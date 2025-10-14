@@ -5,7 +5,9 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -475,56 +477,175 @@ const SubsectionDetail = () => {
 
         {/* COC Docs & Metering Data Tab */}
         <TabsContent value="coc-metering" className="space-y-4">
-          <div className="grid gap-4">
-            {/* COC Information */}
+          <div className="space-y-6">
+            {/* Certificates of Compliance */}
             <Card>
               <CardHeader>
-                <CardTitle>Certificate of Compliance</CardTitle>
+                <CardTitle>Certificates of Compliance</CardTitle>
+                <p className="text-sm text-muted-foreground">Manage COC documents and their details.</p>
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid md:grid-cols-2 gap-4">
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">COC Number</p>
-                    <p className="font-medium">{subsection.cocNumber || 'Not available'}</p>
+              <CardContent className="space-y-6">
+                {/* Existing COC Document */}
+                {subsection.cocNumber && (
+                  <div className="border rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-4">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{subsection.name} - ECA {subsection.cocNumber}.pdf</p>
+                          <p className="text-sm text-muted-foreground">
+                            Size: 1.19 MB
+                          </p>
+                        </div>
+                      </div>
+                      <Badge className="bg-green-500">Pass</Badge>
+                    </div>
+
+                    <div className="grid md:grid-cols-2 gap-4">
+                      <div>
+                        <Label>COC Number</Label>
+                        <Input
+                          value={subsection.cocNumber || ''}
+                          readOnly
+                          className="mt-1"
+                        />
+                      </div>
+                      <div>
+                        <Label>Issue Date</Label>
+                        <Input
+                          type="date"
+                          value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                          readOnly
+                          className="mt-1"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <Label>Type</Label>
+                      <div className="flex gap-4 mt-2">
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="cocType"
+                            value="Pass"
+                            checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
+                            readOnly
+                            className="text-primary"
+                          />
+                          <span className="text-sm">Pass</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="cocType"
+                            value="Fail"
+                            checked={subsection.cocType === 'Fail'}
+                            readOnly
+                            className="text-primary"
+                          />
+                          <span className="text-sm">Fail</span>
+                        </label>
+                        <label className="flex items-center gap-2">
+                          <input
+                            type="radio"
+                            name="cocType"
+                            value="Pending"
+                            checked={subsection.cocType === 'Pending'}
+                            readOnly
+                            className="text-primary"
+                          />
+                          <span className="text-sm">Pending</span>
+                        </label>
+                      </div>
+                    </div>
+
+                    <div className="mt-4">
+                      <Label>Validation Status</Label>
+                      <div className="mt-2 p-3 bg-muted rounded-lg">
+                        <p className="text-sm">
+                          {subsection.cocNumber ? 'COC is valid and compliant' : 'No COC available'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <Button className="mt-4">Save Details</Button>
                   </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Issue Date</p>
-                    <p className="font-medium">
-                      {subsection.cocIssueDate 
-                        ? format(new Date(subsection.cocIssueDate), "yyyy-MM-dd")
-                        : 'Not available'}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Type</p>
-                    <p className="font-medium">{subsection.cocType || 'Not specified'}</p>
-                  </div>
-                  <div>
-                    <p className="text-sm text-muted-foreground mb-1">Status</p>
-                    <Badge variant={subsection.cocNumber ? "default" : "destructive"}>
-                      {subsection.cocNumber ? 'Valid' : 'Missing'}
-                    </Badge>
+                )}
+
+                {/* Upload New COC */}
+                <div className="border-2 border-dashed rounded-lg p-6">
+                  <p className="text-sm font-medium mb-2">
+                    {subsection.cocNumber ? 'Upload a new COC document' : 'Upload a COC document'}
+                  </p>
+                  <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Click to select or drag & drop files
+                      </p>
+                    </div>
                   </div>
                 </div>
               </CardContent>
             </Card>
 
-            {/* Metering Data */}
-            <Card>
+            {/* Metering Details & Documents */}
+            <Card className="border-red-200">
               <CardHeader>
-                <CardTitle>Metering Data</CardTitle>
+                <CardTitle>Metering Details & Documents</CardTitle>
+                <Alert className="mt-2 bg-red-50 border-red-200">
+                  <AlertCircle className="h-4 w-4 text-red-600" />
+                  <AlertDescription className="text-red-600">
+                    This information is a requirement for the subsection to pass compliance checks.
+                  </AlertDescription>
+                </Alert>
               </CardHeader>
-              <CardContent className="space-y-4">
+              <CardContent className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-4">
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">Meter Serial Number</p>
-                    <p className="font-medium">{subsection.meterSerialNumber || 'Not available'}</p>
+                    <Label>Meter Serial Number</Label>
+                    <Input
+                      value={subsection.meterSerialNumber || ''}
+                      placeholder="Enter meter serial number"
+                      className="mt-1"
+                      readOnly
+                    />
                   </div>
                   <div>
-                    <p className="text-sm text-muted-foreground mb-1">CT Ratio</p>
-                    <p className="font-medium">{subsection.ctRatio || 'Not available'}</p>
+                    <Label>CT Ratio</Label>
+                    <Input
+                      value={subsection.ctRatio || ''}
+                      placeholder="Enter CT ratio"
+                      className="mt-1"
+                      readOnly
+                    />
                   </div>
                 </div>
+
+                <div>
+                  <Label>Metering Documents</Label>
+                  <div className="mt-2 p-4 bg-muted/50 rounded-lg text-center">
+                    <p className="text-sm text-muted-foreground">
+                      No metering documents uploaded.
+                    </p>
+                  </div>
+                </div>
+
+                {/* Upload Metering Document */}
+                <div className="border-2 border-dashed rounded-lg p-6">
+                  <p className="text-sm font-medium mb-2">Upload a new metering document</p>
+                  <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
+                    <div className="text-center">
+                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
+                      <p className="text-sm text-muted-foreground">
+                        Click to select or drag & drop files
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <Button className="w-full md:w-auto">Save Metering Details</Button>
               </CardContent>
             </Card>
           </div>
