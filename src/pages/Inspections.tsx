@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -19,11 +20,19 @@ interface Inspection {
   status: string;
   inspection_date: string | null;
   site_id: string;
+  subsection_id: string | null;
   sites: {
+    id: string;
     name: string;
+    client_id: string;
     clients: {
+      id: string;
       name: string;
     };
+  };
+  subsections?: {
+    id: string;
+    name: string;
   };
 }
 
@@ -36,6 +45,7 @@ interface Site {
 }
 
 const Inspections = () => {
+  const navigate = useNavigate();
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
@@ -57,7 +67,7 @@ const Inspections = () => {
       const [inspectionsRes, sitesRes] = await Promise.all([
         supabase
           .from("inspections")
-          .select("*, sites(name, clients(name))")
+          .select("*, sites(id, name, client_id, clients(id, name)), subsections(id, name)")
           .order("created_at", { ascending: false }),
         supabase.from("sites").select("id, name, clients(name)").order("name"),
       ]);
@@ -290,7 +300,21 @@ const Inspections = () => {
               </TableHeader>
               <TableBody>
                 {inspections.map((inspection) => (
-                  <TableRow key={inspection.id}>
+                  <TableRow 
+                    key={inspection.id}
+                    className="cursor-pointer hover:bg-muted/50"
+                    onClick={() => {
+                      if (inspection.subsection_id && inspection.subsections) {
+                        // Navigate through the proper hierarchy
+                        const clientId = inspection.sites.client_id;
+                        const siteId = inspection.site_id;
+                        const subsectionId = inspection.subsection_id;
+                        navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspection.id}`);
+                      } else {
+                        toast.info("This inspection is not linked to a subsection");
+                      }
+                    }}
+                  >
                     <TableCell className="font-medium">{inspection.title}</TableCell>
                     <TableCell>{inspection.sites?.name}</TableCell>
                     <TableCell>{inspection.sites?.clients?.name}</TableCell>
@@ -308,7 +332,10 @@ const Inspections = () => {
                       <Button
                         variant="ghost"
                         size="sm"
-                        onClick={() => handleDelete(inspection.id)}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(inspection.id);
+                        }}
                       >
                         <Trash2 className="h-4 w-4 text-destructive" />
                       </Button>

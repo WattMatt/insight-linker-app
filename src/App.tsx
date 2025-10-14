@@ -15,6 +15,7 @@ import SiteDetail from "./pages/SiteDetail";
 import SubsectionDetail from "./pages/SubsectionDetail";
 import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
+import InspectionDetail from "./pages/InspectionDetail";
 import InspectionTemplates from "./pages/InspectionTemplates";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
@@ -96,6 +97,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <SubsectionDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/sites/:siteId/subsections/:subsectionId/inspections/:inspectionId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <InspectionDetail />
                 </DashboardLayout>
               </ProtectedRoute>
             }

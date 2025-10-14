@@ -346,7 +346,11 @@ const SubsectionDetail = () => {
               ) : (
                 <div className="space-y-2">
                   {inspections.slice(0, 3).map((inspection) => (
-                    <div key={inspection.id} className="flex justify-between items-center p-3 border rounded">
+                    <div 
+                      key={inspection.id} 
+                      className="flex justify-between items-center p-3 border rounded cursor-pointer hover:bg-muted/50 transition-colors"
+                      onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspection.id}`)}
+                    >
                       <div>
                         <p className="font-medium">{inspection.title}</p>
                         <p className="text-sm text-muted-foreground">
@@ -383,7 +387,7 @@ const SubsectionDetail = () => {
         <TabsContent value="inspections" className="space-y-4">
           <div className="flex justify-between items-center">
             <h3 className="text-lg font-semibold">Inspections</h3>
-            <Button>
+            <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/new`)}>
               <Plus className="mr-2 h-4 w-4" />
               Create Inspection
             </Button>
@@ -408,7 +412,11 @@ const SubsectionDetail = () => {
                   </TableHeader>
                   <TableBody>
                     {inspections.map((inspection) => (
-                      <TableRow key={inspection.id}>
+                      <TableRow 
+                        key={inspection.id} 
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspection.id}`)}
+                      >
                         <TableCell className="font-medium">{inspection.title}</TableCell>
                         <TableCell>
                           {inspection.inspection_date
