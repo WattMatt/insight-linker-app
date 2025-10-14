@@ -122,33 +122,42 @@ export type Database = {
       }
       inspections: {
         Row: {
+          assigned_to: string[] | null
           created_at: string
           description: string | null
+          end_date: string | null
           id: string
           inspection_date: string | null
           inspector_id: string | null
+          priority: string | null
           site_id: string
           status: string
           title: string
           updated_at: string
         }
         Insert: {
+          assigned_to?: string[] | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
+          priority?: string | null
           site_id: string
           status?: string
           title: string
           updated_at?: string
         }
         Update: {
+          assigned_to?: string[] | null
           created_at?: string
           description?: string | null
+          end_date?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
+          priority?: string | null
           site_id?: string
           status?: string
           title?: string

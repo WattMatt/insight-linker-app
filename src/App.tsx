@@ -13,6 +13,7 @@ import Clients from "./pages/Clients";
 import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
 import Users from "./pages/Users";
+import Calendar from "./pages/Calendar";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -88,6 +89,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Users />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/calendar"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Calendar />
                 </DashboardLayout>
               </ProtectedRoute>
             }

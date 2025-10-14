@@ -5,7 +5,8 @@ import {
   ClipboardCheck, 
   LogOut,
   Zap,
-  UserCog
+  UserCog,
+  CalendarDays
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -26,6 +27,7 @@ import {
 
 const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
+  { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Sites", url: "/sites", icon: Building2 },
   { title: "Inspections", url: "/inspections", icon: ClipboardCheck },
