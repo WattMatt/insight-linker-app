@@ -170,6 +170,8 @@ export const migrateClientToSupabase = async (
             consultant_name: (siteData as any).consultantName || (siteData as any).consultant_name || null,
             consultant_company: (siteData as any).consultantCompany || (siteData as any).consultant_company || null,
             consultant_contact: (siteData as any).consultantContact || (siteData as any).consultant_contact || null,
+            site_image_url: (siteData as any).siteImageUrl || (siteData as any).site_image_url || null,
+            client_logo_url: (siteData as any).clientLogoUrl || (siteData as any).client_logo_url || null,
           };
 
           const { data: newSite, error: siteError } = await supabase
