@@ -9,6 +9,7 @@ import {
   CalendarDays,
   Database,
   CloudUpload,
+  FileText,
   Settings as SettingsIcon
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -32,6 +33,9 @@ const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home },
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Clients", url: "/clients", icon: Users },
+  { title: "Sites", url: "/sites", icon: Building2 },
+  { title: "Inspections", url: "/inspections", icon: ClipboardCheck },
+  { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Firebase Sync", url: "/firebase-sync", icon: CloudUpload },

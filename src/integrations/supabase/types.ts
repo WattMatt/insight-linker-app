@@ -119,6 +119,38 @@ export type Database = {
         }
         Relationships: []
       }
+      document_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          order_index: number
+          subsection_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          order_index?: number
+          subsection_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          order_index?: number
+          subsection_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "document_categories_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspection_items: {
         Row: {
           created_at: string
@@ -191,6 +223,39 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      inspection_templates: {
+        Row: {
+          category: string
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          pages_count: number | null
+          sections_count: number | null
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          pages_count?: number | null
+          sections_count?: number | null
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          pages_count?: number | null
+          sections_count?: number | null
+          updated_at?: string
+        }
+        Relationships: []
       }
       inspections: {
         Row: {
@@ -312,6 +377,44 @@ export type Database = {
         }
         Relationships: []
       }
+      qr_scans: {
+        Row: {
+          created_at: string
+          id: string
+          ip_address: string | null
+          scanned_at: string
+          scanned_by: string | null
+          subsection_id: string
+          user_agent: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          scanned_at?: string
+          scanned_by?: string | null
+          subsection_id: string
+          user_agent?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          ip_address?: string | null
+          scanned_at?: string
+          scanned_by?: string | null
+          subsection_id?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "qr_scans_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           company_logo_url: string | null
@@ -344,6 +447,47 @@ export type Database = {
           updated_at?: string | null
         }
         Relationships: []
+      }
+      site_documents: {
+        Row: {
+          category: string
+          created_at: string
+          file_count: number | null
+          file_name: string
+          file_url: string
+          id: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          category: string
+          created_at?: string
+          file_count?: number | null
+          file_name: string
+          file_url: string
+          id?: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string
+          created_at?: string
+          file_count?: number | null
+          file_name?: string
+          file_url?: string
+          id?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_documents_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       sites: {
         Row: {
@@ -407,15 +551,68 @@ export type Database = {
           },
         ]
       }
+      subsection_documents: {
+        Row: {
+          category_id: string
+          file_name: string
+          file_size: number | null
+          file_url: string
+          id: string
+          subsection_id: string
+          uploaded_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          category_id: string
+          file_name: string
+          file_size?: number | null
+          file_url: string
+          id?: string
+          subsection_id: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          category_id?: string
+          file_name?: string
+          file_size?: number | null
+          file_url?: string
+          id?: string
+          subsection_id?: string
+          uploaded_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subsection_documents_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "document_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "subsection_documents_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       subsections: {
         Row: {
           category: string | null
+          coc_issue_date: string | null
+          coc_number: string | null
           coc_status: string | null
+          coc_type: string | null
           created_at: string
+          ct_ratio: string | null
           description: string | null
           id: string
           is_coc_required: boolean | null
           is_compliant: boolean | null
+          meter_serial_number: string | null
           metering_status: string | null
           name: string
           site_id: string
@@ -424,12 +621,17 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          coc_issue_date?: string | null
+          coc_number?: string | null
           coc_status?: string | null
+          coc_type?: string | null
           created_at?: string
+          ct_ratio?: string | null
           description?: string | null
           id?: string
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
+          meter_serial_number?: string | null
           metering_status?: string | null
           name: string
           site_id: string
@@ -438,12 +640,17 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          coc_issue_date?: string | null
+          coc_number?: string | null
           coc_status?: string | null
+          coc_type?: string | null
           created_at?: string
+          ct_ratio?: string | null
           description?: string | null
           id?: string
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
+          meter_serial_number?: string | null
           metering_status?: string | null
           name?: string
           site_id?: string

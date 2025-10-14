@@ -5,7 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Layers, MapPin } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Progress } from "@/components/ui/progress";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail } from "lucide-react";
 import { toast } from "sonner";
 
 interface Site {
@@ -14,6 +17,11 @@ interface Site {
   address: string | null;
   site_type: string | null;
   client_id: string;
+  supply_authority: string | null;
+  nominated_max_demand: string | null;
+  consultant_name: string | null;
+  consultant_company: string | null;
+  consultant_contact: string | null;
   clients: {
     id: string;
     name: string;
@@ -28,6 +36,20 @@ interface Subsection {
   coc_status: string;
   metering_status: string;
   is_compliant: boolean;
+  tenant_name: string | null;
+}
+
+interface SiteDocument {
+  category: string;
+  file_count: number;
+}
+
+interface SiteStats {
+  totalSubsections: number;
+  compliantCount: number;
+  cocApprovedCount: number;
+  meteringInstalledCount: number;
+  snaggedCount: number;
 }
 
 const SiteDetail = () => {
@@ -35,7 +57,10 @@ const SiteDetail = () => {
   const navigate = useNavigate();
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
+  const [documents, setDocuments] = useState<SiteDocument[]>([]);
+  const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
     fetchSiteData();
@@ -43,7 +68,7 @@ const SiteDetail = () => {
 
   const fetchSiteData = async () => {
     try {
-      const [siteRes, subsectionsRes] = await Promise.all([
+      const [siteRes, subsectionsRes, docsRes] = await Promise.all([
         supabase
           .from("sites")
           .select("*, clients(id, name)")
@@ -54,13 +79,34 @@ const SiteDetail = () => {
           .select("*")
           .eq("site_id", siteId)
           .order("name"),
+        supabase
+          .from("site_documents")
+          .select("category, file_count")
+          .eq("site_id", siteId),
       ]);
 
       if (siteRes.error) throw siteRes.error;
       if (subsectionsRes.error) throw subsectionsRes.error;
 
       setSite(siteRes.data);
-      setSubsections(subsectionsRes.data || []);
+      const subs = subsectionsRes.data || [];
+      setSubsections(subs);
+      setDocuments(docsRes.data || []);
+
+      // Calculate stats
+      const totalSubsections = subs.length;
+      const compliantCount = subs.filter((s) => s.is_compliant).length;
+      const cocApprovedCount = subs.filter((s) => s.coc_status === "Approved").length;
+      const meteringInstalledCount = subs.filter((s) => s.metering_status === "Installed").length;
+      const snaggedCount = subs.filter((s) => !s.is_compliant || s.coc_status !== "Approved").length;
+
+      setStats({
+        totalSubsections,
+        compliantCount,
+        cocApprovedCount,
+        meteringInstalledCount,
+        snaggedCount,
+      });
     } catch (error) {
       console.error("Error fetching site data:", error);
       toast.error("Failed to fetch site data");
@@ -68,6 +114,35 @@ const SiteDetail = () => {
       setLoading(false);
     }
   };
+
+  const CircularProgress = ({ value, color }: { value: number; color: string }) => (
+    <div className="relative inline-flex items-center justify-center w-32 h-32">
+      <svg className="transform -rotate-90 w-32 h-32">
+        <circle
+          cx="64"
+          cy="64"
+          r="56"
+          stroke="currentColor"
+          strokeWidth="8"
+          fill="none"
+          className="text-muted"
+        />
+        <circle
+          cx="64"
+          cy="64"
+          r="56"
+          stroke="currentColor"
+          strokeWidth="8"
+          fill="none"
+          strokeDasharray={`${2 * Math.PI * 56}`}
+          strokeDashoffset={`${2 * Math.PI * 56 * (1 - value / 100)}`}
+          className={color}
+          strokeLinecap="round"
+        />
+      </svg>
+      <span className="absolute text-2xl font-bold">{value}%</span>
+    </div>
+  );
 
   if (loading) {
     return (
@@ -89,6 +164,11 @@ const SiteDetail = () => {
     );
   }
 
+  const overallHealth = stats ? Math.round((stats.compliantCount / stats.totalSubsections) * 100) || 0 : 0;
+  const cocCompliance = stats ? Math.round((stats.cocApprovedCount / stats.totalSubsections) * 100) || 0 : 0;
+  const snaggedPercentage = stats ? Math.round((stats.snaggedCount / stats.totalSubsections) * 100) || 0 : 0;
+  const meteringPercentage = stats ? Math.round((stats.meteringInstalledCount / stats.totalSubsections) * 100) || 0 : 0;
+
   return (
     <div className="space-y-6">
       <Breadcrumbs
@@ -102,108 +182,278 @@ const SiteDetail = () => {
       <div className="flex justify-between items-start">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">{site.name}</h1>
-          <p className="text-muted-foreground mt-2">
-            Electrical boards and subsections
-          </p>
+          <p className="text-muted-foreground mt-1">{site.address}</p>
         </div>
+        <Button variant="outline">
+          Edit Site
+        </Button>
       </div>
 
-      {/* Site Info Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Site Information</CardTitle>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          {site.site_type && (
-            <div>
-              <p className="text-sm text-muted-foreground">Type</p>
-              <p className="font-medium">{site.site_type}</p>
-            </div>
-          )}
-          {site.address && (
-            <div className="flex items-start gap-2">
-              <MapPin className="h-4 w-4 text-muted-foreground mt-1" />
-              <div>
-                <p className="text-sm text-muted-foreground">Address</p>
-                <p className="font-medium">{site.address}</p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="grid w-full grid-cols-5">
+          <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="documents">Documents</TabsTrigger>
+          <TabsTrigger value="subsections">Subsections/Tenants</TabsTrigger>
+          <TabsTrigger value="qr-analytics">QR Analytics</TabsTrigger>
+          <TabsTrigger value="export">Export Reports</TabsTrigger>
+        </TabsList>
 
-      {/* Subsections Card */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Subsections</CardTitle>
-          <CardDescription>
-            {subsections.length} {subsections.length === 1 ? "subsection" : "subsections"} at this site
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {subsections.length === 0 ? (
-            <div className="text-center py-12">
-              <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No subsections yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Add electrical boards or subsections to this site
+        <TabsContent value="overview" className="space-y-6">
+          {/* Site Details Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Details</CardTitle>
+              <CardDescription>Key information about {site.name}</CardDescription>
+            </CardHeader>
+            <CardContent className="grid md:grid-cols-2 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Client</p>
+                  <p className="font-medium">{site.clients.name}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">NMD</p>
+                  <p className="font-medium">{site.nominated_max_demand || "TBC"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Consultant Company</p>
+                  <p className="font-medium">{site.consultant_company || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Physical Address</p>
+                  <p className="font-medium">{site.address || "—"}</p>
+                </div>
+              </div>
+              <div className="space-y-4">
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Supply Authority</p>
+                  <p className="font-medium">{site.supply_authority || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Consultant</p>
+                  <p className="font-medium">{site.consultant_name || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground mb-1">Consultant Contact</p>
+                  <p className="font-medium">{site.consultant_contact || "—"}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="text-sm text-muted-foreground">
+            Total Subsections: <span className="font-semibold text-foreground">{stats?.totalSubsections || 0}</span>
+          </div>
+
+          {/* Stats Grid */}
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Overall Site Health</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <CircularProgress value={overallHealth} color="text-green-500" />
+                <p className="text-sm text-muted-foreground mt-4 text-center">
+                  Based on CoC, snags and Metering data
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">COC Compliance</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <CircularProgress value={cocCompliance} color="text-yellow-500" />
+                <p className="text-sm text-muted-foreground mt-4 text-center">
+                  {stats?.cocApprovedCount || 0} of {stats?.totalSubsections || 0} required COCs are compliant
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Snagged Subsections</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <CircularProgress value={snaggedPercentage} color="text-red-500" />
+                <p className="text-sm text-muted-foreground mt-4 text-center">
+                  {stats?.snaggedCount || 0} of {stats?.totalSubsections || 0} subsections have open snags
+                </p>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-base">Metering Data</CardTitle>
+              </CardHeader>
+              <CardContent className="flex flex-col items-center">
+                <CircularProgress value={meteringPercentage} color="text-red-500" />
+                <p className="text-sm text-muted-foreground mt-4 text-center">
+                  {stats?.meteringInstalledCount || 0} of {stats?.totalSubsections || 0} required subsections have metering data
+                </p>
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
+        <TabsContent value="documents" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Documents</CardTitle>
+              <CardDescription>A summary of all uploaded site-level documents</CardDescription>
+            </CardHeader>
+            <CardContent>
+              {documents.length === 0 ? (
+                <div className="text-center py-12">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
+                  <p className="text-muted-foreground">Upload documents for this site</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {documents.map((doc, idx) => (
+                    <div key={idx} className="flex justify-between items-center p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <span className="font-medium">{doc.category}</span>
+                      </div>
+                      <Badge variant="secondary">{doc.file_count}</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="subsections" className="space-y-4">
+          <div className="flex justify-between items-center">
+            <div>
+              <h3 className="text-lg font-semibold">Subsections / Tenants</h3>
+              <p className="text-sm text-muted-foreground">
+                Manage all sub-boards or tenants at this site
               </p>
             </div>
-          ) : (
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-              {subsections.map((subsection) => (
-                <Card
-                  key={subsection.id}
-                  className="cursor-pointer hover:shadow-md transition-shadow"
-                  onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsection.id}`)}
-                >
-                  <CardHeader>
-                    <div className="flex items-start justify-between">
-                      <CardTitle className="text-lg">{subsection.name}</CardTitle>
-                      {subsection.category && (
-                        <Badge variant="outline">{subsection.category}</Badge>
-                      )}
-                    </div>
-                    {subsection.description && (
-                      <CardDescription>{subsection.description}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent>
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">CoC Status:</span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            subsection.coc_status === "Approved"
-                              ? "bg-green-500/10 text-green-500"
-                              : "bg-orange-500/10 text-orange-500"
-                          }
-                        >
-                          {subsection.coc_status}
-                        </Badge>
-                      </div>
-                      <div className="flex justify-between">
-                        <span className="text-muted-foreground">Compliant:</span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            subsection.is_compliant
-                              ? "bg-green-500/10 text-green-500"
-                              : "bg-red-500/10 text-red-500"
-                          }
-                        >
-                          {subsection.is_compliant ? "Yes" : "No"}
-                        </Badge>
-                      </div>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          )}
-        </CardContent>
-      </Card>
+            <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/new`)}>
+              <Plus className="mr-2 h-4 w-4" />
+              Create New Subsection
+            </Button>
+          </div>
+
+          <Card>
+            <CardContent className="p-0">
+              {subsections.length === 0 ? (
+                <div className="text-center py-12">
+                  <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">No subsections yet</h3>
+                  <p className="text-muted-foreground">Create your first subsection</p>
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Name</TableHead>
+                      <TableHead>Tenant</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>CoC</TableHead>
+                      <TableHead>Metering</TableHead>
+                      <TableHead>Snagging</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {subsections.map((sub) => (
+                      <TableRow
+                        key={sub.id}
+                        className="cursor-pointer hover:bg-muted/50"
+                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${sub.id}`)}
+                      >
+                        <TableCell className="font-medium">{sub.name}</TableCell>
+                        <TableCell>{sub.tenant_name || "—"}</TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              sub.is_compliant
+                                ? "bg-green-500/10 text-green-500"
+                                : "bg-red-500/10 text-red-500"
+                            }
+                          >
+                            {sub.is_compliant ? "Compliant" : "Non-Compliant"}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              sub.coc_status === "Approved"
+                                ? "bg-green-500/10 text-green-500"
+                                : "bg-red-500/10 text-red-500"
+                            }
+                          >
+                            {sub.coc_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant="outline"
+                            className={
+                              sub.metering_status === "Installed"
+                                ? "bg-green-500/10 text-green-500"
+                                : "bg-red-500/10 text-red-500"
+                            }
+                          >
+                            {sub.metering_status}
+                          </Badge>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline">
+                            {sub.is_compliant ? "0" : "1+"}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="qr-analytics" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>QR Code Analytics</CardTitle>
+              <CardDescription>
+                A summary of QR code scan activity across all subsections for {site.name}
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                QR analytics feature coming soon...
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        <TabsContent value="export" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Export Report</CardTitle>
+              <CardDescription>{site.name}</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Generate comprehensive site reports with all subsection data
+              </p>
+              <Button>
+                <FileText className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
