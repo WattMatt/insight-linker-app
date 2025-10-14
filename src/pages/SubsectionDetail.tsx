@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
 import { readFirebaseData } from "@/lib/firebase";
+import { supabase } from "@/integrations/supabase/client";
 
 interface SubsectionData {
   name: string;
@@ -57,6 +58,9 @@ const SubsectionDetail = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [cocType, setCocType] = useState<string>("");
+  const [cocValidationStatus, setCocValidationStatus] = useState<string>("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (clientId && siteId && subsectionId) {
@@ -79,6 +83,8 @@ const SubsectionDetail = () => {
 
       console.log('Subsection data:', data);
       setSubsection(data);
+      setCocType(data.cocType || '');
+      setCocValidationStatus(data.cocValidationStatus || '');
       
       // Fetch site info for header
       const siteInfo = await readFirebaseData(`/clients/${clientId}/${siteId}`);
@@ -91,6 +97,54 @@ const SubsectionDetail = () => {
       toast.error("Failed to load subsection data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveCocDetails = async () => {
+    if (!subsection) return;
+    
+    try {
+      setSaving(true);
+      
+      // Find the subsection in Supabase by firebase_id
+      const { data: supabaseSubsection, error: findError } = await supabase
+        .from('subsections')
+        .select('id')
+        .eq('firebase_id', subsectionId)
+        .single();
+      
+      if (findError || !supabaseSubsection) {
+        toast.error("Could not find subsection in database");
+        return;
+      }
+      
+      // Update the subsection with new COC details
+      const { error: updateError } = await supabase
+        .from('subsections')
+        .update({
+          coc_type: cocType,
+          coc_validation_status: cocValidationStatus,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', supabaseSubsection.id);
+      
+      if (updateError) {
+        throw updateError;
+      }
+      
+      // Update local state
+      setSubsection({
+        ...subsection,
+        cocType,
+        cocValidationStatus
+      });
+      
+      toast.success("COC details saved successfully");
+    } catch (error) {
+      console.error("Error saving COC details:", error);
+      toast.error("Failed to save COC details");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -555,9 +609,9 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${idx}`}
                                   value="Pass"
-                                  checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
-                                  readOnly
-                                  className="w-4 h-4 text-primary"
+                                  checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Pass</span>
                               </label>
@@ -566,9 +620,9 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${idx}`}
                                   value="Fail"
-                                  checked={subsection.cocType === 'Fail'}
-                                  readOnly
-                                  className="w-4 h-4 text-primary"
+                                  checked={cocType === 'Fail'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Fail</span>
                               </label>
@@ -577,9 +631,9 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${idx}`}
                                   value="Pending"
-                                  checked={subsection.cocType === 'Pending'}
-                                  readOnly
-                                  className="w-4 h-4 text-primary"
+                                  checked={cocType === 'Pending'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Pending</span>
                               </label>
@@ -589,14 +643,20 @@ const SubsectionDetail = () => {
                           <div className="mt-4">
                             <Label>Validation Status</Label>
                             <Input
-                              value={subsection.cocValidationStatus || ''}
+                              value={cocValidationStatus}
+                              onChange={(e) => setCocValidationStatus(e.target.value)}
                               placeholder="Enter validation status"
                               className="mt-1"
-                              readOnly
                             />
                           </div>
 
-                          <Button className="mt-4 bg-blue-500 hover:bg-blue-600">Save Details</Button>
+                          <Button 
+                            onClick={handleSaveCocDetails} 
+                            disabled={saving}
+                            className="mt-4 bg-blue-500 hover:bg-blue-600"
+                          >
+                            {saving ? "Saving..." : "Save Details"}
+                          </Button>
                         </div>
                       ))}
                     </div>
@@ -648,9 +708,9 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Pass"
-                              checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
-                              readOnly
-                              className="w-4 h-4 text-primary"
+                              checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                              onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Pass</span>
                           </label>
@@ -659,9 +719,9 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Fail"
-                              checked={subsection.cocType === 'Fail'}
-                              readOnly
-                              className="w-4 h-4 text-primary"
+                              checked={cocType === 'Fail'}
+                              onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Fail</span>
                           </label>
@@ -670,9 +730,9 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Pending"
-                              checked={subsection.cocType === 'Pending'}
-                              readOnly
-                              className="w-4 h-4 text-primary"
+                              checked={cocType === 'Pending'}
+                              onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Pending</span>
                           </label>
@@ -682,14 +742,20 @@ const SubsectionDetail = () => {
                       <div className="mt-4">
                         <Label>Validation Status</Label>
                         <Input
-                          value={subsection.cocValidationStatus || ''}
+                          value={cocValidationStatus}
+                          onChange={(e) => setCocValidationStatus(e.target.value)}
                           placeholder="Enter validation status"
                           className="mt-1"
-                          readOnly
                         />
                       </div>
 
-                      <Button className="mt-4 bg-blue-500 hover:bg-blue-600">Save Details</Button>
+                      <Button 
+                        onClick={handleSaveCocDetails} 
+                        disabled={saving}
+                        className="mt-4 bg-blue-500 hover:bg-blue-600"
+                      >
+                        {saving ? "Saving..." : "Save Details"}
+                      </Button>
                     </div>
                   ) : null;
                 })()}
