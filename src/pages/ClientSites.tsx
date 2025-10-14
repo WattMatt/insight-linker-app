@@ -14,6 +14,9 @@ interface Site {
   address: string | null;
   site_type: string | null;
   source?: 'firebase' | 'supabase';
+  site_image_url?: string | null;
+  client_logo_url?: string | null;
+  project_logo_url?: string | null;
 }
 
 const ClientSites = () => {
@@ -97,6 +100,9 @@ const ClientSites = () => {
           address: siteData.physicalAddress || siteData.address || siteData.Address || null,
           site_type: siteData.siteType || siteData.site_type || siteData.type || null,
           source: 'firebase' as const,
+          site_image_url: siteData.siteImageUrl || siteData.site_image_url || null,
+          client_logo_url: siteData.clientLogoUrl || siteData.client_logo_url || null,
+          project_logo_url: siteData.projectLogoUrl || siteData.project_logo_url || null,
         };
 
         transformedSites.push(site);
@@ -140,7 +146,7 @@ const ClientSites = () => {
           sites.map((site) => (
             <Card
               key={site.id}
-              className="cursor-pointer hover:shadow-lg transition-shadow"
+              className="cursor-pointer hover:shadow-lg transition-shadow overflow-hidden"
               onClick={() => {
                 if (!isFirebaseClient) {
                   navigate(`/sites/${site.id}`);
@@ -149,18 +155,45 @@ const ClientSites = () => {
                 }
               }}
             >
+              {/* Site Image Header */}
+              {(site.project_logo_url || site.site_image_url) && (
+                <div className="h-32 w-full bg-muted flex items-center justify-center overflow-hidden">
+                  <img
+                    src={site.project_logo_url || site.site_image_url || ''}
+                    alt={site.name}
+                    className="w-full h-full object-cover"
+                    onError={(e) => {
+                      e.currentTarget.style.display = 'none';
+                    }}
+                  />
+                </div>
+              )}
+              
               <CardHeader>
                 <div className="flex items-start justify-between">
-                  <div className="flex items-center gap-3">
-                    <Building2 className="h-5 w-5 text-primary" />
-                    <div>
-                      <CardTitle className="text-lg">{site.name}</CardTitle>
+                  <div className="flex items-start gap-3 flex-1">
+                    {site.client_logo_url ? (
+                      <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center p-1 flex-shrink-0">
+                        <img
+                          src={site.client_logo_url}
+                          alt="Client logo"
+                          className="w-full h-full object-contain"
+                          onError={(e) => {
+                            e.currentTarget.style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    ) : (
+                      <Building2 className="h-5 w-5 text-primary flex-shrink-0 mt-1" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <CardTitle className="text-lg truncate">{site.name}</CardTitle>
                       {site.site_type && (
                         <p className="text-sm text-muted-foreground">{site.site_type}</p>
                       )}
                     </div>
                   </div>
-                  <Badge variant={site.source === 'firebase' ? 'secondary' : 'default'}>
+                  <Badge variant={site.source === 'firebase' ? 'secondary' : 'default'} className="ml-2 flex-shrink-0">
                     <Database className="h-3 w-3 mr-1" />
                     {site.source === 'firebase' ? 'Firebase' : 'Supabase'}
                   </Badge>
@@ -170,7 +203,7 @@ const ClientSites = () => {
                 <CardContent>
                   <div className="flex items-start gap-2 text-sm text-muted-foreground">
                     <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
-                    <span>{site.address}</span>
+                    <span className="line-clamp-2">{site.address}</span>
                   </div>
                 </CardContent>
               )}
