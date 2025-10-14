@@ -136,7 +136,7 @@ const SubsectionDetail = () => {
 
   const generateQRCode = async () => {
     try {
-      const url = `${window.location.origin}/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`;
+      const url = `${window.location.origin}/public/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`;
       const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
       setQrCodeUrl(qrDataUrl);
     } catch (error) {
@@ -541,7 +541,7 @@ const SubsectionDetail = () => {
                 <>
                   <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded-lg" />
                   <p className="text-sm text-muted-foreground mt-4 text-center max-w-md">
-                    Scan this QR code to quickly access this subsection's details
+                    Scan this QR code to view public subsection details, documents, and COC
                   </p>
                   <Button 
                     className="mt-4"

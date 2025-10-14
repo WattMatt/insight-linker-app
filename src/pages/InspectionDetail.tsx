@@ -107,7 +107,7 @@ const InspectionDetail = () => {
       }
 
       // Generate QR code
-      const url = `${window.location.origin}/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`;
+      const url = `${window.location.origin}/public/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`;
       const qrDataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2 });
       setQrCodeUrl(qrDataUrl);
     } catch (error) {

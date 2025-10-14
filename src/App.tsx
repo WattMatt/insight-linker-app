@@ -15,6 +15,7 @@ import ClientSites from "./pages/ClientSites";
 import SiteOverview from "./pages/SiteOverview";
 import SiteDetail from "./pages/SiteDetail";
 import SubsectionDetail from "./pages/SubsectionDetail";
+import PublicSubsection from "./pages/PublicSubsection";
 import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
 import InspectionDetail from "./pages/InspectionDetail";
@@ -53,6 +54,10 @@ const App = () => (
         <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          
+          {/* Public QR Code Landing Page */}
+          <Route path="/public/clients/:clientId/sites/:siteId/subsections/:subsectionId" element={<PublicSubsection />} />
+          
           <Route
             path="/dashboard"
             element={
