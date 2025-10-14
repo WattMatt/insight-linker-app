@@ -21,6 +21,7 @@ interface SubsectionData {
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
+  cocValidationStatus?: string;
   meterSerialNumber?: string;
   ctRatio?: string;
   isCocRequired: boolean;
@@ -134,6 +135,22 @@ const SubsectionDetail = () => {
 
     console.log('Parsed document categories:', categories);
     setDocuments(categories);
+  };
+
+  // Helper function to find COC documents
+  const getCocDocuments = () => {
+    return documents.filter(cat => 
+      cat.name.toLowerCase().includes('coc') || 
+      cat.name.toLowerCase().includes('certificate')
+    ).flatMap(cat => cat.files);
+  };
+
+  // Helper function to find metering documents
+  const getMeteringDocuments = () => {
+    return documents.filter(cat => 
+      cat.name.toLowerCase().includes('meter') || 
+      cat.name.toLowerCase().includes('metering')
+    ).flatMap(cat => cat.files);
   };
 
   const generateQRCode = async () => {
@@ -485,106 +502,206 @@ const SubsectionDetail = () => {
                 <p className="text-sm text-muted-foreground">Manage COC documents and their details.</p>
               </CardHeader>
               <CardContent className="space-y-6">
-                {/* Existing COC Document */}
-                {subsection.cocNumber && (
-                  <div className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
+                {/* Existing COC Documents */}
+                {(() => {
+                  const cocDocs = getCocDocuments();
+                  return cocDocs.length > 0 ? (
+                    <div className="space-y-4">
+                      {cocDocs.map((doc, idx) => (
+                        <div key={idx} className="border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-muted-foreground" />
+                              <div>
+                                <p className="font-medium">{doc.name}</p>
+                                <p className="text-sm text-muted-foreground">Size: 1.19 MB</p>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="bg-green-500 text-white hover:bg-green-600 border-green-500"
+                            >
+                              Pass
+                            </Button>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <Label>COC Number</Label>
+                              <Input
+                                value={subsection.cocNumber || ''}
+                                placeholder="ECA 642760"
+                                className="mt-1"
+                                readOnly
+                              />
+                            </div>
+                            <div>
+                              <Label>Issue Date</Label>
+                              <Input
+                                type="date"
+                                value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                                className="mt-1"
+                                readOnly
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>Type</Label>
+                            <div className="flex gap-4 mt-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${idx}`}
+                                  value="Pass"
+                                  checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
+                                  readOnly
+                                  className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-sm">Pass</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${idx}`}
+                                  value="Fail"
+                                  checked={subsection.cocType === 'Fail'}
+                                  readOnly
+                                  className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-sm">Fail</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${idx}`}
+                                  value="Pending"
+                                  checked={subsection.cocType === 'Pending'}
+                                  readOnly
+                                  className="w-4 h-4 text-primary"
+                                />
+                                <span className="text-sm">Pending</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>Validation Status</Label>
+                            <Input
+                              value={subsection.cocValidationStatus || ''}
+                              placeholder="Enter validation status"
+                              className="mt-1"
+                              readOnly
+                            />
+                          </div>
+
+                          <Button className="mt-4 bg-blue-500 hover:bg-blue-600">Save Details</Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : subsection.cocNumber ? (
+                    <div className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-3">
+                          <FileText className="h-5 w-5 text-muted-foreground" />
+                          <div>
+                            <p className="font-medium">{subsection.name} - ECA {subsection.cocNumber}.pdf</p>
+                            <p className="text-sm text-muted-foreground">Size: 1.19 MB</p>
+                          </div>
+                        </div>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="bg-green-500 text-white hover:bg-green-600 border-green-500"
+                        >
+                          Pass
+                        </Button>
+                      </div>
+
+                      <div className="grid md:grid-cols-2 gap-4">
                         <div>
-                          <p className="font-medium">{subsection.name} - ECA {subsection.cocNumber}.pdf</p>
-                          <p className="text-sm text-muted-foreground">
-                            Size: 1.19 MB
-                          </p>
+                          <Label>COC Number</Label>
+                          <Input
+                            value={subsection.cocNumber || ''}
+                            placeholder="ECA 642760"
+                            className="mt-1"
+                            readOnly
+                          />
+                        </div>
+                        <div>
+                          <Label>Issue Date</Label>
+                          <Input
+                            type="date"
+                            value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                            className="mt-1"
+                            readOnly
+                          />
                         </div>
                       </div>
-                      <Badge className="bg-green-500">Pass</Badge>
-                    </div>
 
-                    <div className="grid md:grid-cols-2 gap-4">
-                      <div>
-                        <Label>COC Number</Label>
+                      <div className="mt-4">
+                        <Label>Type</Label>
+                        <div className="flex gap-4 mt-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocType"
+                              value="Pass"
+                              checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
+                              readOnly
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-sm">Pass</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocType"
+                              value="Fail"
+                              checked={subsection.cocType === 'Fail'}
+                              readOnly
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-sm">Fail</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocType"
+                              value="Pending"
+                              checked={subsection.cocType === 'Pending'}
+                              readOnly
+                              className="w-4 h-4 text-primary"
+                            />
+                            <span className="text-sm">Pending</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <Label>Validation Status</Label>
                         <Input
-                          value={subsection.cocNumber || ''}
-                          readOnly
+                          value={subsection.cocValidationStatus || ''}
+                          placeholder="Enter validation status"
                           className="mt-1"
+                          readOnly
                         />
                       </div>
-                      <div>
-                        <Label>Issue Date</Label>
-                        <Input
-                          type="date"
-                          value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
-                          readOnly
-                          className="mt-1"
-                        />
-                      </div>
-                    </div>
 
-                    <div className="mt-4">
-                      <Label>Type</Label>
-                      <div className="flex gap-4 mt-2">
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="cocType"
-                            value="Pass"
-                            checked={subsection.cocType === 'Pass' || subsection.cocType === 'Supplementary'}
-                            readOnly
-                            className="text-primary"
-                          />
-                          <span className="text-sm">Pass</span>
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="cocType"
-                            value="Fail"
-                            checked={subsection.cocType === 'Fail'}
-                            readOnly
-                            className="text-primary"
-                          />
-                          <span className="text-sm">Fail</span>
-                        </label>
-                        <label className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="cocType"
-                            value="Pending"
-                            checked={subsection.cocType === 'Pending'}
-                            readOnly
-                            className="text-primary"
-                          />
-                          <span className="text-sm">Pending</span>
-                        </label>
-                      </div>
+                      <Button className="mt-4 bg-blue-500 hover:bg-blue-600">Save Details</Button>
                     </div>
-
-                    <div className="mt-4">
-                      <Label>Validation Status</Label>
-                      <div className="mt-2 p-3 bg-muted rounded-lg">
-                        <p className="text-sm">
-                          {subsection.cocNumber ? 'COC is valid and compliant' : 'No COC available'}
-                        </p>
-                      </div>
-                    </div>
-
-                    <Button className="mt-4">Save Details</Button>
-                  </div>
-                )}
+                  ) : null;
+                })()}
 
                 {/* Upload New COC */}
-                <div className="border-2 border-dashed rounded-lg p-6">
-                  <p className="text-sm font-medium mb-2">
-                    {subsection.cocNumber ? 'Upload a new COC document' : 'Upload a COC document'}
-                  </p>
-                  <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
-                    <div className="text-center">
-                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Click to select or drag & drop files
-                      </p>
-                    </div>
+                <div>
+                  <p className="text-sm font-medium mb-2">Upload a new COC document</p>
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
+                    <p className="text-sm text-muted-foreground">
+                      Click to select or drag & drop files
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -625,27 +742,53 @@ const SubsectionDetail = () => {
 
                 <div>
                   <Label>Metering Documents</Label>
-                  <div className="mt-2 p-4 bg-muted/50 rounded-lg text-center">
+                  {(() => {
+                    const meteringDocs = getMeteringDocuments();
+                    return meteringDocs.length > 0 ? (
+                      <div className="mt-2 space-y-2">
+                        {meteringDocs.map((doc, idx) => (
+                          <div
+                            key={idx}
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                          >
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="text-sm font-medium">{doc.name}</span>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDownloadDocument(doc.url, doc.name)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="mt-2 p-4 bg-muted/50 rounded-lg text-center">
+                        <p className="text-sm text-muted-foreground">
+                          No metering documents uploaded.
+                        </p>
+                      </div>
+                    );
+                  })()}
+                </div>
+
+                {/* Upload Metering Document */}
+                <div>
+                  <p className="text-sm font-medium mb-2">Upload a new metering document</p>
+                  <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer">
+                    <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      No metering documents uploaded.
+                      Click to select or drag & drop files
                     </p>
                   </div>
                 </div>
 
-                {/* Upload Metering Document */}
-                <div className="border-2 border-dashed rounded-lg p-6">
-                  <p className="text-sm font-medium mb-2">Upload a new metering document</p>
-                  <div className="flex items-center justify-center p-8 bg-muted/50 rounded-lg">
-                    <div className="text-center">
-                      <Upload className="h-8 w-8 text-muted-foreground mx-auto mb-2" />
-                      <p className="text-sm text-muted-foreground">
-                        Click to select or drag & drop files
-                      </p>
-                    </div>
-                  </div>
-                </div>
-
-                <Button className="w-full md:w-auto">Save Metering Details</Button>
+                <Button className="w-full md:w-auto bg-blue-500 hover:bg-blue-600">
+                  Save Metering Details
+                </Button>
               </CardContent>
             </Card>
           </div>
