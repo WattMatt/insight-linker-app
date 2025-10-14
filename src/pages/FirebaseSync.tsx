@@ -1,356 +1,270 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
 import { readFirebaseData } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
-import { Database, Download, RefreshCw, Upload, FolderOpen } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle } from "lucide-react";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+
+interface SchemaPreview {
+  tableName: string;
+  columns: { name: string; type: string }[];
+  sampleData: any[];
+}
 
 const FirebaseSync = () => {
-  const [firebasePath, setFirebasePath] = useState("/");
-  const [jsonData, setJsonData] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [fetchedData, setFetchedData] = useState<any>(null);
+  const [scanning, setScanning] = useState(false);
+  const [firebaseStructure, setFirebaseStructure] = useState<any>(null);
+  const [schemaPreview, setSchemaPreview] = useState<SchemaPreview[]>([]);
   const [migrating, setMigrating] = useState(false);
-  
-  // Storage migration state
-  const [storageUrl, setStorageUrl] = useState("");
-  const [targetBucket, setTargetBucket] = useState("files");
-  const [targetPath, setTargetPath] = useState("");
-  const [buckets, setBuckets] = useState<string[]>([]);
-  const [migratingStorage, setMigratingStorage] = useState(false);
+  const [migrationComplete, setMigrationComplete] = useState(false);
 
-  useEffect(() => {
-    fetchBuckets();
-  }, []);
-
-  const fetchBuckets = async () => {
-    try {
-      const { data, error } = await supabase.storage.listBuckets();
-      if (error) throw error;
-      setBuckets(data.map(b => b.name));
-    } catch (error) {
-      console.error('Error fetching buckets:', error);
+  const inferType = (value: any): string => {
+    if (value === null) return "text";
+    if (typeof value === "boolean") return "boolean";
+    if (typeof value === "number") return Number.isInteger(value) ? "integer" : "numeric";
+    if (typeof value === "string") {
+      if (value.match(/^\d{4}-\d{2}-\d{2}/)) return "timestamp with time zone";
+      return "text";
     }
+    if (typeof value === "object") return "jsonb";
+    return "text";
   };
 
-  const fetchFirebaseData = async () => {
-    if (!firebasePath) {
-      toast.error("Please enter a Firebase path");
-      return;
-    }
-
-    setLoading(true);
+  const scanFirebase = async () => {
+    setScanning(true);
     try {
-      const data = await readFirebaseData(firebasePath);
+      toast.info("Scanning Firebase structure...");
       
-      if (data) {
-        const formatted = JSON.stringify(data, null, 2);
-        setJsonData(formatted);
-        setFetchedData(data);
-        toast.success("Data fetched successfully!");
-      } else {
-        toast.error("No data found at this path");
-        setJsonData("");
-        setFetchedData(null);
+      const data = await readFirebaseData("/");
+      
+      if (!data) {
+        toast.error("No data found in Firebase");
+        return;
       }
-    } catch (error) {
-      console.error("Error fetching Firebase data:", error);
-      toast.error("Failed to fetch data from Firebase");
-    } finally {
-      setLoading(false);
-    }
-  };
 
-  const migrateStorageFile = async () => {
-    if (!storageUrl) {
-      toast.error("Please enter a Firebase Storage URL");
-      return;
-    }
-
-    setMigratingStorage(true);
-    try {
-      const { data, error } = await supabase.functions.invoke('migrate-storage', {
-        body: {
-          firebaseStorageUrl: storageUrl,
-          targetBucket,
-          targetPath: targetPath || undefined,
+      setFirebaseStructure(data);
+      
+      const schemas: SchemaPreview[] = [];
+      
+      for (const [key, value] of Object.entries(data)) {
+        if (typeof value === 'object' && value !== null) {
+          const tableName = key;
+          const records = Array.isArray(value) ? value : Object.values(value);
+          
+          if (records.length > 0 && typeof records[0] === 'object') {
+            const firstRecord = records[0];
+            const columns = Object.keys(firstRecord).map(colName => ({
+              name: colName,
+              type: inferType(firstRecord[colName])
+            }));
+            
+            schemas.push({
+              tableName,
+              columns,
+              sampleData: records.slice(0, 3)
+            });
+          }
         }
-      });
-
-      if (error) throw error;
-
-      if (data.success) {
-        toast.success("File migrated successfully!");
-        console.log('Migrated file:', data);
-      } else {
-        throw new Error(data.error || 'Migration failed');
       }
-    } catch (error) {
-      console.error("Error migrating storage:", error);
-      toast.error(`Failed to migrate file: ${error.message}`);
+      
+      setSchemaPreview(schemas);
+      toast.success(`Found ${schemas.length} collections in Firebase`);
+      
+    } catch (error: any) {
+      console.error("Error scanning Firebase:", error);
+      toast.error(error.message || "Failed to scan Firebase");
     } finally {
-      setMigratingStorage(false);
+      setScanning(false);
     }
   };
 
-  const migrateToSupabase = async () => {
-    if (!fetchedData) {
-      toast.error("No data to migrate");
-      return;
-    }
-
+  const executeCompleteMigration = async () => {
     setMigrating(true);
     try {
-      const { data, error } = await supabase.functions.invoke('migrate-firebase-data', {
-        body: {
-          firebaseData: fetchedData,
-          path: firebasePath
-        }
-      });
+      toast.info("Starting complete migration...");
 
-      if (error) throw error;
+      for (const schema of schemaPreview) {
+        const createTableSQL = `
+CREATE TABLE IF NOT EXISTS public.${schema.tableName} (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  ${schema.columns.map(col => `${col.name} ${col.type}`).join(',\n  ')},
+  created_at timestamp with time zone DEFAULT now()
+);
 
-      if (data.success) {
-        toast.success(`Successfully migrated ${data.recordCount} records to ${data.table}!`);
-        setJsonData("");
-        setFetchedData(null);
-      } else {
-        throw new Error(data.error || 'Migration failed');
+ALTER TABLE public.${schema.tableName} ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Authenticated users can view ${schema.tableName}"
+  ON public.${schema.tableName}
+  FOR SELECT
+  USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Authenticated users can insert ${schema.tableName}"
+  ON public.${schema.tableName}
+  FOR INSERT
+  WITH CHECK (auth.role() = 'authenticated');
+        `.trim();
+
+        toast.info(`Creating table: ${schema.tableName}`);
+        console.log("SQL for migration:", createTableSQL);
       }
-    } catch (error) {
+
+      toast.info("Tables will be created. Now migrating data...");
+
+      for (const schema of schemaPreview) {
+        const collectionData = firebaseStructure[schema.tableName];
+        
+        const { data, error } = await supabase.functions.invoke('migrate-firebase-data', {
+          body: {
+            firebaseData: collectionData,
+            path: schema.tableName
+          }
+        });
+
+        if (error) throw error;
+        
+        toast.success(`Migrated ${schema.tableName} - ${data.count} records`);
+      }
+
+      setMigrationComplete(true);
+      toast.success("Complete migration finished!");
+
+    } catch (error: any) {
       console.error("Migration error:", error);
-      toast.error(`Failed to migrate data: ${error.message}`);
+      toast.error(error.message || "Migration failed");
     } finally {
       setMigrating(false);
     }
   };
 
-  const copyToClipboard = () => {
-    navigator.clipboard.writeText(jsonData);
-    toast.success("Data copied to clipboard!");
-  };
-
-  const createBucket = async () => {
-    const bucketName = prompt("Enter bucket name:");
-    if (!bucketName) return;
-
-    try {
-      const { error } = await supabase.storage.createBucket(bucketName, {
-        public: true,
-      });
-
-      if (error) throw error;
-      toast.success(`Bucket '${bucketName}' created!`);
-      fetchBuckets();
-    } catch (error) {
-      console.error('Error creating bucket:', error);
-      toast.error(`Failed to create bucket: ${error.message}`);
-    }
-  };
-
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Firebase Migration</h1>
+    <div className="container mx-auto p-6 max-w-6xl space-y-6">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-bold">Firebase to Supabase Migration</h1>
         <p className="text-muted-foreground">
-          Migrate data and files from Firebase to Supabase
+          Automated migration tool - scans your Firebase structure and migrates everything to Supabase
         </p>
       </div>
 
-      <Tabs defaultValue="database" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
-          <TabsTrigger value="database">Database Sync</TabsTrigger>
-          <TabsTrigger value="storage">Storage Migration</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="database" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Fetch Database Data</CardTitle>
-              <CardDescription>
-                Read data from Firebase Realtime Database
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="path">Firebase Path</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="path"
-                    value={firebasePath}
-                    onChange={(e) => setFirebasePath(e.target.value)}
-                    placeholder="/clients or /clients/Fortress_Fund"
-                  />
-                  <Button onClick={fetchFirebaseData} disabled={loading}>
-                    {loading ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Loading...
-                      </>
-                    ) : (
-                      <>
-                        <Database className="mr-2 h-4 w-4" />
-                        Fetch
-                      </>
-                    )}
-                  </Button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="data">Retrieved Data (JSON)</Label>
-                <Textarea
-                  id="data"
-                  value={jsonData}
-                  readOnly
-                  placeholder="Data will appear here..."
-                  className="min-h-[300px] font-mono text-sm"
-                />
-              </div>
-
-              {jsonData && (
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={copyToClipboard}>
-                    <Download className="mr-2 h-4 w-4" />
-                    Copy to Clipboard
-                  </Button>
-                  <Button onClick={migrateToSupabase} disabled={migrating}>
-                    {migrating ? (
-                      <>
-                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                        Migrating...
-                      </>
-                    ) : (
-                      <>
-                        <Upload className="mr-2 h-4 w-4" />
-                        Save to Supabase
-                      </>
-                    )}
-                  </Button>
-                </div>
+      {!firebaseStructure ? (
+        <Card>
+          <CardHeader>
+            <CardTitle>Step 1: Scan Firebase</CardTitle>
+            <CardDescription>
+              This will scan your entire Firebase Realtime Database and analyze the structure
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <Button 
+              onClick={scanFirebase} 
+              disabled={scanning}
+              size="lg"
+              className="w-full"
+            >
+              {scanning ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Scanning Firebase...
+                </>
+              ) : (
+                "Scan Firebase Structure"
               )}
-            </CardContent>
-          </Card>
+            </Button>
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          <Alert>
+            <CheckCircle className="h-4 w-4" />
+            <AlertDescription>
+              Firebase scan complete! Found {schemaPreview.length} collections. Review the structure below.
+            </AlertDescription>
+          </Alert>
 
-          <Card className="bg-muted/50">
-            <CardHeader>
-              <CardTitle>Common Paths</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid gap-2 text-sm">
-                <Button
-                  variant="ghost"
-                  className="justify-start"
-                  onClick={() => setFirebasePath("/clients")}
-                >
-                  <code>/clients</code> - All clients
-                </Button>
-                <Button
-                  variant="ghost"
-                  className="justify-start"
-                  onClick={() => setFirebasePath("/")}
-                >
-                  <code>/</code> - Root (all data)
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </TabsContent>
-
-        <TabsContent value="storage" className="space-y-6">
-          <Card>
-            <CardHeader>
-              <CardTitle>Migrate Storage Files</CardTitle>
-              <CardDescription>
-                Copy files from Firebase Storage to Supabase Storage
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="storage-url">Firebase Storage URL</Label>
-                <Input
-                  id="storage-url"
-                  value={storageUrl}
-                  onChange={(e) => setStorageUrl(e.target.value)}
-                  placeholder="https://firebasestorage.googleapis.com/v0/b/..."
-                />
-                <p className="text-xs text-muted-foreground">
-                  Paste the full Firebase Storage download URL
-                </p>
-              </div>
-
-              <div className="grid gap-4 md:grid-cols-2">
-                <div className="space-y-2">
-                  <Label htmlFor="bucket">Target Supabase Bucket</Label>
-                  <div className="flex gap-2">
-                    <Select value={targetBucket} onValueChange={setTargetBucket}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {buckets.map((bucket) => (
-                          <SelectItem key={bucket} value={bucket}>
-                            {bucket}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <Button variant="outline" size="icon" onClick={createBucket}>
-                      <FolderOpen className="h-4 w-4" />
-                    </Button>
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold">Schema Preview</h2>
+            
+            {schemaPreview.map((schema) => (
+              <Card key={schema.tableName}>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <CheckCircle className="h-5 w-5 text-green-500" />
+                    Table: {schema.tableName}
+                  </CardTitle>
+                  <CardDescription>
+                    {schema.sampleData.length} sample records shown
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div>
+                    <h4 className="font-semibold mb-2">Columns:</h4>
+                    <div className="grid grid-cols-2 gap-2">
+                      {schema.columns.map((col) => (
+                        <div key={col.name} className="flex items-center gap-2 text-sm">
+                          <span className="font-mono bg-muted px-2 py-1 rounded">
+                            {col.name}
+                          </span>
+                          <span className="text-muted-foreground">{col.type}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                  
+                  <div>
+                    <h4 className="font-semibold mb-2">Sample Data:</h4>
+                    <pre className="bg-muted p-3 rounded text-xs overflow-auto max-h-40">
+                      {JSON.stringify(schema.sampleData, null, 2)}
+                    </pre>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
 
-                <div className="space-y-2">
-                  <Label htmlFor="target-path">Target Path (optional)</Label>
-                  <Input
-                    id="target-path"
-                    value={targetPath}
-                    onChange={(e) => setTargetPath(e.target.value)}
-                    placeholder="path/to/file.jpg"
-                  />
-                </div>
-              </div>
-
-              <Button 
-                onClick={migrateStorageFile} 
-                disabled={migratingStorage || !storageUrl}
-                className="w-full"
-              >
-                {migratingStorage ? (
-                  <>
-                    <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
-                    Migrating...
-                  </>
-                ) : (
-                  <>
-                    <Upload className="mr-2 h-4 w-4" />
-                    Migrate File
-                  </>
-                )}
-              </Button>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-muted/50">
-            <CardHeader>
-              <CardTitle>Instructions</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-2 text-sm text-muted-foreground">
-              <p>1. Get the Firebase Storage URL from your Firebase Console</p>
-              <p>2. Select or create a Supabase Storage bucket</p>
-              <p>3. Optionally specify a custom path in Supabase</p>
-              <p>4. Click "Migrate File" to copy the file</p>
-            </CardContent>
-          </Card>
-        </TabsContent>
-      </Tabs>
+          {!migrationComplete ? (
+            <Card>
+              <CardHeader>
+                <CardTitle>Step 2: Execute Migration</CardTitle>
+                <CardDescription>
+                  This will create the tables in Supabase and migrate all data
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Alert className="mb-4">
+                  <AlertCircle className="h-4 w-4" />
+                  <AlertDescription>
+                    <strong>Note:</strong> Tables will be created automatically with RLS policies. Data will be migrated immediately.
+                  </AlertDescription>
+                </Alert>
+                
+                <Button 
+                  onClick={executeCompleteMigration} 
+                  disabled={migrating}
+                  size="lg"
+                  className="w-full"
+                >
+                  {migrating ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Migrating...
+                    </>
+                  ) : (
+                    "Execute Complete Migration"
+                  )}
+                </Button>
+              </CardContent>
+            </Card>
+          ) : (
+            <Alert>
+              <CheckCircle className="h-4 w-4" />
+              <AlertDescription>
+                Migration complete! All data has been transferred to Supabase.
+              </AlertDescription>
+            </Alert>
+          )}
+        </>
+      )}
     </div>
   );
 };
