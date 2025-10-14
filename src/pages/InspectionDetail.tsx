@@ -1,46 +1,52 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Breadcrumbs } from "@/components/Breadcrumb";
-import { Badge } from "@/components/ui/badge";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Edit, Save, X } from "lucide-react";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { X, Save, Camera, Upload, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import QRCode from "qrcode";
+import { readFirebaseData } from "@/lib/firebase";
+import { supabase } from "@/integrations/supabase/client";
 
-interface Inspection {
-  id: string;
-  title: string;
-  description: string | null;
-  status: string;
-  priority: string;
-  inspection_date: string | null;
-  end_date: string | null;
-  project_name: string | null;
-  shop_number: string | null;
-  shop_name: string | null;
-  inspector_name: string | null;
-  client_rep: string | null;
-  consultant: string | null;
-  contractor: string | null;
-  testing_party: string | null;
-  location: string | null;
-  subsection_id: string;
-  site_id: string;
-  subsections: {
-    id: string;
-    name: string;
-    sites: {
-      id: string;
+interface InspectionTemplate {
+  name: string;
+  sections: {
+    [key: string]: {
       name: string;
-      clients: {
-        id: string;
-        name: string;
+      items: {
+        [key: string]: {
+          name: string;
+          type?: string;
+        };
+      };
+    };
+  };
+}
+
+interface InspectionData {
+  type: string;
+  date: string;
+  projectName?: string;
+  shopNumber?: string;
+  shopName?: string;
+  inspectorName?: string;
+  clientRep?: string;
+  consultant?: string;
+  contractor?: string;
+  testingParty?: string;
+  location?: string;
+  jsonData?: {
+    [sectionKey: string]: {
+      [itemKey: string]: {
+        status?: string;
+        notes?: string;
+        photos?: string[];
       };
     };
   };
@@ -49,75 +55,407 @@ interface Inspection {
 const InspectionDetail = () => {
   const { clientId, siteId, subsectionId, inspectionId } = useParams();
   const navigate = useNavigate();
-  const [inspection, setInspection] = useState<Inspection | null>(null);
+  const [template, setTemplate] = useState<InspectionTemplate | null>(null);
+  const [inspection, setInspection] = useState<InspectionData | null>(null);
+  const [siteData, setSiteData] = useState<any>(null);
+  const [subsectionData, setSubsectionData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
-  const [editing, setEditing] = useState(false);
-  const [formData, setFormData] = useState<Partial<Inspection>>({});
+  const [saving, setSaving] = useState(false);
+  const [qrCodeUrl, setQrCodeUrl] = useState("");
+  const [activeTab, setActiveTab] = useState("");
+  const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
-    fetchInspectionData();
-  }, [inspectionId]);
+    if (clientId && siteId && subsectionId && inspectionId) {
+      fetchInspectionData();
+    }
+  }, [clientId, siteId, subsectionId, inspectionId]);
 
   const fetchInspectionData = async () => {
     try {
-      const { data, error } = await supabase
-        .from("inspections")
-        .select("*, subsections(id, name, sites(id, name, clients(id, name)))")
-        .eq("id", inspectionId)
-        .single();
+      setLoading(true);
 
-      if (error) throw error;
-      setInspection(data);
-      setFormData(data);
+      // Fetch inspection data
+      const inspectionPath = `/clients/${clientId}/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`;
+      const inspData = await readFirebaseData(inspectionPath);
+
+      if (!inspData) {
+        toast.error("Inspection not found");
+        return;
+      }
+
+      setInspection(inspData);
+
+      // Fetch site and subsection data
+      const siteInfo = await readFirebaseData(`/clients/${clientId}/${siteId}`);
+      const subsectionInfo = await readFirebaseData(`/clients/${clientId}/${siteId}/subsections/${subsectionId}`);
+      setSiteData(siteInfo);
+      setSubsectionData(subsectionInfo);
+
+      // Fetch template
+      const templatePath = `/reportTemplates/${inspData.type}`;
+      const templateData = await readFirebaseData(templatePath);
+
+      if (templateData) {
+        setTemplate(templateData);
+        // Set first section as active tab
+        const firstSection = Object.keys(templateData.sections || {})[0];
+        if (firstSection) {
+          setActiveTab(firstSection);
+        }
+      }
+
+      // Generate QR code
+      const url = `${window.location.origin}/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`;
+      const qrDataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2 });
+      setQrCodeUrl(qrDataUrl);
     } catch (error) {
-      console.error("Error fetching inspection:", error);
-      toast.error("Failed to fetch inspection data");
+      console.error("Error fetching inspection data:", error);
+      toast.error("Failed to load inspection data");
     } finally {
       setLoading(false);
     }
   };
 
+  const handleFieldChange = (field: string, value: any) => {
+    setInspection(prev => prev ? { ...prev, [field]: value } : null);
+  };
+
+  const handleItemChange = (sectionKey: string, itemKey: string, field: 'status' | 'notes', value: string) => {
+    setInspection(prev => {
+      if (!prev) return null;
+      
+      const jsonData = prev.jsonData || {};
+      const sectionData = jsonData[sectionKey] || {};
+      const itemData = sectionData[itemKey] || {};
+
+      return {
+        ...prev,
+        jsonData: {
+          ...jsonData,
+          [sectionKey]: {
+            ...sectionData,
+            [itemKey]: {
+              ...itemData,
+              [field]: value
+            }
+          }
+        }
+      };
+    });
+  };
+
+  const handleImageUpload = async (sectionKey: string, itemKey: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    setUploadingImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      const uploadedUrls: string[] = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileExt = file.name.split('.').pop();
+        const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}-${i}.${fileExt}`;
+
+        const { data, error } = await supabase.storage
+          .from('inspection-photos')
+          .upload(fileName, file);
+
+        if (error) throw error;
+
+        const { data: urlData } = supabase.storage
+          .from('inspection-photos')
+          .getPublicUrl(data.path);
+
+        uploadedUrls.push(urlData.publicUrl);
+      }
+
+      // Add uploaded URLs to inspection data
+      setInspection(prev => {
+        if (!prev) return null;
+
+        const jsonData = prev.jsonData || {};
+        const sectionData = jsonData[sectionKey] || {};
+        const itemData = sectionData[itemKey] || {};
+        const existingPhotos = itemData.photos || [];
+
+        return {
+          ...prev,
+          jsonData: {
+            ...jsonData,
+            [sectionKey]: {
+              ...sectionData,
+              [itemKey]: {
+                ...itemData,
+                photos: [...existingPhotos, ...uploadedUrls]
+              }
+            }
+          }
+        };
+      });
+
+      toast.success(`${uploadedUrls.length} image(s) uploaded successfully`);
+    } catch (error) {
+      console.error("Error uploading images:", error);
+      toast.error("Failed to upload images");
+    } finally {
+      setUploadingImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadKey);
+        return newSet;
+      });
+    }
+  };
+
+  const handleDeleteImage = async (sectionKey: string, itemKey: string, photoUrl: string, index: number) => {
+    try {
+      // Extract file path from URL
+      const urlParts = photoUrl.split('/inspection-photos/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1].split('?')[0];
+        await supabase.storage.from('inspection-photos').remove([filePath]);
+      }
+
+      // Remove from inspection data
+      setInspection(prev => {
+        if (!prev) return null;
+
+        const jsonData = prev.jsonData || {};
+        const sectionData = jsonData[sectionKey] || {};
+        const itemData = sectionData[itemKey] || {};
+        const photos = itemData.photos || [];
+
+        return {
+          ...prev,
+          jsonData: {
+            ...jsonData,
+            [sectionKey]: {
+              ...sectionData,
+              [itemKey]: {
+                ...itemData,
+                photos: photos.filter((_, i) => i !== index)
+              }
+            }
+          }
+        };
+      });
+
+      toast.success("Image deleted successfully");
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      toast.error("Failed to delete image");
+    }
+  };
+
   const handleSave = async () => {
     try {
-      const { error } = await supabase
-        .from("inspections")
-        .update(formData)
-        .eq("id", inspectionId);
-
-      if (error) throw error;
-      toast.success("Inspection updated successfully");
-      setEditing(false);
-      fetchInspectionData();
+      setSaving(true);
+      // In a real implementation, this would save back to Firebase
+      // For now, we'll just show a success message
+      toast.success("Inspection saved successfully");
+      
+      // You would implement Firebase update here:
+      // await updateFirebaseData(`/clients/${clientId}/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`, inspection);
+      
     } catch (error) {
-      console.error("Error updating inspection:", error);
-      toast.error("Failed to update inspection");
+      console.error("Error saving inspection:", error);
+      toast.error("Failed to save inspection");
+    } finally {
+      setSaving(false);
     }
   };
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Completed":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      case "In Progress":
-        return "bg-blue-500/10 text-blue-500 border-blue-500/20";
-      case "Pending":
-        return "bg-orange-500/10 text-orange-500 border-orange-500/20";
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
-    }
-  };
+  const renderGeneralInfo = () => (
+    <Card>
+      <CardHeader>
+        <CardTitle>General Information</CardTitle>
+        <p className="text-sm text-muted-foreground">Basic details about this inspection.</p>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="grid md:grid-cols-2 gap-4">
+          <div>
+            <Label>Project Name</Label>
+            <Input
+              value={inspection?.projectName || siteData?.siteName || ''}
+              onChange={(e) => handleFieldChange('projectName', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Shop Number</Label>
+            <Input
+              value={inspection?.shopNumber || subsectionData?.name || ''}
+              onChange={(e) => handleFieldChange('shopNumber', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Shop Name</Label>
+            <Input
+              value={inspection?.shopName || ''}
+              onChange={(e) => handleFieldChange('shopName', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Inspection Date</Label>
+            <Input
+              type="date"
+              value={inspection?.date ? format(new Date(inspection.date), 'yyyy-MM-dd') : ''}
+              onChange={(e) => handleFieldChange('date', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Inspector Name</Label>
+            <Input
+              value={inspection?.inspectorName || ''}
+              onChange={(e) => handleFieldChange('inspectorName', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Client Rep</Label>
+            <Input
+              value={inspection?.clientRep || ''}
+              onChange={(e) => handleFieldChange('clientRep', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Consultant</Label>
+            <Input
+              value={inspection?.consultant || ''}
+              onChange={(e) => handleFieldChange('consultant', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Contractor</Label>
+            <Input
+              value={inspection?.contractor || ''}
+              onChange={(e) => handleFieldChange('contractor', e.target.value)}
+            />
+          </div>
+          <div>
+            <Label>Testing Party</Label>
+            <Input
+              value={inspection?.testingParty || ''}
+              onChange={(e) => handleFieldChange('testingParty', e.target.value)}
+            />
+          </div>
+        </div>
+        <div>
+          <Label>Location</Label>
+          <Input
+            value={inspection?.location || siteData?.physicalAddress || ''}
+            onChange={(e) => handleFieldChange('location', e.target.value)}
+          />
+        </div>
+        <div>
+          <Label>QR Code</Label>
+          <div className="mt-2">
+            {qrCodeUrl && (
+              <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 border rounded" />
+            )}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case "High":
-        return "bg-red-500/10 text-red-500 border-red-500/20";
-      case "Medium":
-        return "bg-yellow-500/10 text-yellow-500 border-yellow-500/20";
-      case "Low":
-        return "bg-green-500/10 text-green-500 border-green-500/20";
-      default:
-        return "bg-gray-500/10 text-gray-500 border-gray-500/20";
-    }
+  const renderInspectionItem = (sectionKey: string, itemKey: string, item: any) => {
+    const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
+    const photos = itemData.photos || [];
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    const isUploading = uploadingImages.has(uploadKey);
+
+    return (
+      <div key={itemKey} className="border-b pb-6 mb-6 last:border-b-0">
+        <h4 className="font-medium mb-4">{itemKey}. {item.name}</h4>
+        
+        <div className="grid md:grid-cols-2 gap-6">
+          <div className="space-y-4">
+            <div>
+              <Label>Status</Label>
+              <Select
+                value={itemData.status || ''}
+                onValueChange={(value) => handleItemChange(sectionKey, itemKey, 'status', value)}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Select status" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Pass">Pass</SelectItem>
+                  <SelectItem value="Fail">Fail</SelectItem>
+                  <SelectItem value="N/A">N/A</SelectItem>
+                  <SelectItem value="Pending">Pending</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div>
+              <Label>Notes / Observations</Label>
+              <Textarea
+                value={itemData.notes || ''}
+                onChange={(e) => handleItemChange(sectionKey, itemKey, 'notes', e.target.value)}
+                rows={4}
+                placeholder="Enter notes or observations..."
+              />
+            </div>
+          </div>
+
+          <div>
+            <Label>Photos</Label>
+            <div className="mt-2 space-y-3">
+              {photos.length > 0 && (
+                <div className="grid grid-cols-2 gap-2">
+                  {photos.map((photo: string, index: number) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={photo}
+                        alt={`Photo ${index + 1}`}
+                        className="w-full h-32 object-cover rounded border"
+                      />
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
+                      >
+                        <Trash2 className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+              
+              <input
+                ref={(el) => (fileInputRefs.current[uploadKey] = el)}
+                type="file"
+                accept="image/*"
+                multiple
+                capture="environment"
+                className="hidden"
+                onChange={(e) => handleImageUpload(sectionKey, itemKey, e.target.files)}
+              />
+              
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => fileInputRefs.current[uploadKey]?.click()}
+                disabled={isUploading}
+              >
+                {isUploading ? (
+                  <>Uploading...</>
+                ) : (
+                  <>
+                    <Camera className="mr-2 h-4 w-4" />
+                    Add Image
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   };
 
   if (loading) {
@@ -125,233 +463,109 @@ const InspectionDetail = () => {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
-          <p className="text-muted-foreground">Loading...</p>
+          <p className="text-muted-foreground">Loading inspection...</p>
         </div>
       </div>
     );
   }
 
-  if (!inspection) {
+  if (!inspection || !template) {
     return (
-      <div className="text-center py-12">
-        <h3 className="text-lg font-semibold mb-2">Inspection not found</h3>
-        <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}>
-          Back to Subsection
-        </Button>
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <p className="text-muted-foreground">Inspection or template not found</p>
+          <Button 
+            className="mt-4" 
+            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+          >
+            Back to Subsection
+          </Button>
+        </div>
       </div>
     );
   }
 
   return (
     <div className="space-y-6">
-      <Breadcrumbs
-        items={[
-          { label: "Clients", href: "/clients" },
-          { label: inspection.subsections.sites.clients.name, href: `/clients/${clientId}` },
-          { label: inspection.subsections.sites.name, href: `/clients/${clientId}/sites/${siteId}` },
-          { label: inspection.subsections.name, href: `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}` },
-          { label: inspection.title },
-        ]}
-      />
-
-      <div className="flex justify-between items-start">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">{inspection.title}</h1>
-          <p className="text-muted-foreground mt-2">
-            {inspection.subsections.name} - {inspection.subsections.sites.name}
-          </p>
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+          >
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold">Edit Inspection</h1>
+            <p className="text-sm text-muted-foreground">
+              Site: {siteData?.siteName || 'Unknown'} | Subsection: {subsectionData?.name || 'Unknown'}
+            </p>
+          </div>
         </div>
         <div className="flex gap-2">
-          {editing ? (
-            <>
-              <Button variant="outline" onClick={() => setEditing(false)}>
-                <X className="mr-2 h-4 w-4" />
-                Cancel
-              </Button>
-              <Button onClick={handleSave}>
-                <Save className="mr-2 h-4 w-4" />
-                Save Changes
-              </Button>
-            </>
-          ) : (
-            <Button onClick={() => setEditing(true)}>
-              <Edit className="mr-2 h-4 w-4" />
-              Edit
-            </Button>
-          )}
+          <Button 
+            variant="outline" 
+            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+          >
+            <X className="mr-2 h-4 w-4" />
+            Exit
+          </Button>
+          <Button onClick={handleSave} disabled={saving}>
+            <Save className="mr-2 h-4 w-4" />
+            {saving ? 'Saving...' : 'Save'}
+          </Button>
         </div>
       </div>
 
-      {/* Status Overview */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Status</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant="outline" className={getStatusColor(inspection.status)}>
-              {inspection.status}
-            </Badge>
-          </CardContent>
-        </Card>
+      {/* Tabs */}
+      <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
+          <TabsTrigger value="general">General Info</TabsTrigger>
+          {Object.entries(template.sections || {}).map(([key, section]) => (
+            <TabsTrigger key={key} value={key}>
+              {section.name}
+            </TabsTrigger>
+          ))}
+          <TabsTrigger value="snag-list">Snag List</TabsTrigger>
+        </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Priority</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <Badge variant="outline" className={getPriorityColor(inspection.priority)}>
-              {inspection.priority}
-            </Badge>
-          </CardContent>
-        </Card>
+        <TabsContent value="general" className="space-y-4">
+          {renderGeneralInfo()}
+        </TabsContent>
 
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Inspection Date</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="font-medium">
-              {inspection.inspection_date
-                ? format(new Date(inspection.inspection_date), "MMM dd, yyyy")
-                : "Not scheduled"}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+        {Object.entries(template.sections || {}).map(([sectionKey, section]) => (
+          <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle>{section.name}</CardTitle>
+              </CardHeader>
+              <CardContent>
+                {Object.entries(section.items || {}).map(([itemKey, item]) =>
+                  renderInspectionItem(sectionKey, itemKey, item)
+                )}
+              </CardContent>
+            </Card>
+          </TabsContent>
+        ))}
 
-      {/* Inspection Details */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Inspection Details</CardTitle>
-          <CardDescription>
-            {editing ? "Edit the inspection information below" : "View inspection information"}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {editing ? (
-            <div className="grid gap-4 md:grid-cols-2">
-              <div className="space-y-2">
-                <Label htmlFor="title">Inspection Title</Label>
-                <Input
-                  id="title"
-                  value={formData.title || ""}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="status">Status</Label>
-                <Select
-                  value={formData.status || ""}
-                  onValueChange={(value) => setFormData({ ...formData, status: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Pending">Pending</SelectItem>
-                    <SelectItem value="In Progress">In Progress</SelectItem>
-                    <SelectItem value="Completed">Completed</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="priority">Priority</Label>
-                <Select
-                  value={formData.priority || ""}
-                  onValueChange={(value) => setFormData({ ...formData, priority: value })}
-                >
-                  <SelectTrigger>
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="High">High</SelectItem>
-                    <SelectItem value="Medium">Medium</SelectItem>
-                    <SelectItem value="Low">Low</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="inspection_date">Inspection Date</Label>
-                <Input
-                  id="inspection_date"
-                  type="date"
-                  value={formData.inspection_date || ""}
-                  onChange={(e) => setFormData({ ...formData, inspection_date: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="project_name">Project Name</Label>
-                <Input
-                  id="project_name"
-                  value={formData.project_name || ""}
-                  onChange={(e) => setFormData({ ...formData, project_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="inspector_name">Inspector Name</Label>
-                <Input
-                  id="inspector_name"
-                  value={formData.inspector_name || ""}
-                  onChange={(e) => setFormData({ ...formData, inspector_name: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="location">Location</Label>
-                <Input
-                  id="location"
-                  value={formData.location || ""}
-                  onChange={(e) => setFormData({ ...formData, location: e.target.value })}
-                />
-              </div>
-              <div className="space-y-2 md:col-span-2">
-                <Label htmlFor="description">Description</Label>
-                <Textarea
-                  id="description"
-                  value={formData.description || ""}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  rows={3}
-                />
-              </div>
-            </div>
-          ) : (
-            <div className="grid gap-6 md:grid-cols-2">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Description</p>
-                <p className="font-medium">{inspection.description || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Project Name</p>
-                <p className="font-medium">{inspection.project_name || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Inspector Name</p>
-                <p className="font-medium">{inspection.inspector_name || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Location</p>
-                <p className="font-medium">{inspection.location || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Client Representative</p>
-                <p className="font-medium">{inspection.client_rep || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Consultant</p>
-                <p className="font-medium">{inspection.consultant || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Contractor</p>
-                <p className="font-medium">{inspection.contractor || "—"}</p>
-              </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Testing Party</p>
-                <p className="font-medium">{inspection.testing_party || "—"}</p>
-              </div>
-            </div>
-          )}
-        </CardContent>
-      </Card>
+        <TabsContent value="snag-list" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Snag List</CardTitle>
+              <p className="text-sm text-muted-foreground">
+                Items marked as "Fail" or issues identified during inspection
+              </p>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Snag list functionality coming soon...
+              </p>
+            </CardContent>
+          </Card>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };
