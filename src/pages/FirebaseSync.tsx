@@ -403,9 +403,30 @@ const FirebaseSync = () => {
 
       toast.info("Starting complete migration with file transfer...");
       
+      // Migrate settings if needed
+      if (migrationStatus.settings.needsUpdate) {
+        toast.info("Migrating app settings...");
+        const { migrateAppSettings } = await import("@/lib/migration");
+        await migrateAppSettings();
+        toast.success("Settings migrated");
+      }
+
       // Migrate clients if any
       if (migrationStatus.clients.toMigrate.length > 0) {
         await migrateClients();
+      }
+
+      // Migrate users if any
+      if (migrationStatus.users.toMigrate.length > 0) {
+        toast.info("Migrating users...");
+        const { migrateUsers } = await import("@/lib/migration");
+        const usersToMigrate = migrationStatus.users.toMigrate.map(u => ({
+          id: u.id,
+          email: u.email,
+          name: u.name
+        }));
+        await migrateUsers(usersToMigrate);
+        toast.success(`Migrated ${usersToMigrate.length} users`);
       }
 
       // Migrate calendar events if any
