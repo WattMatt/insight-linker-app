@@ -23,6 +23,11 @@ interface MigrationStatus {
     firebase: number;
     supabase: number;
   };
+  users: {
+    firebase: number;
+    supabase: number;
+    toMigrate: Array<{id: string; email: string; name: string}>;
+  };
   calendarEvents: {
     firebase: number;
     supabase: number;
@@ -83,6 +88,7 @@ const FirebaseSync = () => {
       // Scan Firebase
       const firebaseData = await readFirebaseData("/clients");
       const firebaseEvents = await readFirebaseData("/scheduleEvents");
+      const firebaseUsers = await readFirebaseData("/users");
       
       if (!firebaseData) {
         toast.error("No data found in Firebase");
@@ -91,6 +97,11 @@ const FirebaseSync = () => {
 
       const firebaseClients = Object.keys(firebaseData);
       const firebaseEventsCount = firebaseEvents ? Object.keys(firebaseEvents).length : 0;
+      const firebaseUsersData = firebaseUsers ? Object.entries(firebaseUsers).map(([id, data]: [string, any]) => ({
+        id,
+        email: data.email || data.Email || '',
+        name: data.name || data.displayName || data.Name || data.full_name || ''
+      })) : [];
       
       // Extract all file URLs from Firebase
       const allFileUrls = extractFileUrls(firebaseData);
@@ -133,6 +144,10 @@ const FirebaseSync = () => {
         .from('subsections')
         .select('*', { count: 'exact', head: true });
       
+      const { data: supabaseProfiles } = await supabase
+        .from('profiles')
+        .select('email');
+      
       const { count: calendarEventsCount } = await supabase
         .from('calendar_events')
         .select('*', { count: 'exact', head: true });
@@ -143,6 +158,14 @@ const FirebaseSync = () => {
       
       const clientsToMigrate = firebaseClients.filter(
         clientId => !migratedFirebaseIds.has(clientId)
+      );
+
+      const migratedEmails = new Set(
+        (supabaseProfiles || []).map(p => p.email?.toLowerCase()).filter(Boolean)
+      );
+      
+      const usersToMigrate = firebaseUsersData.filter(
+        user => user.email && !migratedEmails.has(user.email.toLowerCase())
       );
 
       const eventsToMigrate = Math.max(0, firebaseEventsCount - (calendarEventsCount || 0));
@@ -160,6 +183,11 @@ const FirebaseSync = () => {
         subsections: {
           firebase: firebaseSubsectionsCount,
           supabase: subsectionsCount || 0,
+        },
+        users: {
+          firebase: firebaseUsersData.length,
+          supabase: supabaseProfiles?.length || 0,
+          toMigrate: usersToMigrate,
         },
         calendarEvents: {
           firebase: firebaseEventsCount,
@@ -239,6 +267,34 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateUsers = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('users');
+    try {
+      toast.info("Migrating users and sending invites...");
+
+      const { migrateUsers: migrateUsersFn } = await import("@/lib/migration");
+      const result = await migrateUsersFn(migrationStatus.users.toMigrate);
+      
+      if (result.migratedCount > 0) {
+        toast.success(`Migrated ${result.migratedCount} users. Invites sent to ${result.invitesSent} users.`);
+      } else {
+        toast.info("No users to migrate");
+      }
+      
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate users");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   const migrateCalendarEventsOnly = async () => {
     if (!migrationStatus) return;
     
@@ -260,7 +316,10 @@ const FirebaseSync = () => {
         toast.info("No events to migrate");
       }
       
-      await scanComplete();
+      // Give a moment for the toast to show, then refresh
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
       
     } catch (error: any) {
       console.error("Migration error:", error);
@@ -356,7 +415,7 @@ const FirebaseSync = () => {
             </AlertDescription>
           </Alert>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Clients</CardTitle>
@@ -434,6 +493,45 @@ const FirebaseSync = () => {
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Clients
                   </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Users</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.users.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.users.supabase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">To Migrate:</span>
+                    <Badge variant="destructive">{migrationStatus.users.toMigrate.length}</Badge>
+                  </div>
+                  {migrationStatus.users.toMigrate.length > 0 && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateUsers}
+                      disabled={migratingSection !== null || migrating}
+                    >
+                      {migratingSection === 'users' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate & Invite'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>

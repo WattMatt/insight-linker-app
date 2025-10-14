@@ -483,6 +483,62 @@ export const migrateAllFromFirebase = async (
 };
 
 /**
+ * Migrate users from Firebase to Supabase profiles and send invites
+ */
+export const migrateUsers = async (
+  users: Array<{id: string; email: string; name: string}>
+): Promise<{ success: boolean; migratedCount: number; invitesSent: number; error?: string }> => {
+  try {
+    let migratedCount = 0;
+    let invitesSent = 0;
+
+    for (const user of users) {
+      try {
+        if (!user.email) {
+          console.warn(`Skipping user ${user.id}: No email`);
+          continue;
+        }
+
+        // Send invite via Supabase Auth Admin API
+        const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
+          user.email,
+          {
+            data: {
+              full_name: user.name || '',
+            },
+            redirectTo: `${window.location.origin}/`
+          }
+        );
+
+        if (!inviteError && inviteData) {
+          migratedCount++;
+          invitesSent++;
+          console.log(`Invited user: ${user.email}`);
+        } else {
+          console.error('User invite error:', inviteError);
+        }
+      } catch (error) {
+        console.error('Error migrating user:', user.id, error);
+      }
+    }
+
+    return {
+      success: true,
+      migratedCount,
+      invitesSent,
+    };
+  } catch (error) {
+    console.error('Users migration error:', error);
+    return {
+      success: false,
+      migratedCount: 0,
+      invitesSent: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
+/**
  * Migrate calendar events from Firebase to Supabase
  */
 export const migrateCalendarEvents = async (): Promise<{ success: boolean; migratedCount: number; skipped: number; error?: string }> => {
