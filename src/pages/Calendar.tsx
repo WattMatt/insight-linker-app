@@ -168,63 +168,88 @@ const Calendar = () => {
                     {format(month, "MMMM yyyy")}
                   </h3>
                   
-                  {/* Mini calendar grid */}
-                  <div className="grid grid-cols-7 gap-1">
-                    {/* Week day headers */}
-                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, idx) => (
-                      <div
-                        key={idx}
-                        className="text-center text-xs font-medium text-muted-foreground pb-1"
-                      >
-                        {day}
-                      </div>
-                    ))}
-
-                    {/* Empty cells for days before month starts */}
-                    {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-                      <div key={`empty-${index}`} className="aspect-square p-1">
-                        <div className="w-full h-full" />
-                      </div>
-                    ))}
-
-                    {/* Calendar days */}
-                    {daysInMonth.map(day => {
-                      const dayEvents = getEventsForDay(day);
-                      const isToday = isSameDay(day, new Date());
-                      const hasEvents = dayEvents.length > 0;
-                      
-                      // Use the first event's site for color coding
-                      const siteColor = hasEvents ? getSiteColor(dayEvents[0].site_name) : null;
-
-                      return (
-                        <div key={day.toISOString()} className="aspect-square p-1">
-                          <button
-                            onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
-                            disabled={!hasEvents}
-                            className={cn(
-                              "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium text-white",
-                              isToday && !hasEvents && "ring-2 ring-blue-500",
-                              isToday && hasEvents && "ring-2 ring-white ring-offset-1",
-                              hasEvents && "cursor-pointer",
-                              !hasEvents && "cursor-default text-muted-foreground hover:bg-muted/50",
-                              hasEvents && siteColor?.bg,
-                              hasEvents && `hover:${siteColor?.hover}`
-                            )}
-                          >
-                            {format(day, "d")}
-                          </button>
+                  {/* Mini calendar grid with event bars */}
+                  <div className="relative">
+                    <div className="grid grid-cols-7 gap-1">
+                      {/* Week day headers */}
+                      {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, idx) => (
+                        <div
+                          key={idx}
+                          className="text-center text-xs font-medium text-muted-foreground pb-1"
+                        >
+                          {day}
                         </div>
-                      );
-                    })}
+                      ))}
 
-                    {/* Fill remaining cells to complete the grid */}
-                    {Array.from({ 
-                      length: (7 - ((monthStart.getDay() + daysInMonth.length) % 7)) % 7 
-                    }).map((_, index) => (
-                      <div key={`fill-${index}`} className="aspect-square p-1">
-                        <div className="w-full h-full" />
-                      </div>
-                    ))}
+                      {/* Empty cells for days before month starts */}
+                      {Array.from({ length: monthStart.getDay() }).map((_, index) => (
+                        <div key={`empty-${index}`} className="aspect-square p-1">
+                          <div className="w-full h-full" />
+                        </div>
+                      ))}
+
+                      {/* Calendar days */}
+                      {daysInMonth.map(day => {
+                        const dayEvents = getEventsForDay(day);
+                        const isToday = isSameDay(day, new Date());
+                        const hasEvents = dayEvents.length > 0;
+
+                        return (
+                          <div key={day.toISOString()} className="aspect-square p-1 relative">
+                            <button
+                              onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
+                              className={cn(
+                                "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium relative z-10",
+                                isToday && "ring-2 ring-blue-500",
+                                hasEvents && "cursor-pointer font-semibold",
+                                !hasEvents && "cursor-default text-muted-foreground"
+                              )}
+                            >
+                              {format(day, "d")}
+                            </button>
+                            
+                            {/* Event bars - positioned absolutely behind the date */}
+                            {hasEvents && dayEvents.map((event, idx) => {
+                              const eventStart = parseISO(event.start_date);
+                              const eventEnd = event.end_date ? parseISO(event.end_date) : eventStart;
+                              const isEventStart = isSameDay(day, eventStart);
+                              const isEventEnd = isSameDay(day, eventEnd);
+                              const siteColor = getSiteColor(event.site_name);
+                              
+                              // Calculate if this is the first day of the event in this month
+                              const isFirstInMonth = isEventStart || !isSameMonth(eventStart, month);
+                              
+                              return (
+                                <div
+                                  key={`${event.id}-${idx}`}
+                                  className={cn(
+                                    "absolute inset-0 z-0",
+                                    siteColor.bg,
+                                    "opacity-60"
+                                  )}
+                                  style={{
+                                    top: `${20 + idx * 8}%`,
+                                    height: '6px',
+                                    left: isFirstInMonth ? '10%' : '0',
+                                    right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
+                                    borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
+                                  }}
+                                />
+                              );
+                            })}
+                          </div>
+                        );
+                      })}
+
+                      {/* Fill remaining cells to complete the grid */}
+                      {Array.from({ 
+                        length: (7 - ((monthStart.getDay() + daysInMonth.length) % 7)) % 7 
+                      }).map((_, index) => (
+                        <div key={`fill-${index}`} className="aspect-square p-1">
+                          <div className="w-full h-full" />
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 </div>
               );
