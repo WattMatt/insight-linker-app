@@ -158,6 +158,59 @@ export const migrateClientToSupabase = async (
       
       for (const [siteId, siteData] of Object.entries(sitesToMigrate)) {
         try {
+          // Migrate images from Firebase Storage to Supabase Storage
+          let migratedSiteImageUrl = null;
+          let migratedClientLogoUrl = null;
+          
+          const firebaseSiteImageUrl = (siteData as any).siteImageUrl || (siteData as any).site_image_url;
+          const firebaseClientLogoUrl = (siteData as any).clientLogoUrl || (siteData as any).client_logo_url;
+          
+          // Migrate site image if it exists
+          if (firebaseSiteImageUrl && firebaseSiteImageUrl.startsWith('http')) {
+            try {
+              const fileName = `site-${siteId}-${Date.now()}.jpg`;
+              const { data: imageData, error: imageError } = await supabase.functions.invoke('migrate-images', {
+                body: {
+                  imageUrl: firebaseSiteImageUrl,
+                  bucket: 'site-images',
+                  fileName,
+                },
+              });
+              
+              if (!imageError && imageData?.success) {
+                migratedSiteImageUrl = imageData.newUrl;
+                console.log(`Migrated site image: ${firebaseSiteImageUrl} -> ${migratedSiteImageUrl}`);
+              } else {
+                console.warn(`Failed to migrate site image: ${firebaseSiteImageUrl}`, imageError);
+              }
+            } catch (error) {
+              console.warn('Error migrating site image:', error);
+            }
+          }
+          
+          // Migrate client logo if it exists
+          if (firebaseClientLogoUrl && firebaseClientLogoUrl.startsWith('http')) {
+            try {
+              const fileName = `client-logo-${siteId}-${Date.now()}.jpg`;
+              const { data: logoData, error: logoError } = await supabase.functions.invoke('migrate-images', {
+                body: {
+                  imageUrl: firebaseClientLogoUrl,
+                  bucket: 'client-logos',
+                  fileName,
+                },
+              });
+              
+              if (!logoError && logoData?.success) {
+                migratedClientLogoUrl = logoData.newUrl;
+                console.log(`Migrated client logo: ${firebaseClientLogoUrl} -> ${migratedClientLogoUrl}`);
+              } else {
+                console.warn(`Failed to migrate client logo: ${firebaseClientLogoUrl}`, logoError);
+              }
+            } catch (error) {
+              console.warn('Error migrating client logo:', error);
+            }
+          }
+
           const siteInsertData = {
             name: (siteData as any).name || (siteData as any).siteName || (siteData as any).Name || siteId,
             address: (siteData as any).address || (siteData as any).physicalAddress || (siteData as any).Address || null,
@@ -170,8 +223,8 @@ export const migrateClientToSupabase = async (
             consultant_name: (siteData as any).consultantName || (siteData as any).consultant_name || null,
             consultant_company: (siteData as any).consultantCompany || (siteData as any).consultant_company || null,
             consultant_contact: (siteData as any).consultantContact || (siteData as any).consultant_contact || null,
-            site_image_url: (siteData as any).siteImageUrl || (siteData as any).site_image_url || null,
-            client_logo_url: (siteData as any).clientLogoUrl || (siteData as any).client_logo_url || null,
+            site_image_url: migratedSiteImageUrl || firebaseSiteImageUrl,
+            client_logo_url: migratedClientLogoUrl || firebaseClientLogoUrl,
           };
 
           const { data: newSite, error: siteError } = await supabase
