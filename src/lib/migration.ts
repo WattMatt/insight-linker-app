@@ -690,11 +690,11 @@ export const migrateCalendarEvents = async (): Promise<{ success: boolean; migra
     for (const [eventId, eventData] of Object.entries(firebaseEvents)) {
       try {
         // Extract and validate start_date (REQUIRED field)
-        const startDate = (eventData as any).startDate || (eventData as any).start_date || (eventData as any).date;
+        const startDate = (eventData as any).scheduledDate || (eventData as any).startDate || (eventData as any).start_date || (eventData as any).date;
         
         // Skip events without a valid start date since it's required
         if (!startDate) {
-          console.warn(`Skipping event ${eventId}: No start date found`);
+          console.warn(`Skipping event ${eventId}: No start date found`, eventData);
           skipped++;
           continue;
         }
