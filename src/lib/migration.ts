@@ -305,9 +305,35 @@ export const migrateClientToSupabase = async (
                           }
 
                           if (categoryId) {
+                            const firebaseDocUrl = (docData as any).fileUrl || (docData as any).file_url || (docData as any).url || '';
+                            const fileName = (docData as any).fileName || (docData as any).file_name || (docData as any).name || 'Unnamed Document';
+                            let migratedDocUrl = firebaseDocUrl;
+
+                            // Migrate document file from Firebase Storage to Supabase Storage
+                            if (firebaseDocUrl && (firebaseDocUrl.includes('firebasestorage') || firebaseDocUrl.includes('firebase'))) {
+                              try {
+                                const { data: storageData, error: storageError } = await supabase.functions.invoke('migrate-storage', {
+                                  body: {
+                                    firebaseStorageUrl: firebaseDocUrl,
+                                    targetBucket: 'documents',
+                                    targetPath: `${newSubsection.id}/${fileName}`,
+                                  },
+                                });
+                                
+                                if (!storageError && storageData?.success) {
+                                  migratedDocUrl = storageData.publicUrl;
+                                  console.log(`Migrated document: ${firebaseDocUrl} -> ${migratedDocUrl}`);
+                                } else {
+                                  console.warn(`Failed to migrate document: ${firebaseDocUrl}`, storageError);
+                                }
+                              } catch (error) {
+                                console.warn('Error migrating document file:', error);
+                              }
+                            }
+
                             const docInsertData = {
-                              file_name: (docData as any).fileName || (docData as any).file_name || (docData as any).name || 'Unnamed Document',
-                              file_url: (docData as any).fileUrl || (docData as any).file_url || (docData as any).url || '',
+                              file_name: fileName,
+                              file_url: migratedDocUrl,
                               file_size: (docData as any).fileSize || (docData as any).file_size || null,
                               subsection_id: newSubsection.id,
                               category_id: categoryId,
