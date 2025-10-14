@@ -62,9 +62,9 @@ const Users = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"admin" | "moderator" | "user">("user");
+  const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [editRole, setEditRole] = useState<"admin" | "moderator" | "user">("user");
+  const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
   const queryClient = useQueryClient();
 
@@ -168,7 +168,7 @@ const Users = () => {
       setOpen(false);
       setEmail("");
       setFullName("");
-      setRole("user");
+      setRole("User");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
@@ -235,7 +235,7 @@ const Users = () => {
 
   const handleEditUser = (user: UserProfile) => {
     setSelectedUser(user);
-    setEditRole(user.role as "admin" | "moderator" | "user");
+    setEditRole(user.role as "Admin" | "Moderator" | "User" | "Contractor");
     setEditStatus((user.status || "Active") as "Active" | "Inactive");
     setEditOpen(true);
   };
@@ -317,9 +317,10 @@ const Users = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="admin">Admin</SelectItem>
-                      <SelectItem value="moderator">Moderator</SelectItem>
-                      <SelectItem value="user">User</SelectItem>
+                      <SelectItem value="Admin">Admin</SelectItem>
+                      <SelectItem value="Moderator">Moderator</SelectItem>
+                      <SelectItem value="User">User</SelectItem>
+                      <SelectItem value="Contractor">Contractor</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -503,9 +504,10 @@ const Users = () => {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="moderator">Moderator</SelectItem>
-                  <SelectItem value="user">User</SelectItem>
+                  <SelectItem value="Admin">Admin</SelectItem>
+                  <SelectItem value="Moderator">Moderator</SelectItem>
+                  <SelectItem value="User">User</SelectItem>
+                  <SelectItem value="Contractor">Contractor</SelectItem>
                 </SelectContent>
               </Select>
             </div>
