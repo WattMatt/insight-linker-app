@@ -102,34 +102,86 @@ const InspectionTemplates = () => {
         date: mockDate
       };
 
-      // Cover Page
+      // Cover Page - Professional & Ink-Friendly
+      doc.setDrawColor(0, 0, 0);
+      doc.setLineWidth(0.5);
+      
+      // Top border accent
       doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      doc.rect(0, 0, pageWidth, 8, 'F');
       
       // Logo placeholder
-      doc.setDrawColor(255, 255, 255);
-      doc.setLineWidth(2);
-      doc.rect(pageWidth / 2 - 25, 30, 50, 30);
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(1);
+      doc.rect(pageWidth / 2 - 30, 25, 60, 30, 'S');
       doc.setFontSize(8);
-      doc.setTextColor(255, 255, 255);
-      doc.text('COMPANY LOGO', pageWidth / 2, 48, { align: 'center' });
+      doc.setTextColor(150, 150, 150);
+      doc.text('COMPANY LOGO', pageWidth / 2, 43, { align: 'center' });
       
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(32);
+      // Main title
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(28);
       doc.setFont(undefined, 'bold');
-      doc.text(template.name, pageWidth / 2, 95, { align: 'center' });
+      const titleLines = doc.splitTextToSize(template.name, pageWidth - 40);
+      doc.text(titleLines, pageWidth / 2, 75, { align: 'center' });
       
-      doc.setFontSize(16);
+      // Subtitle with light background
+      doc.setFillColor(245, 245, 245);
+      doc.rect(margin, 95, contentWidth, 12, 'F');
+      doc.setFontSize(14);
       doc.setFont(undefined, 'normal');
-      doc.text(template.cover_page?.subtitle || template.category, pageWidth / 2, 110, { align: 'center' });
+      doc.setTextColor(60, 60, 60);
+      doc.text(template.cover_page?.subtitle || template.category, pageWidth / 2, 103, { align: 'center' });
+      
+      // Information box
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.rect(margin + 10, 120, contentWidth - 20, 55, 'S');
+      
+      doc.setFontSize(11);
+      doc.setTextColor(0, 0, 0);
+      doc.setFont(undefined, 'bold');
+      let infoY = 130;
+      
+      doc.text('Report Date:', margin + 15, infoY);
+      doc.setFont(undefined, 'normal');
+      doc.text(mockDate, margin + 60, infoY);
+      
+      infoY += 10;
+      doc.setFont(undefined, 'bold');
+      doc.text('Inspector:', margin + 15, infoY);
+      doc.setFont(undefined, 'normal');
+      doc.text(mockData.inspectorName, margin + 60, infoY);
+      
+      infoY += 10;
+      doc.setFont(undefined, 'bold');
+      doc.text('Project:', margin + 15, infoY);
+      doc.setFont(undefined, 'normal');
+      doc.text(mockData.projectName, margin + 60, infoY);
+      
+      infoY += 10;
+      doc.setFont(undefined, 'bold');
+      doc.text('Location:', margin + 15, infoY);
+      doc.setFont(undefined, 'normal');
+      doc.text(mockData.location, margin + 60, infoY);
+      
+      // Bottom section
+      doc.setDrawColor(200, 200, 200);
+      doc.line(margin, pageHeight - 35, pageWidth - margin, pageHeight - 35);
       
       doc.setFontSize(12);
-      doc.text(`Date of Report: ${mockDate}`, pageWidth / 2, 130, { align: 'center' });
-      doc.text(`Inspector: ${mockData.inspectorName}`, pageWidth / 2, 140, { align: 'center' });
-      doc.text(`Project Name: ${mockData.projectName}`, pageWidth / 2, 150, { align: 'center' });
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(0, 0, 0);
+      doc.text(template.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, pageHeight - 25, { align: 'center' });
       
-      doc.setFontSize(10);
-      doc.text(template.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, pageHeight - 20, { align: 'center' });
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'normal');
+      doc.setTextColor(100, 100, 100);
+      doc.text('Inspection & Compliance Report', pageWidth / 2, pageHeight - 18, { align: 'center' });
+      
+      // Bottom border accent
+      doc.setFillColor(41, 128, 185);
+      doc.rect(0, pageHeight - 8, pageWidth, 8, 'F');
 
       // General Information Page
       doc.addPage();
@@ -437,24 +489,54 @@ const InspectionTemplates = () => {
             <div className="space-y-4 pb-4">
               {previewTemplate && (
                 <>
-                  {/* Cover Page */}
-                  <div className="bg-[#2980b9] text-white aspect-[210/297] p-8 flex flex-col items-center justify-center relative shadow-lg">
+                  {/* Cover Page - Professional & Ink-Friendly */}
+                  <div className="bg-white aspect-[210/297] border shadow-lg relative">
+                    {/* Top accent bar */}
+                    <div className="bg-[#2980b9] h-2 w-full"></div>
+                    
                     {/* Logo placeholder */}
-                    <div className="absolute top-8 border-2 border-white w-20 h-12 flex items-center justify-center">
-                      <span className="text-[8px]">COMPANY LOGO</span>
+                    <div className="absolute top-6 left-1/2 transform -translate-x-1/2 border-2 border-gray-300 w-24 h-12 flex items-center justify-center">
+                      <span className="text-[10px] text-gray-400">COMPANY LOGO</span>
                     </div>
                     
-                    <div className="flex-1 flex flex-col items-center justify-center space-y-4">
-                      <h1 className="text-3xl font-bold text-center">{previewTemplate.name}</h1>
-                      <p className="text-lg text-center">{previewTemplate.cover_page?.subtitle || previewTemplate.category}</p>
-                      <div className="space-y-1 text-center mt-6">
-                        <p className="text-sm">Date of Report: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
-                        <p className="text-sm">Inspector: Preview Inspector</p>
-                        <p className="text-sm">Project Name: Preview Project</p>
+                    <div className="pt-24 px-12 flex flex-col items-center">
+                      <h1 className="text-3xl font-bold text-center text-gray-900 mb-4">{previewTemplate.name}</h1>
+                      
+                      <div className="bg-gray-50 w-full py-3 text-center mb-8">
+                        <p className="text-base text-gray-700">{previewTemplate.cover_page?.subtitle || previewTemplate.category}</p>
+                      </div>
+                      
+                      {/* Information box */}
+                      <div className="border border-gray-300 w-full p-6 space-y-3 text-sm">
+                        <div className="flex">
+                          <span className="font-bold text-gray-900 w-32">Report Date:</span>
+                          <span className="text-gray-700">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                        </div>
+                        <div className="flex">
+                          <span className="font-bold text-gray-900 w-32">Inspector:</span>
+                          <span className="text-gray-700">Preview Inspector</span>
+                        </div>
+                        <div className="flex">
+                          <span className="font-bold text-gray-900 w-32">Project:</span>
+                          <span className="text-gray-700">Preview Project</span>
+                        </div>
+                        <div className="flex">
+                          <span className="font-bold text-gray-900 w-32">Location:</span>
+                          <span className="text-gray-700">Site Location Address</span>
+                        </div>
                       </div>
                     </div>
                     
-                    <p className="text-xs absolute bottom-6">{previewTemplate.cover_page?.company_name || 'Watson Mattheus'}</p>
+                    {/* Bottom section */}
+                    <div className="absolute bottom-12 left-0 right-0 px-12">
+                      <div className="border-t border-gray-300 pt-4 text-center">
+                        <p className="font-bold text-gray-900 text-sm">{previewTemplate.cover_page?.company_name || 'Watson Mattheus'}</p>
+                        <p className="text-xs text-gray-600 mt-1">Inspection & Compliance Report</p>
+                      </div>
+                    </div>
+                    
+                    {/* Bottom accent bar */}
+                    <div className="bg-[#2980b9] h-2 w-full absolute bottom-0"></div>
                   </div>
 
                   {/* General Information Page */}
