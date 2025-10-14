@@ -27,15 +27,26 @@ export interface MigrationProgress {
  * Transform Firebase client data to Supabase format
  */
 export const transformFirebaseClient = (firebaseId: string, fbData: Record<string, any>) => {
+  // Try multiple field name variations for the client name
+  const name = fbData.name || 
+               fbData.clientName || 
+               fbData.Name || 
+               fbData.client_name ||
+               fbData.ClientName ||
+               fbData.company_name ||
+               fbData.companyName ||
+               fbData.CompanyName ||
+               firebaseId; // Use Firebase ID as last resort
+  
   return {
     id: firebaseId, // Temporary, will be replaced by Supabase UUID
     firebaseId,
-    name: fbData.name || fbData.clientName || fbData.Name || 'Unnamed Client',
+    name: name,
     contact_person: fbData.contactPerson || fbData.contact_person || fbData.ContactPerson || null,
     email: fbData.email || fbData.Email || fbData.contactEmail || null,
     phone: fbData.phone || fbData.Phone || fbData.phoneNumber || null,
     logo_url: fbData.logoUrl || fbData.logo_url || fbData.LogoUrl || null,
-    company_name: fbData.companyName || fbData.company_name || fbData.CompanyName || null,
+    company_name: fbData.companyName || fbData.company_name || fbData.CompanyName || fbData.name || null,
     primary_contact_email: fbData.primaryContactEmail || fbData.primary_contact_email || fbData.PrimaryContactEmail || null,
     created_at: fbData.createdAt || fbData.created_at || new Date().toISOString(),
     source: 'firebase' as const,
