@@ -325,21 +325,34 @@ export const fetchFirebaseClients = async (): Promise<Array<ReturnType<typeof tr
     return Object.entries(data).map(([id, clientData]) => {
       const clientDataObj = clientData as Record<string, any>;
       
-      // Check multiple possible field names for sites
-      const sites = clientDataObj.sites || 
-                   clientDataObj.Sites || 
-                   clientDataObj.SITES ||
-                   {};
+      // Get all keys from the client data
+      const allKeys = Object.keys(clientDataObj);
       
-      const sitesCount = typeof sites === 'object' && sites !== null 
-        ? Object.keys(sites).length 
-        : 0;
+      // Filter out client-level properties to find site keys
+      // Sites are the keys that aren't standard client properties
+      const excludedKeys = ['name', 'clientname', 'email', 'phone', 'logo', 'logourl', 
+                           'created', 'updated', 'contact', 'company', 'address', 
+                           'primary', 'firebase', 'source'];
       
-      console.log(`Client ${id}: Found ${sitesCount} sites`, Object.keys(sites));
+      const siteKeys = allKeys.filter(key => {
+        const lowerKey = key.toLowerCase();
+        // Exclude if it matches common client property patterns
+        const isClientProp = excludedKeys.some(exclude => lowerKey.includes(exclude));
+        // Site keys are usually longer and contain underscores or parentheses
+        const looksLikeSite = key.length > 3 && (key.includes('_') || key.includes('('));
+        // Also check if the value is an object (sites are objects with subsections, etc.)
+        const isObject = typeof clientDataObj[key] === 'object' && clientDataObj[key] !== null;
+        
+        return !isClientProp && looksLikeSite && isObject;
+      });
+      
+      const sitesCount = siteKeys.length;
+      
+      console.log(`Client ${id}: Found ${sitesCount} sites`, siteKeys);
       
       return {
         ...transformFirebaseClient(id, clientDataObj),
-        _rawData: clientDataObj, // Keep raw data for migration
+        _rawData: clientDataObj,
         sitesCount,
       };
     });
