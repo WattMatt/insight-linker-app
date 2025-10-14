@@ -12,13 +12,25 @@ const DataImport = () => {
 
   const transformToSQL = () => {
     try {
-      const data = JSON.parse(jsonInput);
+      // Clean the input - remove any trailing commas and fix common JSON issues
+      let cleanedInput = jsonInput.trim();
+      
+      const data = JSON.parse(cleanedInput);
       const inspections = Object.entries(data);
       
-      let sql = "-- Insert inspections from JSON data\n\n";
+      if (inspections.length === 0) {
+        toast.error("No inspection data found in JSON");
+        return;
+      }
+      
+      let sql = "-- Insert inspections from JSON data\n";
+      sql += "-- IMPORTANT: Make sure all sites exist in the database first!\n";
+      sql += "-- You can verify by running: SELECT name FROM public.sites;\n\n";
+      
+      // Collect unique site names for validation message
+      const uniqueSites = new Set<string>();
       
       inspections.forEach(([key, inspection]: [string, any]) => {
-        // Parse siteId JSON to get siteName for lookup
         const siteName = inspection.siteName?.replace(/'/g, "''") || "";
         const title = inspection.title?.replace(/'/g, "''") || "";
         const description = inspection.notes?.replace(/'/g, "''") || "";
@@ -26,6 +38,10 @@ const DataImport = () => {
         const endDate = inspection.endDate || null;
         const status = inspection.status || "Scheduled";
         const priority = inspection.priority || "Medium";
+        
+        if (siteName) {
+          uniqueSites.add(siteName);
+        }
         
         // Build assigned_to array
         let assignedToSQL = "NULL";
@@ -35,32 +51,44 @@ const DataImport = () => {
         }
         
         sql += `-- ${title}\n`;
-        sql += `INSERT INTO public.inspections (
-  title,
-  description,
-  inspection_date,
-  end_date,
-  status,
-  priority,
-  assigned_to,
-  site_id
-) VALUES (
-  '${title}',
-  '${description}',
-  ${scheduledDate ? `'${scheduledDate}'` : "NULL"},
-  ${endDate ? `'${endDate}'` : "NULL"},
-  '${status}',
-  '${priority}',
-  ${assignedToSQL},
-  (SELECT id FROM public.sites WHERE name = '${siteName}' LIMIT 1)
-);\n\n`;
+        sql += `INSERT INTO public.inspections (\n`;
+        sql += `  title,\n`;
+        sql += `  description,\n`;
+        sql += `  inspection_date,\n`;
+        sql += `  end_date,\n`;
+        sql += `  status,\n`;
+        sql += `  priority,\n`;
+        sql += `  assigned_to,\n`;
+        sql += `  site_id\n`;
+        sql += `) VALUES (\n`;
+        sql += `  '${title}',\n`;
+        sql += `  '${description}',\n`;
+        sql += `  ${scheduledDate ? `'${scheduledDate}'` : "NULL"},\n`;
+        sql += `  ${endDate ? `'${endDate}'` : "NULL"},\n`;
+        sql += `  '${status}',\n`;
+        sql += `  '${priority}',\n`;
+        sql += `  ${assignedToSQL},\n`;
+        sql += `  (SELECT id FROM public.sites WHERE name = '${siteName}' LIMIT 1)\n`;
+        sql += `);\n\n`;
       });
       
+      // Add validation query at the end
+      sql += "\n-- VALIDATION: Check if any inserts failed due to missing sites\n";
+      sql += "-- Run this query to see which sites are missing:\n";
+      sql += "/*\n";
+      uniqueSites.forEach(siteName => {
+        sql += `SELECT '${siteName}' as expected_site, EXISTS(SELECT 1 FROM public.sites WHERE name = '${siteName}') as exists\n`;
+        sql += "UNION ALL\n";
+      });
+      sql = sql.replace(/UNION ALL\n$/, ";\n");
+      sql += "*/\n";
+      
       setSqlOutput(sql);
-      toast.success("SQL generated successfully!");
+      toast.success(`Generated SQL for ${inspections.length} inspections. Check that all ${uniqueSites.size} sites exist!`);
     } catch (error) {
-      toast.error("Invalid JSON format");
-      console.error(error);
+      const errorMessage = error instanceof Error ? error.message : "Invalid JSON format";
+      toast.error(`JSON parsing failed: ${errorMessage}`);
+      console.error("JSON Parse Error:", error);
     }
   };
 
@@ -128,12 +156,17 @@ const DataImport = () => {
       </div>
 
       <Card className="p-6 bg-muted/50">
-        <h3 className="font-semibold mb-2">Instructions:</h3>
-        <ol className="list-decimal list-inside space-y-1 text-sm text-muted-foreground">
+        <h3 className="font-semibold mb-2">⚠️ Important Instructions:</h3>
+        <ol className="list-decimal list-inside space-y-2 text-sm text-muted-foreground">
           <li>Paste your JSON data in the left panel</li>
           <li>Click "Transform to SQL" to generate INSERT statements</li>
-          <li>Copy the SQL output and run it in your Supabase SQL Editor</li>
-          <li>Make sure your sites exist in the database before running the SQL</li>
+          <li className="font-semibold text-orange-600">
+            CRITICAL: Make sure all sites referenced in the inspections exist in your database first!
+            <br/>
+            <span className="text-xs">The error you're seeing means the site lookup is returning NULL because those sites don't exist.</span>
+          </li>
+          <li>Run the complete-import.sql script first to create all sites, OR create sites manually</li>
+          <li>Copy the generated SQL and run it in your Supabase SQL Editor</li>
         </ol>
       </Card>
     </div>
