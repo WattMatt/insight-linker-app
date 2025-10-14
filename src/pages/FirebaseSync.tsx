@@ -148,6 +148,10 @@ const FirebaseSync = () => {
         .from('profiles')
         .select('email');
       
+      const { data: pendingInvites } = await supabase
+        .from('pending_user_invites')
+        .select('email');
+      
       const { count: calendarEventsCount } = await supabase
         .from('calendar_events')
         .select('*', { count: 'exact', head: true });
@@ -160,9 +164,13 @@ const FirebaseSync = () => {
         clientId => !migratedFirebaseIds.has(clientId)
       );
 
-      const migratedEmails = new Set(
-        (supabaseProfiles || []).map(p => p.email?.toLowerCase()).filter(Boolean)
-      );
+      // Combine profiles and pending invites for user count
+      const totalSupabaseUsers = (supabaseProfiles?.length || 0) + (pendingInvites?.length || 0);
+      
+      const migratedEmails = new Set([
+        ...(supabaseProfiles || []).map(p => p.email?.toLowerCase()).filter(Boolean),
+        ...(pendingInvites || []).map(p => p.email?.toLowerCase()).filter(Boolean)
+      ]);
       
       const usersToMigrate = firebaseUsersData.filter(
         user => user.email && !migratedEmails.has(user.email.toLowerCase())
@@ -186,7 +194,7 @@ const FirebaseSync = () => {
         },
         users: {
           firebase: firebaseUsersData.length,
-          supabase: supabaseProfiles?.length || 0,
+          supabase: totalSupabaseUsers,
           toMigrate: usersToMigrate,
         },
         calendarEvents: {
