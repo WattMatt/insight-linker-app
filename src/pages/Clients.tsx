@@ -346,13 +346,7 @@ const Clients = () => {
               <Card
                 key={client.id}
                 className="group cursor-pointer hover:shadow-lg transition-shadow relative"
-                onClick={() => {
-                  if (client.source === 'supabase') {
-                    navigate(`/clients/${client.id}`);
-                  } else {
-                    toast.info("Firebase clients are read-only. Please migrate to view details.");
-                  }
-                }}
+                onClick={() => navigate(`/clients/${client.id}/sites`)}
               >
                 <CardContent className="p-6">
                   {/* Source Badge */}

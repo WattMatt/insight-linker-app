@@ -1,0 +1,176 @@
+import { useState, useEffect } from "react";
+import { useParams, useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { ArrowLeft, MapPin, Building2, Database } from "lucide-react";
+import { toast } from "sonner";
+import { readFirebaseData } from "@/lib/firebase";
+
+interface Site {
+  id: string;
+  name: string;
+  address: string | null;
+  site_type: string | null;
+  source?: 'firebase' | 'supabase';
+}
+
+const ClientSites = () => {
+  const { clientId } = useParams();
+  const navigate = useNavigate();
+  const [clientName, setClientName] = useState<string>('');
+  const [sites, setSites] = useState<Site[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [isFirebaseClient, setIsFirebaseClient] = useState(false);
+
+  useEffect(() => {
+    if (clientId) {
+      fetchSites();
+    }
+  }, [clientId]);
+
+  const fetchSites = async () => {
+    try {
+      setLoading(true);
+
+      // First try to fetch from Supabase
+      const { data: supabaseClient, error: clientError } = await supabase
+        .from("clients")
+        .select("name, sites(*)")
+        .eq("id", clientId)
+        .maybeSingle();
+
+      if (supabaseClient) {
+        // It's a Supabase client
+        setClientName(supabaseClient.name);
+        const supabaseSites = (supabaseClient.sites || []).map((site: any) => ({
+          ...site,
+          source: 'supabase' as const,
+        }));
+        setSites(supabaseSites);
+        setIsFirebaseClient(false);
+      } else {
+        // Try Firebase
+        setIsFirebaseClient(true);
+        await fetchFirebaseSites(clientId!);
+      }
+    } catch (error) {
+      console.error("Error fetching sites:", error);
+      toast.error("Failed to fetch sites");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const fetchFirebaseSites = async (firebaseClientId: string) => {
+    try {
+      const data = await readFirebaseData(`/clients/${firebaseClientId}`);
+      if (!data) {
+        toast.error("Client not found in Firebase");
+        return;
+      }
+
+      setClientName(data.name || data.clientName || data.Name || firebaseClientId);
+
+      // Get sites from Firebase with multiple possible field names
+      const firebaseSites = data.sites || data.Sites || data.SITES || {};
+      
+      console.log('Firebase sites for client:', firebaseClientId, Object.keys(firebaseSites));
+
+      const transformedSites: Site[] = Object.entries(firebaseSites).map(([siteId, siteData]: [string, any]) => ({
+        id: siteId,
+        name: siteData.name || siteData.siteName || siteData.Name || 'Unnamed Site',
+        address: siteData.address || siteData.Address || null,
+        site_type: siteData.siteType || siteData.site_type || siteData.type || null,
+        source: 'firebase' as const,
+      }));
+
+      setSites(transformedSites);
+    } catch (error) {
+      console.error("Error fetching Firebase sites:", error);
+      toast.error("Failed to fetch Firebase sites");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading sites...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center gap-4">
+        <Button variant="ghost" size="icon" onClick={() => navigate("/clients")}>
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">{clientName}</h1>
+          <p className="text-muted-foreground mt-1">
+            {sites.length} {sites.length === 1 ? 'site' : 'sites'}
+          </p>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {sites.length > 0 ? (
+          sites.map((site) => (
+            <Card
+              key={site.id}
+              className="cursor-pointer hover:shadow-lg transition-shadow"
+              onClick={() => {
+                if (!isFirebaseClient) {
+                  navigate(`/sites/${site.id}`);
+                } else {
+                  toast.info("Firebase sites are read-only. Please migrate the client first.");
+                }
+              }}
+            >
+              <CardHeader>
+                <div className="flex items-start justify-between">
+                  <div className="flex items-center gap-3">
+                    <Building2 className="h-5 w-5 text-primary" />
+                    <div>
+                      <CardTitle className="text-lg">{site.name}</CardTitle>
+                      {site.site_type && (
+                        <p className="text-sm text-muted-foreground">{site.site_type}</p>
+                      )}
+                    </div>
+                  </div>
+                  <Badge variant={site.source === 'firebase' ? 'secondary' : 'default'}>
+                    <Database className="h-3 w-3 mr-1" />
+                    {site.source === 'firebase' ? 'Firebase' : 'Supabase'}
+                  </Badge>
+                </div>
+              </CardHeader>
+              {site.address && (
+                <CardContent>
+                  <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                    <MapPin className="h-4 w-4 mt-0.5 flex-shrink-0" />
+                    <span>{site.address}</span>
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          ))
+        ) : (
+          <div className="col-span-full text-center py-12">
+            <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+            <h3 className="text-lg font-semibold mb-2">No sites found</h3>
+            <p className="text-muted-foreground">
+              This client does not have any sites yet.
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
+
+export default ClientSites;

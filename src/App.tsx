@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
+import ClientSites from "./pages/ClientSites";
 import SiteDetail from "./pages/SiteDetail";
 import SubsectionDetail from "./pages/SubsectionDetail";
 import Sites from "./pages/Sites";
@@ -77,6 +78,26 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <ClientDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/sites"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ClientSites />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sites/:siteId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SiteDetail />
                 </DashboardLayout>
               </ProtectedRoute>
             }
