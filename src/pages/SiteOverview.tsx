@@ -619,10 +619,99 @@ const SiteOverview = () => {
         <TabsContent value="subsections">
           <Card>
             <CardHeader>
-              <CardTitle>Subsections/Tenants</CardTitle>
+              <CardTitle>Subsections / Tenants</CardTitle>
+              <CardDescription>
+                Subsections / Tenants info with the COC & Metering Status.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <p className="text-muted-foreground">Subsection list view coming soon...</p>
+              {!siteData.subsections || Object.keys(siteData.subsections).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <Building2 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No subsections found for this site</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {Object.entries(siteData.subsections).map(([id, subsection]: [string, any]) => {
+                    const isHS = subsection.category === 'HS';
+                    const cocStatus = subsection.cocNumber ? 'In Date' : 'EXPIRED';
+                    const meteringStatus = subsection.isMeteringRequired ? 
+                      (subsection.meterSerialNumber ? 'Complete' : 'Missing') : 'N/A';
+                    
+                    // Count inspections
+                    const inspections = subsection.inspections || {};
+                    const inspectionCount = Object.keys(inspections).length;
+                    
+                    return (
+                      <div
+                        key={id}
+                        className="flex items-center gap-4 p-4 rounded-lg border hover:bg-accent transition-colors"
+                      >
+                        {/* Category Icon */}
+                        <div className={`w-10 h-10 rounded flex items-center justify-center ${
+                          isHS ? 'bg-red-500' : 'bg-blue-500'
+                        }`}>
+                          <Building2 className="h-5 w-5 text-white" />
+                        </div>
+                        
+                        {/* Name & Tenant */}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium truncate">{subsection.name || id}</p>
+                          {subsection.tenantName && (
+                            <p className="text-sm text-muted-foreground truncate">
+                              {subsection.tenantName}
+                            </p>
+                          )}
+                        </div>
+                        
+                        {/* Status Badge */}
+                        <Badge 
+                          variant={cocStatus === 'In Date' ? 'default' : 'destructive'}
+                          className={cocStatus === 'In Date' ? 'bg-green-500' : ''}
+                        >
+                          {cocStatus}
+                        </Badge>
+                        
+                        {/* Item Count */}
+                        <div className="flex items-center gap-1 text-sm">
+                          <FileText className="h-4 w-4 text-muted-foreground" />
+                          <span>{inspectionCount} Item{inspectionCount !== 1 ? 's' : ''}</span>
+                        </div>
+                        
+                        {/* COC Data */}
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          {subsection.cocNumber ? (
+                            <Badge variant="outline" className="text-xs">
+                              {subsection.cocNumber}
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs border-red-500 text-red-500">
+                              MISSING COC
+                            </Badge>
+                          )}
+                        </div>
+                        
+                        {/* Metering Status */}
+                        <Badge 
+                          variant={meteringStatus === 'Complete' ? 'default' : 'outline'}
+                          className={meteringStatus === 'Complete' ? 'bg-green-500' : ''}
+                        >
+                          {meteringStatus}
+                        </Badge>
+                        
+                        {/* Action Button */}
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${id}`)}
+                        >
+                          <ArrowLeft className="h-4 w-4 rotate-180" />
+                        </Button>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
