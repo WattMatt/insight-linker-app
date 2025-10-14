@@ -19,14 +19,19 @@ const database = getDatabase(app);
 
 // Helper function to read data from a path
 export const readFirebaseData = async (path: string) => {
-  const dataRef = ref(database, path);
-  const snapshot = await get(dataRef);
-  
-  if (snapshot.exists()) {
-    return snapshot.val();
-  } else {
-    console.log("No data available at path:", path);
-    return null;
+  try {
+    const dataRef = ref(database, path);
+    const snapshot = await get(dataRef);
+    
+    if (snapshot.exists()) {
+      return snapshot.val();
+    } else {
+      console.log("No data available at path:", path);
+      return null;
+    }
+  } catch (error) {
+    console.error("Firebase read error:", error);
+    throw new Error(`Failed to read from Firebase: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 };
 
