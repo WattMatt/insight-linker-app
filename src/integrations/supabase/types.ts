@@ -230,31 +230,37 @@ export type Database = {
       inspection_templates: {
         Row: {
           category: string
+          cover_page: Json | null
           created_at: string
           description: string | null
           id: string
           name: string
           pages_count: number | null
+          sections: Json | null
           sections_count: number | null
           updated_at: string
         }
         Insert: {
           category: string
+          cover_page?: Json | null
           created_at?: string
           description?: string | null
           id?: string
           name: string
           pages_count?: number | null
+          sections?: Json | null
           sections_count?: number | null
           updated_at?: string
         }
         Update: {
           category?: string
+          cover_page?: Json | null
           created_at?: string
           description?: string | null
           id?: string
           name?: string
           pages_count?: number | null
+          sections?: Json | null
           sections_count?: number | null
           updated_at?: string
         }

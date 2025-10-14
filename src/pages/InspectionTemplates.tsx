@@ -3,8 +3,22 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Plus } from "lucide-react";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight } from "lucide-react";
 import { toast } from "sonner";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
+interface TemplateSection {
+  id: string;
+  name: string;
+  order_index: number;
+  items?: Array<{
+    id: string;
+    name: string;
+    type: string;
+    required: boolean;
+  }>;
+}
 
 interface InspectionTemplate {
   id: string;
@@ -13,11 +27,22 @@ interface InspectionTemplate {
   description: string | null;
   sections_count: number;
   pages_count: number;
+  created_at?: string;
+  sections?: TemplateSection[];
+  cover_page?: {
+    title: string;
+    subtitle: string;
+    company_name: string;
+    logo_url?: string;
+  };
 }
+
+const ITEMS_PER_PAGE = 9;
 
 const InspectionTemplates = () => {
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
 
   useEffect(() => {
     fetchTemplates();
@@ -32,12 +57,139 @@ const InspectionTemplates = () => {
         .order("name", { ascending: true });
 
       if (error) throw error;
-      setTemplates(data || []);
+      
+      // Type cast the data to match our interface
+      const typedData = (data || []).map(template => ({
+        ...template,
+        sections: template.sections as unknown as TemplateSection[],
+        cover_page: template.cover_page as unknown as {
+          title: string;
+          subtitle: string;
+          company_name: string;
+          logo_url?: string;
+        },
+      })) as InspectionTemplate[];
+      
+      setTemplates(typedData);
     } catch (error) {
       console.error("Error fetching templates:", error);
       toast.error("Failed to fetch templates");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generatePDF = async (template: InspectionTemplate) => {
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // Cover Page
+      doc.setFillColor(41, 128, 185);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(32);
+      doc.setFont(undefined, 'bold');
+      doc.text(template.cover_page?.title || 'Inspection Report', pageWidth / 2, 80, { align: 'center' });
+      
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'normal');
+      doc.text(template.cover_page?.subtitle || template.name, pageWidth / 2, 100, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.text(template.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, 120, { align: 'center' });
+      
+      doc.setFontSize(12);
+      const date = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+      doc.text(`Generated: ${date}`, pageWidth / 2, 140, { align: 'center' });
+
+      // Add new page for content
+      doc.addPage();
+      doc.setTextColor(0, 0, 0);
+      
+      // Template Details
+      doc.setFontSize(24);
+      doc.setFont(undefined, 'bold');
+      doc.text(template.name, 20, 20);
+      
+      doc.setFontSize(12);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Category: ${template.category}`, 20, 35);
+      
+      if (template.description) {
+        doc.setFontSize(11);
+        const splitDescription = doc.splitTextToSize(template.description, pageWidth - 40);
+        doc.text(splitDescription, 20, 45);
+      }
+
+      // Template Statistics
+      let yPosition = template.description ? 65 : 50;
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text('Template Overview', 20, yPosition);
+      
+      yPosition += 10;
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'normal');
+      doc.text(`• Total Sections: ${template.sections_count}`, 25, yPosition);
+      yPosition += 7;
+      doc.text(`• Estimated Pages: ${template.pages_count}`, 25, yPosition);
+      yPosition += 7;
+      doc.text(`• Template ID: ${template.id}`, 25, yPosition);
+
+      // Sections Table
+      if (template.sections && template.sections.length > 0) {
+        yPosition += 15;
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('Inspection Sections', 20, yPosition);
+        
+        yPosition += 5;
+        const tableData = template.sections.map((section, index) => [
+          (index + 1).toString(),
+          section.name,
+          section.items?.length.toString() || '0',
+          section.items?.filter(i => i.required).length.toString() || '0'
+        ]);
+
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['#', 'Section Name', 'Items', 'Required']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+          styles: { fontSize: 10 },
+          margin: { left: 20, right: 20 },
+        });
+      }
+
+      // Footer on all pages
+      const totalPages = doc.getNumberOfPages();
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(10);
+        doc.setTextColor(128, 128, 128);
+        if (i > 1) { // Skip footer on cover page
+          doc.text(
+            `Page ${i - 1} of ${totalPages - 1}`,
+            pageWidth / 2,
+            pageHeight - 10,
+            { align: 'center' }
+          );
+        }
+      }
+
+      doc.save(`${template.name.replace(/\s+/g, '_')}_Template.pdf`);
+      toast.success("PDF exported successfully");
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate PDF");
     }
   };
 
@@ -48,6 +200,16 @@ const InspectionTemplates = () => {
     acc[template.category].push(template);
     return acc;
   }, {} as Record<string, InspectionTemplate[]>);
+
+  // Pagination
+  const totalPages = Math.ceil(templates.length / ITEMS_PER_PAGE);
+  const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
+  const endIndex = startIndex + ITEMS_PER_PAGE;
+  const currentTemplates = templates.slice(startIndex, endIndex);
+
+  const goToPage = (page: number) => {
+    setCurrentPage(Math.max(1, Math.min(page, totalPages)));
+  };
 
   if (loading) {
     return (
@@ -66,7 +228,7 @@ const InspectionTemplates = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Inspection Templates</h1>
           <p className="text-muted-foreground mt-2">
-            Reusable templates for common inspection types
+            {templates.length} reusable templates for common inspection types
           </p>
         </div>
         <Button>
@@ -90,49 +252,95 @@ const InspectionTemplates = () => {
           </CardContent>
         </Card>
       ) : (
-        <div className="space-y-8">
-          {Object.entries(groupedTemplates).map(([category, categoryTemplates]) => (
-            <div key={category}>
-              <h2 className="text-xl font-semibold mb-4">{category}</h2>
-              <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {categoryTemplates.map((template) => (
-                  <Card key={template.id} className="hover:shadow-md transition-shadow cursor-pointer">
-                    <CardHeader>
-                      <div className="flex items-start justify-between mb-2">
-                        <FileText className="h-5 w-5 text-primary" />
-                        <Button variant="ghost" size="sm">
-                          View Details
-                        </Button>
-                      </div>
-                      <CardTitle className="text-lg">{template.name}</CardTitle>
-                      {template.description && (
-                        <CardDescription className="line-clamp-2">
-                          {template.description}
-                        </CardDescription>
-                      )}
-                    </CardHeader>
-                    <CardContent>
-                      <div className="flex gap-4 text-sm text-muted-foreground">
-                        <div>
-                          <span className="font-semibold text-foreground">
-                            {template.sections_count}
-                          </span>{" "}
-                          Sections
-                        </div>
-                        <div>
-                          <span className="font-semibold text-foreground">
-                            {template.pages_count}
-                          </span>{" "}
-                          Pages
-                        </div>
-                      </div>
-                    </CardContent>
-                  </Card>
+        <>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {currentTemplates.map((template) => (
+              <Card key={template.id} className="hover:shadow-lg transition-shadow">
+                <CardHeader>
+                  <div className="flex items-start justify-between mb-2">
+                    <FileText className="h-5 w-5 text-primary" />
+                    <Badge variant="secondary">{template.category}</Badge>
+                  </div>
+                  <CardTitle className="text-lg">{template.name}</CardTitle>
+                  {template.description && (
+                    <CardDescription className="line-clamp-2">
+                      {template.description}
+                    </CardDescription>
+                  )}
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  <div className="flex gap-4 text-sm text-muted-foreground">
+                    <div>
+                      <span className="font-semibold text-foreground">
+                        {template.sections_count}
+                      </span>{" "}
+                      Sections
+                    </div>
+                    <div>
+                      <span className="font-semibold text-foreground">
+                        {template.pages_count}
+                      </span>{" "}
+                      Pages
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" size="sm" className="flex-1">
+                      View Details
+                    </Button>
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => generatePDF(template)}
+                    >
+                      <Download className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+
+          {/* Pagination Controls */}
+          {totalPages > 1 && (
+            <div className="flex items-center justify-center gap-2 mt-8">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(currentPage - 1)}
+                disabled={currentPage === 1}
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              
+              <div className="flex gap-1">
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((page) => (
+                  <Button
+                    key={page}
+                    variant={currentPage === page ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => goToPage(page)}
+                    className="w-10"
+                  >
+                    {page}
+                  </Button>
                 ))}
               </div>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => goToPage(currentPage + 1)}
+                disabled={currentPage === totalPages}
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
             </div>
-          ))}
-        </div>
+          )}
+
+          <div className="text-center text-sm text-muted-foreground">
+            Showing {startIndex + 1}-{Math.min(endIndex, templates.length)} of {templates.length} templates
+          </div>
+        </>
       )}
     </div>
   );
