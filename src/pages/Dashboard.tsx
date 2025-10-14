@@ -4,6 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Building2, Users, ClipboardCheck, Activity, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
+import { readFirebaseData } from "@/lib/firebase";
+import { fetchFirebaseClients } from "@/lib/migration";
 
 interface DashboardStats {
   totalClients: number;
@@ -47,23 +49,83 @@ const Dashboard = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      const [clientsRes, sitesRes, inspectionsRes, activityRes, eventsRes] = await Promise.all([
+      // Fetch from both Firebase and Supabase
+      const [supabaseClientsRes, firebaseClients, activityRes, eventsRes] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
-        supabase.from("sites").select("id", { count: "exact", head: true }),
-        supabase.from("inspections").select("id, status", { count: "exact" }),
+        fetchFirebaseClients(),
         supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(5),
         supabase.from("calendar_events").select("*").gte("start_date", today).order("start_date", { ascending: true }).limit(5),
       ]);
 
-      const activeCount = inspectionsRes.data?.filter(
+      // Count total clients (Firebase + Supabase)
+      const totalClients = (supabaseClientsRes.count || 0) + firebaseClients.length;
+
+      // Count sites and inspections from Firebase
+      let totalSites = 0;
+      let totalInspections = 0;
+      let activeInspections = 0;
+
+      // Count Supabase sites and inspections
+      const supabaseSitesRes = await supabase.from("sites").select("id", { count: "exact", head: true });
+      const supabaseInspectionsRes = await supabase.from("inspections").select("id, status", { count: "exact" });
+      
+      totalSites += supabaseSitesRes.count || 0;
+      totalInspections += supabaseInspectionsRes.count || 0;
+      
+      const supabaseActiveCount = supabaseInspectionsRes.data?.filter(
         (i) => i.status === "In Progress" || i.status === "Scheduled"
       ).length || 0;
+      activeInspections += supabaseActiveCount;
+
+      // Count Firebase sites and inspections
+      for (const client of firebaseClients) {
+        if (client.firebaseId) {
+          try {
+            const clientData = await readFirebaseData(`/clients/${client.firebaseId}`);
+            if (clientData) {
+              // Count sites for this client
+              const allKeys = Object.keys(clientData);
+              const siteKeys = allKeys.filter(key => 
+                !['name', 'clientName', 'Name', 'email', 'phone', 'logo', 'logoUrl', 'created', 'updated'].some(excludeKey => 
+                  key.toLowerCase().includes(excludeKey.toLowerCase())
+                ) && 
+                key.length > 3 &&
+                typeof clientData[key] === 'object' &&
+                clientData[key] !== null
+              );
+              
+              totalSites += siteKeys.length;
+
+              // Count inspections for each site
+              for (const siteKey of siteKeys) {
+                const siteData = clientData[siteKey];
+                if (siteData.subsections) {
+                  const subsections = Object.values(siteData.subsections);
+                  for (const subsection of subsections) {
+                    if (typeof subsection === 'object' && subsection !== null) {
+                      const subsectionData = subsection as any;
+                      if (subsectionData.inspections) {
+                        const inspectionCount = Object.keys(subsectionData.inspections).length;
+                        totalInspections += inspectionCount;
+                        // For Firebase inspections, we'll count all as active for now
+                        activeInspections += inspectionCount;
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error fetching Firebase client ${client.firebaseId}:`, error);
+          }
+        }
+      }
 
       setStats({
-        totalClients: clientsRes.count || 0,
-        totalSites: sitesRes.count || 0,
-        totalInspections: inspectionsRes.count || 0,
-        activeInspections: activeCount,
+        totalClients,
+        totalSites,
+        totalInspections,
+        activeInspections,
       });
 
       setActivities(activityRes.data || []);
