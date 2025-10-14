@@ -5,7 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Progress } from "@/components/ui/progress";
-import { ArrowLeft, FileText, Building2, MapPin, Users, Zap } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { ArrowLeft, FileText, Download, Building2, MapPin, Users, Zap } from "lucide-react";
 import { toast } from "sonner";
 import { readFirebaseData } from "@/lib/firebase";
 
@@ -20,6 +21,20 @@ interface SiteData {
   clientLogoUrl?: string;
   projectLogoUrl?: string;
   subsections: Record<string, any>;
+  documents?: Record<string, any>;
+}
+
+interface DocumentCategory {
+  name: string;
+  files: DocumentFile[];
+  status?: string;
+}
+
+interface DocumentFile {
+  name: string;
+  url: string;
+  uploadedAt?: string;
+  status?: string;
 }
 
 interface Stats {
@@ -37,6 +52,7 @@ const SiteOverview = () => {
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [stats, setStats] = useState<Stats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [documents, setDocuments] = useState<DocumentCategory[]>([]);
 
   useEffect(() => {
     if (clientId && siteId) {
@@ -56,12 +72,68 @@ const SiteOverview = () => {
 
       setSiteData(data);
       calculateStats(data);
+      parseDocuments(data);
     } catch (error) {
       console.error("Error fetching site data:", error);
       toast.error("Failed to load site data");
     } finally {
       setLoading(false);
     }
+  };
+
+  const parseDocuments = (data: SiteData) => {
+    const documentsData = data.documents || {};
+    const categories: DocumentCategory[] = [];
+
+    // Parse documents structure from Firebase
+    Object.entries(documentsData).forEach(([categoryKey, categoryData]: [string, any]) => {
+      if (typeof categoryData === 'object' && categoryData !== null) {
+        const files: DocumentFile[] = [];
+        
+        // Check if this category contains files
+        Object.entries(categoryData).forEach(([fileKey, fileData]: [string, any]) => {
+          if (typeof fileData === 'object' && fileData !== null) {
+            // Check if this is a file object with url/name
+            if (fileData.url || fileData.name || fileData.downloadURL) {
+              files.push({
+                name: fileData.name || fileKey,
+                url: fileData.url || fileData.downloadURL || '',
+                uploadedAt: fileData.uploadedAt || fileData.timestamp,
+                status: fileData.status || 'No Update: Detail'
+              });
+            }
+          } else if (typeof fileData === 'string') {
+            // If it's a direct URL string
+            files.push({
+              name: fileKey,
+              url: fileData,
+              status: 'No Update: Detail'
+            });
+          }
+        });
+
+        if (files.length > 0) {
+          categories.push({
+            name: categoryKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
+            files,
+            status: categoryData.status || `No Update: Detail`
+          });
+        }
+      }
+    });
+
+    setDocuments(categories);
+  };
+
+  const handleDownloadDocument = (url: string, fileName: string) => {
+    if (!url) {
+      toast.error("Document URL not available");
+      return;
+    }
+    
+    // Open document in new tab or download
+    window.open(url, '_blank');
+    toast.success(`Opening ${fileName}`);
   };
 
   const calculateStats = (data: SiteData) => {
@@ -482,46 +554,64 @@ const SiteOverview = () => {
           <Card>
             <CardHeader>
               <CardTitle>Site Documents</CardTitle>
-              <CardDescription>A summary of all uploaded site-wide documents</CardDescription>
+              <CardDescription>
+                Storage for the legal documents like: reports, invoices, site contracts generated reports.
+              </CardDescription>
             </CardHeader>
             <CardContent>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>Layouts</span>
-                  </div>
-                  <Badge variant="outline">3</Badge>
+              {documents.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No documents found for this site</p>
                 </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>Service records</span>
-                  </div>
-                  <Badge variant="outline">2</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>Externally Generated Reports</span>
-                  </div>
-                  <Badge variant="outline">3</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>Medium Voltage Earthing Report</span>
-                  </div>
-                  <Badge variant="outline">3</Badge>
-                </div>
-                <div className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent cursor-pointer">
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-4 w-4 text-muted-foreground" />
-                    <span>Earthing and Lighting Protection Certificate of Compliance</span>
-                  </div>
-                  <Badge variant="outline">1</Badge>
-                </div>
-              </div>
+              ) : (
+                <Accordion type="multiple" className="w-full">
+                  {documents.map((category, idx) => (
+                    <AccordionItem key={idx} value={`category-${idx}`}>
+                      <AccordionTrigger className="hover:no-underline">
+                        <div className="flex items-center justify-between w-full pr-4">
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-4 w-4 text-muted-foreground" />
+                            <span className="font-medium">{category.name}</span>
+                          </div>
+                          <Badge variant="outline">{category.files.length}</Badge>
+                        </div>
+                      </AccordionTrigger>
+                      <AccordionContent>
+                        <div className="space-y-2 pl-7 pt-2">
+                          <p className="text-sm text-muted-foreground mb-3">{category.status}</p>
+                          {category.files.map((file, fileIdx) => (
+                            <div
+                              key={fileIdx}
+                              className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                            >
+                              <div className="flex items-center gap-3 flex-1">
+                                <div className="w-2 h-2 rounded-full bg-primary" />
+                                <div className="flex-1">
+                                  <p className="text-sm font-medium">{file.name}</p>
+                                  {file.uploadedAt && (
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(file.uploadedAt).toLocaleDateString()}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDownloadDocument(file.url, file.name)}
+                                className="ml-2"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </AccordionContent>
+                    </AccordionItem>
+                  ))}
+                </Accordion>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
