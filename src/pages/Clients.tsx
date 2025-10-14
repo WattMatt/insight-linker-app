@@ -6,9 +6,18 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, MoreVertical, Upload, Building2 } from "lucide-react";
+import { Plus, MoreVertical, Upload, Building2, Download, Database } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Progress } from "@/components/ui/progress";
+import { 
+  fetchFirebaseClients, 
+  migrateClientToSupabase, 
+  migrateAllFromFirebase,
+  type MigrationProgress 
+} from "@/lib/migration";
 
 interface Client {
   id: string;
@@ -20,6 +29,9 @@ interface Client {
   company_name: string | null;
   primary_contact_email: string | null;
   created_at: string;
+  source?: 'firebase' | 'supabase';
+  firebaseId?: string;
+  _rawData?: any;
 }
 
 const Clients = () => {
@@ -29,6 +41,10 @@ const Clients = () => {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [activeTab, setActiveTab] = useState<'all' | 'firebase' | 'supabase'>('all');
+  const [migrating, setMigrating] = useState(false);
+  const [bulkMigrationOpen, setBulkMigrationOpen] = useState(false);
+  const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     contact_person: "",
@@ -39,24 +55,45 @@ const Clients = () => {
   });
 
   useEffect(() => {
-    fetchClients();
+    fetchAllClients();
   }, []);
 
-  const fetchClients = async () => {
+  const fetchAllClients = async () => {
     try {
-      const { data, error } = await supabase
-        .from("clients")
-        .select("*")
-        .order("created_at", { ascending: false });
+      setLoading(true);
 
-      if (error) throw error;
-      setClients(data || []);
+      // Fetch from both sources in parallel
+      const [supabaseData, firebaseData] = await Promise.all([
+        fetchSupabaseClients(),
+        fetchFirebaseClients(),
+      ]);
+
+      // Combine both sources
+      const combined = [
+        ...supabaseData.map(c => ({ ...c, source: 'supabase' as const })),
+        ...firebaseData,
+      ];
+
+      setClients(combined);
     } catch (error) {
       console.error("Error fetching clients:", error);
       toast.error("Failed to fetch clients");
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchSupabaseClients = async (): Promise<Client[]> => {
+    const { data, error } = await supabase
+      .from("clients")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      console.error("Error fetching Supabase clients:", error);
+      return [];
+    }
+    return data || [];
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,7 +147,7 @@ const Clients = () => {
         primary_contact_email: ""
       });
       setLogoFile(null);
-      fetchClients();
+      fetchAllClients();
     } catch (error) {
       console.error("Error adding client:", error);
       toast.error("Failed to add client");
@@ -127,10 +164,81 @@ const Clients = () => {
       if (error) throw error;
 
       toast.success("Client deleted successfully");
-      fetchClients();
+      fetchAllClients();
     } catch (error) {
       console.error("Error deleting client:", error);
       toast.error("Failed to delete client");
+    }
+  };
+
+  const handleMigrateClient = async (client: Client) => {
+    if (!client.firebaseId || !client._rawData) {
+      toast.error("Cannot migrate: Missing Firebase data");
+      return;
+    }
+
+    setMigrating(true);
+    const toastId = toast.loading(`Migrating ${client.name}...`);
+
+    try {
+      const result = await migrateClientToSupabase(
+        client.firebaseId,
+        client._rawData,
+        (message) => {
+          toast.loading(message, { id: toastId });
+        }
+      );
+
+      if (result.success) {
+        toast.success(
+          `Successfully migrated ${client.name}!\n` +
+          `Sites: ${result.sitesCount}, Subsections: ${result.subsectionsCount}, ` +
+          `Inspections: ${result.inspectionsCount}, Documents: ${result.documentsCount}`,
+          { id: toastId, duration: 5000 }
+        );
+        fetchAllClients();
+      } else {
+        toast.error(`Failed to migrate: ${result.error}`, { id: toastId });
+      }
+    } catch (error) {
+      console.error("Migration error:", error);
+      toast.error("Migration failed", { id: toastId });
+    } finally {
+      setMigrating(false);
+    }
+  };
+
+  const handleBulkMigration = async () => {
+    setBulkMigrationOpen(false);
+    setMigrating(true);
+    const toastId = toast.loading("Starting bulk migration...");
+
+    try {
+      const result = await migrateAllFromFirebase((progress) => {
+        setMigrationProgress(progress);
+        toast.loading(
+          `Migrating ${progress.currentEntity} (${progress.itemsMigrated}/${progress.totalItems})`,
+          { id: toastId }
+        );
+      });
+
+      toast.success(
+        `Bulk migration complete!\n` +
+        `Success: ${result.success}, Failed: ${result.failed}`,
+        { id: toastId, duration: 5000 }
+      );
+
+      if (result.errors.length > 0) {
+        console.error("Migration errors:", result.errors);
+      }
+
+      fetchAllClients();
+    } catch (error) {
+      console.error("Bulk migration error:", error);
+      toast.error("Bulk migration failed", { id: toastId });
+    } finally {
+      setMigrating(false);
+      setMigrationProgress(null);
     }
   };
 
@@ -145,68 +253,166 @@ const Clients = () => {
     );
   }
 
+  const filteredClients = clients.filter((client) => {
+    if (activeTab === 'all') return true;
+    return client.source === activeTab;
+  });
+
+  const firebaseCount = clients.filter(c => c.source === 'firebase').length;
+  const supabaseCount = clients.filter(c => c.source === 'supabase').length;
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted-foreground mt-2">
-            An overview of all clients
+            Managing {firebaseCount} Firebase and {supabaseCount} Supabase clients
           </p>
         </div>
+        {firebaseCount > 0 && (
+          <Button
+            onClick={() => setBulkMigrationOpen(true)}
+            disabled={migrating}
+            variant="outline"
+          >
+            <Download className="mr-2 h-4 w-4" />
+            Migrate All from Firebase ({firebaseCount})
+          </Button>
+        )}
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {clients.map((client) => (
-          <Card
-            key={client.id}
-            className="group cursor-pointer hover:shadow-lg transition-shadow relative"
-            onClick={() => navigate(`/clients/${client.id}`)}
-          >
-            <CardContent className="p-6">
-              <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                      <MoreVertical className="h-4 w-4" />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuItem
-                      className="text-destructive"
-                      onClick={() => handleDelete(client.id)}
-                    >
-                      Delete Client
-                    </DropdownMenuItem>
-                  </DropdownMenuContent>
-                </DropdownMenu>
+      {/* Migration Progress */}
+      {migrationProgress && (
+        <Card>
+          <CardContent className="pt-6">
+            <div className="space-y-2">
+              <div className="flex justify-between text-sm">
+                <span>Migrating: {migrationProgress.currentEntity}</span>
+                <span>{migrationProgress.percentage}%</span>
               </div>
+              <Progress value={migrationProgress.percentage} />
+              <p className="text-xs text-muted-foreground">
+                {migrationProgress.itemsMigrated} of {migrationProgress.totalItems} clients
+              </p>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
-              <div className="flex flex-col items-center text-center space-y-3">
-                <div className="w-32 h-20 flex items-center justify-center bg-muted rounded-lg">
-                  {client.logo_url ? (
-                    <img
-                      src={client.logo_url}
-                      alt={client.name}
-                      className="max-w-full max-h-full object-contain p-2"
-                    />
-                  ) : (
-                    <Building2 className="h-10 w-10 text-muted-foreground" />
-                  )}
-                </div>
-                <div>
-                  <h3 className="font-semibold">{client.name}</h3>
-                  <p className="text-sm text-muted-foreground">
-                    {client.company_name || client.contact_person || "No sites"}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
+      {/* Bulk Migration Confirmation Dialog */}
+      <Dialog open={bulkMigrationOpen} onOpenChange={setBulkMigrationOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Migrate All Clients from Firebase</DialogTitle>
+            <DialogDescription>
+              This will migrate {firebaseCount} clients and all their nested data (sites, subsections, inspections, documents) from Firebase to Supabase.
+              This process may take several minutes.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setBulkMigrationOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleBulkMigration}>
+              Start Migration
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Filter Tabs */}
+      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as any)}>
+        <TabsList>
+          <TabsTrigger value="all">All ({clients.length})</TabsTrigger>
+          <TabsTrigger value="firebase">
+            Firebase ({firebaseCount})
+          </TabsTrigger>
+          <TabsTrigger value="supabase">
+            Supabase ({supabaseCount})
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value={activeTab} className="mt-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filteredClients.map((client) => (
+              <Card
+                key={client.id}
+                className="group cursor-pointer hover:shadow-lg transition-shadow relative"
+                onClick={() => {
+                  if (client.source === 'supabase') {
+                    navigate(`/clients/${client.id}`);
+                  } else {
+                    toast.info("Firebase clients are read-only. Please migrate to view details.");
+                  }
+                }}
+              >
+                <CardContent className="p-6">
+                  {/* Source Badge */}
+                  <div className="absolute top-2 left-2">
+                    <Badge 
+                      variant={client.source === 'firebase' ? 'secondary' : 'default'}
+                      className="flex items-center gap-1"
+                    >
+                      <Database className="h-3 w-3" />
+                      {client.source === 'firebase' ? 'Firebase' : 'Supabase'}
+                    </Badge>
+                  </div>
+
+                  {/* Action Menu */}
+                  <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        {client.source === 'firebase' ? (
+                          <DropdownMenuItem
+                            onClick={() => handleMigrateClient(client)}
+                            disabled={migrating}
+                          >
+                            <Download className="mr-2 h-4 w-4" />
+                            Migrate to Supabase
+                          </DropdownMenuItem>
+                        ) : (
+                          <DropdownMenuItem
+                            className="text-destructive"
+                            onClick={() => handleDelete(client.id)}
+                          >
+                            Delete Client
+                          </DropdownMenuItem>
+                        )}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  </div>
+
+                  <div className="flex flex-col items-center text-center space-y-3 mt-6">
+                    <div className="w-32 h-20 flex items-center justify-center bg-muted rounded-lg">
+                      {client.logo_url ? (
+                        <img
+                          src={client.logo_url}
+                          alt={client.name}
+                          className="max-w-full max-h-full object-contain p-2"
+                        />
+                      ) : (
+                        <Building2 className="h-10 w-10 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div>
+                      <h3 className="font-semibold">{client.name}</h3>
+                      <p className="text-sm text-muted-foreground">
+                        {client.company_name || client.contact_person || "No details"}
+                      </p>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
         ))}
 
-        {/* Create New Client Card */}
-        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+            {/* Create New Client Card */}
+            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Card className="group cursor-pointer hover:shadow-lg transition-shadow border-dashed">
               <CardContent className="p-6 h-full flex items-center justify-center">
@@ -319,8 +525,10 @@ const Clients = () => {
               </DialogFooter>
             </form>
           </DialogContent>
-        </Dialog>
-      </div>
+            </Dialog>
+          </div>
+        </TabsContent>
+      </Tabs>
     </div>
   );
 };

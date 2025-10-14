@@ -84,6 +84,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           email: string | null
+          firebase_id: string | null
           id: string
           logo_url: string | null
           name: string
@@ -97,6 +98,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           email?: string | null
+          firebase_id?: string | null
           id?: string
           logo_url?: string | null
           name: string
@@ -110,6 +112,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           email?: string | null
+          firebase_id?: string | null
           id?: string
           logo_url?: string | null
           name?: string
@@ -266,6 +269,7 @@ export type Database = {
           created_at: string
           description: string | null
           end_date: string | null
+          firebase_id: string | null
           id: string
           inspection_date: string | null
           inspector_id: string | null
@@ -291,6 +295,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          firebase_id?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
@@ -316,6 +321,7 @@ export type Database = {
           created_at?: string
           description?: string | null
           end_date?: string | null
+          firebase_id?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
@@ -499,6 +505,7 @@ export type Database = {
           consultant_name: string | null
           created_at: string
           created_by: string | null
+          firebase_id: string | null
           id: string
           name: string
           nominated_max_demand: string | null
@@ -516,6 +523,7 @@ export type Database = {
           consultant_name?: string | null
           created_at?: string
           created_by?: string | null
+          firebase_id?: string | null
           id?: string
           name: string
           nominated_max_demand?: string | null
@@ -533,6 +541,7 @@ export type Database = {
           consultant_name?: string | null
           created_at?: string
           created_by?: string | null
+          firebase_id?: string | null
           id?: string
           name?: string
           nominated_max_demand?: string | null
@@ -609,6 +618,7 @@ export type Database = {
           created_at: string
           ct_ratio: string | null
           description: string | null
+          firebase_id: string | null
           id: string
           is_coc_required: boolean | null
           is_compliant: boolean | null
@@ -628,6 +638,7 @@ export type Database = {
           created_at?: string
           ct_ratio?: string | null
           description?: string | null
+          firebase_id?: string | null
           id?: string
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
@@ -647,6 +658,7 @@ export type Database = {
           created_at?: string
           ct_ratio?: string | null
           description?: string | null
+          firebase_id?: string | null
           id?: string
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
