@@ -14,6 +14,7 @@ import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
+import DataImport from "./pages/DataImport";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -99,6 +100,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Calendar />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/data-import"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <DataImport />
                 </DashboardLayout>
               </ProtectedRoute>
             }

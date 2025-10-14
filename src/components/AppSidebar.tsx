@@ -6,7 +6,8 @@ import {
   LogOut,
   Zap,
   UserCog,
-  CalendarDays
+  CalendarDays,
+  Database
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +33,7 @@ const menuItems = [
   { title: "Sites", url: "/sites", icon: Building2 },
   { title: "Inspections", url: "/inspections", icon: ClipboardCheck },
   { title: "Users", url: "/users", icon: UserCog },
+  { title: "Data Import", url: "/data-import", icon: Database },
 ];
 
 export function AppSidebar() {
