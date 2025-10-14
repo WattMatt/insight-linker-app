@@ -229,6 +229,24 @@ export type Database = {
           },
         ]
       }
+      temp_import: {
+        Row: {
+          data: Json | null
+          id: number
+          imported_at: string | null
+        }
+        Insert: {
+          data?: Json | null
+          id?: number
+          imported_at?: string | null
+        }
+        Update: {
+          data?: Json | null
+          id?: number
+          imported_at?: string | null
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
