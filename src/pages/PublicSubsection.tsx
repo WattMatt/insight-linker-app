@@ -14,6 +14,7 @@ interface SubsectionData {
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
+  cocDocumentUrl?: string;
   isCocRequired: boolean;
   files?: Record<string, any>;
 }
@@ -195,7 +196,7 @@ const PublicSubsection = () => {
         </Card>
 
         {/* COC Documents */}
-        {subsection.cocNumber && (
+        {subsection.cocNumber && subsection.cocDocumentUrl && (
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>01 COC</CardTitle>
@@ -211,7 +212,11 @@ const PublicSubsection = () => {
                     </p>
                   </div>
                 </div>
-                <Button size="sm" variant="outline">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={() => handleDownload(subsection.cocDocumentUrl!, `${subsection.name}-ECA-${subsection.cocNumber}.pdf`)}
+                >
                   <Download className="mr-2 h-4 w-4" />
                   Download
                 </Button>
