@@ -1,0 +1,281 @@
+import { useEffect, useState } from "react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Plus, Trash2, Building2, MapPin } from "lucide-react";
+import { toast } from "sonner";
+
+interface Site {
+  id: string;
+  name: string;
+  address: string | null;
+  site_type: string | null;
+  client_id: string;
+  clients: {
+    name: string;
+  };
+}
+
+interface Client {
+  id: string;
+  name: string;
+}
+
+const Sites = () => {
+  const [sites, setSites] = useState<Site[]>([]);
+  const [clients, setClients] = useState<Client[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    name: "",
+    address: "",
+    site_type: "",
+    client_id: "",
+  });
+
+  useEffect(() => {
+    fetchData();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const [sitesRes, clientsRes] = await Promise.all([
+        supabase.from("sites").select("*, clients(name)").order("created_at", { ascending: false }),
+        supabase.from("clients").select("id, name").order("name"),
+      ]);
+
+      if (sitesRes.error) throw sitesRes.error;
+      if (clientsRes.error) throw clientsRes.error;
+
+      setSites(sitesRes.data || []);
+      setClients(clientsRes.data || []);
+    } catch (error) {
+      console.error("Error fetching data:", error);
+      toast.error("Failed to fetch data");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { error } = await supabase.from("sites").insert([
+        {
+          ...formData,
+          created_by: user?.id,
+        },
+      ]);
+
+      if (error) throw error;
+
+      toast.success("Site added successfully");
+      setDialogOpen(false);
+      setFormData({ name: "", address: "", site_type: "", client_id: "" });
+      fetchData();
+    } catch (error) {
+      console.error("Error adding site:", error);
+      toast.error("Failed to add site");
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this site?")) return;
+
+    try {
+      const { error } = await supabase.from("sites").delete().eq("id", id);
+      if (error) throw error;
+
+      toast.success("Site deleted successfully");
+      fetchData();
+    } catch (error) {
+      console.error("Error deleting site:", error);
+      toast.error("Failed to delete site");
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading sites...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Sites</h1>
+          <p className="text-muted-foreground mt-2">
+            Manage inspection sites and locations
+          </p>
+        </div>
+        <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+          <DialogTrigger asChild>
+            <Button disabled={clients.length === 0}>
+              <Plus className="mr-2 h-4 w-4" />
+              Add Site
+            </Button>
+          </DialogTrigger>
+          <DialogContent>
+            <DialogHeader>
+              <DialogTitle>Add New Site</DialogTitle>
+              <DialogDescription>
+                Create a new site location for inspections.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleSubmit}>
+              <div className="space-y-4 py-4">
+                <div className="space-y-2">
+                  <Label htmlFor="client">Client *</Label>
+                  <Select
+                    value={formData.client_id}
+                    onValueChange={(value) => setFormData({ ...formData, client_id: value })}
+                    required
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select a client" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {clients.map((client) => (
+                        <SelectItem key={client.id} value={client.id}>
+                          {client.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="name">Site Name *</Label>
+                  <Input
+                    id="name"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    placeholder="Main Building"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="site_type">Site Type</Label>
+                  <Select
+                    value={formData.site_type}
+                    onValueChange={(value) => setFormData({ ...formData, site_type: value })}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select site type" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Commercial">Commercial</SelectItem>
+                      <SelectItem value="Industrial">Industrial</SelectItem>
+                      <SelectItem value="Residential">Residential</SelectItem>
+                      <SelectItem value="Mall">Shopping Mall</SelectItem>
+                      <SelectItem value="Office">Office Building</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="address">Address</Label>
+                  <div className="relative">
+                    <MapPin className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="address"
+                      value={formData.address}
+                      onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                      placeholder="123 Main St, City, State"
+                      className="pl-10"
+                    />
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="submit">Create Site</Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      {clients.length === 0 && (
+        <Card className="border-warning">
+          <CardHeader>
+            <CardTitle className="text-warning">No Clients Available</CardTitle>
+            <CardDescription>
+              You need to add at least one client before creating sites. Go to the Clients page to add your first client.
+            </CardDescription>
+          </CardHeader>
+        </Card>
+      )}
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Site List</CardTitle>
+          <CardDescription>
+            {sites.length} {sites.length === 1 ? "site" : "sites"} registered
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          {sites.length === 0 ? (
+            <div className="text-center py-12">
+              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+              <h3 className="text-lg font-semibold mb-2">No sites yet</h3>
+              <p className="text-muted-foreground mb-4">
+                Add your first site to start managing inspections
+              </p>
+              {clients.length > 0 && (
+                <Button onClick={() => setDialogOpen(true)}>
+                  <Plus className="mr-2 h-4 w-4" />
+                  Add First Site
+                </Button>
+              )}
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Site Name</TableHead>
+                  <TableHead>Client</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Address</TableHead>
+                  <TableHead className="text-right">Actions</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {sites.map((site) => (
+                  <TableRow key={site.id}>
+                    <TableCell className="font-medium">{site.name}</TableCell>
+                    <TableCell>{site.clients?.name}</TableCell>
+                    <TableCell>{site.site_type || "—"}</TableCell>
+                    <TableCell>{site.address || "—"}</TableCell>
+                    <TableCell className="text-right">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleDelete(site.id)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default Sites;
