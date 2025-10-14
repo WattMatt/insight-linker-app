@@ -3,7 +3,9 @@ import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { FileText, Plus, Download, ChevronLeft, ChevronRight } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -43,6 +45,7 @@ const InspectionTemplates = () => {
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -284,7 +287,13 @@ const InspectionTemplates = () => {
                     </div>
                   </div>
                   <div className="flex gap-2">
-                    <Button variant="outline" size="sm" className="flex-1">
+                    <Button 
+                      variant="outline" 
+                      size="sm" 
+                      className="flex-1"
+                      onClick={() => setPreviewTemplate(template)}
+                    >
+                      <Eye className="mr-2 h-4 w-4" />
                       View Details
                     </Button>
                     <Button
@@ -342,6 +351,135 @@ const InspectionTemplates = () => {
           </div>
         </>
       )}
+
+      {/* Template Preview Dialog */}
+      <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
+        <DialogContent className="max-w-4xl max-h-[90vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <FileText className="h-5 w-5 text-primary" />
+              {previewTemplate?.name}
+            </DialogTitle>
+            <DialogDescription>
+              {previewTemplate?.description}
+            </DialogDescription>
+          </DialogHeader>
+          
+          <ScrollArea className="h-[60vh] pr-4">
+            <div className="space-y-6">
+              {/* Cover Page Preview */}
+              <Card className="bg-primary/5 border-primary/20">
+                <CardHeader>
+                  <CardTitle className="text-base">Cover Page</CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-2">
+                  <div>
+                    <span className="text-sm font-medium">Title:</span>
+                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.title}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Subtitle:</span>
+                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.subtitle}</p>
+                  </div>
+                  <div>
+                    <span className="text-sm font-medium">Company:</span>
+                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.company_name}</p>
+                  </div>
+                </CardContent>
+              </Card>
+
+              {/* Template Metadata */}
+              <div className="grid grid-cols-3 gap-4">
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-primary">{previewTemplate?.sections_count}</p>
+                      <p className="text-sm text-muted-foreground">Sections</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <p className="text-2xl font-bold text-primary">{previewTemplate?.pages_count}</p>
+                      <p className="text-sm text-muted-foreground">Est. Pages</p>
+                    </div>
+                  </CardContent>
+                </Card>
+                <Card>
+                  <CardContent className="pt-6">
+                    <div className="text-center">
+                      <Badge variant="secondary" className="text-sm">{previewTemplate?.category}</Badge>
+                      <p className="text-sm text-muted-foreground mt-1">Category</p>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Sections Preview */}
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold">Template Sections</h3>
+                {previewTemplate?.sections?.map((section, idx) => (
+                  <Card key={section.id}>
+                    <CardHeader>
+                      <div className="flex items-center justify-between">
+                        <CardTitle className="text-base">
+                          {idx + 1}. {section.name}
+                        </CardTitle>
+                        <Badge variant="outline">
+                          {section.items?.length || 0} items
+                        </Badge>
+                      </div>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        {section.items?.map((item, itemIdx) => (
+                          <div 
+                            key={item.id} 
+                            className="flex items-start gap-3 p-2 rounded border bg-muted/30"
+                          >
+                            <span className="text-xs font-medium text-muted-foreground min-w-[24px]">
+                              {itemIdx + 1}.
+                            </span>
+                            <div className="flex-1">
+                              <p className="text-sm">{item.name}</p>
+                              <div className="flex gap-2 mt-1">
+                                <Badge variant="secondary" className="text-xs">
+                                  {item.type}
+                                </Badge>
+                                {item.required && (
+                                  <Badge variant="outline" className="text-xs">
+                                    Required
+                                  </Badge>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            </div>
+          </ScrollArea>
+
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={() => setPreviewTemplate(null)}>
+              Close
+            </Button>
+            <Button onClick={() => {
+              if (previewTemplate) {
+                generatePDF(previewTemplate);
+                setPreviewTemplate(null);
+              }
+            }}>
+              <Download className="mr-2 h-4 w-4" />
+              Download PDF
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
