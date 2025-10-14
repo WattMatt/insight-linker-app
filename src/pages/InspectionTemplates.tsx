@@ -588,53 +588,155 @@ const InspectionTemplates = () => {
                         <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
                       </div>
                       
-                      <div className="space-y-3">
-                        {section.items?.slice(0, 4).map((item, itemIdx) => (
-                          <div key={item.id} className="border border-gray-300 p-3">
-                            <div className="font-bold text-xs mb-2">
+                      <div className="space-y-4">
+                        {section.items?.map((item, itemIdx) => (
+                          <div key={item.id} className="border border-gray-300 p-4">
+                            <div className="font-bold text-sm mb-3 text-gray-900">
                               {itemIdx + 1}. {item.name}
                             </div>
                             
                             {item.type === 'checklist' && (
-                              <div className="space-y-1">
-                                <div className="bg-green-50 inline-block px-3 py-1 text-xs font-bold">
-                                  Value for {['Pass', 'N/A', 'Pass'][itemIdx % 3]}
+                              <div className="space-y-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs font-semibold text-gray-700">Status:</span>
+                                  <div className={`inline-block px-3 py-1 text-xs font-bold rounded ${
+                                    ['bg-green-100 text-green-800', 'bg-gray-100 text-gray-800', 'bg-red-100 text-red-800'][itemIdx % 3]
+                                  }`}>
+                                    {['✓ PASS', 'N/A', '✗ FAIL'][itemIdx % 3]}
+                                  </div>
                                 </div>
-                                <p className="text-xs text-gray-600 mt-2">
-                                  Notes: This is a mock note for {item.name}
-                                </p>
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-700">Notes:</p>
+                                  <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                    Inspection completed on site. {item.name} has been thoroughly checked and documented. All safety protocols followed.
+                                  </p>
+                                </div>
+                                <div className="mt-3 grid grid-cols-2 gap-2">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                    <div className="text-gray-400 text-center">
+                                      <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 1}</div>
+                                      <div className="text-[8px]">Image Placeholder</div>
+                                      <div className="text-[8px] text-gray-400">1024x768</div>
+                                    </div>
+                                  </div>
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                    <div className="text-gray-400 text-center">
+                                      <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 2}</div>
+                                      <div className="text-[8px]">Image Placeholder</div>
+                                      <div className="text-[8px] text-gray-400">1024x768</div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             )}
                             
-                            {(item.type === 'text' || item.type === 'number') && (
-                              <div className="text-xs">
-                                Value for {item.name}
+                            {item.type === 'text' && (
+                              <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Value:</span>
+                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded flex-1">
+                                    Sample text value for {item.name}
+                                  </span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {item.type === 'number' && (
+                              <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Value:</span>
+                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded">
+                                    {Math.floor(Math.random() * 100) + 50} units
+                                  </span>
+                                </div>
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx + 1}</div>
+                                    <div className="text-[8px]">Image Placeholder</div>
+                                    <div className="text-[8px] text-gray-400">1024x768</div>
+                                  </div>
+                                </div>
                               </div>
                             )}
                             
                             {item.type === 'textarea' && (
-                              <div className="space-y-1">
-                                <p className="text-xs font-semibold">Notes:</p>
-                                <p className="text-xs text-gray-600">
-                                  This is a mock note for {item.name}
-                                </p>
+                              <div className="space-y-2">
+                                <div className="space-y-1">
+                                  <p className="text-xs font-semibold text-gray-700">Detailed Notes:</p>
+                                  <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
+                                    Comprehensive inspection notes for {item.name}. All components have been visually inspected and tested according to the standard procedures. Documentation has been completed and all measurements recorded. Additional observations noted during the inspection process.
+                                  </p>
+                                </div>
+                                <div className="mt-3 grid grid-cols-3 gap-2">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                    <div className="text-gray-400 text-center">
+                                      <div className="text-[9px] font-semibold mb-1">PHOTO A</div>
+                                      <div className="text-[7px]">Placeholder</div>
+                                    </div>
+                                  </div>
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                    <div className="text-gray-400 text-center">
+                                      <div className="text-[9px] font-semibold mb-1">PHOTO B</div>
+                                      <div className="text-[7px]">Placeholder</div>
+                                    </div>
+                                  </div>
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                    <div className="text-gray-400 text-center">
+                                      <div className="text-[9px] font-semibold mb-1">PHOTO C</div>
+                                      <div className="text-[7px]">Placeholder</div>
+                                    </div>
+                                  </div>
+                                </div>
                               </div>
                             )}
                             
                             {item.type === 'image' && (
-                              <div className="border border-gray-300 bg-gray-50 w-32 h-24 flex flex-col items-center justify-center">
-                                <span className="text-[10px] text-gray-400">Photo</span>
-                                <span className="text-[10px] text-gray-400">Placeholder</span>
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-gray-700">Photo Documentation:</p>
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-full aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-sm font-semibold mb-2">PHOTO {itemIdx + 1}</div>
+                                    <div className="text-xs">Image Placeholder</div>
+                                    <div className="text-xs text-gray-400 mt-1">1024x768 pixels</div>
+                                  </div>
+                                </div>
+                                <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                                  Caption: Photo taken during inspection of {item.name}
+                                </p>
+                              </div>
+                            )}
+                            
+                            {item.type === 'signature' && (
+                              <div className="space-y-2">
+                                <p className="text-xs font-semibold text-gray-700">Signature Required:</p>
+                                <div className="border-2 border-gray-300 bg-white h-20 flex items-end px-3 pb-2 rounded">
+                                  <div className="text-gray-400 italic text-xs">Signature placeholder</div>
+                                </div>
+                                <div className="flex gap-4 text-xs">
+                                  <div>
+                                    <span className="font-semibold text-gray-700">Name:</span>
+                                    <span className="ml-2 text-gray-600">Inspector Name</span>
+                                  </div>
+                                  <div>
+                                    <span className="font-semibold text-gray-700">Date:</span>
+                                    <span className="ml-2 text-gray-600">{new Date().toLocaleDateString()}</span>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {item.type === 'date' && (
+                              <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Date:</span>
+                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded">
+                                    {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                  </span>
+                                </div>
                               </div>
                             )}
                           </div>
                         ))}
-                        
-                        {section.items && section.items.length > 4 && (
-                          <div className="text-center text-xs text-gray-500 italic py-2">
-                            ... and {section.items.length - 4} more items
-                          </div>
-                        )}
                       </div>
                       
                       <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
