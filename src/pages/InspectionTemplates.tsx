@@ -87,108 +87,176 @@ const InspectionTemplates = () => {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const contentWidth = pageWidth - (margin * 2);
+
+      // Mock data for realistic preview
+      const mockDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+      const mockData = {
+        projectName: 'Preview Project',
+        inspectorName: 'Preview Inspector',
+        clientRep: 'Mock Client Rep',
+        consultant: 'Mock Consultant',
+        contractor: 'Mock Contractor',
+        location: 'Site Location Address',
+        date: mockDate
+      };
 
       // Cover Page
       doc.setFillColor(41, 128, 185);
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
+      // Logo placeholder
+      doc.setDrawColor(255, 255, 255);
+      doc.setLineWidth(2);
+      doc.rect(pageWidth / 2 - 25, 30, 50, 30);
+      doc.setFontSize(8);
+      doc.setTextColor(255, 255, 255);
+      doc.text('COMPANY LOGO', pageWidth / 2, 48, { align: 'center' });
+      
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(32);
       doc.setFont(undefined, 'bold');
-      doc.text(template.cover_page?.title || 'Inspection Report', pageWidth / 2, 80, { align: 'center' });
+      doc.text(template.name, pageWidth / 2, 95, { align: 'center' });
       
-      doc.setFontSize(18);
+      doc.setFontSize(16);
       doc.setFont(undefined, 'normal');
-      doc.text(template.cover_page?.subtitle || template.name, pageWidth / 2, 100, { align: 'center' });
-      
-      doc.setFontSize(14);
-      doc.text(template.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, 120, { align: 'center' });
+      doc.text(template.cover_page?.subtitle || template.category, pageWidth / 2, 110, { align: 'center' });
       
       doc.setFontSize(12);
-      const date = new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-      doc.text(`Generated: ${date}`, pageWidth / 2, 140, { align: 'center' });
+      doc.text(`Date of Report: ${mockDate}`, pageWidth / 2, 130, { align: 'center' });
+      doc.text(`Inspector: ${mockData.inspectorName}`, pageWidth / 2, 140, { align: 'center' });
+      doc.text(`Project Name: ${mockData.projectName}`, pageWidth / 2, 150, { align: 'center' });
+      
+      doc.setFontSize(10);
+      doc.text(template.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, pageHeight - 20, { align: 'center' });
 
-      // Add new page for content
+      // General Information Page
       doc.addPage();
       doc.setTextColor(0, 0, 0);
       
-      // Template Details
-      doc.setFontSize(24);
+      // Section header with background
+      doc.setFillColor(240, 240, 240);
+      doc.rect(0, 10, pageWidth, 15, 'F');
+      doc.setFontSize(16);
       doc.setFont(undefined, 'bold');
-      doc.text(template.name, 20, 20);
+      doc.text('General Information', pageWidth / 2, 20, { align: 'center' });
       
-      doc.setFontSize(12);
-      doc.setFont(undefined, 'normal');
-      doc.text(`Category: ${template.category}`, 20, 35);
-      
-      if (template.description) {
-        doc.setFontSize(11);
-        const splitDescription = doc.splitTextToSize(template.description, pageWidth - 40);
-        doc.text(splitDescription, 20, 45);
-      }
-
-      // Template Statistics
-      let yPosition = template.description ? 65 : 50;
-      doc.setFontSize(14);
+      // General info table
+      let yPos = 35;
+      doc.setFontSize(10);
       doc.setFont(undefined, 'bold');
-      doc.text('Template Overview', 20, yPosition);
       
-      yPosition += 10;
-      doc.setFontSize(11);
-      doc.setFont(undefined, 'normal');
-      doc.text(`• Total Sections: ${template.sections_count}`, 25, yPosition);
-      yPosition += 7;
-      doc.text(`• Estimated Pages: ${template.pages_count}`, 25, yPosition);
-      yPosition += 7;
-      doc.text(`• Template ID: ${template.id}`, 25, yPosition);
+      const genInfo = [
+        ['PROJECT NAME:', mockData.projectName],
+        ['INSPECTOR NAME:', mockData.inspectorName],
+        ['INSPECTION DATE:', mockDate],
+        ['CLIENT REPRESENTATIVE:', mockData.clientRep],
+        ['CONSULTANT NAME:', mockData.consultant],
+        ['CONTRACTOR NAME:', mockData.contractor],
+        ['LOCATION:', mockData.location]
+      ];
+      
+      genInfo.forEach(([label, value]) => {
+        doc.setFont(undefined, 'bold');
+        doc.text(label, margin, yPos);
+        doc.setFont(undefined, 'normal');
+        doc.text(value, margin + 60, yPos);
+        yPos += 8;
+      });
 
-      // Sections Table
-      if (template.sections && template.sections.length > 0) {
-        yPosition += 15;
+      // Section pages with mock data
+      template.sections?.forEach((section, sectionIdx) => {
+        doc.addPage();
+        
+        // Section header
+        doc.setFillColor(41, 128, 185);
+        doc.rect(0, 10, pageWidth, 15, 'F');
+        doc.setTextColor(255, 255, 255);
         doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
-        doc.text('Inspection Sections', 20, yPosition);
+        doc.text(section.name.toUpperCase(), pageWidth / 2, 20, { align: 'center' });
         
-        yPosition += 5;
-        const tableData = template.sections.map((section, index) => [
-          (index + 1).toString(),
-          section.name,
-          section.items?.length.toString() || '0',
-          section.items?.filter(i => i.required).length.toString() || '0'
-        ]);
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [['#', 'Section Name', 'Items', 'Required']],
-          body: tableData,
-          theme: 'grid',
-          headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-          styles: { fontSize: 10 },
-          margin: { left: 20, right: 20 },
+        doc.setTextColor(0, 0, 0);
+        yPos = 35;
+        
+        section.items?.forEach((item, itemIdx) => {
+          // Check if we need a new page
+          if (yPos > pageHeight - 60) {
+            doc.addPage();
+            
+            // Continuation header
+            doc.setFillColor(240, 240, 240);
+            doc.rect(0, 10, pageWidth, 10, 'F');
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${section.name} (cont)`, pageWidth / 2, 17, { align: 'center' });
+            
+            yPos = 30;
+          }
+          
+          // Item box
+          const boxHeight = item.type === 'image' ? 50 : (item.type === 'textarea' ? 35 : 25);
+          doc.setDrawColor(200, 200, 200);
+          doc.setLineWidth(0.5);
+          doc.rect(margin, yPos, contentWidth, boxHeight);
+          
+          // Item number and label
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'bold');
+          const itemLabel = `${itemIdx + 1}. ${item.name}`;
+          const splitLabel = doc.splitTextToSize(itemLabel, contentWidth - 10);
+          doc.text(splitLabel, margin + 5, yPos + 6);
+          
+          const labelHeight = splitLabel.length * 5;
+          
+          // Mock value based on type
+          doc.setFont(undefined, 'normal');
+          doc.setFontSize(9);
+          
+          if (item.type === 'checklist') {
+            const mockStatus = ['Pass', 'N/A', 'Pass'][itemIdx % 3];
+            doc.setFillColor(mockStatus === 'Pass' ? 220 : 240, mockStatus === 'Pass' ? 240 : 240, mockStatus === 'Pass' ? 220 : 240);
+            doc.rect(margin + 5, yPos + labelHeight + 5, 30, 6, 'F');
+            doc.setFont(undefined, 'bold');
+            doc.text(`Value for ${mockStatus}`, margin + 7, yPos + labelHeight + 9);
+            doc.setFont(undefined, 'normal');
+            doc.text(`Notes: This is a mock note for ${item.name}`, margin + 5, yPos + labelHeight + 16);
+          } else if (item.type === 'text' || item.type === 'number') {
+            doc.text(`Value for ${item.name}`, margin + 5, yPos + labelHeight + 8);
+          } else if (item.type === 'textarea') {
+            doc.text('Notes:', margin + 5, yPos + labelHeight + 8);
+            doc.text(`This is a mock note for ${item.name}`, margin + 5, yPos + labelHeight + 14);
+          } else if (item.type === 'image') {
+            doc.setDrawColor(150, 150, 150);
+            doc.setFillColor(250, 250, 250);
+            doc.rect(margin + 5, yPos + labelHeight + 5, 40, 30, 'FD');
+            doc.setFontSize(7);
+            doc.setTextColor(150, 150, 150);
+            doc.text('Photo', margin + 25, yPos + labelHeight + 22, { align: 'center' });
+            doc.text('Placeholder', margin + 25, yPos + labelHeight + 27, { align: 'center' });
+            doc.setTextColor(0, 0, 0);
+          }
+          
+          yPos += boxHeight + 5;
         });
-      }
+      });
 
-      // Footer on all pages
+      // Add page numbers to all content pages
       const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
+      for (let i = 2; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFontSize(10);
+        doc.setFontSize(9);
         doc.setTextColor(128, 128, 128);
-        if (i > 1) { // Skip footer on cover page
-          doc.text(
-            `Page ${i - 1} of ${totalPages - 1}`,
-            pageWidth / 2,
-            pageHeight - 10,
-            { align: 'center' }
-          );
-        }
+        doc.text(
+          `${template.name} - Page ${i - 1}`,
+          pageWidth / 2,
+          pageHeight - 10,
+          { align: 'center' }
+        );
       }
 
-      doc.save(`${template.name.replace(/\s+/g, '_')}_Template.pdf`);
+      doc.save(`${template.name.replace(/\s+/g, '_')}_Preview.pdf`);
       toast.success("PDF exported successfully");
     } catch (error) {
       console.error("Error generating PDF:", error);
