@@ -2,15 +2,15 @@ import { initializeApp } from 'firebase/app';
 import { getDatabase, ref, onValue, get } from 'firebase/database';
 
 // Firebase configuration
-// You'll need to replace these with your actual Firebase config values
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
+  apiKey: "AIzaSyChjTlYO3UcfK2nK6Efy5F71ekxnGjH5W8",
   authDomain: "firestudio-rebuild.firebaseapp.com",
   databaseURL: "https://firestudio-rebuild-default-rtdb.firebaseio.com",
   projectId: "firestudio-rebuild",
   storageBucket: "firestudio-rebuild.firebasestorage.app",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  messagingSenderId: "202782471810",
+  appId: "1:202782471810:web:974edaa311d9d428a6269b",
+  measurementId: "G-6ZBFKS1RL9"
 };
 
 // Initialize Firebase
