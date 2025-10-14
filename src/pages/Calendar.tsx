@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval } from "date-fns";
+import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
 import { ChevronLeft, ChevronRight, Circle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -28,22 +28,22 @@ interface Inspection {
 }
 
 const Calendar = () => {
-  const [currentDate, setCurrentDate] = useState(new Date());
+  const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
   
-  const monthStart = startOfMonth(currentDate);
-  const monthEnd = endOfMonth(currentDate);
-  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+  const yearStart = startOfYear(new Date(currentYear, 0, 1));
+  const yearEnd = endOfYear(new Date(currentYear, 0, 1));
+  const monthsInYear = eachMonthOfInterval({ start: yearStart, end: yearEnd });
 
-  // Fetch inspections for the current month
+  // Fetch all inspections for the current year
   const { data: inspections } = useQuery({
-    queryKey: ["calendar-inspections", format(monthStart, "yyyy-MM")],
+    queryKey: ["calendar-inspections", currentYear],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inspections")
         .select("*")
-        .gte("inspection_date", format(monthStart, "yyyy-MM-dd"))
-        .lte("inspection_date", format(monthEnd, "yyyy-MM-dd"))
+        .gte("inspection_date", format(yearStart, "yyyy-MM-dd"))
+        .lte("inspection_date", format(yearEnd, "yyyy-MM-dd"))
         .order("inspection_date", { ascending: true });
 
       if (error) throw error;
@@ -95,12 +95,12 @@ const Calendar = () => {
     }
   };
 
-  const previousMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
+  const previousYear = () => {
+    setCurrentYear(currentYear - 1);
   };
 
-  const nextMonth = () => {
-    setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
+  const nextYear = () => {
+    setCurrentYear(currentYear + 1);
   };
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -109,93 +109,102 @@ const Calendar = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Inspection Calendar</h1>
+          <h1 className="text-3xl font-bold">Annual Inspection Calendar</h1>
           <p className="text-muted-foreground mt-1">
-            View and manage scheduled inspections
+            View all scheduled inspections for the year
           </p>
         </div>
         
         <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={previousMonth}>
+          <Button variant="outline" size="icon" onClick={previousYear}>
             <ChevronLeft className="h-4 w-4" />
           </Button>
-          <h2 className="text-xl font-semibold min-w-[200px] text-center">
-            {format(currentDate, "MMMM yyyy")}
+          <h2 className="text-xl font-semibold min-w-[120px] text-center">
+            {currentYear}
           </h2>
-          <Button variant="outline" size="icon" onClick={nextMonth}>
+          <Button variant="outline" size="icon" onClick={nextYear}>
             <ChevronRight className="h-4 w-4" />
           </Button>
         </div>
       </div>
 
-      <Card>
-        <CardContent className="p-6">
-          {/* Calendar Grid */}
-          <div className="grid grid-cols-7 gap-2">
-            {/* Week day headers */}
-            {weekDays.map(day => (
-              <div
-                key={day}
-                className="text-center font-semibold text-sm text-muted-foreground p-2"
-              >
-                {day}
-              </div>
-            ))}
+      {/* Annual Calendar Grid - 12 months */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {monthsInYear.map(month => {
+          const monthStart = startOfMonth(month);
+          const monthEnd = endOfMonth(month);
+          const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+          
+          return (
+            <Card key={month.toISOString()}>
+              <CardContent className="p-3">
+                <h3 className="text-sm font-semibold mb-2 text-center">
+                  {format(month, "MMMM")}
+                </h3>
+                
+                {/* Mini calendar grid */}
+                <div className="grid grid-cols-7 gap-1">
+                  {/* Week day headers */}
+                  {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
+                    <div
+                      key={idx}
+                      className="text-center text-[10px] font-medium text-muted-foreground"
+                    >
+                      {day}
+                    </div>
+                  ))}
 
-            {/* Empty cells for days before month starts */}
-            {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-              <div key={`empty-${index}`} className="min-h-[120px] p-2 border rounded-lg bg-muted/20" />
-            ))}
+                  {/* Empty cells for days before month starts */}
+                  {Array.from({ length: monthStart.getDay() }).map((_, index) => (
+                    <div key={`empty-${index}`} className="aspect-square" />
+                  ))}
 
-            {/* Calendar days */}
-            {daysInMonth.map(day => {
-              const dayInspections = getInspectionsForDay(day);
-              const isToday = isSameDay(day, new Date());
+                  {/* Calendar days */}
+                  {daysInMonth.map(day => {
+                    const dayInspections = getInspectionsForDay(day);
+                    const isToday = isSameDay(day, new Date());
+                    const hasInspections = dayInspections.length > 0;
+                    
+                    // Get the highest priority for the day
+                    const highestPriority = dayInspections.reduce((highest, inspection) => {
+                      const priorities = { "high": 3, "medium": 2, "low": 1 };
+                      const currentPriority = priorities[inspection.priority?.toLowerCase() as keyof typeof priorities] || 0;
+                      const highestPriority = priorities[highest?.toLowerCase() as keyof typeof priorities] || 0;
+                      return currentPriority > highestPriority ? inspection.priority : highest;
+                    }, null as string | null);
 
-              return (
-                <div
-                  key={day.toISOString()}
-                  className={cn(
-                    "min-h-[120px] p-2 border rounded-lg transition-colors hover:bg-accent/50",
-                    !isSameMonth(day, currentDate) && "opacity-50",
-                    isToday && "border-primary border-2"
-                  )}
-                >
-                  <div className={cn(
-                    "text-sm font-medium mb-2",
-                    isToday && "text-primary font-bold"
-                  )}>
-                    {format(day, "d")}
-                  </div>
-                  
-                  <div className="space-y-1">
-                    {dayInspections.slice(0, 2).map(inspection => (
+                    return (
                       <button
-                        key={inspection.id}
-                        onClick={() => setSelectedInspection(inspection)}
-                        className="w-full text-left"
+                        key={day.toISOString()}
+                        onClick={() => dayInspections.length > 0 && setSelectedInspection(dayInspections[0])}
+                        disabled={!hasInspections}
+                        className={cn(
+                          "aspect-square text-[10px] rounded-sm transition-all relative",
+                          "hover:scale-110",
+                          isToday && "ring-2 ring-primary font-bold",
+                          hasInspections && "font-semibold cursor-pointer",
+                          !hasInspections && "cursor-default",
+                          hasInspections && highestPriority?.toLowerCase() === "high" && "bg-destructive/20 text-destructive hover:bg-destructive/30",
+                          hasInspections && highestPriority?.toLowerCase() === "medium" && "bg-warning/20 text-warning hover:bg-warning/30",
+                          hasInspections && highestPriority?.toLowerCase() === "low" && "bg-success/20 text-success hover:bg-success/30",
+                          !hasInspections && "text-muted-foreground/50"
+                        )}
                       >
-                        <div className={cn(
-                          "text-xs p-1 rounded truncate",
-                          getStatusColor(inspection.status)
-                        )}>
-                          <Circle className={cn("h-2 w-2 inline mr-1", getPriorityColor(inspection.priority))} />
-                          {inspection.title}
-                        </div>
+                        {format(day, "d")}
+                        {dayInspections.length > 1 && (
+                          <span className="absolute top-0 right-0 text-[6px] font-bold">
+                            +{dayInspections.length - 1}
+                          </span>
+                        )}
                       </button>
-                    ))}
-                    {dayInspections.length > 2 && (
-                      <div className="text-xs text-muted-foreground pl-1">
-                        +{dayInspections.length - 2} more
-                      </div>
-                    )}
-                  </div>
+                    );
+                  })}
                 </div>
-              );
-            })}
-          </div>
-        </CardContent>
-      </Card>
+              </CardContent>
+            </Card>
+          );
+        })}
+      </div>
 
       {/* Legend */}
       <Card>
