@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
+import Users from "./pages/Users";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -77,6 +78,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Inspections />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/users"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Users />
                 </DashboardLayout>
               </ProtectedRoute>
             }

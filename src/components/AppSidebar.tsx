@@ -4,7 +4,8 @@ import {
   Building2, 
   ClipboardCheck, 
   LogOut,
-  Zap
+  Zap,
+  UserCog
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -28,6 +29,7 @@ const menuItems = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Sites", url: "/sites", icon: Building2 },
   { title: "Inspections", url: "/inspections", icon: ClipboardCheck },
+  { title: "Users", url: "/users", icon: UserCog },
 ];
 
 export function AppSidebar() {
