@@ -8,7 +8,8 @@ import {
   UserCog,
   CalendarDays,
   Database,
-  CloudUpload
+  CloudUpload,
+  Settings as SettingsIcon
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -32,6 +33,7 @@ const menuItems = [
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Users", url: "/users", icon: UserCog },
+  { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Firebase Sync", url: "/firebase-sync", icon: CloudUpload },
   { title: "Data Import", url: "/data-import", icon: Database },
 ];

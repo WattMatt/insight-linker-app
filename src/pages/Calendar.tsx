@@ -2,10 +2,11 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Circle } from "lucide-react";
+import { ChevronLeft, ChevronRight, Circle, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import {
   Dialog,
   DialogContent,
@@ -15,54 +16,52 @@ import {
 } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
 
-interface Inspection {
+interface CalendarEvent {
   id: string;
   title: string;
-  site_id: string;
-  inspection_date: string | null;
+  site_name: string;
+  start_date: string;
   end_date: string | null;
   status: string;
-  priority: string | null;
-  assigned_to: string[] | null;
-  description: string | null;
+  priority: string;
+  event_type: string | null;
 }
 
 const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [selectedInspection, setSelectedInspection] = useState<Inspection | null>(null);
+  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   
   const yearStart = startOfYear(new Date(currentYear, 0, 1));
   const yearEnd = endOfYear(new Date(currentYear, 0, 1));
   const monthsInYear = eachMonthOfInterval({ start: yearStart, end: yearEnd });
 
-  // Fetch all inspections for the current year
-  const { data: inspections } = useQuery({
-    queryKey: ["calendar-inspections", currentYear],
+  // Fetch all events for the current year
+  const { data: events, refetch } = useQuery({
+    queryKey: ["calendar-events", currentYear],
     queryFn: async () => {
       const { data, error } = await supabase
-        .from("inspections")
+        .from("calendar_events")
         .select("*")
-        .gte("inspection_date", format(yearStart, "yyyy-MM-dd"))
-        .lte("inspection_date", format(yearEnd, "yyyy-MM-dd"))
-        .order("inspection_date", { ascending: true });
+        .gte("start_date", format(yearStart, "yyyy-MM-dd"))
+        .lte("start_date", format(yearEnd, "yyyy-MM-dd"))
+        .order("start_date", { ascending: true });
 
       if (error) throw error;
-      return data as Inspection[];
+      return data as CalendarEvent[];
     },
   });
 
-  const getInspectionsForDay = (day: Date) => {
-    return inspections?.filter(inspection => {
-      if (!inspection.inspection_date) return false;
-      const inspectionDate = parseISO(inspection.inspection_date);
+  const getEventsForDay = (day: Date) => {
+    return events?.filter(event => {
+      const eventDate = parseISO(event.start_date);
       
       // Check if it's the start date
-      if (isSameDay(inspectionDate, day)) return true;
+      if (isSameDay(eventDate, day)) return true;
       
       // Check if it's within the date range (start to end)
-      if (inspection.end_date) {
-        const endDate = parseISO(inspection.end_date);
-        return isWithinInterval(day, { start: inspectionDate, end: endDate });
+      if (event.end_date) {
+        const endDate = parseISO(event.end_date);
+        return isWithinInterval(day, { start: eventDate, end: endDate });
       }
       
       return false;
@@ -109,9 +108,9 @@ const Calendar = () => {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Annual Inspection Calendar</h1>
+          <h1 className="text-3xl font-bold">Calendar</h1>
           <p className="text-muted-foreground mt-1">
-            View all scheduled inspections for the year
+            View and manage your schedule
           </p>
         </div>
         
@@ -124,6 +123,10 @@ const Calendar = () => {
           </h2>
           <Button variant="outline" size="icon" onClick={nextYear}>
             <ChevronRight className="h-4 w-4" />
+          </Button>
+          <Button>
+            <Plus className="h-4 w-4 mr-2" />
+            Add Event
           </Button>
         </div>
       </div>
@@ -161,39 +164,39 @@ const Calendar = () => {
 
                   {/* Calendar days */}
                   {daysInMonth.map(day => {
-                    const dayInspections = getInspectionsForDay(day);
+                    const dayEvents = getEventsForDay(day);
                     const isToday = isSameDay(day, new Date());
-                    const hasInspections = dayInspections.length > 0;
+                    const hasEvents = dayEvents.length > 0;
                     
                     // Get the highest priority for the day
-                    const highestPriority = dayInspections.reduce((highest, inspection) => {
+                    const highestPriority = dayEvents.reduce((highest, event) => {
                       const priorities = { "high": 3, "medium": 2, "low": 1 };
-                      const currentPriority = priorities[inspection.priority?.toLowerCase() as keyof typeof priorities] || 0;
+                      const currentPriority = priorities[event.priority?.toLowerCase() as keyof typeof priorities] || 0;
                       const highestPriority = priorities[highest?.toLowerCase() as keyof typeof priorities] || 0;
-                      return currentPriority > highestPriority ? inspection.priority : highest;
+                      return currentPriority > highestPriority ? event.priority : highest;
                     }, null as string | null);
 
                     return (
                       <button
                         key={day.toISOString()}
-                        onClick={() => dayInspections.length > 0 && setSelectedInspection(dayInspections[0])}
-                        disabled={!hasInspections}
+                        onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
+                        disabled={!hasEvents}
                         className={cn(
                           "aspect-square text-[10px] rounded-sm transition-all relative",
                           "hover:scale-110",
                           isToday && "ring-2 ring-primary font-bold",
-                          hasInspections && "font-semibold cursor-pointer",
-                          !hasInspections && "cursor-default",
-                          hasInspections && highestPriority?.toLowerCase() === "high" && "bg-destructive/20 text-destructive hover:bg-destructive/30",
-                          hasInspections && highestPriority?.toLowerCase() === "medium" && "bg-warning/20 text-warning hover:bg-warning/30",
-                          hasInspections && highestPriority?.toLowerCase() === "low" && "bg-success/20 text-success hover:bg-success/30",
-                          !hasInspections && "text-muted-foreground/50"
+                          hasEvents && "font-semibold cursor-pointer",
+                          !hasEvents && "cursor-default",
+                          hasEvents && highestPriority?.toLowerCase() === "high" && "bg-destructive/20 text-destructive hover:bg-destructive/30",
+                          hasEvents && highestPriority?.toLowerCase() === "medium" && "bg-warning/20 text-warning hover:bg-warning/30",
+                          hasEvents && highestPriority?.toLowerCase() === "low" && "bg-success/20 text-success hover:bg-success/30",
+                          !hasEvents && "text-muted-foreground/50"
                         )}
                       >
                         {format(day, "d")}
-                        {dayInspections.length > 1 && (
+                        {dayEvents.length > 1 && (
                           <span className="absolute top-0 right-0 text-[6px] font-bold">
-                            +{dayInspections.length - 1}
+                            +{dayEvents.length - 1}
                           </span>
                         )}
                       </button>
@@ -229,75 +232,74 @@ const Calendar = () => {
         </CardContent>
       </Card>
 
-      {/* Inspection Details Dialog */}
-      <Dialog open={!!selectedInspection} onOpenChange={() => setSelectedInspection(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{selectedInspection?.title}</DialogTitle>
-            <DialogDescription>
-              Inspection details and schedule
-            </DialogDescription>
-          </DialogHeader>
-          
-          {selectedInspection && (
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">Start Date</p>
-                  <p className="text-sm">
-                    {selectedInspection.inspection_date 
-                      ? format(parseISO(selectedInspection.inspection_date), "PPP")
-                      : "Not set"}
-                  </p>
-                </div>
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground">End Date</p>
-                  <p className="text-sm">
-                    {selectedInspection.end_date 
-                      ? format(parseISO(selectedInspection.end_date), "PPP")
-                      : "Not set"}
-                  </p>
-                </div>
-              </div>
-              
-              <div>
-                <p className="text-sm font-medium text-muted-foreground mb-1">Status</p>
-                <Badge className={getStatusColor(selectedInspection.status)}>
-                  {selectedInspection.status}
-                </Badge>
-              </div>
-              
-              {selectedInspection.priority && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Priority</p>
-                  <div className="flex items-center gap-2">
-                    <Circle className={cn("h-3 w-3", getPriorityColor(selectedInspection.priority))} />
-                    <span className="text-sm">{selectedInspection.priority}</span>
-                  </div>
-                </div>
+      {/* Schedule Table */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Schedule</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Title</TableHead>
+                <TableHead>Site</TableHead>
+                <TableHead>Start Date</TableHead>
+                <TableHead>End Date</TableHead>
+                <TableHead>Status</TableHead>
+                <TableHead>Priority</TableHead>
+                <TableHead className="text-right">Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {events && events.length > 0 ? (
+                events.map((event) => (
+                  <TableRow key={event.id}>
+                    <TableCell className="font-medium">{event.title}</TableCell>
+                    <TableCell>{event.site_name}</TableCell>
+                    <TableCell>{event.start_date}</TableCell>
+                    <TableCell>{event.end_date || "—"}</TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="secondary"
+                        className={
+                          event.status === "Scheduled" ? "bg-blue-500/10 text-blue-500" :
+                          event.status === "In Progress" ? "bg-orange-500/10 text-orange-500" :
+                          "bg-green-500/10 text-green-500"
+                        }
+                      >
+                        {event.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge 
+                        variant="secondary"
+                        className={
+                          event.priority === "High" ? "bg-red-500/10 text-red-500" :
+                          event.priority === "Medium" ? "bg-orange-500/10 text-orange-500" :
+                          "bg-green-500/10 text-green-500"
+                        }
+                      >
+                        {event.priority}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm">
+                        ⋯
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              ) : (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    No scheduled events
+                  </TableCell>
+                </TableRow>
               )}
-              
-              {selectedInspection.description && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Description</p>
-                  <p className="text-sm">{selectedInspection.description}</p>
-                </div>
-              )}
-              
-              {selectedInspection.assigned_to && selectedInspection.assigned_to.length > 0 && (
-                <div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">Assigned To</p>
-                  <div className="flex gap-2 flex-wrap">
-                    {selectedInspection.assigned_to.map((user, index) => (
-                      <Badge key={index} variant="outline">{user}</Badge>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
     </div>
   );
 };

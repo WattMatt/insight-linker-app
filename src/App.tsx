@@ -19,6 +19,7 @@ import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
 import DataImport from "./pages/DataImport";
 import FirebaseSync from "./pages/FirebaseSync";
+import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -154,6 +155,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <FirebaseSync />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Settings />
                 </DashboardLayout>
               </ProtectedRoute>
             }

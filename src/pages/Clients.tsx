@@ -2,12 +2,12 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Mail, Phone, User } from "lucide-react";
+import { Plus, MoreVertical, Upload, Building2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
 interface Client {
@@ -16,6 +16,9 @@ interface Client {
   contact_person: string | null;
   email: string | null;
   phone: string | null;
+  logo_url: string | null;
+  company_name: string | null;
+  primary_contact_email: string | null;
   created_at: string;
 }
 
@@ -24,11 +27,15 @@ const Clients = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [logoFile, setLogoFile] = useState<File | null>(null);
   const [formData, setFormData] = useState({
     name: "",
     contact_person: "",
     email: "",
     phone: "",
+    company_name: "",
+    primary_contact_email: "",
   });
 
   useEffect(() => {
@@ -56,11 +63,36 @@ const Clients = () => {
     e.preventDefault();
     
     try {
+      setUploading(true);
       const { data: { user } } = await supabase.auth.getUser();
+      
+      let logo_url = null;
+
+      // Upload logo if provided
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('client-logos')
+          .upload(filePath, logoFile, {
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('client-logos')
+          .getPublicUrl(filePath);
+
+        logo_url = publicUrl;
+      }
       
       const { error } = await supabase.from("clients").insert([
         {
           ...formData,
+          logo_url,
           created_by: user?.id,
         },
       ]);
@@ -69,11 +101,21 @@ const Clients = () => {
 
       toast.success("Client added successfully");
       setDialogOpen(false);
-      setFormData({ name: "", contact_person: "", email: "", phone: "" });
+      setFormData({ 
+        name: "", 
+        contact_person: "", 
+        email: "", 
+        phone: "",
+        company_name: "",
+        primary_contact_email: ""
+      });
+      setLogoFile(null);
       fetchClients();
     } catch (error) {
       console.error("Error adding client:", error);
       toast.error("Failed to add client");
+    } finally {
+      setUploading(false);
     }
   };
 
@@ -109,143 +151,176 @@ const Clients = () => {
         <div>
           <h1 className="text-3xl font-bold tracking-tight">Clients</h1>
           <p className="text-muted-foreground mt-2">
-            Manage your client organizations
+            An overview of all clients
           </p>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+        {clients.map((client) => (
+          <Card
+            key={client.id}
+            className="group cursor-pointer hover:shadow-lg transition-shadow relative"
+            onClick={() => navigate(`/clients/${client.id}`)}
+          >
+            <CardContent className="p-6">
+              <div className="absolute top-2 right-2" onClick={(e) => e.stopPropagation()}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      className="text-destructive"
+                      onClick={() => handleDelete(client.id)}
+                    >
+                      Delete Client
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
+
+              <div className="flex flex-col items-center text-center space-y-3">
+                <div className="w-32 h-20 flex items-center justify-center bg-muted rounded-lg">
+                  {client.logo_url ? (
+                    <img
+                      src={client.logo_url}
+                      alt={client.name}
+                      className="max-w-full max-h-full object-contain p-2"
+                    />
+                  ) : (
+                    <Building2 className="h-10 w-10 text-muted-foreground" />
+                  )}
+                </div>
+                <div>
+                  <h3 className="font-semibold">{client.name}</h3>
+                  <p className="text-sm text-muted-foreground">
+                    {client.company_name || client.contact_person || "No sites"}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+
+        {/* Create New Client Card */}
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Add Client
-            </Button>
+            <Card className="group cursor-pointer hover:shadow-lg transition-shadow border-dashed">
+              <CardContent className="p-6 h-full flex items-center justify-center">
+                <div className="flex flex-col items-center text-center space-y-3">
+                  <div className="w-32 h-20 flex items-center justify-center bg-muted rounded-lg">
+                    <Plus className="h-10 w-10 text-muted-foreground" />
+                  </div>
+                  <p className="font-semibold">Create New Client</p>
+                </div>
+              </CardContent>
+            </Card>
           </DialogTrigger>
-          <DialogContent>
+          <DialogContent className="max-w-2xl">
             <DialogHeader>
-              <DialogTitle>Add New Client</DialogTitle>
+              <DialogTitle>Create New Client</DialogTitle>
               <DialogDescription>
-                Create a new client organization to manage sites and inspections.
+                Fill in the details for the new client.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleSubmit}>
-              <div className="space-y-4 py-4">
-                <div className="space-y-2">
-                  <Label htmlFor="name">Organization Name *</Label>
-                  <Input
-                    id="name"
-                    value={formData.name}
-                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                    placeholder="ACME Corporation"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="contact_person">Contact Person</Label>
-                  <div className="relative">
-                    <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <div className="space-y-6 py-4">
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Client Details</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="name">Client Name *</Label>
                     <Input
-                      id="contact_person"
-                      value={formData.contact_person}
-                      onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                      placeholder="John Doe"
-                      className="pl-10"
+                      id="name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., Fortress Fund"
+                      required
                     />
                   </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="email">Email</Label>
-                  <div className="relative">
-                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Development Manager / Consultant Details</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="company_name">Company Name</Label>
                     <Input
-                      id="email"
-                      type="email"
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      placeholder="contact@example.com"
-                      className="pl-10"
+                      id="company_name"
+                      value={formData.company_name}
+                      onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                      placeholder="e.g., Watson Mattheus Consulting Electrical Engineers"
                     />
                   </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="contact_person">Primary Contact Name</Label>
+                      <Input
+                        id="contact_person"
+                        value={formData.contact_person}
+                        onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                        placeholder="e.g., Ernst De Beer"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="primary_contact_email">Primary Contact Email</Label>
+                      <Input
+                        id="primary_contact_email"
+                        type="email"
+                        value={formData.primary_contact_email}
+                        onChange={(e) => setFormData({ ...formData, primary_contact_email: e.target.value })}
+                        placeholder="e.g., ernst@wmeng.co.za"
+                      />
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="phone">Phone</Label>
-                  <div className="relative">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                      id="phone"
-                      type="tel"
-                      value={formData.phone}
-                      onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                      placeholder="+1 (555) 000-0000"
-                      className="pl-10"
-                    />
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Branding</h3>
+                  <p className="text-sm text-muted-foreground">Upload a logo for the client</p>
+                  <div className="space-y-2">
+                    <Label>Client Logo</Label>
+                    <div className="flex items-center gap-4">
+                      {logoFile && (
+                        <div className="border rounded-lg p-2 w-20 h-20 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground text-center">Preview</span>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('logo-upload')?.click()}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Choose File
+                      </Button>
+                      <input
+                        id="logo-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {logoFile ? logoFile.name : "No file chosen"}
+                      </span>
+                    </div>
                   </div>
                 </div>
               </div>
               <DialogFooter>
-                <Button type="submit">Create Client</Button>
+                <Button type="button" variant="outline" onClick={() => setDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={uploading}>
+                  {uploading ? "Creating..." : "Create Client"}
+                </Button>
               </DialogFooter>
             </form>
           </DialogContent>
         </Dialog>
       </div>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Client List</CardTitle>
-          <CardDescription>
-            {clients.length} {clients.length === 1 ? "client" : "clients"} registered
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {clients.length === 0 ? (
-            <div className="text-center py-12">
-              <User className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No clients yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Get started by adding your first client organization
-              </p>
-              <Button onClick={() => setDialogOpen(true)}>
-                <Plus className="mr-2 h-4 w-4" />
-                Add First Client
-              </Button>
-            </div>
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Organization</TableHead>
-                  <TableHead>Contact Person</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Phone</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {clients.map((client) => (
-                  <TableRow
-                    key={client.id}
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => navigate(`/clients/${client.id}`)}
-                  >
-                    <TableCell className="font-medium">{client.name}</TableCell>
-                    <TableCell>{client.contact_person || "—"}</TableCell>
-                    <TableCell>{client.email || "—"}</TableCell>
-                    <TableCell>{client.phone || "—"}</TableCell>
-                    <TableCell className="text-right" onClick={(e) => e.stopPropagation()}>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(client.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
-      </Card>
     </div>
   );
 };

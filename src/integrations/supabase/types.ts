@@ -14,35 +14,107 @@ export type Database = {
   }
   public: {
     Tables: {
+      activity_logs: {
+        Row: {
+          action: string
+          created_at: string | null
+          details: string | null
+          id: string
+          user_email: string
+        }
+        Insert: {
+          action: string
+          created_at?: string | null
+          details?: string | null
+          id?: string
+          user_email: string
+        }
+        Update: {
+          action?: string
+          created_at?: string | null
+          details?: string | null
+          id?: string
+          user_email?: string
+        }
+        Relationships: []
+      }
+      calendar_events: {
+        Row: {
+          created_at: string | null
+          end_date: string | null
+          event_type: string | null
+          id: string
+          priority: string | null
+          site_name: string
+          start_date: string
+          status: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_date?: string | null
+          event_type?: string | null
+          id?: string
+          priority?: string | null
+          site_name: string
+          start_date: string
+          status?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_date?: string | null
+          event_type?: string | null
+          id?: string
+          priority?: string | null
+          site_name?: string
+          start_date?: string
+          status?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       clients: {
         Row: {
+          company_name: string | null
           contact_person: string | null
           created_at: string
           created_by: string | null
           email: string | null
           id: string
+          logo_url: string | null
           name: string
           phone: string | null
+          primary_contact_email: string | null
           updated_at: string
         }
         Insert: {
+          company_name?: string | null
           contact_person?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null
           id?: string
+          logo_url?: string | null
           name: string
           phone?: string | null
+          primary_contact_email?: string | null
           updated_at?: string
         }
         Update: {
+          company_name?: string | null
           contact_person?: string | null
           created_at?: string
           created_by?: string | null
           email?: string | null
           id?: string
+          logo_url?: string | null
           name?: string
           phone?: string | null
+          primary_contact_email?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -123,46 +195,76 @@ export type Database = {
       inspections: {
         Row: {
           assigned_to: string[] | null
+          client_rep: string | null
+          consultant: string | null
+          contractor: string | null
           created_at: string
           description: string | null
           end_date: string | null
           id: string
           inspection_date: string | null
           inspector_id: string | null
+          inspector_name: string | null
+          location: string | null
           priority: string | null
+          project_name: string | null
+          qr_code_url: string | null
+          shop_name: string | null
+          shop_number: string | null
           site_id: string
           status: string
           subsection_id: string | null
+          testing_party: string | null
           title: string
           updated_at: string
         }
         Insert: {
           assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
+          inspector_name?: string | null
+          location?: string | null
           priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          shop_name?: string | null
+          shop_number?: string | null
           site_id: string
           status?: string
           subsection_id?: string | null
+          testing_party?: string | null
           title: string
           updated_at?: string
         }
         Update: {
           assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
           created_at?: string
           description?: string | null
           end_date?: string | null
           id?: string
           inspection_date?: string | null
           inspector_id?: string | null
+          inspector_name?: string | null
+          location?: string | null
           priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          shop_name?: string | null
+          shop_number?: string | null
           site_id?: string
           status?: string
           subsection_id?: string | null
+          testing_party?: string | null
           title?: string
           updated_at?: string
         }
@@ -210,35 +312,89 @@ export type Database = {
         }
         Relationships: []
       }
+      settings: {
+        Row: {
+          company_logo_url: string | null
+          company_name: string | null
+          created_at: string | null
+          google_drive_connected: boolean | null
+          id: string
+          login_hero_image_url: string | null
+          primary_color: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          company_logo_url?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          google_drive_connected?: boolean | null
+          id?: string
+          login_hero_image_url?: string | null
+          primary_color?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          company_logo_url?: string | null
+          company_name?: string | null
+          created_at?: string | null
+          google_drive_connected?: boolean | null
+          id?: string
+          login_hero_image_url?: string | null
+          primary_color?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
       sites: {
         Row: {
           address: string | null
           client_id: string
+          client_logo_url: string | null
+          consultant_company: string | null
+          consultant_contact: string | null
+          consultant_name: string | null
           created_at: string
           created_by: string | null
           id: string
           name: string
+          nominated_max_demand: string | null
+          site_image_url: string | null
           site_type: string | null
+          supply_authority: string | null
           updated_at: string
         }
         Insert: {
           address?: string | null
           client_id: string
+          client_logo_url?: string | null
+          consultant_company?: string | null
+          consultant_contact?: string | null
+          consultant_name?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           name: string
+          nominated_max_demand?: string | null
+          site_image_url?: string | null
           site_type?: string | null
+          supply_authority?: string | null
           updated_at?: string
         }
         Update: {
           address?: string | null
           client_id?: string
+          client_logo_url?: string | null
+          consultant_company?: string | null
+          consultant_contact?: string | null
+          consultant_name?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
           name?: string
+          nominated_max_demand?: string | null
+          site_image_url?: string | null
           site_type?: string | null
+          supply_authority?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -263,6 +419,7 @@ export type Database = {
           metering_status: string | null
           name: string
           site_id: string
+          tenant_name: string | null
           updated_at: string
         }
         Insert: {
@@ -276,6 +433,7 @@ export type Database = {
           metering_status?: string | null
           name: string
           site_id: string
+          tenant_name?: string | null
           updated_at?: string
         }
         Update: {
@@ -289,6 +447,7 @@ export type Database = {
           metering_status?: string | null
           name?: string
           site_id?: string
+          tenant_name?: string | null
           updated_at?: string
         }
         Relationships: [
