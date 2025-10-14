@@ -82,11 +82,14 @@ const SiteOverview = () => {
   };
 
   const parseDocuments = (data: SiteData) => {
-    const documentsData = data.documents || {};
+    // Documents are stored in the "files" key in Firebase
+    const filesData = (data as any).files || data.documents || {};
     const categories: DocumentCategory[] = [];
 
+    console.log('Parsing documents from Firebase:', filesData);
+
     // Parse documents structure from Firebase
-    Object.entries(documentsData).forEach(([categoryKey, categoryData]: [string, any]) => {
+    Object.entries(filesData).forEach(([categoryKey, categoryData]: [string, any]) => {
       if (typeof categoryData === 'object' && categoryData !== null) {
         const files: DocumentFile[] = [];
         
@@ -122,6 +125,7 @@ const SiteOverview = () => {
       }
     });
 
+    console.log('Parsed document categories:', categories);
     setDocuments(categories);
   };
 
