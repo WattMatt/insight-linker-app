@@ -509,7 +509,7 @@ export const migrateAllFromFirebase = async (
 };
 
 /**
- * Migrate app settings from Firebase to Supabase
+ * Migrate app settings from Firebase to Supabase, including image files
  */
 export const migrateAppSettings = async (): Promise<{ success: boolean; error?: string }> => {
   try {
@@ -525,10 +525,48 @@ export const migrateAppSettings = async (): Promise<{ success: boolean; error?: 
       .select('id')
       .maybeSingle();
 
+    // Helper function to migrate an image if it's a Firebase Storage URL
+    const migrateImageIfNeeded = async (imageUrl: string | null, bucket: string, filePrefix: string): Promise<string | null> => {
+      if (!imageUrl || !imageUrl.includes('firebasestorage.googleapis.com')) {
+        return imageUrl; // Already migrated or not a Firebase URL
+      }
+
+      try {
+        console.log(`Migrating ${filePrefix} image from Firebase Storage...`);
+        const fileName = `${filePrefix}-${Date.now()}.jpg`;
+        
+        const { data, error } = await supabase.functions.invoke('migrate-images', {
+          body: {
+            imageUrl,
+            bucket,
+            fileName,
+          },
+        });
+
+        if (error) {
+          console.error(`Failed to migrate ${filePrefix} image:`, error);
+          return imageUrl; // Return original URL if migration fails
+        }
+
+        console.log(`Successfully migrated ${filePrefix} image to Supabase Storage`);
+        return data.newUrl;
+      } catch (error) {
+        console.error(`Error migrating ${filePrefix} image:`, error);
+        return imageUrl; // Return original URL if migration fails
+      }
+    };
+
+    // Migrate images if they're Firebase Storage URLs
+    const logoUrl = firebaseConfig.company_logo_url || firebaseConfig.companyLogoUrl || null;
+    const heroUrl = firebaseConfig.login_hero_image_url || firebaseConfig.loginHeroImageUrl || null;
+
+    const migratedLogoUrl = await migrateImageIfNeeded(logoUrl, 'company-logos', 'logo');
+    const migratedHeroUrl = await migrateImageIfNeeded(heroUrl, 'company-logos', 'hero');
+
     const settingsData = {
       company_name: firebaseConfig.company_name || firebaseConfig.companyName || 'Watson Mattheus',
-      company_logo_url: firebaseConfig.company_logo_url || firebaseConfig.companyLogoUrl || null,
-      login_hero_image_url: firebaseConfig.login_hero_image_url || firebaseConfig.loginHeroImageUrl || null,
+      company_logo_url: migratedLogoUrl,
+      login_hero_image_url: migratedHeroUrl,
       primary_color: firebaseConfig.primary_color || firebaseConfig.primaryColor || '#3B82F6',
       google_drive_connected: firebaseConfig.google_drive_connected ?? firebaseConfig.googleDriveConnected ?? false,
     };
