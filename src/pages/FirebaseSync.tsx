@@ -47,6 +47,7 @@ const FirebaseSync = () => {
   const [scanning, setScanning] = useState(false);
   const [migrationStatus, setMigrationStatus] = useState<MigrationStatus | null>(null);
   const [migrating, setMigrating] = useState(false);
+  const [migratingSection, setMigratingSection] = useState<string | null>(null);
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   const [migrationComplete, setMigrationComplete] = useState(false);
 
@@ -184,10 +185,10 @@ const FirebaseSync = () => {
     }
   };
 
-  const executeCompleteMigration = async () => {
+  const migrateClients = async () => {
     if (!migrationStatus) return;
     
-    setMigrating(true);
+    setMigratingSection('clients');
     try {
       const { user } = (await supabase.auth.getUser()).data;
       if (!user) {
@@ -195,15 +196,13 @@ const FirebaseSync = () => {
         return;
       }
 
-      toast.info("Starting complete migration with file transfer...");
+      toast.info("Migrating clients with all associated data...");
       
       const totalClients = migrationStatus.clients.toMigrate.length;
       let completedClients = 0;
 
-      // Import the migration functions
-      const { migrateClientToSupabase, migrateCalendarEvents } = await import("@/lib/migration");
+      const { migrateClientToSupabase } = await import("@/lib/migration");
 
-      // Migrate clients
       for (const clientId of migrationStatus.clients.toMigrate) {
         setMigrationProgress({
           stage: 'Migrating clients',
@@ -224,26 +223,65 @@ const FirebaseSync = () => {
         completedClients++;
       }
 
-      // Migrate calendar events
-      if (migrationStatus.calendarEvents.toMigrate > 0) {
-        setMigrationProgress({
-          stage: 'Migrating calendar events',
-          current: 0,
-          total: 1,
-          percentage: 50,
-          currentItem: 'Calendar events',
-        });
+      setMigrationProgress(null);
+      toast.success(`Migrated ${completedClients} clients successfully`);
+      await scanComplete();
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate clients");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
 
-        const eventsResult = await migrateCalendarEvents();
-        toast.success(`Migrated ${eventsResult.migratedCount} calendar events`);
+  const migrateCalendarEventsOnly = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('calendar');
+    try {
+      toast.info("Migrating calendar events...");
+
+      const { migrateCalendarEvents } = await import("@/lib/migration");
+      const eventsResult = await migrateCalendarEvents();
+      
+      toast.success(`Migrated ${eventsResult.migratedCount} calendar events`);
+      await scanComplete();
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate calendar events");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
+  const executeCompleteMigration = async () => {
+    if (!migrationStatus) return;
+    
+    setMigrating(true);
+    try {
+      const { user } = (await supabase.auth.getUser()).data;
+      if (!user) {
+        toast.error("You must be logged in to migrate data");
+        return;
+      }
+
+      toast.info("Starting complete migration with file transfer...");
+      
+      // Migrate clients if any
+      if (migrationStatus.clients.toMigrate.length > 0) {
+        await migrateClients();
+      }
+
+      // Migrate calendar events if any
+      if (migrationStatus.calendarEvents.toMigrate > 0) {
+        await migrateCalendarEventsOnly();
       }
 
       setMigrationProgress(null);
       setMigrationComplete(true);
       toast.success("Migration complete! All data and files transferred to Supabase");
-      
-      // Re-scan to show updated status
-      await scanComplete();
       
     } catch (error: any) {
       console.error("Migration error:", error);
@@ -316,6 +354,23 @@ const FirebaseSync = () => {
                     <span className="text-sm font-medium">To Migrate:</span>
                     <Badge variant="destructive">{migrationStatus.clients.toMigrate.length}</Badge>
                   </div>
+                  {migrationStatus.clients.toMigrate.length > 0 && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateClients}
+                      disabled={migratingSection === 'clients'}
+                    >
+                      {migratingSection === 'clients' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate Clients'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -374,6 +429,23 @@ const FirebaseSync = () => {
                     <span className="text-sm font-medium">To Migrate:</span>
                     <Badge variant="destructive">{migrationStatus.calendarEvents.toMigrate}</Badge>
                   </div>
+                  {migrationStatus.calendarEvents.toMigrate > 0 && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateCalendarEventsOnly}
+                      disabled={migratingSection === 'calendar'}
+                    >
+                      {migratingSection === 'calendar' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate Events'
+                      )}
+                    </Button>
+                  )}
                 </div>
               </CardContent>
             </Card>
