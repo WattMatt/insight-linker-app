@@ -32,6 +32,7 @@ interface Client {
   source?: 'firebase' | 'supabase';
   firebaseId?: string;
   _rawData?: any;
+  sitesCount?: number;
 }
 
 const Clients = () => {
@@ -86,14 +87,20 @@ const Clients = () => {
   const fetchSupabaseClients = async (): Promise<Client[]> => {
     const { data, error } = await supabase
       .from("clients")
-      .select("*")
+      .select("*, sites(id)")
       .order("created_at", { ascending: false });
 
     if (error) {
       console.error("Error fetching Supabase clients:", error);
       return [];
     }
-    return data || [];
+    
+    // Map and count sites for each client
+    return (data || []).map(client => ({
+      ...client,
+      sitesCount: (client.sites as any[])?.length || 0,
+      sites: undefined, // Remove sites array to keep data clean
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -403,7 +410,9 @@ const Clients = () => {
                     <div>
                       <h3 className="font-semibold">{client.name}</h3>
                       <p className="text-sm text-muted-foreground">
-                        {client.company_name || client.contact_person || "No details"}
+                        {client.sitesCount !== undefined 
+                          ? `${client.sitesCount} ${client.sitesCount === 1 ? 'site' : 'sites'}`
+                          : 'No sites'}
                       </p>
                     </div>
                   </div>

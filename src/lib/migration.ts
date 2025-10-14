@@ -311,16 +311,23 @@ export const migrateClientToSupabase = async (
 /**
  * Fetch all clients from Firebase
  */
-export const fetchFirebaseClients = async (): Promise<Array<ReturnType<typeof transformFirebaseClient> & { _rawData: Record<string, any> }>> => {
+export const fetchFirebaseClients = async (): Promise<Array<ReturnType<typeof transformFirebaseClient> & { _rawData: Record<string, any>; sitesCount: number }>> => {
   try {
     const data = await readFirebaseData('/clients') as Record<string, any> | null;
     if (!data) return [];
 
     // Transform Firebase object to array
-    return Object.entries(data).map(([id, clientData]) => ({
-      ...transformFirebaseClient(id, clientData as Record<string, any>),
-      _rawData: clientData as Record<string, any>, // Keep raw data for migration
-    }));
+    return Object.entries(data).map(([id, clientData]) => {
+      const clientDataObj = clientData as Record<string, any>;
+      const sites = clientDataObj.sites || clientDataObj.Sites || {};
+      const sitesCount = Object.keys(sites).length;
+      
+      return {
+        ...transformFirebaseClient(id, clientDataObj),
+        _rawData: clientDataObj, // Keep raw data for migration
+        sitesCount,
+      };
+    });
   } catch (error) {
     console.error('Error fetching Firebase clients:', error);
     return [];
