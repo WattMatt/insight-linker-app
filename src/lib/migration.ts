@@ -325,30 +325,26 @@ export const fetchFirebaseClients = async (): Promise<Array<ReturnType<typeof tr
     return Object.entries(data).map(([id, clientData]) => {
       const clientDataObj = clientData as Record<string, any>;
       
-      // Get all keys from the client data
+      // Use the EXACT same logic as ClientSites page to count sites
       const allKeys = Object.keys(clientDataObj);
       
-      // Filter out client-level properties to find site keys
-      // Sites are the keys that aren't standard client properties
-      const excludedKeys = ['name', 'clientname', 'email', 'phone', 'logo', 'logourl', 
-                           'created', 'updated', 'contact', 'company', 'address', 
-                           'primary', 'firebase', 'source'];
-      
-      const siteKeys = allKeys.filter(key => {
-        const lowerKey = key.toLowerCase();
-        // Exclude if it matches common client property patterns
-        const isClientProp = excludedKeys.some(exclude => lowerKey.includes(exclude));
-        // Site keys are usually longer and contain underscores or parentheses
-        const looksLikeSite = key.length > 3 && (key.includes('_') || key.includes('('));
-        // Also check if the value is an object (sites are objects with subsections, etc.)
-        const isObject = typeof clientDataObj[key] === 'object' && clientDataObj[key] !== null;
-        
-        return !isClientProp && looksLikeSite && isObject;
-      });
+      // Filter to find site keys - exclude known client-level properties
+      const siteKeys = allKeys.filter(key => 
+        !['name', 'clientName', 'Name', 'email', 'phone', 'logo', 'logoUrl', 'created', 'updated'].some(excludeKey => 
+          key.toLowerCase().includes(excludeKey.toLowerCase())
+        ) && 
+        key.length > 3 &&
+        typeof clientDataObj[key] === 'object' && 
+        clientDataObj[key] !== null
+      );
       
       const sitesCount = siteKeys.length;
       
-      console.log(`Client ${id}: Found ${sitesCount} sites`, siteKeys);
+      console.log(`Client "${id}":`, {
+        totalKeys: allKeys.length,
+        siteKeys: siteKeys,
+        sitesCount: sitesCount
+      });
       
       return {
         ...transformFirebaseClient(id, clientDataObj),
