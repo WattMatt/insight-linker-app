@@ -420,115 +420,148 @@ const InspectionTemplates = () => {
         </>
       )}
 
-      {/* Template Preview Dialog */}
+      {/* Template Preview Dialog - WYSIWYG PDF Preview */}
       <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              {previewTemplate?.name}
+              PDF Preview: {previewTemplate?.name}
             </DialogTitle>
             <DialogDescription>
-              {previewTemplate?.description}
+              Exact preview of the generated PDF report
             </DialogDescription>
           </DialogHeader>
           
-          <ScrollArea className="h-[60vh] pr-4">
-            <div className="space-y-6">
-              {/* Cover Page Preview */}
-              <Card className="bg-primary/5 border-primary/20">
-                <CardHeader>
-                  <CardTitle className="text-base">Cover Page</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div>
-                    <span className="text-sm font-medium">Title:</span>
-                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.title}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium">Subtitle:</span>
-                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.subtitle}</p>
-                  </div>
-                  <div>
-                    <span className="text-sm font-medium">Company:</span>
-                    <p className="text-sm text-muted-foreground">{previewTemplate?.cover_page?.company_name}</p>
-                  </div>
-                </CardContent>
-              </Card>
-
-              {/* Template Metadata */}
-              <div className="grid grid-cols-3 gap-4">
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-primary">{previewTemplate?.sections_count}</p>
-                      <p className="text-sm text-muted-foreground">Sections</p>
+          <ScrollArea className="h-[65vh]">
+            <div className="space-y-4 pb-4">
+              {previewTemplate && (
+                <>
+                  {/* Cover Page */}
+                  <div className="bg-[#2980b9] text-white aspect-[210/297] p-8 flex flex-col items-center justify-center relative shadow-lg">
+                    {/* Logo placeholder */}
+                    <div className="absolute top-8 border-2 border-white w-20 h-12 flex items-center justify-center">
+                      <span className="text-[8px]">COMPANY LOGO</span>
                     </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <p className="text-2xl font-bold text-primary">{previewTemplate?.pages_count}</p>
-                      <p className="text-sm text-muted-foreground">Est. Pages</p>
-                    </div>
-                  </CardContent>
-                </Card>
-                <Card>
-                  <CardContent className="pt-6">
-                    <div className="text-center">
-                      <Badge variant="secondary" className="text-sm">{previewTemplate?.category}</Badge>
-                      <p className="text-sm text-muted-foreground mt-1">Category</p>
-                    </div>
-                  </CardContent>
-                </Card>
-              </div>
-
-              {/* Sections Preview */}
-              <div className="space-y-4">
-                <h3 className="text-lg font-semibold">Template Sections</h3>
-                {previewTemplate?.sections?.map((section, idx) => (
-                  <Card key={section.id}>
-                    <CardHeader>
-                      <div className="flex items-center justify-between">
-                        <CardTitle className="text-base">
-                          {idx + 1}. {section.name}
-                        </CardTitle>
-                        <Badge variant="outline">
-                          {section.items?.length || 0} items
-                        </Badge>
+                    
+                    <div className="flex-1 flex flex-col items-center justify-center space-y-4">
+                      <h1 className="text-3xl font-bold text-center">{previewTemplate.name}</h1>
+                      <p className="text-lg text-center">{previewTemplate.cover_page?.subtitle || previewTemplate.category}</p>
+                      <div className="space-y-1 text-center mt-6">
+                        <p className="text-sm">Date of Report: {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</p>
+                        <p className="text-sm">Inspector: Preview Inspector</p>
+                        <p className="text-sm">Project Name: Preview Project</p>
                       </div>
-                    </CardHeader>
-                    <CardContent>
-                      <div className="space-y-2">
-                        {section.items?.map((item, itemIdx) => (
-                          <div 
-                            key={item.id} 
-                            className="flex items-start gap-3 p-2 rounded border bg-muted/30"
-                          >
-                            <span className="text-xs font-medium text-muted-foreground min-w-[24px]">
-                              {itemIdx + 1}.
-                            </span>
-                            <div className="flex-1">
-                              <p className="text-sm">{item.name}</p>
-                              <div className="flex gap-2 mt-1">
-                                <Badge variant="secondary" className="text-xs">
-                                  {item.type}
-                                </Badge>
-                                {item.required && (
-                                  <Badge variant="outline" className="text-xs">
-                                    Required
-                                  </Badge>
-                                )}
-                              </div>
+                    </div>
+                    
+                    <p className="text-xs absolute bottom-6">{previewTemplate.cover_page?.company_name || 'Watson Mattheus'}</p>
+                  </div>
+
+                  {/* General Information Page */}
+                  <div className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
+                    <div className="bg-gray-100 -mx-8 px-8 py-3 mb-6">
+                      <h2 className="text-lg font-bold text-center">General Information</h2>
+                    </div>
+                    
+                    <div className="space-y-3 text-sm">
+                      <div className="flex">
+                        <span className="font-bold w-48">PROJECT NAME:</span>
+                        <span>Preview Project</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">INSPECTOR NAME:</span>
+                        <span>Preview Inspector</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">INSPECTION DATE:</span>
+                        <span>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">CLIENT REPRESENTATIVE:</span>
+                        <span>Mock Client Rep</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">CONSULTANT NAME:</span>
+                        <span>Mock Consultant</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">CONTRACTOR NAME:</span>
+                        <span>Mock Contractor</span>
+                      </div>
+                      <div className="flex">
+                        <span className="font-bold w-48">LOCATION:</span>
+                        <span>Site Location Address</span>
+                      </div>
+                    </div>
+                    
+                    <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
+                      {previewTemplate.name} - Page 1
+                    </div>
+                  </div>
+
+                  {/* Section Pages */}
+                  {previewTemplate.sections?.map((section, sectionIdx) => (
+                    <div key={section.id} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
+                      <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
+                        <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
+                      </div>
+                      
+                      <div className="space-y-3">
+                        {section.items?.slice(0, 4).map((item, itemIdx) => (
+                          <div key={item.id} className="border border-gray-300 p-3">
+                            <div className="font-bold text-xs mb-2">
+                              {itemIdx + 1}. {item.name}
                             </div>
+                            
+                            {item.type === 'checklist' && (
+                              <div className="space-y-1">
+                                <div className="bg-green-50 inline-block px-3 py-1 text-xs font-bold">
+                                  Value for {['Pass', 'N/A', 'Pass'][itemIdx % 3]}
+                                </div>
+                                <p className="text-xs text-gray-600 mt-2">
+                                  Notes: This is a mock note for {item.name}
+                                </p>
+                              </div>
+                            )}
+                            
+                            {(item.type === 'text' || item.type === 'number') && (
+                              <div className="text-xs">
+                                Value for {item.name}
+                              </div>
+                            )}
+                            
+                            {item.type === 'textarea' && (
+                              <div className="space-y-1">
+                                <p className="text-xs font-semibold">Notes:</p>
+                                <p className="text-xs text-gray-600">
+                                  This is a mock note for {item.name}
+                                </p>
+                              </div>
+                            )}
+                            
+                            {item.type === 'image' && (
+                              <div className="border border-gray-300 bg-gray-50 w-32 h-24 flex flex-col items-center justify-center">
+                                <span className="text-[10px] text-gray-400">Photo</span>
+                                <span className="text-[10px] text-gray-400">Placeholder</span>
+                              </div>
+                            )}
                           </div>
                         ))}
+                        
+                        {section.items && section.items.length > 4 && (
+                          <div className="text-center text-xs text-gray-500 italic py-2">
+                            ... and {section.items.length - 4} more items
+                          </div>
+                        )}
                       </div>
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
+                      
+                      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
+                        {previewTemplate.name} - Page {sectionIdx + 2}
+                      </div>
+                    </div>
+                  ))}
+                </>
+              )}
             </div>
           </ScrollArea>
 
