@@ -10,6 +10,9 @@ import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
+import ClientDetail from "./pages/ClientDetail";
+import SiteDetail from "./pages/SiteDetail";
+import SubsectionDetail from "./pages/SubsectionDetail";
 import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
 import Users from "./pages/Users";
@@ -60,6 +63,36 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Clients />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ClientDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/sites/:siteId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SiteDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/sites/:siteId/subsections/:subsectionId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SubsectionDetail />
                 </DashboardLayout>
               </ProtectedRoute>
             }

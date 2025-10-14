@@ -132,6 +132,7 @@ export type Database = {
           priority: string | null
           site_id: string
           status: string
+          subsection_id: string | null
           title: string
           updated_at: string
         }
@@ -146,6 +147,7 @@ export type Database = {
           priority?: string | null
           site_id: string
           status?: string
+          subsection_id?: string | null
           title: string
           updated_at?: string
         }
@@ -160,6 +162,7 @@ export type Database = {
           priority?: string | null
           site_id?: string
           status?: string
+          subsection_id?: string | null
           title?: string
           updated_at?: string
         }
@@ -169,6 +172,13 @@ export type Database = {
             columns: ["site_id"]
             isOneToOne: false
             referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
             referencedColumns: ["id"]
           },
         ]
@@ -237,6 +247,56 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subsections: {
+        Row: {
+          category: string | null
+          coc_status: string | null
+          created_at: string
+          description: string | null
+          id: string
+          is_coc_required: boolean | null
+          is_compliant: boolean | null
+          metering_status: string | null
+          name: string
+          site_id: string
+          updated_at: string
+        }
+        Insert: {
+          category?: string | null
+          coc_status?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_coc_required?: boolean | null
+          is_compliant?: boolean | null
+          metering_status?: string | null
+          name: string
+          site_id: string
+          updated_at?: string
+        }
+        Update: {
+          category?: string | null
+          coc_status?: string | null
+          created_at?: string
+          description?: string | null
+          id?: string
+          is_coc_required?: boolean | null
+          is_compliant?: boolean | null
+          metering_status?: string | null
+          name?: string
+          site_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subsections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
             referencedColumns: ["id"]
           },
         ]
