@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Circle, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -114,123 +114,114 @@ const Calendar = () => {
           </p>
         </div>
         
-        <div className="flex items-center gap-4">
-          <Button variant="outline" size="icon" onClick={previousYear}>
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <h2 className="text-xl font-semibold min-w-[120px] text-center">
-            {currentYear}
-          </h2>
-          <Button variant="outline" size="icon" onClick={nextYear}>
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Add Event
-          </Button>
-        </div>
+        <Button className="bg-sky-500 hover:bg-sky-600">
+          <Plus className="h-4 w-4 mr-2" />
+          Add New Event
+        </Button>
       </div>
 
-      {/* Annual Calendar Grid - 12 months */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-        {monthsInYear.map(month => {
-          const monthStart = startOfMonth(month);
-          const monthEnd = endOfMonth(month);
-          const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
-          
-          return (
-            <Card key={month.toISOString()}>
-              <CardContent className="p-3">
-                <h3 className="text-sm font-semibold mb-2 text-center">
-                  {format(month, "MMMM")}
-                </h3>
-                
-                {/* Mini calendar grid */}
-                <div className="grid grid-cols-7 gap-1">
-                  {/* Week day headers */}
-                  {["S", "M", "T", "W", "T", "F", "S"].map((day, idx) => (
-                    <div
-                      key={idx}
-                      className="text-center text-[10px] font-medium text-muted-foreground"
-                    >
-                      {day}
-                    </div>
-                  ))}
-
-                  {/* Empty cells for days before month starts */}
-                  {Array.from({ length: monthStart.getDay() }).map((_, index) => (
-                    <div key={`empty-${index}`} className="aspect-square" />
-                  ))}
-
-                  {/* Calendar days */}
-                  {daysInMonth.map(day => {
-                    const dayEvents = getEventsForDay(day);
-                    const isToday = isSameDay(day, new Date());
-                    const hasEvents = dayEvents.length > 0;
-                    
-                    // Get the highest priority for the day
-                    const highestPriority = dayEvents.reduce((highest, event) => {
-                      const priorities = { "high": 3, "medium": 2, "low": 1 };
-                      const currentPriority = priorities[event.priority?.toLowerCase() as keyof typeof priorities] || 0;
-                      const highestPriority = priorities[highest?.toLowerCase() as keyof typeof priorities] || 0;
-                      return currentPriority > highestPriority ? event.priority : highest;
-                    }, null as string | null);
-
-                    return (
-                      <button
-                        key={day.toISOString()}
-                        onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
-                        disabled={!hasEvents}
-                        className={cn(
-                          "aspect-square text-[10px] rounded-sm transition-all relative",
-                          "hover:scale-110",
-                          isToday && "ring-2 ring-primary font-bold",
-                          hasEvents && "font-semibold cursor-pointer",
-                          !hasEvents && "cursor-default",
-                          hasEvents && highestPriority?.toLowerCase() === "high" && "bg-destructive/20 text-destructive hover:bg-destructive/30",
-                          hasEvents && highestPriority?.toLowerCase() === "medium" && "bg-warning/20 text-warning hover:bg-warning/30",
-                          hasEvents && highestPriority?.toLowerCase() === "low" && "bg-success/20 text-success hover:bg-success/30",
-                          !hasEvents && "text-muted-foreground/50"
-                        )}
-                      >
-                        {format(day, "d")}
-                        {dayEvents.length > 1 && (
-                          <span className="absolute top-0 right-0 text-[6px] font-bold">
-                            +{dayEvents.length - 1}
-                          </span>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </CardContent>
-            </Card>
-          );
-        })}
-      </div>
-
-      {/* Legend */}
+      {/* Year Navigation and Annual Calendar Grid */}
       <Card>
-        <CardContent className="p-4">
-          <div className="flex items-center gap-6 flex-wrap">
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Priority:</span>
-              <Circle className="h-3 w-3 text-destructive" />
-              <span className="text-xs text-muted-foreground">High</span>
-              <Circle className="h-3 w-3 text-warning" />
-              <span className="text-xs text-muted-foreground">Medium</span>
-              <Circle className="h-3 w-3 text-success" />
-              <span className="text-xs text-muted-foreground">Low</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="text-sm font-medium">Status:</span>
-              <Badge variant="secondary" className="bg-success/10 text-success">Completed</Badge>
-              <Badge variant="secondary" className="bg-primary/10 text-primary">In Progress</Badge>
-              <Badge variant="secondary" className="bg-info/10 text-info">Scheduled</Badge>
-            </div>
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-6">
+            <Button variant="ghost" size="icon" onClick={previousYear}>
+              <ChevronLeft className="h-5 w-5" />
+            </Button>
+            <h2 className="text-2xl font-bold">
+              {format(new Date(currentYear, 0, 1), "MMMM yyyy")}
+            </h2>
+            <Button variant="ghost" size="icon" onClick={nextYear}>
+              <ChevronRight className="h-5 w-5" />
+            </Button>
+          </div>
+
+          {/* 12 Month Grid */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+            {monthsInYear.map(month => {
+              const monthStart = startOfMonth(month);
+              const monthEnd = endOfMonth(month);
+              const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+              
+              return (
+                <div key={month.toISOString()} className="space-y-3">
+                  <h3 className="text-base font-semibold text-center">
+                    {format(month, "MMMM yyyy")}
+                  </h3>
+                  
+                  {/* Mini calendar grid */}
+                  <div className="grid grid-cols-7 gap-1">
+                    {/* Week day headers */}
+                    {["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"].map((day, idx) => (
+                      <div
+                        key={idx}
+                        className="text-center text-xs font-medium text-muted-foreground pb-1"
+                      >
+                        {day}
+                      </div>
+                    ))}
+
+                    {/* Empty cells for days before month starts */}
+                    {Array.from({ length: monthStart.getDay() }).map((_, index) => (
+                      <div key={`empty-${index}`} className="aspect-square p-1">
+                        <div className="w-full h-full" />
+                      </div>
+                    ))}
+
+                    {/* Calendar days */}
+                    {daysInMonth.map(day => {
+                      const dayEvents = getEventsForDay(day);
+                      const isToday = isSameDay(day, new Date());
+                      const hasEvents = dayEvents.length > 0;
+                      const eventCount = dayEvents.length;
+                      
+                      // Determine blue shade based on event density
+                      let bgClass = "";
+                      if (hasEvents) {
+                        if (eventCount >= 3) {
+                          bgClass = "bg-blue-600 text-white hover:bg-blue-700";
+                        } else if (eventCount === 2) {
+                          bgClass = "bg-blue-500 text-white hover:bg-blue-600";
+                        } else {
+                          bgClass = "bg-blue-400 text-white hover:bg-blue-500";
+                        }
+                      }
+
+                      return (
+                        <div key={day.toISOString()} className="aspect-square p-1">
+                          <button
+                            onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
+                            disabled={!hasEvents}
+                            className={cn(
+                              "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium",
+                              isToday && !hasEvents && "ring-2 ring-blue-500",
+                              isToday && hasEvents && "ring-2 ring-white",
+                              hasEvents && "cursor-pointer",
+                              !hasEvents && "cursor-default text-muted-foreground hover:bg-muted/50",
+                              bgClass
+                            )}
+                          >
+                            {format(day, "d")}
+                          </button>
+                        </div>
+                      );
+                    })}
+
+                    {/* Fill remaining cells to complete the grid */}
+                    {Array.from({ 
+                      length: (7 - ((monthStart.getDay() + daysInMonth.length) % 7)) % 7 
+                    }).map((_, index) => (
+                      <div key={`fill-${index}`} className="aspect-square p-1">
+                        <div className="w-full h-full" />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </CardContent>
       </Card>
+
 
       {/* Schedule Table */}
       <Card>
@@ -260,11 +251,10 @@ const Calendar = () => {
                     <TableCell>{event.end_date || "—"}</TableCell>
                     <TableCell>
                       <Badge 
-                        variant="secondary"
                         className={
-                          event.status === "Scheduled" ? "bg-blue-500/10 text-blue-500" :
-                          event.status === "In Progress" ? "bg-orange-500/10 text-orange-500" :
-                          "bg-green-500/10 text-green-500"
+                          event.status === "Scheduled" ? "bg-blue-500 hover:bg-blue-600 text-white" :
+                          event.status === "In Progress" ? "bg-orange-500 hover:bg-orange-600 text-white" :
+                          "bg-green-500 hover:bg-green-600 text-white"
                         }
                       >
                         {event.status}
@@ -272,11 +262,10 @@ const Calendar = () => {
                     </TableCell>
                     <TableCell>
                       <Badge 
-                        variant="secondary"
                         className={
-                          event.priority === "High" ? "bg-red-500/10 text-red-500" :
-                          event.priority === "Medium" ? "bg-orange-500/10 text-orange-500" :
-                          "bg-green-500/10 text-green-500"
+                          event.priority === "High" ? "bg-red-500 hover:bg-red-600 text-white" :
+                          event.priority === "Medium" ? "bg-orange-500 hover:bg-orange-600 text-white" :
+                          "bg-green-500 hover:bg-green-600 text-white"
                         }
                       >
                         {event.priority}
