@@ -481,3 +481,57 @@ export const migrateAllFromFirebase = async (
 
   return results;
 };
+
+/**
+ * Migrate calendar events from Firebase to Supabase
+ */
+export const migrateCalendarEvents = async (): Promise<{ success: boolean; migratedCount: number; error?: string }> => {
+  try {
+    const firebaseEvents = await readFirebaseData('/scheduleEvents') as Record<string, any> | null;
+    
+    if (!firebaseEvents) {
+      return { success: true, migratedCount: 0 };
+    }
+
+    let migratedCount = 0;
+
+    for (const [eventId, eventData] of Object.entries(firebaseEvents)) {
+      try {
+        // Check if event already exists (optional - if events have unique identifiers)
+        const eventInsertData = {
+          title: (eventData as any).title || (eventData as any).name || 'Unnamed Event',
+          site_name: (eventData as any).siteName || (eventData as any).site_name || (eventData as any).site || 'Unknown Site',
+          start_date: (eventData as any).startDate || (eventData as any).start_date || null,
+          end_date: (eventData as any).endDate || (eventData as any).end_date || null,
+          status: (eventData as any).status || (eventData as any).Status || 'Scheduled',
+          event_type: (eventData as any).eventType || (eventData as any).event_type || (eventData as any).type || null,
+          priority: (eventData as any).priority || (eventData as any).Priority || 'High',
+        };
+
+        const { error } = await supabase
+          .from('calendar_events')
+          .insert([eventInsertData]);
+
+        if (!error) {
+          migratedCount++;
+        } else {
+          console.error('Calendar event migration error:', error);
+        }
+      } catch (error) {
+        console.error('Error migrating event:', eventId, error);
+      }
+    }
+
+    return {
+      success: true,
+      migratedCount,
+    };
+  } catch (error) {
+    console.error('Calendar events migration error:', error);
+    return {
+      success: false,
+      migratedCount: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};

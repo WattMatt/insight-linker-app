@@ -23,6 +23,11 @@ interface MigrationStatus {
     firebase: number;
     supabase: number;
   };
+  calendarEvents: {
+    firebase: number;
+    supabase: number;
+    toMigrate: number;
+  };
   files: {
     images: number;
     documents: number;
@@ -76,6 +81,7 @@ const FirebaseSync = () => {
       
       // Scan Firebase
       const firebaseData = await readFirebaseData("/clients");
+      const firebaseEvents = await readFirebaseData("/scheduleEvents");
       
       if (!firebaseData) {
         toast.error("No data found in Firebase");
@@ -83,6 +89,7 @@ const FirebaseSync = () => {
       }
 
       const firebaseClients = Object.keys(firebaseData);
+      const firebaseEventsCount = firebaseEvents ? Object.keys(firebaseEvents).length : 0;
       
       // Extract all file URLs from Firebase
       const allFileUrls = extractFileUrls(firebaseData);
@@ -125,6 +132,10 @@ const FirebaseSync = () => {
         .from('subsections')
         .select('*', { count: 'exact', head: true });
       
+      const { count: calendarEventsCount } = await supabase
+        .from('calendar_events')
+        .select('*', { count: 'exact', head: true });
+      
       const migratedFirebaseIds = new Set(
         (supabaseClients || []).map(c => c.firebase_id).filter(Boolean)
       );
@@ -132,6 +143,8 @@ const FirebaseSync = () => {
       const clientsToMigrate = firebaseClients.filter(
         clientId => !migratedFirebaseIds.has(clientId)
       );
+
+      const eventsToMigrate = Math.max(0, firebaseEventsCount - (calendarEventsCount || 0));
 
       const status: MigrationStatus = {
         clients: {
@@ -146,6 +159,11 @@ const FirebaseSync = () => {
         subsections: {
           firebase: firebaseSubsectionsCount,
           supabase: subsectionsCount || 0,
+        },
+        calendarEvents: {
+          firebase: firebaseEventsCount,
+          supabase: calendarEventsCount || 0,
+          toMigrate: eventsToMigrate,
         },
         files: {
           images: imageUrls.length,
@@ -182,9 +200,10 @@ const FirebaseSync = () => {
       const totalClients = migrationStatus.clients.toMigrate.length;
       let completedClients = 0;
 
-      // Import the migration function
-      const { migrateClientToSupabase } = await import("@/lib/migration");
+      // Import the migration functions
+      const { migrateClientToSupabase, migrateCalendarEvents } = await import("@/lib/migration");
 
+      // Migrate clients
       for (const clientId of migrationStatus.clients.toMigrate) {
         setMigrationProgress({
           stage: 'Migrating clients',
@@ -203,6 +222,20 @@ const FirebaseSync = () => {
         );
 
         completedClients++;
+      }
+
+      // Migrate calendar events
+      if (migrationStatus.calendarEvents.toMigrate > 0) {
+        setMigrationProgress({
+          stage: 'Migrating calendar events',
+          current: 0,
+          total: 1,
+          percentage: 50,
+          currentItem: 'Calendar events',
+        });
+
+        const eventsResult = await migrateCalendarEvents();
+        toast.success(`Migrated ${eventsResult.migratedCount} calendar events`);
       }
 
       setMigrationProgress(null);
@@ -264,7 +297,7 @@ const FirebaseSync = () => {
             </AlertDescription>
           </Alert>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Clients</CardTitle>
@@ -318,6 +351,28 @@ const FirebaseSync = () => {
                   <div className="flex justify-between items-center">
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.subsections.supabase}</Badge>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">Calendar Events</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.calendarEvents.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.calendarEvents.supabase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm font-medium">To Migrate:</span>
+                    <Badge variant="destructive">{migrationStatus.calendarEvents.toMigrate}</Badge>
                   </div>
                 </div>
               </CardContent>
@@ -400,6 +455,7 @@ const FirebaseSync = () => {
                     <ul className="list-disc list-inside mt-2 space-y-1">
                       <li>Create {migrationStatus.clients.toMigrate.length} client(s) in Supabase</li>
                       <li>Migrate all associated sites and subsections</li>
+                      <li>Migrate {migrationStatus.calendarEvents.toMigrate} calendar event(s)</li>
                       <li>Copy {migrationStatus.files.toMigrate.length} file(s) to Supabase Storage</li>
                       <li>Update all URLs to point to Supabase</li>
                     </ul>
