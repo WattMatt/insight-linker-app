@@ -73,9 +73,9 @@ export function AppSidebar() {
   return (
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border p-4">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
           {settings?.company_logo_url ? (
-            <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center">
+            <div className="w-12 h-12 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0">
               <img 
                 src={settings.company_logo_url} 
                 alt="Company Logo"
@@ -83,12 +83,12 @@ export function AppSidebar() {
               />
             </div>
           ) : (
-            <div className="p-1.5 bg-primary/10 rounded-lg">
-              <Zap className="h-5 w-5 text-primary" />
+            <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
+              <Zap className="h-6 w-6 text-primary" />
             </div>
           )}
           {!collapsed && (
-            <span className="font-semibold text-sidebar-foreground">
+            <span className="text-sm font-semibold text-sidebar-foreground">
               {settings?.company_name || "SiteWise"}
             </span>
           )}
