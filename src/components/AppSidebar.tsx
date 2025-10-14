@@ -7,7 +7,6 @@ import {
   Zap,
   UserCog,
   CalendarDays,
-  Database,
   CloudUpload,
   FileText,
   Settings as SettingsIcon
@@ -38,7 +37,6 @@ const menuItems = [
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   { title: "Firebase Sync", url: "/firebase-sync", icon: CloudUpload },
-  { title: "Data Import", url: "/data-import", icon: Database },
 ];
 
 export function AppSidebar() {
