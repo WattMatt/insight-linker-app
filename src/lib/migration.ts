@@ -485,24 +485,34 @@ export const migrateAllFromFirebase = async (
 /**
  * Migrate calendar events from Firebase to Supabase
  */
-export const migrateCalendarEvents = async (): Promise<{ success: boolean; migratedCount: number; error?: string }> => {
+export const migrateCalendarEvents = async (): Promise<{ success: boolean; migratedCount: number; skipped: number; error?: string }> => {
   try {
     const firebaseEvents = await readFirebaseData('/scheduleEvents') as Record<string, any> | null;
     
     if (!firebaseEvents) {
-      return { success: true, migratedCount: 0 };
+      return { success: true, migratedCount: 0, skipped: 0 };
     }
 
     let migratedCount = 0;
+    let skipped = 0;
 
     for (const [eventId, eventData] of Object.entries(firebaseEvents)) {
       try {
-        // Check if event already exists (optional - if events have unique identifiers)
+        // Extract and validate start_date (REQUIRED field)
+        const startDate = (eventData as any).startDate || (eventData as any).start_date || (eventData as any).date;
+        
+        // Skip events without a valid start date since it's required
+        if (!startDate) {
+          console.warn(`Skipping event ${eventId}: No start date found`);
+          skipped++;
+          continue;
+        }
+
         const eventInsertData = {
           title: (eventData as any).title || (eventData as any).name || 'Unnamed Event',
           site_name: (eventData as any).siteName || (eventData as any).site_name || (eventData as any).site || 'Unknown Site',
-          start_date: (eventData as any).startDate || (eventData as any).start_date || null,
-          end_date: (eventData as any).endDate || (eventData as any).end_date || null,
+          start_date: startDate,
+          end_date: (eventData as any).endDate || (eventData as any).end_date || startDate, // Default to start_date if no end_date
           status: (eventData as any).status || (eventData as any).Status || 'Scheduled',
           event_type: (eventData as any).eventType || (eventData as any).event_type || (eventData as any).type || null,
           priority: (eventData as any).priority || (eventData as any).Priority || 'High',
@@ -516,21 +526,25 @@ export const migrateCalendarEvents = async (): Promise<{ success: boolean; migra
           migratedCount++;
         } else {
           console.error('Calendar event migration error:', error);
+          skipped++;
         }
       } catch (error) {
         console.error('Error migrating event:', eventId, error);
+        skipped++;
       }
     }
 
     return {
       success: true,
       migratedCount,
+      skipped,
     };
   } catch (error) {
     console.error('Calendar events migration error:', error);
     return {
       success: false,
       migratedCount: 0,
+      skipped: 0,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }

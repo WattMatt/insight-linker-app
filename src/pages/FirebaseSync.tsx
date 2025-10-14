@@ -224,8 +224,12 @@ const FirebaseSync = () => {
       }
 
       setMigrationProgress(null);
-      toast.success(`Migrated ${completedClients} clients successfully`);
-      await scanComplete();
+      toast.success(`Successfully migrated ${completedClients} client(s) with all associated sites and subsections`);
+      
+      // Give a moment for the toast to show, then refresh
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
       
     } catch (error: any) {
       console.error("Migration error:", error);
@@ -245,7 +249,17 @@ const FirebaseSync = () => {
       const { migrateCalendarEvents } = await import("@/lib/migration");
       const eventsResult = await migrateCalendarEvents();
       
-      toast.success(`Migrated ${eventsResult.migratedCount} calendar events`);
+      if (eventsResult.migratedCount > 0) {
+        const message = eventsResult.skipped > 0 
+          ? `Migrated ${eventsResult.migratedCount} calendar events (${eventsResult.skipped} skipped due to missing dates)`
+          : `Migrated ${eventsResult.migratedCount} calendar events`;
+        toast.success(message);
+      } else if (eventsResult.skipped > 0) {
+        toast.warning(`All ${eventsResult.skipped} events were skipped due to missing start dates`);
+      } else {
+        toast.info("No events to migrate");
+      }
+      
       await scanComplete();
       
     } catch (error: any) {
@@ -335,6 +349,13 @@ const FirebaseSync = () => {
             </AlertDescription>
           </Alert>
 
+          <Alert>
+            <AlertCircle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>How migration works:</strong> Click "Migrate Clients & Sites" to transfer clients along with all their nested sites, subsections, and files. Calendar events can be migrated separately.
+            </AlertDescription>
+          </Alert>
+
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
             <Card>
               <CardHeader className="pb-3">
@@ -354,12 +375,12 @@ const FirebaseSync = () => {
                     <span className="text-sm font-medium">To Migrate:</span>
                     <Badge variant="destructive">{migrationStatus.clients.toMigrate.length}</Badge>
                   </div>
-                  {migrationStatus.clients.toMigrate.length > 0 && (
+                   {migrationStatus.clients.toMigrate.length > 0 && (
                     <Button 
                       size="sm" 
                       className="w-full mt-2"
                       onClick={migrateClients}
-                      disabled={migratingSection === 'clients'}
+                      disabled={migratingSection !== null || migrating}
                     >
                       {migratingSection === 'clients' ? (
                         <>
@@ -367,7 +388,7 @@ const FirebaseSync = () => {
                           Migrating...
                         </>
                       ) : (
-                        'Migrate Clients'
+                        'Migrate Clients & Sites'
                       )}
                     </Button>
                   )}
@@ -389,6 +410,9 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.sites.supabase}</Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Clients
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -407,6 +431,9 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.subsections.supabase}</Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Clients
+                  </p>
                 </div>
               </CardContent>
             </Card>
@@ -434,7 +461,7 @@ const FirebaseSync = () => {
                       size="sm" 
                       className="w-full mt-2"
                       onClick={migrateCalendarEventsOnly}
-                      disabled={migratingSection === 'calendar'}
+                      disabled={migratingSection !== null || migrating}
                     >
                       {migratingSection === 'calendar' ? (
                         <>
@@ -467,6 +494,9 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Documents:</span>
                     <Badge variant="secondary">{migrationStatus.files.documents}</Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Clients
+                  </p>
                 </div>
               </CardContent>
             </Card>
