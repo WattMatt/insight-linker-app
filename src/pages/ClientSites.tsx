@@ -151,7 +151,7 @@ const ClientSites = () => {
                 if (!isFirebaseClient) {
                   navigate(`/sites/${site.id}`);
                 } else {
-                  toast.info("Firebase sites are read-only. Please migrate the client first.");
+                  navigate(`/clients/${clientId}/sites/${site.id}`);
                 }
               }}
             >

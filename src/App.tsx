@@ -12,6 +12,7 @@ import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
 import ClientSites from "./pages/ClientSites";
+import SiteOverview from "./pages/SiteOverview";
 import SiteDetail from "./pages/SiteDetail";
 import SubsectionDetail from "./pages/SubsectionDetail";
 import Sites from "./pages/Sites";
@@ -93,17 +94,17 @@ const App = () => (
             }
           />
           <Route
-            path="/sites/:siteId"
+            path="/clients/:clientId/sites/:siteId"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <SiteDetail />
+                  <SiteOverview />
                 </DashboardLayout>
               </ProtectedRoute>
             }
           />
           <Route
-            path="/clients/:clientId/sites/:siteId"
+            path="/sites/:siteId"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
