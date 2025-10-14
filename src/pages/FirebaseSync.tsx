@@ -410,11 +410,25 @@ const FirebaseSync = () => {
 
       // Migrate calendar events if any
       if (migrationStatus.calendarEvents.toMigrate > 0) {
-        await migrateCalendarEventsOnly();
+        toast.info("Migrating calendar events...");
+        const { migrateCalendarEvents } = await import("@/lib/migration");
+        const eventsResult = await migrateCalendarEvents();
+        
+        if (eventsResult.migratedCount > 0) {
+          const message = eventsResult.skipped > 0 
+            ? `Migrated ${eventsResult.migratedCount} calendar events (${eventsResult.skipped} skipped)`
+            : `Migrated ${eventsResult.migratedCount} calendar events`;
+          toast.success(message);
+        }
       }
 
       setMigrationProgress(null);
       setMigrationComplete(true);
+      
+      // Refresh counts to show updated data
+      toast.info("Refreshing counts...");
+      await scanComplete();
+      
       toast.success("Migration complete! All data and files transferred to Supabase");
       
     } catch (error: any) {
