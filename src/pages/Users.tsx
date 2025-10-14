@@ -136,31 +136,17 @@ const Users = () => {
   // Invite user mutation
   const inviteMutation = useMutation({
     mutationFn: async (userData: { email: string; fullName: string; role: string }) => {
-      // Create auth user via signUp (they'll need to confirm email)
-      const { data, error } = await supabase.auth.signUp({
-        email: userData.email,
-        password: Math.random().toString(36).slice(-12) + "Aa1!", // Temporary password
-        options: {
-          data: {
-            full_name: userData.fullName,
-          },
-          emailRedirectTo: `${window.location.origin}/auth`,
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: userData.email,
+          fullName: userData.fullName,
+          role: userData.role,
         },
       });
 
       if (error) throw error;
-      if (!data.user) throw new Error("User creation failed");
-
-      // Assign role
-      const { error: roleError } = await supabase
-        .from("user_roles")
-        .insert([{
-          user_id: data.user.id,
-          role: userData.role,
-        }] as any);
-
-      if (roleError) throw roleError;
-
+      if (!data.success) throw new Error(data.error || 'Failed to invite user');
+      
       return data;
     },
     onSuccess: () => {
