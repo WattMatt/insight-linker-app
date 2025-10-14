@@ -14,7 +14,6 @@ interface SubsectionData {
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
-  cocDocumentUrl?: string;
   isCocRequired: boolean;
   files?: Record<string, any>;
 }
@@ -41,6 +40,7 @@ const PublicSubsection = () => {
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
+  const [cocDocuments, setCocDocuments] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -79,6 +79,7 @@ const PublicSubsection = () => {
   const parseDocuments = (data: SubsectionData) => {
     const filesData = data.files || {};
     const categories: DocumentCategory[] = [];
+    const cocCategories: DocumentCategory[] = [];
 
     Object.entries(filesData).forEach(([categoryKey, categoryData]: [string, any]) => {
       if (typeof categoryData === 'object' && categoryData !== null) {
@@ -102,14 +103,24 @@ const PublicSubsection = () => {
         });
 
         if (files.length > 0) {
-          categories.push({
-            name: categoryKey.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase()),
+          const categoryName = categoryKey.replace(/_/g, ' ').replace(/\b\w/g, (l) => l.toUpperCase());
+          const category = {
+            name: categoryName,
             files,
-          });
+          };
+          
+          // Separate COC documents from other documents
+          if (categoryKey.toLowerCase().includes('coc') || categoryKey.toLowerCase().includes('certificate')) {
+            cocCategories.push(category);
+          } else {
+            categories.push(category);
+          }
         }
       }
     });
 
+    // Set COC documents first
+    setCocDocuments(cocCategories);
     setDocuments(categories);
   };
 
@@ -196,31 +207,49 @@ const PublicSubsection = () => {
         </Card>
 
         {/* COC Documents */}
-        {subsection.cocNumber && subsection.cocDocumentUrl && (
+        {cocDocuments.length > 0 && (
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>01 COC</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors">
-                <div className="flex items-center gap-3">
-                  <FileText className="h-5 w-5 text-muted-foreground" />
-                  <div>
-                    <p className="font-medium">{subsection.name} - ECA {subsection.cocNumber}.pdf</p>
-                    <p className="text-sm text-muted-foreground">
-                      Uploaded on {subsection.cocIssueDate ? new Date(subsection.cocIssueDate).toLocaleDateString() : 'N/A'}
-                    </p>
-                  </div>
+              <CardTitle>Certificates of Compliance (COC)</CardTitle>
+              {subsection.cocNumber && (
+                <div className="text-sm space-y-1 mt-2">
+                  <p><span className="font-medium">COC Number:</span> {subsection.cocNumber}</p>
+                  {subsection.cocIssueDate && (
+                    <p><span className="font-medium">Issue Date:</span> {new Date(subsection.cocIssueDate).toLocaleDateString()}</p>
+                  )}
+                  {subsection.cocType && (
+                    <p><span className="font-medium">Type:</span> {subsection.cocType}</p>
+                  )}
                 </div>
-                <Button 
-                  size="sm" 
-                  variant="outline"
-                  onClick={() => handleDownload(subsection.cocDocumentUrl!, `${subsection.name}-ECA-${subsection.cocNumber}.pdf`)}
-                >
-                  <Download className="mr-2 h-4 w-4" />
-                  Download
-                </Button>
-              </div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {cocDocuments.map((category, catIdx) =>
+                category.files.map((file, fileIdx) => (
+                  <div
+                    key={`${catIdx}-${fileIdx}`}
+                    className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <FileText className="h-5 w-5 text-muted-foreground" />
+                      <div>
+                        <p className="font-medium">{file.name}</p>
+                        <p className="text-sm text-muted-foreground">
+                          Uploaded on {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'N/A'}
+                        </p>
+                      </div>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      onClick={() => handleDownload(file.url, file.name)}
+                    >
+                      <Download className="mr-2 h-4 w-4" />
+                      Download
+                    </Button>
+                  </div>
+                ))
+              )}
             </CardContent>
           </Card>
         )}
@@ -260,7 +289,7 @@ const PublicSubsection = () => {
           </Card>
         ))}
 
-        {documents.length === 0 && !subsection.cocNumber && (
+        {documents.length === 0 && cocDocuments.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
