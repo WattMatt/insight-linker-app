@@ -483,6 +483,62 @@ export const migrateAllFromFirebase = async (
 };
 
 /**
+ * Migrate app settings from Firebase to Supabase
+ */
+export const migrateAppSettings = async (): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const firebaseConfig = await readFirebaseData('/app_config') as Record<string, any> | null;
+    
+    if (!firebaseConfig) {
+      return { success: false, error: 'No Firebase config found' };
+    }
+
+    // Check if settings already exist
+    const { data: existingSettings } = await supabase
+      .from('settings')
+      .select('id')
+      .maybeSingle();
+
+    const settingsData = {
+      company_name: firebaseConfig.company_name || firebaseConfig.companyName || 'Watson Mattheus',
+      company_logo_url: firebaseConfig.company_logo_url || firebaseConfig.companyLogoUrl || null,
+      login_hero_image_url: firebaseConfig.login_hero_image_url || firebaseConfig.loginHeroImageUrl || null,
+      primary_color: firebaseConfig.primary_color || firebaseConfig.primaryColor || '#3B82F6',
+      google_drive_connected: firebaseConfig.google_drive_connected ?? firebaseConfig.googleDriveConnected ?? false,
+    };
+
+    if (existingSettings) {
+      // Update existing settings
+      const { error } = await supabase
+        .from('settings')
+        .update(settingsData)
+        .eq('id', existingSettings.id);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } else {
+      // Insert new settings
+      const { error } = await supabase
+        .from('settings')
+        .insert([settingsData]);
+
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    }
+
+    return { success: true };
+  } catch (error) {
+    console.error('Settings migration error:', error);
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
+/**
  * Migrate users from Firebase to pending invites table (without sending invites)
  */
 export const migrateUsers = async (

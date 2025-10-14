@@ -33,6 +33,11 @@ interface MigrationStatus {
     supabase: number;
     toMigrate: number;
   };
+  settings: {
+    hasFirebaseConfig: boolean;
+    hasSupabaseConfig: boolean;
+    needsUpdate: boolean;
+  };
   files: {
     images: number;
     documents: number;
@@ -89,6 +94,7 @@ const FirebaseSync = () => {
       const firebaseData = await readFirebaseData("/clients");
       const firebaseEvents = await readFirebaseData("/scheduleEvents");
       const firebaseUsers = await readFirebaseData("/users");
+      const firebaseConfig = await readFirebaseData("/app_config");
       
       if (!firebaseData) {
         toast.error("No data found in Firebase");
@@ -102,6 +108,7 @@ const FirebaseSync = () => {
         email: data.email || data.Email || '',
         name: data.name || data.displayName || data.Name || data.full_name || ''
       })) : [];
+      const hasFirebaseConfig = !!firebaseConfig;
       
       // Extract all file URLs from Firebase
       const allFileUrls = extractFileUrls(firebaseData);
@@ -152,6 +159,11 @@ const FirebaseSync = () => {
         .from('pending_user_invites')
         .select('email');
       
+      const { data: supabaseSettings, count: settingsCount } = await supabase
+        .from('settings')
+        .select('*', { count: 'exact' })
+        .maybeSingle();
+      
       const { count: calendarEventsCount } = await supabase
         .from('calendar_events')
         .select('*', { count: 'exact', head: true });
@@ -177,6 +189,9 @@ const FirebaseSync = () => {
       );
 
       const eventsToMigrate = Math.max(0, firebaseEventsCount - (calendarEventsCount || 0));
+      
+      const hasSupabaseConfig = !!supabaseSettings;
+      const needsSettingsUpdate = hasFirebaseConfig && (!hasSupabaseConfig || !supabaseSettings?.company_name);
 
       const status: MigrationStatus = {
         clients: {
@@ -202,6 +217,11 @@ const FirebaseSync = () => {
           supabase: calendarEventsCount || 0,
           toMigrate: eventsToMigrate,
         },
+        settings: {
+          hasFirebaseConfig,
+          hasSupabaseConfig,
+          needsUpdate: needsSettingsUpdate,
+        },
         files: {
           images: imageUrls.length,
           documents: documentUrls.length,
@@ -218,6 +238,34 @@ const FirebaseSync = () => {
       toast.error(error.message || "Failed to scan");
     } finally {
       setScanning(false);
+    }
+  };
+
+  const migrateSettings = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('settings');
+    try {
+      toast.info("Migrating app settings...");
+
+      const { migrateAppSettings } = await import("@/lib/migration");
+      const result = await migrateAppSettings();
+      
+      if (result.success) {
+        toast.success("App settings migrated successfully!");
+      } else {
+        toast.error(result.error || "Failed to migrate settings");
+      }
+      
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate settings");
+    } finally {
+      setMigratingSection(null);
     }
   };
 
@@ -421,14 +469,14 @@ const FirebaseSync = () => {
             </AlertDescription>
           </Alert>
 
-          <Alert>
-            <AlertCircle className="h-4 w-4" />
-            <AlertDescription>
-              <strong>How migration works:</strong> Click "Migrate Clients & Sites" to transfer clients along with all their nested sites, subsections, and files. Calendar events can be migrated separately.
-            </AlertDescription>
-          </Alert>
+            <Alert>
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                <strong>How migration works:</strong> Click "Migrate Clients & Sites" to transfer clients along with all their nested sites, subsections, and files. Calendar events, users, and settings can be migrated separately.
+              </AlertDescription>
+            </Alert>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
             <Card>
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium">Clients</CardTitle>
@@ -593,6 +641,50 @@ const FirebaseSync = () => {
                         'Migrate Events'
                       )}
                     </Button>
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium">App Settings</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant={migrationStatus.settings.hasFirebaseConfig ? "secondary" : "outline"}>
+                      {migrationStatus.settings.hasFirebaseConfig ? 'Found' : 'None'}
+                    </Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant={migrationStatus.settings.hasSupabaseConfig ? "default" : "outline"}>
+                      {migrationStatus.settings.hasSupabaseConfig ? 'Configured' : 'Empty'}
+                    </Badge>
+                  </div>
+                  {migrationStatus.settings.needsUpdate && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateSettings}
+                      disabled={migratingSection !== null || migrating}
+                    >
+                      {migratingSection === 'settings' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate Settings'
+                      )}
+                    </Button>
+                  )}
+                  {!migrationStatus.settings.needsUpdate && migrationStatus.settings.hasSupabaseConfig && (
+                    <p className="text-xs text-muted-foreground italic mt-2">
+                      Already configured
+                    </p>
                   )}
                 </div>
               </CardContent>
