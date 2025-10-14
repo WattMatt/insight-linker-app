@@ -15,6 +15,7 @@ import {
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useQuery } from "@tanstack/react-query";
 import {
   Sidebar,
   SidebarContent,
@@ -45,6 +46,20 @@ export function AppSidebar() {
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
 
+  // Fetch company settings for logo and name
+  const { data: settings } = useQuery({
+    queryKey: ["company-settings"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("settings")
+        .select("company_logo_url, company_name")
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
     if (error) {
@@ -59,11 +74,23 @@ export function AppSidebar() {
     <Sidebar collapsible="icon">
       <SidebarHeader className="border-b border-sidebar-border p-4">
         <div className="flex items-center gap-2">
-          <div className="p-1.5 bg-primary/10 rounded-lg">
-            <Zap className="h-5 w-5 text-primary" />
-          </div>
+          {settings?.company_logo_url ? (
+            <div className="w-8 h-8 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center">
+              <img 
+                src={settings.company_logo_url} 
+                alt="Company Logo"
+                className="w-full h-full object-contain"
+              />
+            </div>
+          ) : (
+            <div className="p-1.5 bg-primary/10 rounded-lg">
+              <Zap className="h-5 w-5 text-primary" />
+            </div>
+          )}
           {!collapsed && (
-            <span className="font-semibold text-sidebar-foreground">SiteWise</span>
+            <span className="font-semibold text-sidebar-foreground">
+              {settings?.company_name || "SiteWise"}
+            </span>
           )}
         </div>
       </SidebarHeader>
