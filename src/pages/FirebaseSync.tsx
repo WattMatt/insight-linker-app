@@ -15,6 +15,8 @@ const FirebaseSync = () => {
   const [firebasePath, setFirebasePath] = useState("/");
   const [jsonData, setJsonData] = useState("");
   const [loading, setLoading] = useState(false);
+  const [fetchedData, setFetchedData] = useState<any>(null);
+  const [migrating, setMigrating] = useState(false);
   
   // Storage migration state
   const [storageUrl, setStorageUrl] = useState("");
@@ -50,10 +52,12 @@ const FirebaseSync = () => {
       if (data) {
         const formatted = JSON.stringify(data, null, 2);
         setJsonData(formatted);
+        setFetchedData(data);
         toast.success("Data fetched successfully!");
       } else {
         toast.error("No data found at this path");
         setJsonData("");
+        setFetchedData(null);
       }
     } catch (error) {
       console.error("Error fetching Firebase data:", error);
@@ -92,6 +96,38 @@ const FirebaseSync = () => {
       toast.error(`Failed to migrate file: ${error.message}`);
     } finally {
       setMigratingStorage(false);
+    }
+  };
+
+  const migrateToSupabase = async () => {
+    if (!fetchedData) {
+      toast.error("No data to migrate");
+      return;
+    }
+
+    setMigrating(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('migrate-firebase-data', {
+        body: {
+          firebaseData: fetchedData,
+          path: firebasePath
+        }
+      });
+
+      if (error) throw error;
+
+      if (data.success) {
+        toast.success(`Successfully migrated ${data.recordCount} records to ${data.table}!`);
+        setJsonData("");
+        setFetchedData(null);
+      } else {
+        throw new Error(data.error || 'Migration failed');
+      }
+    } catch (error) {
+      console.error("Migration error:", error);
+      toast.error(`Failed to migrate data: ${error.message}`);
+    } finally {
+      setMigrating(false);
     }
   };
 
@@ -179,10 +215,25 @@ const FirebaseSync = () => {
               </div>
 
               {jsonData && (
-                <Button variant="outline" onClick={copyToClipboard}>
-                  <Download className="mr-2 h-4 w-4" />
-                  Copy to Clipboard
-                </Button>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={copyToClipboard}>
+                    <Download className="mr-2 h-4 w-4" />
+                    Copy to Clipboard
+                  </Button>
+                  <Button onClick={migrateToSupabase} disabled={migrating}>
+                    {migrating ? (
+                      <>
+                        <RefreshCw className="mr-2 h-4 w-4 animate-spin" />
+                        Migrating...
+                      </>
+                    ) : (
+                      <>
+                        <Upload className="mr-2 h-4 w-4" />
+                        Save to Supabase
+                      </>
+                    )}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
