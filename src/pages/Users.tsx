@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import {
   Table,
   TableBody,
@@ -29,7 +30,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { UserPlus, Mail, Send } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { UserPlus, Mail, Send, MoreVertical, Edit } from "lucide-react";
 
 interface UserProfile {
   id: string;
@@ -50,9 +59,13 @@ interface PendingInvite {
 
 const Users = () => {
   const [open, setOpen] = useState(false);
+  const [editOpen, setEditOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"Admin" | "User" | "Contractor">("User");
+  const [role, setRole] = useState<"admin" | "moderator" | "user">("user");
+  const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
+  const [editRole, setEditRole] = useState<"admin" | "moderator" | "user">("user");
+  const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -141,10 +154,10 @@ const Users = () => {
       // Assign role
       const { error: roleError } = await supabase
         .from("user_roles")
-        .insert({
+        .insert([{
           user_id: data.user.id,
-          role: userData.role as "Admin" | "User" | "Contractor",
-        });
+          role: userData.role,
+        }] as any);
 
       if (roleError) throw roleError;
 
@@ -155,13 +168,95 @@ const Users = () => {
       setOpen(false);
       setEmail("");
       setFullName("");
-      setRole("User");
+      setRole("user");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to send invitation");
     },
   });
+
+  // Update user role mutation
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ userId, newRole }: { userId: string; newRole: string }) => {
+      // Check if role exists
+      const { data: existingRole } = await supabase
+        .from("user_roles")
+        .select("id")
+        .eq("user_id", userId)
+        .maybeSingle();
+
+      if (existingRole) {
+        // Update existing role
+        const { error } = await supabase
+          .from("user_roles")
+          .update({ role: newRole } as any)
+          .eq("user_id", userId);
+        
+        if (error) throw error;
+      } else {
+        // Insert new role
+        const { error } = await supabase
+          .from("user_roles")
+          .insert([{ user_id: userId, role: newRole }] as any);
+        
+        if (error) throw error;
+      }
+    },
+    onSuccess: () => {
+      toast.success("User role updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update role");
+    },
+  });
+
+  // Update user status mutation
+  const updateStatusMutation = useMutation({
+    mutationFn: async ({ userId, newStatus }: { userId: string; newStatus: string }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ status: newStatus })
+        .eq("id", userId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("User status updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update status");
+    },
+  });
+
+  const handleEditUser = (user: UserProfile) => {
+    setSelectedUser(user);
+    setEditRole(user.role as "admin" | "moderator" | "user");
+    setEditStatus((user.status || "Active") as "Active" | "Inactive");
+    setEditOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!selectedUser) return;
+
+    try {
+      await updateRoleMutation.mutateAsync({
+        userId: selectedUser.id,
+        newRole: editRole,
+      });
+      
+      await updateStatusMutation.mutateAsync({
+        userId: selectedUser.id,
+        newStatus: editStatus,
+      });
+    } catch (error) {
+      // Errors are handled by mutations
+    }
+  };
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
@@ -222,9 +317,9 @@ const Users = () => {
                       <SelectValue />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="Admin">Admin</SelectItem>
-                      <SelectItem value="User">User</SelectItem>
-                      <SelectItem value="Contractor">Contractor</SelectItem>
+                      <SelectItem value="admin">Admin</SelectItem>
+                      <SelectItem value="moderator">Moderator</SelectItem>
+                      <SelectItem value="user">User</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
@@ -325,12 +420,13 @@ const Users = () => {
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
               <TableHead>Status</TableHead>
+              <TableHead className="text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   Loading users...
                 </TableCell>
               </TableRow>
@@ -342,24 +438,37 @@ const Users = () => {
                   </TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>
-                    <span className="inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium bg-primary/10 text-primary">
+                    <Badge variant="secondary" className="capitalize">
                       {user.role}
-                    </span>
+                    </Badge>
                   </TableCell>
                   <TableCell>
-                    <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      user.status === "Active" 
-                        ? "bg-success/10 text-success" 
-                        : "bg-muted text-muted-foreground"
-                    }`}>
+                    <Badge variant={user.status === "Active" ? "default" : "outline"}>
                       {user.status || "Pending"}
-                    </span>
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end">
+                        <DropdownMenuLabel>Actions</DropdownMenuLabel>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onClick={() => handleEditUser(user)}>
+                          <Edit className="mr-2 h-4 w-4" />
+                          Edit User
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </TableCell>
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={4} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
                   No users found. Invite your first user to get started.
                 </TableCell>
               </TableRow>
@@ -368,6 +477,64 @@ const Users = () => {
         </Table>
       </div>
       </div>
+
+      {/* Edit User Dialog */}
+      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit User</DialogTitle>
+            <DialogDescription>
+              Update user role and status
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label>Name</Label>
+              <Input value={selectedUser?.full_name || "N/A"} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <Input value={selectedUser?.email || ""} disabled />
+            </div>
+            <div className="space-y-2">
+              <Label>Role</Label>
+              <Select value={editRole} onValueChange={(value: any) => setEditRole(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="admin">Admin</SelectItem>
+                  <SelectItem value="moderator">Moderator</SelectItem>
+                  <SelectItem value="user">User</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Status</Label>
+              <Select value={editStatus} onValueChange={(value: any) => setEditStatus(value)}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="Active">Active</SelectItem>
+                  <SelectItem value="Inactive">Inactive</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditOpen(false)}>
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit}
+              disabled={updateRoleMutation.isPending || updateStatusMutation.isPending}
+            >
+              {(updateRoleMutation.isPending || updateStatusMutation.isPending) ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
