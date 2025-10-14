@@ -126,15 +126,41 @@ export const migrateClientToSupabase = async (
     let documentsCount = 0;
 
     // Step 2: Migrate Sites
-    if (firebaseData.sites || firebaseData.Sites) {
-      onProgress?.('Migrating sites...');
-      const sites = firebaseData.sites || firebaseData.Sites;
+    // Sites can be under a 'sites' key OR as direct children of the client object
+    const sitesData = firebaseData.sites || firebaseData.Sites;
+    let sitesToMigrate: Record<string, any> = {};
+    
+    if (sitesData) {
+      // Sites are under a 'sites' key
+      sitesToMigrate = sitesData;
+    } else {
+      // Sites are direct children - filter out client-level properties
+      const clientLevelProps = ['name', 'clientName', 'Name', 'email', 'Email', 'phone', 'Phone', 
+        'logo', 'logoUrl', 'logo_url', 'LogoUrl', 'created', 'createdAt', 'created_at', 
+        'updated', 'updatedAt', 'updated_at', 'contactPerson', 'contact_person', 
+        'companyName', 'company_name', 'primaryContactEmail', 'primary_contact_email'];
       
-      for (const [siteId, siteData] of Object.entries(sites || {})) {
+      Object.keys(firebaseData).forEach(key => {
+        const isClientProp = clientLevelProps.some(prop => 
+          key.toLowerCase() === prop.toLowerCase()
+        );
+        const value = firebaseData[key];
+        
+        // If it's not a client-level property and it's an object with nested data, it's likely a site
+        if (!isClientProp && typeof value === 'object' && value !== null && Object.keys(value).length > 0) {
+          sitesToMigrate[key] = value;
+        }
+      });
+    }
+    
+    if (Object.keys(sitesToMigrate).length > 0) {
+      onProgress?.('Migrating sites...');
+      
+      for (const [siteId, siteData] of Object.entries(sitesToMigrate)) {
         try {
           const siteInsertData = {
-            name: (siteData as any).name || (siteData as any).siteName || (siteData as any).Name || 'Unnamed Site',
-            address: (siteData as any).address || (siteData as any).Address || null,
+            name: (siteData as any).name || (siteData as any).siteName || (siteData as any).Name || siteId,
+            address: (siteData as any).address || (siteData as any).physicalAddress || (siteData as any).Address || null,
             site_type: (siteData as any).siteType || (siteData as any).site_type || (siteData as any).type || null,
             client_id: newClient.id,
             firebase_id: siteId,
