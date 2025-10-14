@@ -94,6 +94,26 @@ const Calendar = () => {
     }
   };
 
+  // Generate consistent color for a site based on its name
+  const getSiteColor = (siteName: string) => {
+    const colors = [
+      { bg: "bg-blue-500", hover: "bg-blue-600", text: "text-blue-600" },
+      { bg: "bg-purple-500", hover: "bg-purple-600", text: "text-purple-600" },
+      { bg: "bg-green-500", hover: "bg-green-600", text: "text-green-600" },
+      { bg: "bg-orange-500", hover: "bg-orange-600", text: "text-orange-600" },
+      { bg: "bg-pink-500", hover: "bg-pink-600", text: "text-pink-600" },
+      { bg: "bg-cyan-500", hover: "bg-cyan-600", text: "text-cyan-600" },
+      { bg: "bg-yellow-500", hover: "bg-yellow-600", text: "text-yellow-600" },
+      { bg: "bg-red-500", hover: "bg-red-600", text: "text-red-600" },
+      { bg: "bg-indigo-500", hover: "bg-indigo-600", text: "text-indigo-600" },
+      { bg: "bg-teal-500", hover: "bg-teal-600", text: "text-teal-600" },
+    ];
+    
+    // Generate consistent hash from site name
+    const hash = siteName.split("").reduce((acc, char) => acc + char.charCodeAt(0), 0);
+    return colors[hash % colors.length];
+  };
+
   const previousYear = () => {
     setCurrentYear(currentYear - 1);
   };
@@ -172,19 +192,9 @@ const Calendar = () => {
                       const dayEvents = getEventsForDay(day);
                       const isToday = isSameDay(day, new Date());
                       const hasEvents = dayEvents.length > 0;
-                      const eventCount = dayEvents.length;
                       
-                      // Determine blue shade based on event density
-                      let bgClass = "";
-                      if (hasEvents) {
-                        if (eventCount >= 3) {
-                          bgClass = "bg-blue-600 text-white hover:bg-blue-700";
-                        } else if (eventCount === 2) {
-                          bgClass = "bg-blue-500 text-white hover:bg-blue-600";
-                        } else {
-                          bgClass = "bg-blue-400 text-white hover:bg-blue-500";
-                        }
-                      }
+                      // Use the first event's site for color coding
+                      const siteColor = hasEvents ? getSiteColor(dayEvents[0].site_name) : null;
 
                       return (
                         <div key={day.toISOString()} className="aspect-square p-1">
@@ -192,12 +202,13 @@ const Calendar = () => {
                             onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
                             disabled={!hasEvents}
                             className={cn(
-                              "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium",
+                              "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium text-white",
                               isToday && !hasEvents && "ring-2 ring-blue-500",
-                              isToday && hasEvents && "ring-2 ring-white",
+                              isToday && hasEvents && "ring-2 ring-white ring-offset-1",
                               hasEvents && "cursor-pointer",
                               !hasEvents && "cursor-default text-muted-foreground hover:bg-muted/50",
-                              bgClass
+                              hasEvents && siteColor?.bg,
+                              hasEvents && `hover:${siteColor?.hover}`
                             )}
                           >
                             {format(day, "d")}
@@ -246,7 +257,11 @@ const Calendar = () => {
                 events.map((event) => (
                   <TableRow key={event.id}>
                     <TableCell className="font-medium">{event.title}</TableCell>
-                    <TableCell>{event.site_name}</TableCell>
+                    <TableCell>
+                      <Badge className={cn(getSiteColor(event.site_name).bg, "text-white hover:opacity-90")}>
+                        {event.site_name}
+                      </Badge>
+                    </TableCell>
                     <TableCell>{event.start_date}</TableCell>
                     <TableCell>{event.end_date || "—"}</TableCell>
                     <TableCell>
