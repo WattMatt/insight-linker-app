@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, ClipboardList } from "lucide-react";
+import { TemplateBasedReport } from "@/components/TemplateBasedReport";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -304,6 +305,10 @@ const SubsectionDetail = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
+          <TabsTrigger value="reports">
+            <ClipboardList className="mr-2 h-4 w-4" />
+            Template Reports
+          </TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="coc-metering">COC Docs & Metering Data</TabsTrigger>
           <TabsTrigger value="qr-code">QR Code</TabsTrigger>
@@ -448,6 +453,15 @@ const SubsectionDetail = () => {
               </CardContent>
             </Card>
           )}
+        </TabsContent>
+
+        {/* Template Reports Tab */}
+        <TabsContent value="reports" className="space-y-4">
+          <TemplateBasedReport 
+            subsectionId={subsectionId || ''}
+            subsectionName={subsection.name}
+            siteName={siteData.siteName}
+          />
         </TabsContent>
 
         {/* Inspections Tab */}
