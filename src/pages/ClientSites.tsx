@@ -73,19 +73,36 @@ const ClientSites = () => {
 
       setClientName(data.name || data.clientName || data.Name || firebaseClientId);
 
-      // Get sites from Firebase with multiple possible field names
-      const firebaseSites = data.sites || data.Sites || data.SITES || {};
+      // Get all keys that look like site keys (they contain underscores or special chars, not "name", "email", etc.)
+      const allKeys = Object.keys(data);
+      const siteKeys = allKeys.filter(key => 
+        !['name', 'clientName', 'Name', 'email', 'phone', 'logo', 'logoUrl', 'created', 'updated'].some(excludeKey => 
+          key.toLowerCase().includes(excludeKey.toLowerCase())
+        ) && key.length > 3
+      );
       
-      console.log('Firebase sites for client:', firebaseClientId, Object.keys(firebaseSites));
+      console.log('Site keys found for client:', firebaseClientId, siteKeys);
 
-      const transformedSites: Site[] = Object.entries(firebaseSites).map(([siteId, siteData]: [string, any]) => ({
-        id: siteId,
-        name: siteData.name || siteData.siteName || siteData.Name || 'Unnamed Site',
-        address: siteData.address || siteData.Address || null,
-        site_type: siteData.siteType || siteData.site_type || siteData.type || null,
-        source: 'firebase' as const,
-      }));
+      const transformedSites: Site[] = [];
 
+      for (const siteKey of siteKeys) {
+        const siteData = data[siteKey];
+        
+        // Skip if not an object
+        if (typeof siteData !== 'object' || siteData === null) continue;
+
+        const site: Site = {
+          id: siteKey,
+          name: siteData.siteName || siteData.name || siteData.Name || siteKey,
+          address: siteData.physicalAddress || siteData.address || siteData.Address || null,
+          site_type: siteData.siteType || siteData.site_type || siteData.type || null,
+          source: 'firebase' as const,
+        };
+
+        transformedSites.push(site);
+      }
+
+      console.log('Transformed sites:', transformedSites);
       setSites(transformedSites);
     } catch (error) {
       console.error("Error fetching Firebase sites:", error);
