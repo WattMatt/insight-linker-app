@@ -109,12 +109,19 @@ const SubsectionDetail = () => {
       // Find the subsection in Supabase by firebase_id
       const { data: supabaseSubsection, error: findError } = await supabase
         .from('subsections')
-        .select('id')
+        .select('id, firebase_id')
         .eq('firebase_id', subsectionId)
-        .single();
+        .maybeSingle();
       
-      if (findError || !supabaseSubsection) {
-        toast.error("Could not find subsection in database");
+      if (findError) {
+        console.error("Error finding subsection:", findError);
+        toast.error("Database error: " + findError.message);
+        return;
+      }
+      
+      if (!supabaseSubsection) {
+        console.log("Subsection not found in Supabase. Firebase ID:", subsectionId);
+        toast.error("This subsection hasn't been migrated to the database yet. Please migrate this client first.");
         return;
       }
       
@@ -129,6 +136,7 @@ const SubsectionDetail = () => {
         .eq('id', supabaseSubsection.id);
       
       if (updateError) {
+        console.error("Error updating subsection:", updateError);
         throw updateError;
       }
       
