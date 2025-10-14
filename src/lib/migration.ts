@@ -483,56 +483,109 @@ export const migrateAllFromFirebase = async (
 };
 
 /**
- * Migrate users from Firebase to Supabase profiles and send invites
+ * Migrate users from Firebase to pending invites table (without sending invites)
  */
 export const migrateUsers = async (
   users: Array<{id: string; email: string; name: string}>
-): Promise<{ success: boolean; migratedCount: number; invitesSent: number; error?: string }> => {
+): Promise<{ success: boolean; migratedCount: number; skipped: number; error?: string }> => {
   try {
     let migratedCount = 0;
-    let invitesSent = 0;
+    let skipped = 0;
 
     for (const user of users) {
       try {
         if (!user.email) {
           console.warn(`Skipping user ${user.id}: No email`);
+          skipped++;
           continue;
         }
 
-        // Send invite via Supabase Auth Admin API
-        const { data: inviteData, error: inviteError } = await supabase.auth.admin.inviteUserByEmail(
-          user.email,
-          {
-            data: {
-              full_name: user.name || '',
-            },
-            redirectTo: `${window.location.origin}/`
-          }
-        );
+        // Check if already in pending invites or has profile
+        const { data: existingPending } = await supabase
+          .from('pending_user_invites')
+          .select('id')
+          .eq('email', user.email)
+          .maybeSingle();
 
-        if (!inviteError && inviteData) {
+        const { data: existingProfile } = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('email', user.email)
+          .maybeSingle();
+
+        if (existingPending || existingProfile) {
+          console.log(`User already exists: ${user.email}`);
+          skipped++;
+          continue;
+        }
+
+        // Add to pending invites table
+        const { error } = await supabase
+          .from('pending_user_invites')
+          .insert([{
+            firebase_id: user.id,
+            email: user.email,
+            full_name: user.name || ''
+          }]);
+
+        if (!error) {
           migratedCount++;
-          invitesSent++;
-          console.log(`Invited user: ${user.email}`);
+          console.log(`Added pending invite for: ${user.email}`);
         } else {
-          console.error('User invite error:', inviteError);
+          console.error('Pending invite creation error:', error);
+          skipped++;
         }
       } catch (error) {
         console.error('Error migrating user:', user.id, error);
+        skipped++;
       }
     }
 
     return {
       success: true,
       migratedCount,
-      invitesSent,
+      skipped,
     };
   } catch (error) {
     console.error('Users migration error:', error);
     return {
       success: false,
       migratedCount: 0,
-      invitesSent: 0,
+      skipped: 0,
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+};
+
+/**
+ * Send invite to a specific user email
+ */
+export const sendUserInvite = async (email: string, fullName: string): Promise<{ success: boolean; error?: string }> => {
+  try {
+    const { error } = await supabase.auth.admin.inviteUserByEmail(
+      email,
+      {
+        data: {
+          full_name: fullName,
+        },
+        redirectTo: `${window.location.origin}/`
+      }
+    );
+
+    if (error) {
+      return { success: false, error: error.message };
+    }
+
+    // Update pending invite status
+    await supabase
+      .from('pending_user_invites')
+      .update({ invited_at: new Date().toISOString() })
+      .eq('email', email);
+
+    return { success: true };
+  } catch (error) {
+    return {
+      success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
     };
   }

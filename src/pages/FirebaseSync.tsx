@@ -272,13 +272,18 @@ const FirebaseSync = () => {
     
     setMigratingSection('users');
     try {
-      toast.info("Migrating users and sending invites...");
+      toast.info("Migrating user profiles...");
 
       const { migrateUsers: migrateUsersFn } = await import("@/lib/migration");
       const result = await migrateUsersFn(migrationStatus.users.toMigrate);
       
       if (result.migratedCount > 0) {
-        toast.success(`Migrated ${result.migratedCount} users. Invites sent to ${result.invitesSent} users.`);
+        const message = result.skipped > 0
+          ? `Created ${result.migratedCount} profiles (${result.skipped} skipped). You can send invites from the Users page.`
+          : `Created ${result.migratedCount} profiles. You can send invites from the Users page.`;
+        toast.success(message);
+      } else if (result.skipped > 0) {
+        toast.info(`All ${result.skipped} users already have profiles`);
       } else {
         toast.info("No users to migrate");
       }
@@ -528,8 +533,18 @@ const FirebaseSync = () => {
                           Migrating...
                         </>
                       ) : (
-                        'Migrate & Invite'
+                        'Create Profiles'
                       )}
+                    </Button>
+                  )}
+                  {migrationStatus.users.supabase > 0 && (
+                    <Button 
+                      size="sm" 
+                      variant="outline"
+                      className="w-full mt-1"
+                      onClick={() => window.location.href = '/users'}
+                    >
+                      View & Invite
                     </Button>
                   )}
                 </div>
