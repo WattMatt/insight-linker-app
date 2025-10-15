@@ -672,6 +672,104 @@ const FirebaseSync = () => {
     }
   };
 
+  const updateSiteImages = async () => {
+    setMigratingSection('site_images_update');
+    try {
+      toast.info("Updating site images from Firebase...");
+
+      // Fetch all clients with firebase_id
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, firebase_id, name')
+        .not('firebase_id', 'is', null);
+
+      if (clientsError) throw clientsError;
+      if (!clients || clients.length === 0) {
+        toast.info("No clients with Firebase ID found");
+        return;
+      }
+
+      let totalUpdated = 0;
+      let totalErrors = 0;
+
+      for (const client of clients) {
+        // Fetch all sites for this client with firebase_id
+        const { data: sites, error: sitesError } = await supabase
+          .from('sites')
+          .select('id, firebase_id, name, site_image_url, client_logo_url')
+          .eq('client_id', client.id)
+          .not('firebase_id', 'is', null);
+
+        if (sitesError || !sites) continue;
+
+        for (const site of sites) {
+          try {
+            // Fetch Firebase data for this site
+            const fbSitePath = `/clients/${client.firebase_id}/${site.firebase_id}`;
+            const fbSiteData = await readFirebaseData(fbSitePath);
+            
+            if (!fbSiteData) continue;
+
+            const updates: any = {};
+            
+            // Check for project logo
+            const projectLogoUrl = fbSiteData.projectLogoUrl || 
+                                  fbSiteData.project_logo_url || 
+                                  fbSiteData.projectLogo;
+            
+            if (projectLogoUrl && !site.client_logo_url?.includes('supabase')) {
+              updates.client_logo_url = projectLogoUrl;
+            }
+
+            // Check for site image
+            const siteImageUrl = fbSiteData.siteImageUrl || 
+                                fbSiteData.site_image_url || 
+                                fbSiteData.siteImage;
+            
+            if (siteImageUrl && !site.site_image_url?.includes('supabase')) {
+              updates.site_image_url = siteImageUrl;
+            }
+
+            // Update if we found any images
+            if (Object.keys(updates).length > 0) {
+              const { error: updateError } = await supabase
+                .from('sites')
+                .update(updates)
+                .eq('id', site.id);
+
+              if (!updateError) {
+                totalUpdated++;
+                console.log(`Updated images for site ${site.name}:`, updates);
+              } else {
+                console.error(`Failed to update site ${site.name}:`, updateError);
+                totalErrors++;
+              }
+            }
+          } catch (error) {
+            console.error(`Error updating site ${site.name}:`, error);
+            totalErrors++;
+          }
+        }
+      }
+
+      if (totalUpdated > 0) {
+        toast.success(`Updated ${totalUpdated} site(s) with image URLs`);
+        await scanComplete();
+      } else {
+        toast.info("No site images needed updating");
+      }
+
+      if (totalErrors > 0) {
+        toast.warning(`${totalErrors} error(s) occurred during update`);
+      }
+    } catch (error: any) {
+      console.error("Update error:", error);
+      toast.error(error.message || "Failed to update site images");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   const migrateSiteDocuments = async () => {
     if (!migrationStatus) return;
     
@@ -1821,8 +1919,29 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.sites.supabase}</Badge>
                   </div>
+                  {migrationStatus.sites.supabase > 0 && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={updateSiteImages}
+                      disabled={migratingSection !== null || migrating}
+                      variant="outline"
+                    >
+                      {migratingSection === 'site_images_update' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <ImageIcon className="mr-2 h-3 w-3" />
+                          Update Images
+                        </>
+                      )}
+                    </Button>
+                  )}
                   <p className="text-xs text-muted-foreground italic mt-2">
-                    Migrated with Clients
+                    {migrationStatus.sites.supabase > 0 ? 'Click to update Firebase images' : 'Migrated with Clients'}
                   </p>
                 </div>
               </CardContent>
