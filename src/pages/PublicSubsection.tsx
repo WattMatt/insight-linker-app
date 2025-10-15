@@ -207,8 +207,15 @@ const PublicSubsection = () => {
       {/* Header with branding */}
       <header className="bg-white border-b shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-center">
-            <h1 className="text-lg font-semibold text-center">{companySettings?.company_name || 'Watson Mattheus'}</h1>
+          <div className="flex items-center justify-between">
+            <h1 className="text-lg font-semibold">{companySettings?.company_name || 'Watson Mattheus Consulting Electrical Engineers (Pty) Ltd'}</h1>
+            {companySettings?.company_logo_url && (
+              <img 
+                src={companySettings.company_logo_url} 
+                alt="Company Logo" 
+                className="h-10 object-contain" 
+              />
+            )}
           </div>
         </div>
       </header>
