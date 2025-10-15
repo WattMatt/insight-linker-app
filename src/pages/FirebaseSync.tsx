@@ -970,6 +970,150 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateInspections = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('inspections');
+    try {
+      toast.info("Migrating all inspections...");
+
+      // Fetch all clients with firebase_id
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, firebase_id, name')
+        .not('firebase_id', 'is', null);
+
+      if (clientsError) throw clientsError;
+      if (!clients || clients.length === 0) {
+        toast.info("No clients with Firebase ID found");
+        return;
+      }
+
+      let totalMigrated = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+
+      for (const client of clients) {
+        // Fetch all sites for this client with firebase_id
+        const { data: sites, error: sitesError } = await supabase
+          .from('sites')
+          .select('id, firebase_id, name')
+          .eq('client_id', client.id)
+          .not('firebase_id', 'is', null);
+
+        if (sitesError || !sites) continue;
+
+        for (const site of sites) {
+          // Fetch all subsections for this site with firebase_id
+          const { data: subsections, error: subsectionsError } = await supabase
+            .from('subsections')
+            .select('id, firebase_id, name')
+            .eq('site_id', site.id)
+            .not('firebase_id', 'is', null);
+
+          if (subsectionsError || !subsections) continue;
+
+          for (const subsection of subsections) {
+            setMigrationProgress({
+              stage: 'Migrating inspections',
+              current: totalMigrated + totalSkipped + totalErrors,
+              total: clients.length * 20,
+              percentage: 0,
+              currentItem: `${client.name} - ${site.name} - ${subsection.name}`,
+            });
+
+            try {
+              // Fetch Firebase inspections using correct path
+              const fbInspectionsPath = `clients/${client.firebase_id}/${site.firebase_id}/subsections/${subsection.firebase_id}/inspections`;
+              const fbInspections = await readFirebaseData(fbInspectionsPath);
+              if (!fbInspections || typeof fbInspections !== 'object') continue;
+
+              for (const [inspectionKey, inspectionData] of Object.entries(fbInspections)) {
+                if (!inspectionData || typeof inspectionData !== 'object') continue;
+
+                const inspection: any = inspectionData;
+
+                // Check if already migrated by firebase_id
+                const { data: existing } = await supabase
+                  .from('inspections')
+                  .select('id')
+                  .eq('firebase_id', inspectionKey)
+                  .maybeSingle();
+
+                if (existing) {
+                  totalSkipped++;
+                  continue;
+                }
+
+                // Find or create template
+                let templateId: string | null = null;
+                if (inspection.type || inspection.templateName) {
+                  const templateName = inspection.templateName || inspection.type;
+                  const { data: template } = await supabase
+                    .from('inspection_templates')
+                    .select('id')
+                    .ilike('name', `%${templateName}%`)
+                    .maybeSingle();
+
+                  if (template) {
+                    templateId = template.id;
+                  }
+                }
+
+                // Insert inspection into Supabase
+                const { error: insertError } = await supabase
+                  .from('inspections')
+                  .insert({
+                    firebase_id: inspectionKey,
+                    site_id: site.id,
+                    subsection_id: subsection.id,
+                    title: inspection.projectName || inspection.title || 'Imported Inspection',
+                    description: inspection.shopName || inspection.description || null,
+                    inspection_date: inspection.date || inspection.inspectionDate || new Date().toISOString().split('T')[0],
+                    status: inspection.type || inspection.status || 'Pending',
+                    template_id: templateId,
+                    project_name: inspection.projectName || null,
+                    shop_number: inspection.shopNumber || null,
+                    shop_name: inspection.shopName || null,
+                    inspector_name: inspection.inspectorName || null,
+                    client_rep: inspection.clientRep || null,
+                    consultant: inspection.consultant || null,
+                    contractor: inspection.contractor || null,
+                    testing_party: inspection.testingParty || null,
+                    location: inspection.location || null,
+                    json_data: inspection.sections || inspection.jsonData || {},
+                  });
+
+                if (insertError) {
+                  console.error("Failed to insert inspection:", insertError);
+                  totalErrors++;
+                } else {
+                  totalMigrated++;
+                }
+              }
+            } catch (error) {
+              console.error(`Error migrating inspections for subsection ${subsection.name}:`, error);
+              totalErrors++;
+            }
+          }
+        }
+      }
+
+      setMigrationProgress(null);
+      toast.success(`Migrated ${totalMigrated} inspections (${totalSkipped} skipped, ${totalErrors} errors)`);
+      
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate inspections");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   const migrateStorageOnly = async () => {
     setMigratingSection('storage');
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
@@ -1951,6 +2095,41 @@ const FirebaseSync = () => {
                       All migrated
                     </p>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Database className="h-4 w-4" />
+                  Inspections
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Migration:</span>
+                    <Badge variant="secondary">Available</Badge>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="w-full mt-2"
+                    onClick={migrateInspections}
+                    disabled={migratingSection !== null || migrating}
+                  >
+                    {migratingSection === 'inspections' ? (
+                      <>
+                        <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                        Migrating...
+                      </>
+                    ) : (
+                      'Migrate All Inspections'
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrates inspections from Firebase to Supabase
+                  </p>
                 </div>
               </CardContent>
             </Card>
