@@ -68,6 +68,11 @@ const FirebaseSync = () => {
     migrated: 0,
     failed: 0,
   });
+  const [migrationLogs, setMigrationLogs] = useState<Array<{
+    timestamp: string;
+    level: 'info' | 'success' | 'warning' | 'error';
+    message: string;
+  }>>([]);
 
   const extractFileUrls = (obj: any, urls: Array<{url: string; type: string; path: string}> = [], path: string = ''): Array<{url: string; type: string; path: string}> => {
     if (!obj || typeof obj !== 'object') return urls;
@@ -397,12 +402,6 @@ const FirebaseSync = () => {
       setMigratingSection(null);
     }
   };
-
-  const [migrationLogs, setMigrationLogs] = useState<Array<{
-    timestamp: string;
-    level: string;
-    message: string;
-  }>>([]);
 
   const executeMeticulousMigration = async () => {
     setMigrating(true);
@@ -1096,38 +1095,83 @@ const FirebaseSync = () => {
           </div>
 
           {migrationStatus.clients.toMigrate.length > 0 && (
-            <MigrationSelector 
-              onMigrate={async (selections) => {
-                setMigrating(true);
-                try {
-                  const { data: { user } } = await supabase.auth.getUser();
-                  if (!user) throw new Error('Not authenticated');
+            <>
+              <MigrationSelector 
+                onMigrate={async (selections) => {
+                  setMigrating(true);
+                  setMigrationLogs([]);
+                  try {
+                    const { data: { user } } = await supabase.auth.getUser();
+                    if (!user) throw new Error('Not authenticated');
 
-                  const migration = new MeticulousMigration((log) => {
-                    console.log(log);
-                  });
+                    const migration = new MeticulousMigration((log) => {
+                      console.log(`[${log.level}]`, log.message, log.data || '');
+                      setMigrationLogs(prev => [...prev, {
+                        timestamp: log.timestamp,
+                        level: log.level,
+                        message: log.message
+                      }]);
+                    });
 
-                  // For now, migrate all selected clients with their full hierarchy
-                  // TODO: Implement partial migration for individual sites/subsections
-                  const firebaseData = await readFirebaseData("/clients");
-                  if (!firebaseData) throw new Error('No Firebase data');
+                    // For now, migrate all selected clients with their full hierarchy
+                    const firebaseData = await readFirebaseData("/clients");
+                    if (!firebaseData) throw new Error('No Firebase data');
 
-                  for (const clientId of selections.clientIds) {
-                    const clientData = firebaseData[clientId];
-                    if (clientData) {
-                      await migration.migrateClient(clientId, clientData, user.id);
+                    for (const clientId of selections.clientIds) {
+                      const clientData = firebaseData[clientId];
+                      if (clientData) {
+                        setMigrationLogs(prev => [...prev, {
+                          timestamp: new Date().toISOString(),
+                          level: 'info',
+                          message: `Starting migration for client: ${clientId}`
+                        }]);
+                        await migration.migrateClient(clientId, clientData, user.id);
+                      }
                     }
-                  }
 
-                  toast.success("Migration completed!");
-                  await scanComplete();
-                } catch (error: any) {
-                  toast.error(`Migration failed: ${error.message}`);
-                } finally {
-                  setMigrating(false);
-                }
-              }}
-            />
+                    toast.success("Migration completed!");
+                    await scanComplete();
+                  } catch (error: any) {
+                    toast.error(`Migration failed: ${error.message}`);
+                    setMigrationLogs(prev => [...prev, {
+                      timestamp: new Date().toISOString(),
+                      level: 'error',
+                      message: `Migration failed: ${error.message}`
+                    }]);
+                  } finally {
+                    setMigrating(false);
+                  }
+                }}
+              />
+              
+              {migrationLogs.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Migration Logs</CardTitle>
+                    <CardDescription>Real-time migration progress</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ScrollArea className="h-[400px] w-full rounded border p-4">
+                      <div className="space-y-1 font-mono text-xs">
+                        {migrationLogs.map((log, idx) => (
+                          <div 
+                            key={idx} 
+                            className={`${
+                              log.level === 'error' ? 'text-red-500' :
+                              log.level === 'success' ? 'text-green-500' :
+                              log.level === 'warning' ? 'text-yellow-500' :
+                              'text-muted-foreground'
+                            }`}
+                          >
+                            [{new Date(log.timestamp).toLocaleTimeString()}] {log.message}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </CardContent>
+                </Card>
+              )}
+            </>
           )}
 
           {migrationProgress && (

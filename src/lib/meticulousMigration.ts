@@ -214,10 +214,12 @@ export class MeticulousMigration {
       }
 
       // Find sites - check multiple possible locations
+      this.log('info', `\n→ Looking for sites under client ${firebaseId}...`);
       let sitesToMigrate: Record<string, any> = {};
       
       if (fbData.sites || fbData.Sites) {
         sitesToMigrate = fbData.sites || fbData.Sites;
+        this.log('info', `  Found sites in 'sites' property`);
       } else {
         // Sites might be direct children
         const clientLevelProps = ['name', 'clientName', 'Name', 'email', 'Email', 'phone', 'Phone', 
@@ -233,21 +235,23 @@ export class MeticulousMigration {
             sitesToMigrate[key] = value;
           }
         });
+        this.log('info', `  Found sites as direct children properties`);
       }
 
       const siteIds = Object.keys(sitesToMigrate);
       this.stats.sites.total += siteIds.length;
-      this.log('info', `Found ${siteIds.length} sites for client`);
+      this.log('success', `  ✓ Found ${siteIds.length} site(s) for this client`);
 
       // Migrate each site
       for (let siteIndex = 0; siteIndex < siteIds.length; siteIndex++) {
         const siteId = siteIds[siteIndex];
         const siteData = sitesToMigrate[siteId];
         
-        this.log('info', `\n  SITE ${siteIndex + 1}/${siteIds.length}: ${siteId}`);
+        this.log('info', `\n  ========== SITE ${siteIndex + 1}/${siteIds.length}: ${siteId} ==========`);
         await this.migrateSite(siteId, siteData, clientId, userId);
       }
 
+      this.log('success', `\n========== COMPLETED CLIENT: ${firebaseId} ==========\n`);
       return { id: clientId };
       
     } catch (error: any) {
