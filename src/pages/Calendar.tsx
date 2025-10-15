@@ -260,17 +260,32 @@ const Calendar = () => {
   const exportToPDF = async () => {
     const doc = new jsPDF();
     
-    // Cover page
-    doc.setFontSize(24);
-    doc.text("Calendar Report", 105, 50, { align: "center" });
-    doc.setFontSize(16);
-    doc.text(`Year: ${currentYear}`, 105, 70, { align: "center" });
-    doc.setFontSize(12);
-    doc.text(`Generated: ${format(new Date(), "MMMM dd, yyyy")}`, 105, 85, { align: "center" });
+    // Cover page with professional styling
+    doc.setFillColor(240, 245, 250);
+    doc.rect(0, 0, 210, 297, 'F');
+    
+    doc.setTextColor(30, 40, 50);
+    doc.setFontSize(28);
+    doc.setFont(undefined, 'bold');
+    doc.text("Calendar Report", 105, 60, { align: "center" });
+    
+    doc.setFontSize(18);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(70, 80, 90);
+    doc.text(`Year: ${currentYear}`, 105, 80, { align: "center" });
+    
+    doc.setFontSize(11);
+    doc.setTextColor(100, 110, 120);
+    doc.text(`Generated: ${format(new Date(), "dd MMMM yyyy")}`, 105, 95, { align: "center" });
     
     // Add new page for calendar view
     doc.addPage();
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, 210, 297, 'F');
+    
+    doc.setTextColor(30, 40, 50);
     doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
     doc.text("Calendar View", 14, 15);
     
     // Draw calendar grid (3x4 grid for 12 months)
@@ -286,14 +301,20 @@ const Calendar = () => {
       const x = startX + col * (monthWidth + spacing);
       const y = startY + row * (monthHeight + spacing);
       
-      // Draw month border
-      doc.setDrawColor(200, 200, 200);
+      // Draw month border with subtle shadow effect
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.5);
       doc.rect(x, y, monthWidth, monthHeight);
+      
+      // Month header background
+      doc.setFillColor(59, 130, 246);
+      doc.rect(x, y, monthWidth, 7, 'F');
       
       // Month name
       doc.setFontSize(9);
       doc.setFont(undefined, 'bold');
-      doc.text(format(month, "MMM yyyy"), x + monthWidth / 2, y + 5, { align: "center" });
+      doc.setTextColor(255, 255, 255);
+      doc.text(format(month, "MMMM yyyy"), x + monthWidth / 2, y + 5, { align: "center" });
       
       // Draw mini calendar
       const monthStart = startOfMonth(month);
@@ -302,13 +323,14 @@ const Calendar = () => {
       
       // Day headers (S M T W T F S)
       doc.setFontSize(6);
-      doc.setFont(undefined, 'normal');
+      doc.setFont(undefined, 'bold');
+      doc.setTextColor(100, 110, 120);
       const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
       const cellWidth = monthWidth / 7;
       const cellHeight = 4;
       
       dayHeaders.forEach((day, i) => {
-        doc.text(day, x + i * cellWidth + cellWidth / 2, y + 10, { align: "center" });
+        doc.text(day, x + i * cellWidth + cellWidth / 2, y + 11, { align: "center" });
       });
       
       // Draw days
@@ -322,7 +344,7 @@ const Calendar = () => {
         }
         
         const dayX = x + dayOfWeek * cellWidth;
-        const dayY = y + 13 + currentRow * cellHeight;
+        const dayY = y + 14 + currentRow * cellHeight;
         
         // Check if day has events
         const dayEvents = getEventsForDay(day);
@@ -330,44 +352,146 @@ const Calendar = () => {
         
         // Draw day cell with color if has events
         if (hasEvents) {
-          doc.setFillColor(59, 130, 246, 0.3);
-          doc.rect(dayX, dayY - 2, cellWidth, cellHeight, 'F');
+          // Use gradient-like effect with multiple shades
+          const highPriority = dayEvents.some(e => e.priority === "High");
+          const mediumPriority = dayEvents.some(e => e.priority === "Medium");
+          
+          if (highPriority) {
+            doc.setFillColor(239, 68, 68); // Red for high priority
+          } else if (mediumPriority) {
+            doc.setFillColor(251, 146, 60); // Orange for medium priority
+          } else {
+            doc.setFillColor(34, 197, 94); // Green for low priority
+          }
+          
+          doc.setDrawColor(255, 255, 255);
+          doc.setLineWidth(0.3);
+          doc.roundedRect(dayX + 0.5, dayY - 2, cellWidth - 1, cellHeight - 0.5, 0.5, 0.5, 'FD');
         }
         
         // Day number
         doc.setFontSize(6);
-        doc.text(format(day, "d"), dayX + cellWidth / 2, dayY + 1, { align: "center" });
+        doc.setFont(undefined, hasEvents ? 'bold' : 'normal');
+        doc.setTextColor(hasEvents ? 255 : 60, hasEvents ? 255 : 70, hasEvents ? 255 : 80);
+        doc.text(format(day, "d"), dayX + cellWidth / 2, dayY + 1.5, { align: "center" });
       });
     });
     
-    // Add legend
+    // Add enhanced legend
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'bold');
+    doc.setTextColor(30, 40, 50);
+    doc.text("Legend:", 15, startY + 4 * (monthHeight + spacing) + 8);
+    
+    // High Priority
+    doc.setFillColor(239, 68, 68);
+    doc.roundedRect(15, startY + 4 * (monthHeight + spacing) + 10, 4, 4, 0.5, 0.5, 'F');
+    doc.setFont(undefined, 'normal');
     doc.setFontSize(8);
-    doc.text("Legend:", 15, startY + 4 * (monthHeight + spacing) + 5);
-    doc.setFillColor(59, 130, 246, 0.3);
-    doc.rect(30, startY + 4 * (monthHeight + spacing) + 1, 4, 4, 'F');
-    doc.text("= Days with events", 36, startY + 4 * (monthHeight + spacing) + 5);
+    doc.setTextColor(60, 70, 80);
+    doc.text("High Priority Event", 21, startY + 4 * (monthHeight + spacing) + 13);
+    
+    // Medium Priority
+    doc.setFillColor(251, 146, 60);
+    doc.roundedRect(65, startY + 4 * (monthHeight + spacing) + 10, 4, 4, 0.5, 0.5, 'F');
+    doc.text("Medium Priority Event", 71, startY + 4 * (monthHeight + spacing) + 13);
+    
+    // Low Priority
+    doc.setFillColor(34, 197, 94);
+    doc.roundedRect(125, startY + 4 * (monthHeight + spacing) + 10, 4, 4, 0.5, 0.5, 'F');
+    doc.text("Low Priority Event", 131, startY + 4 * (monthHeight + spacing) + 13);
     
     // Add new page for event summary table
     doc.addPage();
-    doc.setFontSize(16);
-    doc.text("Event Summary", 14, 20);
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, 210, 297, 'F');
     
-    // Prepare table data
+    doc.setTextColor(30, 40, 50);
+    doc.setFontSize(16);
+    doc.setFont(undefined, 'bold');
+    doc.text("Event Summary", 14, 15);
+    
+    // Add summary stats
+    const totalEvents = events?.length || 0;
+    const highPriorityCount = events?.filter(e => e.priority === "High").length || 0;
+    const mediumPriorityCount = events?.filter(e => e.priority === "Medium").length || 0;
+    const lowPriorityCount = events?.filter(e => e.priority === "Low").length || 0;
+    
+    doc.setFontSize(9);
+    doc.setFont(undefined, 'normal');
+    doc.setTextColor(100, 110, 120);
+    doc.text(`Total Events: ${totalEvents}  |  High Priority: ${highPriorityCount}  |  Medium: ${mediumPriorityCount}  |  Low: ${lowPriorityCount}`, 14, 22);
+    
+    // Prepare table data with status colors
     const tableData = events?.map(event => [
       event.title,
       event.site_name,
-      event.start_date,
-      event.end_date || "—",
+      format(parseISO(event.start_date), "dd MMM yyyy"),
+      event.end_date ? format(parseISO(event.end_date), "dd MMM yyyy") : "—",
       event.status,
       event.priority,
     ]) || [];
 
     autoTable(doc, {
-      startY: 30,
+      startY: 28,
       head: [["Title", "Site", "Start Date", "End Date", "Status", "Priority"]],
       body: tableData,
-      theme: "striped",
-      headStyles: { fillColor: [59, 130, 246] },
+      theme: "grid",
+      headStyles: { 
+        fillColor: [59, 130, 246],
+        textColor: [255, 255, 255],
+        fontStyle: 'bold',
+        fontSize: 10,
+      },
+      bodyStyles: {
+        fontSize: 9,
+        textColor: [40, 50, 60],
+      },
+      alternateRowStyles: {
+        fillColor: [248, 250, 252],
+      },
+      columnStyles: {
+        0: { cellWidth: 45 },
+        1: { cellWidth: 35 },
+        2: { cellWidth: 28 },
+        3: { cellWidth: 28 },
+        4: { cellWidth: 25 },
+        5: { cellWidth: 25 },
+      },
+      didParseCell: function(data) {
+        // Color code priority column
+        if (data.column.index === 5 && data.section === 'body') {
+          const priority = data.cell.raw;
+          if (priority === 'High') {
+            data.cell.styles.fillColor = [254, 226, 226];
+            data.cell.styles.textColor = [185, 28, 28];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (priority === 'Medium') {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [180, 83, 9];
+            data.cell.styles.fontStyle = 'bold';
+          } else if (priority === 'Low') {
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [22, 101, 52];
+            data.cell.styles.fontStyle = 'bold';
+          }
+        }
+        
+        // Color code status column
+        if (data.column.index === 4 && data.section === 'body') {
+          const status = data.cell.raw;
+          if (status === 'Completed') {
+            data.cell.styles.fillColor = [220, 252, 231];
+            data.cell.styles.textColor = [22, 101, 52];
+          } else if (status === 'In Progress') {
+            data.cell.styles.fillColor = [254, 243, 199];
+            data.cell.styles.textColor = [180, 83, 9];
+          } else if (status === 'Scheduled') {
+            data.cell.styles.fillColor = [219, 234, 254];
+            data.cell.styles.textColor = [30, 64, 175];
+          }
+        }
+      }
     });
 
     doc.save(`calendar-${currentYear}.pdf`);
