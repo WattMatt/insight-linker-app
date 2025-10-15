@@ -46,6 +46,28 @@ export class MeticulousMigration {
     this.onProgress?.(log);
   }
 
+  private async checkFileExists(bucket: string, fileName: string): Promise<string | null> {
+    try {
+      const { data: files } = await supabase.storage
+        .from(bucket)
+        .list('', { 
+          search: fileName,
+          limit: 1 
+        });
+
+      if (files && files.length > 0) {
+        const { data: urlData } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(fileName);
+        return urlData.publicUrl;
+      }
+      
+      return null;
+    } catch (error) {
+      return null;
+    }
+  }
+
   async migrateAll() {
     try {
       this.log('info', '=== STARTING METICULOUS MIGRATION ===');
@@ -123,29 +145,39 @@ export class MeticulousMigration {
       let migratedLogoUrl = logoUrl;
       
       if (logoUrl && logoUrl.includes('firebase')) {
-        this.log('info', `Migrating client logo: ${logoUrl}`);
+        const fileName = `${firebaseId}/logo-${Date.now()}.png`;
         this.stats.images.total++;
         
-        try {
-          const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
-            body: {
-              imageUrl: logoUrl,
-              bucket: 'client-logos',
-              fileName: `${firebaseId}/logo-${Date.now()}.png`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('client-logos', fileName);
+        if (existingUrl) {
+          migratedLogoUrl = existingUrl;
+          this.stats.images.migrated++;
+          this.log('info', `✓ Logo already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `Migrating client logo: ${logoUrl}`);
           
-          if (!error && imageData?.success) {
-            migratedLogoUrl = imageData.newUrl;
-            this.stats.images.migrated++;
-            this.log('success', `✓ Logo migrated: ${migratedLogoUrl}`);
-          } else {
+          try {
+            const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
+              body: {
+                imageUrl: logoUrl,
+                bucket: 'client-logos',
+                fileName,
+              },
+            });
+            
+            if (!error && imageData?.success) {
+              migratedLogoUrl = imageData.newUrl;
+              this.stats.images.migrated++;
+              this.log('success', `✓ Logo migrated: ${migratedLogoUrl}`);
+            } else {
+              this.stats.images.failed++;
+              this.log('error', `✗ Logo migration failed: ${error?.message}`);
+            }
+          } catch (err: any) {
             this.stats.images.failed++;
-            this.log('error', `✗ Logo migration failed: ${error?.message}`);
+            this.log('error', `✗ Logo migration error: ${err.message}`);
           }
-        } catch (err: any) {
-          this.stats.images.failed++;
-          this.log('error', `✗ Logo migration error: ${err.message}`);
         }
       }
 
@@ -230,29 +262,39 @@ export class MeticulousMigration {
       let migratedSiteImageUrl = siteImageUrl;
       
       if (siteImageUrl && siteImageUrl.includes('firebase')) {
-        this.log('info', `  Migrating site image: ${siteImageUrl}`);
+        const fileName = `${firebaseId}/site-${Date.now()}.png`;
         this.stats.images.total++;
         
-        try {
-          const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
-            body: {
-              imageUrl: siteImageUrl,
-              bucket: 'site-images',
-              fileName: `${firebaseId}/site-${Date.now()}.png`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('site-images', fileName);
+        if (existingUrl) {
+          migratedSiteImageUrl = existingUrl;
+          this.stats.images.migrated++;
+          this.log('info', `  ✓ Site image already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `  Migrating site image: ${siteImageUrl}`);
           
-          if (!error && imageData?.success) {
-            migratedSiteImageUrl = imageData.newUrl;
-            this.stats.images.migrated++;
-            this.log('success', `  ✓ Site image migrated: ${migratedSiteImageUrl}`);
-          } else {
+          try {
+            const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
+              body: {
+                imageUrl: siteImageUrl,
+                bucket: 'site-images',
+                fileName,
+              },
+            });
+            
+            if (!error && imageData?.success) {
+              migratedSiteImageUrl = imageData.newUrl;
+              this.stats.images.migrated++;
+              this.log('success', `  ✓ Site image migrated: ${migratedSiteImageUrl}`);
+            } else {
+              this.stats.images.failed++;
+              this.log('error', `  ✗ Site image migration failed`);
+            }
+          } catch (err: any) {
             this.stats.images.failed++;
-            this.log('error', `  ✗ Site image migration failed`);
+            this.log('error', `  ✗ Site image error: ${err.message}`);
           }
-        } catch (err: any) {
-          this.stats.images.failed++;
-          this.log('error', `  ✗ Site image error: ${err.message}`);
         }
       }
 
@@ -261,27 +303,37 @@ export class MeticulousMigration {
       let migratedClientLogoUrl = clientLogoUrl;
       
       if (clientLogoUrl && clientLogoUrl.includes('firebase')) {
-        this.log('info', `  Migrating client logo: ${clientLogoUrl}`);
+        const fileName = `${firebaseId}/logo-${Date.now()}.png`;
         this.stats.images.total++;
         
-        try {
-          const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
-            body: {
-              imageUrl: clientLogoUrl,
-              bucket: 'client-logos',
-              fileName: `${firebaseId}/logo-${Date.now()}.png`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('client-logos', fileName);
+        if (existingUrl) {
+          migratedClientLogoUrl = existingUrl;
+          this.stats.images.migrated++;
+          this.log('info', `  ✓ Client logo already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `  Migrating client logo: ${clientLogoUrl}`);
           
-          if (!error && imageData?.success) {
-            migratedClientLogoUrl = imageData.newUrl;
-            this.stats.images.migrated++;
-            this.log('success', `  ✓ Client logo migrated: ${migratedClientLogoUrl}`);
-          } else {
+          try {
+            const { data: imageData, error } = await supabase.functions.invoke('migrate-images', {
+              body: {
+                imageUrl: clientLogoUrl,
+                bucket: 'client-logos',
+                fileName,
+              },
+            });
+            
+            if (!error && imageData?.success) {
+              migratedClientLogoUrl = imageData.newUrl;
+              this.stats.images.migrated++;
+              this.log('success', `  ✓ Client logo migrated: ${migratedClientLogoUrl}`);
+            } else {
+              this.stats.images.failed++;
+            }
+          } catch (err) {
             this.stats.images.failed++;
           }
-        } catch (err) {
-          this.stats.images.failed++;
         }
       }
 
@@ -368,28 +420,38 @@ export class MeticulousMigration {
       this.stats.documents.total++;
       
       if (docUrl.includes('firebase')) {
-        this.log('info', `    Migrating site document: ${fileName}`);
+        const filePath = `sites/${siteId}/${fileName}`;
         
-        try {
-          const { data, error } = await supabase.functions.invoke('migrate-storage', {
-            body: {
-              firebaseStorageUrl: docUrl,
-              targetBucket: 'documents',
-              targetPath: `sites/${siteId}/${fileName}`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('documents', filePath);
+        if (existingUrl) {
+          migratedDocUrl = existingUrl;
+          this.stats.documents.migrated++;
+          this.log('info', `    ✓ Site document already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `    Migrating site document: ${fileName}`);
           
-          if (!error && data?.success) {
-            migratedDocUrl = data.publicUrl;
-            this.stats.documents.migrated++;
-            this.log('success', `    ✓ Site document migrated`);
-          } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('migrate-storage', {
+              body: {
+                firebaseStorageUrl: docUrl,
+                targetBucket: 'documents',
+                targetPath: filePath,
+              },
+            });
+            
+            if (!error && data?.success) {
+              migratedDocUrl = data.publicUrl;
+              this.stats.documents.migrated++;
+              this.log('success', `    ✓ Site document migrated`);
+            } else {
+              this.stats.documents.failed++;
+              this.log('error', `    ✗ Site document migration failed`);
+            }
+          } catch (err: any) {
             this.stats.documents.failed++;
-            this.log('error', `    ✗ Site document migration failed`);
+            this.log('error', `    ✗ Site document error: ${err.message}`);
           }
-        } catch (err: any) {
-          this.stats.documents.failed++;
-          this.log('error', `    ✗ Site document error: ${err.message}`);
         }
       }
 
@@ -492,28 +554,38 @@ export class MeticulousMigration {
       this.stats.documents.total++;
       
       if (docUrl.includes('firebase')) {
-        this.log('info', `      Migrating subsection document: ${fileName}`);
+        const filePath = `subsections/${subsectionId}/${fileName}`;
         
-        try {
-          const { data, error } = await supabase.functions.invoke('migrate-storage', {
-            body: {
-              firebaseStorageUrl: docUrl,
-              targetBucket: 'documents',
-              targetPath: `subsections/${subsectionId}/${fileName}`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('documents', filePath);
+        if (existingUrl) {
+          migratedDocUrl = existingUrl;
+          this.stats.documents.migrated++;
+          this.log('info', `      ✓ Subsection document already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `      Migrating subsection document: ${fileName}`);
           
-          if (!error && data?.success) {
-            migratedDocUrl = data.publicUrl;
-            this.stats.documents.migrated++;
-            this.log('success', `      ✓ Subsection document migrated`);
-          } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('migrate-storage', {
+              body: {
+                firebaseStorageUrl: docUrl,
+                targetBucket: 'documents',
+                targetPath: filePath,
+              },
+            });
+            
+            if (!error && data?.success) {
+              migratedDocUrl = data.publicUrl;
+              this.stats.documents.migrated++;
+              this.log('success', `      ✓ Subsection document migrated`);
+            } else {
+              this.stats.documents.failed++;
+              this.log('error', `      ✗ Subsection document migration failed`);
+            }
+          } catch (err: any) {
             this.stats.documents.failed++;
-            this.log('error', `      ✗ Subsection document migration failed`);
+            this.log('error', `      ✗ Subsection document error: ${err.message}`);
           }
-        } catch (err: any) {
-          this.stats.documents.failed++;
-          this.log('error', `      ✗ Subsection document error: ${err.message}`);
         }
       }
 
@@ -598,28 +670,38 @@ export class MeticulousMigration {
       this.stats.images.total++;
       
       if (photoUrl.includes('firebase')) {
-        this.log('info', `        Migrating inspection photo`);
+        const fileName = `${subsectionId}/${firebaseId}-${Date.now()}.png`;
         
-        try {
-          const { data, error } = await supabase.functions.invoke('migrate-images', {
-            body: {
-              imageUrl: photoUrl,
-              bucket: 'inspection-photos',
-              fileName: `${subsectionId}/${firebaseId}-${Date.now()}.png`,
-            },
-          });
+        // Check if already exists in Supabase
+        const existingUrl = await this.checkFileExists('inspection-photos', fileName);
+        if (existingUrl) {
+          migratedPhotoUrl = existingUrl;
+          this.stats.images.migrated++;
+          this.log('info', `        ✓ Inspection photo already exists in Supabase: ${fileName}`);
+        } else {
+          this.log('info', `        Migrating inspection photo`);
           
-          if (!error && data?.success) {
-            migratedPhotoUrl = data.newUrl;
-            this.stats.images.migrated++;
-            this.log('success', `        ✓ Inspection photo migrated`);
-          } else {
+          try {
+            const { data, error } = await supabase.functions.invoke('migrate-images', {
+              body: {
+                imageUrl: photoUrl,
+                bucket: 'inspection-photos',
+                fileName,
+              },
+            });
+            
+            if (!error && data?.success) {
+              migratedPhotoUrl = data.newUrl;
+              this.stats.images.migrated++;
+              this.log('success', `        ✓ Inspection photo migrated`);
+            } else {
+              this.stats.images.failed++;
+              this.log('error', `        ✗ Inspection photo migration failed`);
+            }
+          } catch (err: any) {
             this.stats.images.failed++;
-            this.log('error', `        ✗ Inspection photo migration failed`);
+            this.log('error', `        ✗ Inspection photo error: ${err.message}`);
           }
-        } catch (err: any) {
-          this.stats.images.failed++;
-          this.log('error', `        ✗ Inspection photo error: ${err.message}`);
         }
       }
       
