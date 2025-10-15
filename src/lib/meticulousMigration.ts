@@ -393,14 +393,48 @@ export class MeticulousMigration {
         siteId = newSite.id;
       }
 
-      // Migrate site documents
+      // Migrate site documents - check multiple possible locations and structures
+      this.log('info', `  Checking for site documents...`);
       const siteDocuments = fbData.documents || fbData.Documents || fbData.files || fbData.Files;
+      
       if (siteDocuments && typeof siteDocuments === 'object') {
-        const docIds = Object.keys(siteDocuments);
-        this.log('info', `  Found ${docIds.length} site documents`);
+        // Check if it's a category-based structure (like "Layouts" -> files)
+        const docKeys = Object.keys(siteDocuments);
+        let totalDocs = 0;
         
-        for (const docId of docIds) {
-          await this.migrateSiteDocument(docId, siteDocuments[docId], siteId, userId);
+        for (const key of docKeys) {
+          const value = siteDocuments[key];
+          
+          // Check if this is a category with nested files
+          if (typeof value === 'object' && value !== null) {
+            const possibleFiles = Object.values(value);
+            const hasFileStructure = possibleFiles.some((item: any) => 
+              item && typeof item === 'object' && (item.url || item.name || item.fileUrl)
+            );
+            
+            if (hasFileStructure) {
+              // This is a category with files
+              this.log('info', `  Found category "${key}" with documents`);
+              const fileIds = Object.keys(value);
+              totalDocs += fileIds.length;
+              
+              for (const fileId of fileIds) {
+                await this.migrateSiteDocument(fileId, value[fileId], siteId, userId, key);
+              }
+            } else if (value.url || value.fileUrl || value.downloadUrl) {
+              // This is a direct file
+              totalDocs++;
+              await this.migrateSiteDocument(key, value, siteId, userId);
+            }
+          } else if (typeof value === 'string' && value.includes('http')) {
+            // Direct URL string
+            totalDocs++;
+            await this.migrateSiteDocument(key, { url: value, name: key }, siteId, userId);
+          }
+        }
+        
+        if (totalDocs > 0) {
+          this.log('success', `  ✓ Found ${totalDocs} total site documents`);
         }
       }
 
@@ -429,14 +463,28 @@ export class MeticulousMigration {
     }
   }
 
-  private async migrateSiteDocument(firebaseId: string, fbData: any, siteId: string, userId: string) {
+  private async migrateSiteDocument(firebaseId: string, fbData: any, siteId: string, userId: string, category?: string) {
     try {
       const docUrl = fbData?.url || fbData?.fileUrl || fbData?.downloadUrl || fbData?.URL ||
                      (typeof fbData === 'string' ? fbData : null);
       const fileName = fbData?.name || fbData?.fileName || fbData?.file_name || `document-${firebaseId}`;
+      const docCategory = category || fbData?.category || fbData?.Category || 'General';
       
       if (!docUrl) {
         this.log('warning', `    ⊘ No URL for site document: ${firebaseId}`);
+        return;
+      }
+
+      // Check if document already exists
+      const { data: existingDoc } = await supabase
+        .from('site_documents')
+        .select('id')
+        .eq('site_id', siteId)
+        .eq('file_name', fileName)
+        .maybeSingle();
+      
+      if (existingDoc) {
+        this.log('info', `    ⊘ Site document already migrated: ${fileName}`);
         return;
       }
 
@@ -446,12 +494,12 @@ export class MeticulousMigration {
       if (docUrl.includes('firebase')) {
         const filePath = `sites/${siteId}/${fileName}`;
         
-        // Check if already exists in Supabase
+        // Check if already exists in Supabase storage
         const existingUrl = await this.checkFileExists('documents', filePath);
         if (existingUrl) {
           migratedDocUrl = existingUrl;
           this.stats.documents.migrated++;
-          this.log('info', `    ✓ Site document already exists in Supabase: ${fileName}`);
+          this.log('info', `    ✓ Site document already in storage: ${fileName}`);
         } else {
           this.log('info', `    Migrating site document: ${fileName}`);
           
@@ -470,7 +518,7 @@ export class MeticulousMigration {
               this.log('success', `    ✓ Site document migrated`);
             } else {
               this.stats.documents.failed++;
-              this.log('error', `    ✗ Site document migration failed`);
+              this.log('error', `    ✗ Site document migration failed: ${error?.message || 'Unknown error'}`);
             }
           } catch (err: any) {
             this.stats.documents.failed++;
@@ -480,12 +528,16 @@ export class MeticulousMigration {
       }
 
       // Insert site document record
-      await supabase.from('site_documents').insert([{
+      const { error: insertError } = await supabase.from('site_documents').insert([{
         site_id: siteId,
         file_name: fileName,
         file_url: migratedDocUrl,
-        category: fbData?.category || fbData?.Category || 'General',
+        category: docCategory,
       }]);
+      
+      if (insertError) {
+        this.log('error', `    ✗ Failed to insert site document record: ${insertError.message}`);
+      }
       
     } catch (error: any) {
       this.stats.documents.failed++;
@@ -549,7 +601,7 @@ export class MeticulousMigration {
         this.log('info', `    Found ${inspectionIds.length} inspections`);
         
         for (const inspId of inspectionIds) {
-          await this.migrateInspection(inspId, inspections[inspId], newSubsection.id, userId);
+          await this.migrateInspection(inspId, inspections[inspId], newSubsection.id, siteId, userId);
         }
       }
 
@@ -657,9 +709,54 @@ export class MeticulousMigration {
     }
   }
 
-  private async migrateInspection(firebaseId: string, fbData: any, subsectionId: string, userId: string) {
+  private async migrateInspection(firebaseId: string, fbData: any, subsectionId: string, siteId: string, userId: string) {
     try {
       this.stats.inspections.total++;
+      
+      // Extract inspection details
+      const inspectionType = fbData?.type || fbData?.inspectionType || fbData?.title || 'Inspection';
+      const inspectionDate = fbData?.date || fbData?.inspectionDate || fbData?.createdAt || new Date().toISOString().split('T')[0];
+      const status = fbData?.status || fbData?.Status || 'Completed';
+      const notes = fbData?.notes || fbData?.description || null;
+      
+      // Check if inspection already exists
+      const { data: existingInspection } = await supabase
+        .from('inspections')
+        .select('id')
+        .eq('firebase_id', firebaseId)
+        .maybeSingle();
+      
+      let inspectionId: string;
+      
+      if (existingInspection) {
+        inspectionId = existingInspection.id;
+        this.log('info', `      Inspection already exists: ${inspectionType}`);
+      } else {
+        // Create inspection record
+        const { data: newInspection, error: inspectionError } = await supabase
+          .from('inspections')
+          .insert([{
+            firebase_id: firebaseId,
+            subsection_id: subsectionId,
+            site_id: siteId,
+            title: inspectionType,
+            inspection_date: inspectionDate,
+            status: status,
+            description: notes,
+            priority: 'Medium',
+          }])
+          .select()
+          .single();
+        
+        if (inspectionError || !newInspection) {
+          this.stats.inspections.failed++;
+          this.log('error', `      ✗ Failed to create inspection: ${inspectionError?.message}`);
+          return;
+        }
+        
+        inspectionId = newInspection.id;
+        this.log('success', `      ✓ Inspection created: ${inspectionType}`);
+      }
       
       // Migrate inspection photos
       const photos = fbData?.photos || fbData?.Photos || fbData?.images || fbData?.Images;
@@ -673,7 +770,6 @@ export class MeticulousMigration {
       }
       
       this.stats.inspections.migrated++;
-      this.log('success', `      ✓ Inspection processed: ${firebaseId}`);
       
     } catch (error: any) {
       this.stats.inspections.failed++;
