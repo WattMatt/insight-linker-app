@@ -11,7 +11,7 @@ import { X, Save, Camera, Upload, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
-import { readFirebaseData } from "@/lib/firebase";
+import { readFirebaseData, updateFirebaseData } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
 
 interface InspectionTemplate {
@@ -311,15 +311,39 @@ const InspectionDetail = () => {
   };
 
   const handleSave = async () => {
+    if (!inspection) return;
+
     try {
       setSaving(true);
-      // In a real implementation, this would save back to Firebase
-      // For now, we'll just show a success message
+
+      // Get Firebase IDs from the subsection
+      const { data: supabaseSubsection } = await supabase
+        .from('subsections')
+        .select(`
+          firebase_id,
+          sites!inner (
+            firebase_id,
+            clients!inner (
+              firebase_id
+            )
+          )
+        `)
+        .eq('id', subsectionId)
+        .maybeSingle();
+
+      if (!supabaseSubsection) {
+        throw new Error("Could not find subsection");
+      }
+
+      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
+      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
+      const firebaseSubsectionId = supabaseSubsection.firebase_id;
+
+      // Update Firebase with the inspection data
+      const inspectionPath = `/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}/inspections/${inspectionId}`;
+      await updateFirebaseData(inspectionPath, inspection);
+
       toast.success("Inspection saved successfully");
-      
-      // You would implement Firebase update here:
-      // await updateFirebaseData(`/clients/${clientId}/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`, inspection);
-      
     } catch (error) {
       console.error("Error saving inspection:", error);
       toast.error("Failed to save inspection");

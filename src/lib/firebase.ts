@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { getDatabase, ref, onValue, get } from 'firebase/database';
+import { getDatabase, ref, onValue, get, set, update } from 'firebase/database';
 
 // Firebase configuration
 const firebaseConfig = {
@@ -47,4 +47,28 @@ export const subscribeToPath = (path: string, callback: (data: any) => void) => 
   return unsubscribe;
 };
 
-export { database, ref, onValue, get };
+// Helper function to write data to a path
+export const writeFirebaseData = async (path: string, data: any) => {
+  try {
+    const dataRef = ref(database, path);
+    await set(dataRef, data);
+    return true;
+  } catch (error) {
+    console.error("Firebase write error:", error);
+    throw new Error(`Failed to write to Firebase: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+// Helper function to update specific fields at a path
+export const updateFirebaseData = async (path: string, updates: any) => {
+  try {
+    const dataRef = ref(database, path);
+    await update(dataRef, updates);
+    return true;
+  } catch (error) {
+    console.error("Firebase update error:", error);
+    throw new Error(`Failed to update Firebase: ${error instanceof Error ? error.message : 'Unknown error'}`);
+  }
+};
+
+export { database, ref, onValue, get, set, update };
