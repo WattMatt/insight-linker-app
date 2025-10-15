@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -20,7 +20,20 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface CalendarEvent {
   id: string;
@@ -36,6 +49,18 @@ interface CalendarEvent {
 const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [formData, setFormData] = useState({
+    title: "",
+    site_name: "",
+    start_date: "",
+    end_date: "",
+    status: "Scheduled",
+    priority: "Medium",
+    event_type: "",
+  });
+  const { toast } = useToast();
   
   const yearStart = startOfYear(new Date(currentYear, 0, 1));
   const yearEnd = endOfYear(new Date(currentYear, 0, 1));
@@ -128,6 +153,148 @@ const Calendar = () => {
     setCurrentYear(currentYear + 1);
   };
 
+  const openAddEventDialog = () => {
+    setEditingEvent(null);
+    setFormData({
+      title: "",
+      site_name: "",
+      start_date: "",
+      end_date: "",
+      status: "Scheduled",
+      priority: "Medium",
+      event_type: "",
+    });
+    setIsEventDialogOpen(true);
+  };
+
+  const openEditEventDialog = (event: CalendarEvent) => {
+    setEditingEvent(event);
+    setFormData({
+      title: event.title,
+      site_name: event.site_name,
+      start_date: event.start_date,
+      end_date: event.end_date || "",
+      status: event.status,
+      priority: event.priority,
+      event_type: event.event_type || "",
+    });
+    setIsEventDialogOpen(true);
+  };
+
+  const handleSaveEvent = async () => {
+    if (!formData.title || !formData.site_name || !formData.start_date) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      if (editingEvent) {
+        const { error } = await supabase
+          .from("calendar_events")
+          .update({
+            title: formData.title,
+            site_name: formData.site_name,
+            start_date: formData.start_date,
+            end_date: formData.end_date || null,
+            status: formData.status,
+            priority: formData.priority,
+            event_type: formData.event_type || null,
+          })
+          .eq("id", editingEvent.id);
+
+        if (error) throw error;
+        toast({ title: "Event updated successfully" });
+      } else {
+        const { error } = await supabase
+          .from("calendar_events")
+          .insert({
+            title: formData.title,
+            site_name: formData.site_name,
+            start_date: formData.start_date,
+            end_date: formData.end_date || null,
+            status: formData.status,
+            priority: formData.priority,
+            event_type: formData.event_type || null,
+          });
+
+        if (error) throw error;
+        toast({ title: "Event created successfully" });
+      }
+
+      setIsEventDialogOpen(false);
+      refetch();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to save event",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleDeleteEvent = async (eventId: string) => {
+    if (!confirm("Are you sure you want to delete this event?")) return;
+
+    try {
+      const { error } = await supabase
+        .from("calendar_events")
+        .delete()
+        .eq("id", eventId);
+
+      if (error) throw error;
+      toast({ title: "Event deleted successfully" });
+      refetch();
+    } catch (error) {
+      toast({
+        title: "Error",
+        description: "Failed to delete event",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const exportToPDF = async () => {
+    const doc = new jsPDF();
+    
+    // Cover page
+    doc.setFontSize(24);
+    doc.text("Calendar Report", 105, 50, { align: "center" });
+    doc.setFontSize(16);
+    doc.text(`Year: ${currentYear}`, 105, 70, { align: "center" });
+    doc.setFontSize(12);
+    doc.text(`Generated: ${format(new Date(), "MMMM dd, yyyy")}`, 105, 85, { align: "center" });
+    
+    // Add new page for calendar data
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.text("Calendar Events", 14, 20);
+    
+    // Prepare table data
+    const tableData = events?.map(event => [
+      event.title,
+      event.site_name,
+      event.start_date,
+      event.end_date || "—",
+      event.status,
+      event.priority,
+    ]) || [];
+
+    autoTable(doc, {
+      startY: 30,
+      head: [["Title", "Site", "Start Date", "End Date", "Status", "Priority"]],
+      body: tableData,
+      theme: "striped",
+      headStyles: { fillColor: [59, 130, 246] },
+    });
+
+    doc.save(`calendar-${currentYear}.pdf`);
+    toast({ title: "PDF exported successfully" });
+  };
+
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
   return (
@@ -140,10 +307,16 @@ const Calendar = () => {
           </p>
         </div>
         
-        <Button className="bg-sky-500 hover:bg-sky-600">
-          <Plus className="h-4 w-4 mr-2" />
-          Add New Event
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={exportToPDF} variant="outline">
+            <Download className="h-4 w-4 mr-2" />
+            Export PDF
+          </Button>
+          <Button className="bg-sky-500 hover:bg-sky-600" onClick={openAddEventDialog}>
+            <Plus className="h-4 w-4 mr-2" />
+            Add New Event
+          </Button>
+        </div>
       </div>
 
       {/* Year Navigation and Annual Calendar Grid */}
@@ -333,9 +506,22 @@ const Calendar = () => {
                       </Badge>
                     </TableCell>
                     <TableCell className="text-right">
-                      <Button variant="ghost" size="sm">
-                        ⋯
-                      </Button>
+                      <div className="flex gap-2 justify-end">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => openEditEventDialog(event)}
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleDeleteEvent(event.id)}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))
@@ -350,6 +536,130 @@ const Calendar = () => {
           </Table>
         </CardContent>
       </Card>
+
+      {/* Event Dialog */}
+      <Dialog open={isEventDialogOpen} onOpenChange={setIsEventDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              {editingEvent ? "Edit Event" : "Add New Event"}
+            </DialogTitle>
+            <DialogDescription>
+              {editingEvent
+                ? "Update the event details below"
+                : "Create a new calendar event"}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="title">Title *</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) =>
+                  setFormData({ ...formData, title: e.target.value })
+                }
+                placeholder="Event title"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="site_name">Site Name *</Label>
+              <Input
+                id="site_name"
+                value={formData.site_name}
+                onChange={(e) =>
+                  setFormData({ ...formData, site_name: e.target.value })
+                }
+                placeholder="Site name"
+              />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="start_date">Start Date *</Label>
+                <Input
+                  id="start_date"
+                  type="date"
+                  value={formData.start_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, start_date: e.target.value })
+                  }
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="end_date">End Date</Label>
+                <Input
+                  id="end_date"
+                  type="date"
+                  value={formData.end_date}
+                  onChange={(e) =>
+                    setFormData({ ...formData, end_date: e.target.value })
+                  }
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="status">Status</Label>
+                <Select
+                  value={formData.status}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, status: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Scheduled">Scheduled</SelectItem>
+                    <SelectItem value="In Progress">In Progress</SelectItem>
+                    <SelectItem value="Completed">Completed</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="priority">Priority</Label>
+                <Select
+                  value={formData.priority}
+                  onValueChange={(value) =>
+                    setFormData({ ...formData, priority: value })
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Low">Low</SelectItem>
+                    <SelectItem value="Medium">Medium</SelectItem>
+                    <SelectItem value="High">High</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="event_type">Event Type</Label>
+              <Input
+                id="event_type"
+                value={formData.event_type}
+                onChange={(e) =>
+                  setFormData({ ...formData, event_type: e.target.value })
+                }
+                placeholder="e.g., Inspection, Maintenance"
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setIsEventDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveEvent}>
+              {editingEvent ? "Update" : "Create"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
