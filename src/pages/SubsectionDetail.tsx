@@ -77,6 +77,8 @@ const SubsectionDetail = () => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [supabaseDocuments, setSupabaseDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category_id: string, uploaded_at: string}>>([]);
+  const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
@@ -84,6 +86,7 @@ const SubsectionDetail = () => {
       fetchCompanyLogo();
       fetchTemplates();
       fetchDocumentCategories();
+      fetchSupabaseDocuments();
     }
   }, [subsectionId]);
 
@@ -136,6 +139,21 @@ const SubsectionDetail = () => {
       }
     } catch (error) {
       console.error("Error fetching document categories:", error);
+    }
+  };
+
+  const fetchSupabaseDocuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('subsection_documents')
+        .select('id, file_name, file_url, category_id, uploaded_at')
+        .eq('subsection_id', subsectionId)
+        .order('uploaded_at', { ascending: false });
+      
+      if (error) throw error;
+      setSupabaseDocuments(data || []);
+    } catch (error) {
+      console.error("Error fetching Supabase documents:", error);
     }
   };
 
@@ -439,11 +457,55 @@ const SubsectionDetail = () => {
       toast.success("Document uploaded successfully!");
       // Refresh data to show new document
       fetchSubsectionData();
+      fetchSupabaseDocuments();
     } catch (error) {
       console.error("Error uploading document:", error);
       toast.error("Failed to upload document");
     } finally {
       setUploadingFile(false);
+    }
+  };
+
+  const handleDeleteDocument = async (documentId: string, fileName: string) => {
+    try {
+      // Get document details first to delete from storage
+      const { data: doc, error: fetchError } = await supabase
+        .from('subsection_documents')
+        .select('file_url')
+        .eq('id', documentId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Extract file path from URL and delete from storage
+      if (doc?.file_url) {
+        const url = new URL(doc.file_url);
+        const pathParts = url.pathname.split('/');
+        const filePath = pathParts.slice(pathParts.indexOf('documents') + 1).join('/');
+        
+        const { error: storageError } = await supabase.storage
+          .from('documents')
+          .remove([filePath]);
+
+        if (storageError) {
+          console.error("Error deleting file from storage:", storageError);
+        }
+      }
+
+      // Delete document record
+      const { error: deleteError } = await supabase
+        .from('subsection_documents')
+        .delete()
+        .eq('id', documentId);
+
+      if (deleteError) throw deleteError;
+
+      toast.success(`${fileName} deleted successfully`);
+      fetchSupabaseDocuments();
+      setDeleteDocumentId(null);
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      toast.error("Failed to delete document");
     }
   };
 
@@ -1132,17 +1194,85 @@ const SubsectionDetail = () => {
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
+          {/* Supabase Documents */}
           <Card>
             <CardHeader>
-              <CardTitle>Documents</CardTitle>
+              <CardTitle>Uploaded Documents</CardTitle>
             </CardHeader>
             <CardContent>
-              {documents.length === 0 ? (
+              {supabaseDocuments.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No documents found for this subsection</p>
+                  <p>No documents uploaded yet</p>
                 </div>
               ) : (
+                <Accordion type="multiple" className="w-full">
+                  {documentCategories.map((category) => {
+                    const categoryDocs = supabaseDocuments.filter(doc => doc.category_id === category.id);
+                    if (categoryDocs.length === 0) return null;
+                    
+                    return (
+                      <AccordionItem key={category.id} value={category.id}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{category.name}</span>
+                            </div>
+                            <Badge variant="outline">{categoryDocs.length}</Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 pl-7 pt-2">
+                            {categoryDocs.map((doc) => (
+                              <div
+                                key={doc.id}
+                                className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                              >
+                                <div className="flex items-center gap-3 flex-1">
+                                  <div className="w-2 h-2 rounded-full bg-primary" />
+                                  <div className="flex-1">
+                                    <p className="text-sm font-medium">{doc.file_name}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {new Date(doc.uploaded_at).toLocaleDateString()}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => window.open(doc.file_url, '_blank')}
+                                  >
+                                    <Download className="h-4 w-4" />
+                                  </Button>
+                                  <Button
+                                    size="sm"
+                                    variant="ghost"
+                                    onClick={() => setDeleteDocumentId(doc.id)}
+                                  >
+                                    <Trash2 className="h-4 w-4 text-destructive" />
+                                  </Button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Firebase Documents (Legacy) */}
+          {documents.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Firebase Documents (Legacy)</CardTitle>
+              </CardHeader>
+              <CardContent>
                 <Accordion type="multiple" className="w-full">
                   {documents.map((category, idx) => (
                     <AccordionItem key={idx} value={`category-${idx}`}>
@@ -1182,7 +1312,6 @@ const SubsectionDetail = () => {
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
-                                {/* Firebase migration buttons hidden from UI */}
                               </div>
                             </div>
                           ))}
@@ -1191,9 +1320,32 @@ const SubsectionDetail = () => {
                     </AccordionItem>
                   ))}
                 </Accordion>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          )}
+
+          <AlertDialog open={deleteDocumentId !== null} onOpenChange={() => setDeleteDocumentId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Document</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this document? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => {
+                    const doc = supabaseDocuments.find(d => d.id === deleteDocumentId);
+                    if (doc) handleDeleteDocument(deleteDocumentId!, doc.file_name);
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* COC Docs & Metering Data Tab */}

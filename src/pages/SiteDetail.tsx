@@ -9,7 +9,8 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2 } from "lucide-react";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 
@@ -84,10 +85,28 @@ const SiteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
+  const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string}>>([]);
+  const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSiteData();
+    fetchSiteDocuments();
   }, [siteId]);
+
+  const fetchSiteDocuments = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('site_documents')
+        .select('id, file_name, file_url, category')
+        .eq('site_id', siteId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setSiteDocuments(data || []);
+    } catch (error) {
+      console.error("Error fetching site documents:", error);
+    }
+  };
 
   const fetchSiteData = async () => {
     try {
@@ -287,11 +306,58 @@ const SiteDetail = () => {
 
       toast.success(`Migrated: ${doc.name}`);
       await fetchSiteData(); // Refresh data
+      await fetchSiteDocuments();
     } catch (error) {
       console.error("Migration error:", error);
       toast.error("Failed to migrate document");
     } finally {
       setMigrating(null);
+    }
+  };
+
+  const handleDeleteSiteDocument = async (documentId: string, fileName: string) => {
+    try {
+      // Get document details first to delete from storage
+      const { data: doc, error: fetchError } = await supabase
+        .from('site_documents')
+        .select('file_url')
+        .eq('id', documentId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      // Extract file path from URL and delete from storage if it's in Supabase storage
+      if (doc?.file_url && doc.file_url.includes('supabase.co/storage')) {
+        const url = new URL(doc.file_url);
+        const pathParts = url.pathname.split('/');
+        const bucketIndex = pathParts.indexOf('documents');
+        if (bucketIndex !== -1) {
+          const filePath = pathParts.slice(bucketIndex + 1).join('/');
+          
+          const { error: storageError } = await supabase.storage
+            .from('documents')
+            .remove([filePath]);
+
+          if (storageError) {
+            console.error("Error deleting file from storage:", storageError);
+          }
+        }
+      }
+
+      // Delete document record
+      const { error: deleteError } = await supabase
+        .from('site_documents')
+        .delete()
+        .eq('id', documentId);
+
+      if (deleteError) throw deleteError;
+
+      toast.success(`${fileName} deleted successfully`);
+      fetchSiteDocuments();
+      setDeleteDocumentId(null);
+    } catch (error) {
+      console.error("Error deleting document:", error);
+      toast.error("Failed to delete document");
     }
   };
 
@@ -522,14 +588,14 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
-          {/* Supabase Documents */}
+          {/* Site Documents */}
           <Card>
             <CardHeader>
-              <CardTitle>Supabase Documents</CardTitle>
-              <CardDescription>Documents migrated to Supabase storage</CardDescription>
+              <CardTitle>Site Documents</CardTitle>
+              <CardDescription>Documents uploaded for this site</CardDescription>
             </CardHeader>
             <CardContent>
-              {documents.length === 0 ? (
+              {siteDocuments.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
@@ -537,21 +603,71 @@ const SiteDetail = () => {
                 </div>
               ) : (
                 <div className="space-y-2">
-                  {documents.map((doc, idx) => (
-                    <div key={idx} className="flex justify-between items-center p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <span className="font-medium">{doc.category}</span>
+                  {/* Group documents by category */}
+                  {Array.from(new Set(siteDocuments.map(d => d.category))).map((category) => {
+                    const categoryDocs = siteDocuments.filter(d => d.category === category);
+                    return (
+                      <div key={category} className="border rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-3">
+                          <div className="flex items-center gap-3">
+                            <FileText className="h-5 w-5 text-muted-foreground" />
+                            <span className="font-medium">{category}</span>
+                          </div>
+                          <Badge variant="secondary">{categoryDocs.length}</Badge>
+                        </div>
+                        <div className="space-y-2 pl-8">
+                          {categoryDocs.map((doc) => (
+                            <div key={doc.id} className="flex items-center justify-between p-2 rounded hover:bg-accent">
+                              <span className="text-sm">{doc.file_name}</span>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => window.open(doc.file_url, '_blank')}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => setDeleteDocumentId(doc.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                      <Badge variant="secondary">{doc.file_count}</Badge>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </CardContent>
           </Card>
 
-          {/* Firebase Documents - hidden from UI */}
+          <AlertDialog open={deleteDocumentId !== null} onOpenChange={() => setDeleteDocumentId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Document</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this document? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => {
+                    const doc = siteDocuments.find(d => d.id === deleteDocumentId);
+                    if (doc) handleDeleteSiteDocument(deleteDocumentId!, doc.file_name);
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         <TabsContent value="subsections" className="space-y-4">
