@@ -39,6 +39,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { UserPlus, Mail, Send, MoreVertical, Edit } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
 
 interface UserProfile {
   id: string;
@@ -46,6 +47,16 @@ interface UserProfile {
   full_name: string | null;
   status: string | null;
   role?: string;
+  phone?: string | null;
+  job_title?: string | null;
+  department?: string | null;
+  company?: string | null;
+  address?: string | null;
+  city?: string | null;
+  country?: string | null;
+  postal_code?: string | null;
+  bio?: string | null;
+  avatar_url?: string | null;
 }
 
 interface PendingInvite {
@@ -66,6 +77,18 @@ const Users = () => {
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
+  const [editFormData, setEditFormData] = useState({
+    full_name: "",
+    phone: "",
+    job_title: "",
+    department: "",
+    company: "",
+    address: "",
+    city: "",
+    country: "",
+    postal_code: "",
+    bio: "",
+  });
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -212,10 +235,29 @@ const Users = () => {
     onSuccess: () => {
       toast.success("User status updated successfully");
       queryClient.invalidateQueries({ queryKey: ["users"] });
-      setEditOpen(false);
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update status");
+    },
+  });
+
+  // Update user profile mutation
+  const updateProfileMutation = useMutation({
+    mutationFn: async ({ userId, profileData }: { userId: string; profileData: any }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update(profileData)
+        .eq("id", userId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("User profile updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditOpen(false);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update profile");
     },
   });
 
@@ -223,6 +265,18 @@ const Users = () => {
     setSelectedUser(user);
     setEditRole(user.role as "Admin" | "Moderator" | "User" | "Contractor");
     setEditStatus((user.status || "Active") as "Active" | "Inactive");
+    setEditFormData({
+      full_name: user.full_name || "",
+      phone: user.phone || "",
+      job_title: user.job_title || "",
+      department: user.department || "",
+      company: user.company || "",
+      address: user.address || "",
+      city: user.city || "",
+      country: user.country || "",
+      postal_code: user.postal_code || "",
+      bio: user.bio || "",
+    });
     setEditOpen(true);
   };
 
@@ -230,15 +284,20 @@ const Users = () => {
     if (!selectedUser) return;
 
     try {
-      await updateRoleMutation.mutateAsync({
-        userId: selectedUser.id,
-        newRole: editRole,
-      });
-      
-      await updateStatusMutation.mutateAsync({
-        userId: selectedUser.id,
-        newStatus: editStatus,
-      });
+      await Promise.all([
+        updateRoleMutation.mutateAsync({
+          userId: selectedUser.id,
+          newRole: editRole,
+        }),
+        updateStatusMutation.mutateAsync({
+          userId: selectedUser.id,
+          newStatus: editStatus,
+        }),
+        updateProfileMutation.mutateAsync({
+          userId: selectedUser.id,
+          profileData: editFormData,
+        }),
+      ]);
     } catch (error) {
       // Errors are handled by mutations
     }
@@ -467,47 +526,167 @@ const Users = () => {
 
       {/* Edit User Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
-        <DialogContent>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Edit User</DialogTitle>
             <DialogDescription>
-              Update user role and status
+              Update user information, role, and status
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>Name</Label>
-              <Input value={selectedUser?.full_name || "N/A"} disabled />
+            {/* Account Information */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Account Information</h3>
+              <div className="space-y-2">
+                <Label htmlFor="edit-email">Email</Label>
+                <Input id="edit-email" value={selectedUser?.email || ""} disabled className="bg-muted" />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-role">Role</Label>
+                  <Select value={editRole} onValueChange={(value: any) => setEditRole(value)}>
+                    <SelectTrigger id="edit-role">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Admin">Admin</SelectItem>
+                      <SelectItem value="Moderator">Moderator</SelectItem>
+                      <SelectItem value="User">User</SelectItem>
+                      <SelectItem value="Contractor">Contractor</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-status">Status</Label>
+                  <Select value={editStatus} onValueChange={(value: any) => setEditStatus(value)}>
+                    <SelectTrigger id="edit-status">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Active">Active</SelectItem>
+                      <SelectItem value="Inactive">Inactive</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <Input value={selectedUser?.email || ""} disabled />
+
+            {/* Personal Information */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Personal Information</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-full-name">Full Name</Label>
+                  <Input
+                    id="edit-full-name"
+                    value={editFormData.full_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
+                    placeholder="John Doe"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-phone">Phone Number</Label>
+                  <Input
+                    id="edit-phone"
+                    type="tel"
+                    value={editFormData.phone}
+                    onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
+                    placeholder="+1 (555) 123-4567"
+                  />
+                </div>
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Role</Label>
-              <Select value={editRole} onValueChange={(value: any) => setEditRole(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Admin">Admin</SelectItem>
-                  <SelectItem value="Moderator">Moderator</SelectItem>
-                  <SelectItem value="User">User</SelectItem>
-                  <SelectItem value="Contractor">Contractor</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Professional Information */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Professional Information</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-job-title">Job Title</Label>
+                  <Input
+                    id="edit-job-title"
+                    value={editFormData.job_title}
+                    onChange={(e) => setEditFormData({ ...editFormData, job_title: e.target.value })}
+                    placeholder="Senior Engineer"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-department">Department</Label>
+                  <Input
+                    id="edit-department"
+                    value={editFormData.department}
+                    onChange={(e) => setEditFormData({ ...editFormData, department: e.target.value })}
+                    placeholder="Engineering"
+                  />
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="edit-company">Company</Label>
+                <Input
+                  id="edit-company"
+                  value={editFormData.company}
+                  onChange={(e) => setEditFormData({ ...editFormData, company: e.target.value })}
+                  placeholder="Acme Corporation"
+                />
+              </div>
             </div>
-            <div className="space-y-2">
-              <Label>Status</Label>
-              <Select value={editStatus} onValueChange={(value: any) => setEditStatus(value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="Active">Active</SelectItem>
-                  <SelectItem value="Inactive">Inactive</SelectItem>
-                </SelectContent>
-              </Select>
+
+            {/* Location Information */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Location</h3>
+              <div className="space-y-2">
+                <Label htmlFor="edit-address">Street Address</Label>
+                <Input
+                  id="edit-address"
+                  value={editFormData.address}
+                  onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                  placeholder="123 Main Street"
+                />
+              </div>
+              <div className="grid grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-city">City</Label>
+                  <Input
+                    id="edit-city"
+                    value={editFormData.city}
+                    onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
+                    placeholder="New York"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-country">Country</Label>
+                  <Input
+                    id="edit-country"
+                    value={editFormData.country}
+                    onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
+                    placeholder="United States"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-postal-code">Postal Code</Label>
+                  <Input
+                    id="edit-postal-code"
+                    value={editFormData.postal_code}
+                    onChange={(e) => setEditFormData({ ...editFormData, postal_code: e.target.value })}
+                    placeholder="10001"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Additional Information */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Additional Information</h3>
+              <div className="space-y-2">
+                <Label htmlFor="edit-bio">Bio / Notes</Label>
+                <Textarea
+                  id="edit-bio"
+                  value={editFormData.bio}
+                  onChange={(e) => setEditFormData({ ...editFormData, bio: e.target.value })}
+                  placeholder="Additional notes about this user..."
+                  rows={3}
+                />
+              </div>
             </div>
           </div>
           <DialogFooter>
@@ -516,9 +695,9 @@ const Users = () => {
             </Button>
             <Button 
               onClick={handleSaveEdit}
-              disabled={updateRoleMutation.isPending || updateStatusMutation.isPending}
+              disabled={updateRoleMutation.isPending || updateStatusMutation.isPending || updateProfileMutation.isPending}
             >
-              {(updateRoleMutation.isPending || updateStatusMutation.isPending) ? "Saving..." : "Save Changes"}
+              {(updateRoleMutation.isPending || updateStatusMutation.isPending || updateProfileMutation.isPending) ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>

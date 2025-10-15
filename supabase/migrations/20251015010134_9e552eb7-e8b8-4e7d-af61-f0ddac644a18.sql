@@ -1,0 +1,12 @@
+-- Add additional fields to profiles table for comprehensive user information
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS phone TEXT,
+ADD COLUMN IF NOT EXISTS job_title TEXT,
+ADD COLUMN IF NOT EXISTS department TEXT,
+ADD COLUMN IF NOT EXISTS company TEXT,
+ADD COLUMN IF NOT EXISTS address TEXT,
+ADD COLUMN IF NOT EXISTS city TEXT,
+ADD COLUMN IF NOT EXISTS country TEXT,
+ADD COLUMN IF NOT EXISTS postal_code TEXT,
+ADD COLUMN IF NOT EXISTS bio TEXT,
+ADD COLUMN IF NOT EXISTS avatar_url TEXT;
