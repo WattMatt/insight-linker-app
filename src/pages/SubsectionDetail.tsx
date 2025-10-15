@@ -488,23 +488,24 @@ const SubsectionDetail = () => {
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
-            // Calculate logo size (24% of QR code size - increased by 20%)
-            const logoSize = size * 0.24;
-            const x = (size - logoSize) / 2;
-            const y = (size - logoSize) / 2;
-            const padding = 10;
+            // Calculate rectangular logo size (24% of QR code size, wider than tall)
+            const logoWidth = size * 0.24 * 1.5; // Make it 1.5x wider
+            const logoHeight = size * 0.24;
+            const x = (size - logoWidth) / 2;
+            const y = (size - logoHeight) / 2;
+            const padding = logoHeight * 0.1; // 10% of logo height
             
             // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
             ctx.fillRect(
               x - padding, 
               y - padding, 
-              logoSize + (padding * 2), 
-              logoSize + (padding * 2)
+              logoWidth + (padding * 2), 
+              logoHeight + (padding * 2)
             );
             
             // Draw logo
-            ctx.drawImage(img, x, y, logoSize, logoSize);
+            ctx.drawImage(img, x, y, logoWidth, logoHeight);
             
             // Convert canvas to data URL
             setQrCodeUrl(canvas.toDataURL());

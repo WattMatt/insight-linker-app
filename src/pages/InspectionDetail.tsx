@@ -296,21 +296,22 @@ const InspectionDetail = () => {
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
-            const logoSize = size * 0.24;
-            const x = (size - logoSize) / 2;
-            const y = (size - logoSize) / 2;
-            const padding = 8;
+            const logoWidth = size * 0.24 * 1.5; // Rectangular, wider than tall
+            const logoHeight = size * 0.24;
+            const x = (size - logoWidth) / 2;
+            const y = (size - logoHeight) / 2;
+            const padding = logoHeight * 0.1; // 10% of logo height
             
             // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
             ctx.fillRect(
               x - padding, 
               y - padding, 
-              logoSize + (padding * 2), 
-              logoSize + (padding * 2)
+              logoWidth + (padding * 2), 
+              logoHeight + (padding * 2)
             );
             
-            ctx.drawImage(img, x, y, logoSize, logoSize);
+            ctx.drawImage(img, x, y, logoWidth, logoHeight);
             setQrCodeUrl(canvas.toDataURL());
           };
           
