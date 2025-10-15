@@ -177,14 +177,20 @@ const ClientSites = () => {
               if (image.fileName.includes('site-image')) {
                 updateData.site_image_url = data.newUrl;
               } else if (image.fileName.includes('project-logo')) {
-                updateData.client_logo_url = data.newUrl;
+                updateData.site_image_url = data.newUrl; // Project logo is the main site image
               }
 
               if (Object.keys(updateData).length > 0) {
-                await supabase
+                console.log(`Updating site ${site.id} with:`, updateData);
+                const { error: updateError } = await supabase
                   .from('sites')
                   .update(updateData)
                   .eq('id', site.id);
+                
+                if (updateError) {
+                  console.error('Update error:', updateError);
+                  throw updateError;
+                }
               }
 
               successCount++;
