@@ -55,7 +55,8 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           
-          {/* Public QR Code Landing Page */}
+          {/* Public QR Code Landing Pages - both patterns supported */}
+          <Route path="/public/subsections/:subsectionId" element={<PublicSubsection />} />
           <Route path="/public/clients/:clientId/sites/:siteId/subsections/:subsectionId" element={<PublicSubsection />} />
           
           <Route

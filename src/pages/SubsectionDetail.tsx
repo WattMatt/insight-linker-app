@@ -439,8 +439,8 @@ const SubsectionDetail = () => {
 
   const generateQRCode = async () => {
     try {
-      // QR code uses the subsectionId directly from URL params which is the Supabase UUID
-      const url = `${window.location.origin}/public/clients/${clientId || 'unknown'}/sites/${siteId || 'unknown'}/subsections/${subsectionId}`;
+      // Simplified QR code URL - we can fetch all data from subsectionId
+      const url = `${window.location.origin}/public/subsections/${subsectionId}`;
       const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
       setQrCodeUrl(qrDataUrl);
     } catch (error) {
