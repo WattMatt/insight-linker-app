@@ -76,73 +76,46 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Fetch inspection from Supabase - try firebase_id first, then UUID
-      let inspData, inspError;
-      
-      // First try with firebase_id
-      const { data: fbData, error: fbError } = await supabase
+      // Fetch inspection - handle both UUID and firebase_id
+      const { data: inspData, error: inspError } = await supabase
         .from('inspections')
         .select(`
           *,
-          inspection_templates!template_id (
+          sites (
             id,
             name,
-            sections
+            address
           ),
-          sites!inner (
-            id,
-            name,
-            address,
-            client_id
-          ),
-          subsections!inner (
+          subsections (
             id,
             name
           )
         `)
-        .eq('firebase_id', inspectionId)
+        .or(`id.eq.${inspectionId},firebase_id.eq.${inspectionId}`)
         .maybeSingle();
-      
-      // If not found by firebase_id, try by UUID
-      if (!fbData) {
-        const { data: uuidData, error: uuidError } = await supabase
-          .from('inspections')
-          .select(`
-            *,
-            inspection_templates!template_id (
-              id,
-              name,
-              sections
-            ),
-            sites!inner (
-              id,
-              name,
-              address,
-              client_id
-            ),
-            subsections!inner (
-              id,
-              name
-            )
-          `)
-          .eq('id', inspectionId)
-          .maybeSingle();
-        
-        inspData = uuidData;
-        inspError = uuidError;
-      } else {
-        inspData = fbData;
-        inspError = fbError;
-      }
 
       if (inspError || !inspData) {
-        console.error("Error fetching inspection from Supabase:", inspError);
+        console.error("Error fetching inspection:", inspError);
         toast.error("Inspection not found");
         navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`);
         return;
       }
 
-      // Map Supabase data to inspection format
+      // Fetch template separately if template_id exists
+      let templateData = null;
+      if (inspData.template_id) {
+        const { data: template, error: templateError } = await supabase
+          .from('inspection_templates')
+          .select('*')
+          .eq('id', inspData.template_id)
+          .maybeSingle();
+
+        if (template && !templateError) {
+          templateData = template;
+        }
+      }
+
+      // Map inspection data
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
         date: inspData.inspection_date || '',
@@ -159,12 +132,21 @@ const InspectionDetail = () => {
       };
 
       setInspection(mappedInspection);
-      setSiteData({ siteName: inspData.sites.name, physicalAddress: inspData.sites.address });
-      setSubsectionData({ name: inspData.subsections.name });
+      
+      // Set site and subsection data
+      if (inspData.sites) {
+        setSiteData({ 
+          siteName: inspData.sites.name, 
+          physicalAddress: inspData.sites.address 
+        });
+      }
+      
+      if (inspData.subsections) {
+        setSubsectionData({ name: inspData.subsections.name });
+      }
 
-      // Fetch template from the joined data
-      if (inspData.inspection_templates && inspData.inspection_templates.sections) {
-        const templateData = inspData.inspection_templates;
+      // Set template if available
+      if (templateData && templateData.sections) {
         setTemplate({
           name: templateData.name,
           sections: templateData.sections as any
@@ -174,14 +156,16 @@ const InspectionDetail = () => {
         const firstSection = Object.keys(templateData.sections as any)[0];
         if (firstSection) {
           setActiveTab(firstSection);
+        } else {
+          setActiveTab('general');
         }
       } else {
         console.warn("No template found for inspection");
-        toast.error("Inspection template not found");
+        setActiveTab('general');
       }
 
       // Generate QR code
-      const url = `${window.location.origin}/public/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`;
+      const url = `${window.location.origin}/public/subsections/${inspData.subsection_id || subsectionId}`;
       const qrDataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2 });
       setQrCodeUrl(qrDataUrl);
     } catch (error) {
@@ -330,7 +314,7 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Update Supabase inspection using firebase_id
+      // Update inspection - handle both UUID and firebase_id
       const { error } = await supabase
         .from('inspections')
         .update({
@@ -344,10 +328,11 @@ const InspectionDetail = () => {
           contractor: inspection.contractor,
           testing_party: inspection.testingParty,
           location: inspection.location,
+          status: inspection.type,
           json_data: inspection.jsonData,
           updated_at: new Date().toISOString()
         })
-        .eq('firebase_id', inspectionId);
+        .or(`id.eq.${inspectionId},firebase_id.eq.${inspectionId}`);
 
       if (error) throw error;
 
