@@ -179,8 +179,11 @@ const SubsectionDetail = () => {
         console.error("Error fetching inspections:", inspectionsError);
       }
 
-      // Convert inspections array to object keyed by firebase_id (to match Firebase structure)
-      const inspectionsObj: Record<string, any> = {};
+      // Merge Firebase inspections with Supabase inspections
+      const firebaseInspections = data.inspections || {};
+      const inspectionsObj: Record<string, any> = { ...firebaseInspections };
+      
+      // Add Supabase inspections (they will override Firebase ones with same firebase_id)
       inspectionsData?.forEach(inspection => {
         const key = inspection.firebase_id || inspection.id;
         inspectionsObj[key] = {
@@ -192,7 +195,7 @@ const SubsectionDetail = () => {
         };
       });
 
-      // Merge Firebase data with Supabase inspections
+      // Set subsection with merged inspections
       setSubsection({
         ...data,
         inspections: inspectionsObj
