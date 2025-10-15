@@ -11,6 +11,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download } from "lucide-react";
 import { toast } from "sonner";
+import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 
 interface Site {
   id: string;
@@ -726,10 +727,11 @@ const SiteDetail = () => {
               <p className="text-sm text-muted-foreground mb-4">
                 Generate comprehensive site reports with all subsection data
               </p>
-              <Button>
-                <FileText className="mr-2 h-4 w-4" />
-                Download PDF
-              </Button>
+              <SiteSummaryReport 
+                siteId={site.id}
+                siteName={site.name}
+                clientName={site.clients.name}
+              />
             </CardContent>
           </Card>
         </TabsContent>
