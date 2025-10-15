@@ -682,9 +682,7 @@ const SubsectionDetail = () => {
                     >
                       <div>
                         <p className="font-medium">
-                          {inspection.templateId 
-                            ? (templateNameMap[inspection.templateId.toLowerCase()] || inspection.templateId)
-                            : (inspection.type || 'Inspection')}
+                          {inspection.title || inspection.type || 'Inspection'}
                         </p>
                         <p className="text-sm text-muted-foreground">
                           {inspection.date ? format(new Date(inspection.date), "dd MMMM yyyy") : "No date"}
@@ -848,9 +846,7 @@ const SubsectionDetail = () => {
                          <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">
-                            {inspection.templateId 
-                              ? (templateNameMap[inspection.templateId.toLowerCase()] || inspection.templateId)
-                              : (inspection.type || 'Inspection')}
+                            {inspection.title || inspection.type || 'Inspection'}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {inspection.date ? format(new Date(inspection.date), "dd MMMM yyyy") : "No date"}
