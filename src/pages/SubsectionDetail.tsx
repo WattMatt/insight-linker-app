@@ -69,23 +69,60 @@ const SubsectionDetail = () => {
   const [newInspectionType, setNewInspectionType] = useState("");
   const [newInspectionDate, setNewInspectionDate] = useState("");
   const [deleteInspectionId, setDeleteInspectionId] = useState<string | null>(null);
+  const [actualClientId, setActualClientId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (clientId && siteId && subsectionId) {
+    if (subsectionId) {
       fetchSubsectionData();
       generateQRCode();
     }
-  }, [clientId, siteId, subsectionId]);
+  }, [subsectionId]);
 
   const fetchSubsectionData = async () => {
     try {
       setLoading(true);
       
+      // First, fetch the subsection from Supabase to get the firebase_id and client info
+      const { data: supabaseSubsection, error: subsectionError } = await supabase
+        .from('subsections')
+        .select(`
+          id,
+          firebase_id,
+          site_id,
+          sites!inner (
+            id,
+            firebase_id,
+            client_id,
+            clients!inner (
+              id,
+              firebase_id
+            )
+          )
+        `)
+        .eq('id', subsectionId)
+        .maybeSingle();
+
+      if (subsectionError || !supabaseSubsection) {
+        console.error("Error fetching subsection from Supabase:", subsectionError);
+        toast.error("Subsection not found in database");
+        return;
+      }
+
+      // Extract firebase IDs and store the client ID
+      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
+      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
+      const firebaseSubsectionId = supabaseSubsection.firebase_id;
+      const supabaseClientId = supabaseSubsection.sites.clients.id;
+      
+      setActualClientId(supabaseClientId);
+
+      console.log('Firebase IDs:', { firebaseClientId, firebaseSiteId, firebaseSubsectionId });
+
       // Fetch subsection data from Firebase
-      const data = await readFirebaseData(`/clients/${clientId}/${siteId}/subsections/${subsectionId}`);
+      const data = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}`);
       
       if (!data) {
-        toast.error("Subsection not found");
+        toast.error("Subsection data not found in Firebase");
         return;
       }
 
@@ -95,7 +132,7 @@ const SubsectionDetail = () => {
       setCocValidationStatus(data.cocValidationStatus || '');
       
       // Fetch site info for header
-      const siteInfo = await readFirebaseData(`/clients/${clientId}/${siteId}`);
+      const siteInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}`);
       setSiteData(siteInfo);
       
       // Parse documents
@@ -225,7 +262,8 @@ const SubsectionDetail = () => {
 
   const generateQRCode = async () => {
     try {
-      const url = `${window.location.origin}/public/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`;
+      // QR code uses the subsectionId directly from URL params which is the Supabase UUID
+      const url = `${window.location.origin}/public/clients/${clientId || 'unknown'}/sites/${siteId || 'unknown'}/subsections/${subsectionId}`;
       const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
       setQrCodeUrl(qrDataUrl);
     } catch (error) {
@@ -249,6 +287,7 @@ const SubsectionDetail = () => {
     }
 
     try {
+      // siteId from URL is already the Supabase UUID, so we can use it directly
       const { error } = await supabase
         .from('inspections')
         .insert({
@@ -326,7 +365,7 @@ const SubsectionDetail = () => {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-muted-foreground">Subsection data not found</p>
-          <Button className="mt-4" onClick={() => navigate(`/clients/${clientId}/sites/${siteId}`)}>
+          <Button className="mt-4" onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}`)}>
             Back to Site
           </Button>
         </div>
@@ -345,7 +384,7 @@ const SubsectionDetail = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/clients/${clientId}/sites/${siteId}`)}>
+          <Button variant="ghost" size="icon" onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}`)}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -455,7 +494,7 @@ const SubsectionDetail = () => {
                     <div 
                       key={id} 
                       className="flex justify-between items-center p-3 border rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                      onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
                     >
                       <div>
                         <p className="font-medium">{inspection.type || 'Inspection'}</p>
@@ -601,7 +640,7 @@ const SubsectionDetail = () => {
                     >
                       <div 
                         className="flex items-center gap-3 flex-1 cursor-pointer"
-                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                        onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
                       >
                         <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
