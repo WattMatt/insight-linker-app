@@ -73,6 +73,12 @@ const FirebaseSync = () => {
     level: 'info' | 'success' | 'warning' | 'error';
     message: string;
   }>>([]);
+  const [migrationPreview, setMigrationPreview] = useState<{
+    templates: Array<{id: string; name: string; category: string}>;
+    subsectionMatches: Array<{subsection: string; template: string | null; category: string}>;
+    documentCategories: Set<string>;
+    inspectionTypes: Set<string>;
+  } | null>(null);
 
   const extractFileUrls = (obj: any, urls: Array<{url: string; type: string; path: string}> = [], path: string = ''): Array<{url: string; type: string; path: string}> => {
     if (!obj || typeof obj !== 'object') return urls;
@@ -103,11 +109,73 @@ const FirebaseSync = () => {
     try {
       toast.info("Scanning Firebase and Supabase...");
       
+      // Fetch inspection templates for preview
+      const { data: templates } = await supabase
+        .from('inspection_templates')
+        .select('id, name, category');
+      
       // Scan Firebase
       const firebaseData = await readFirebaseData("/clients");
       const firebaseEvents = await readFirebaseData("/scheduleEvents");
       const firebaseUsers = await readFirebaseData("/users");
       const firebaseConfig = await readFirebaseData("/app_config");
+      
+      // Analyze migration data for preview
+      const documentCategories = new Set<string>();
+      const inspectionTypes = new Set<string>();
+      const subsectionMatches: Array<{subsection: string; template: string | null; category: string}> = [];
+      
+      if (firebaseData) {
+        for (const [clientId, clientData] of Object.entries(firebaseData)) {
+          if (typeof clientData === 'object' && clientData !== null) {
+            for (const [siteKey, siteData] of Object.entries(clientData as Record<string, any>)) {
+              // Skip client-level properties
+              if (['name', 'clientName', 'email', 'phone', 'logo', 'logoUrl'].some(prop => 
+                siteKey.toLowerCase().includes(prop.toLowerCase()))) continue;
+              
+              if (typeof siteData === 'object' && siteData !== null) {
+                const siteObj = siteData as Record<string, any>;
+                // Check for documents
+                const docs = siteObj.documents || siteObj.Documents || siteObj.files || siteObj.Files;
+                if (docs && typeof docs === 'object') {
+                  Object.keys(docs).forEach(catKey => documentCategories.add(catKey));
+                }
+                
+                // Check subsections
+                const subsections = siteObj.subsections;
+                if (subsections && typeof subsections === 'object') {
+                  for (const [subId, subData] of Object.entries(subsections as Record<string, any>)) {
+                    const subObj = subData as Record<string, any>;
+                    const category = subObj?.category || subObj?.Category;
+                    const inspType = subObj?.inspectionType || subObj?.inspection_type;
+                    
+                    if (inspType) inspectionTypes.add(inspType);
+                    
+                    // Find matching template
+                    const searchTerm = inspType || category;
+                    const matchedTemplate = searchTerm && templates ? 
+                      templates.find(t => t.category?.toLowerCase().includes(searchTerm.toLowerCase())) : 
+                      null;
+                    
+                    subsectionMatches.push({
+                      subsection: subObj?.name || subObj?.Name || subId,
+                      template: matchedTemplate?.name || null,
+                      category: category || 'Unknown'
+                    });
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+      
+      setMigrationPreview({
+        templates: templates || [],
+        subsectionMatches: subsectionMatches.slice(0, 10), // Show first 10 for preview
+        documentCategories,
+        inspectionTypes
+      });
       
       if (!firebaseData) {
         toast.error("No data found in Firebase");
@@ -828,6 +896,84 @@ const FirebaseSync = () => {
               Scan complete! Review the status below and migrate missing data.
             </AlertDescription>
           </Alert>
+
+          {migrationPreview && (
+            <Card className="border-2 border-primary/20">
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Migration Preview
+                </CardTitle>
+                <CardDescription>
+                  Here's what will happen during migration
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div>
+                  <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                    <CheckCircle className="h-4 w-4 text-green-500" />
+                    Inspection Templates ({migrationPreview.templates.length})
+                  </h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {migrationPreview.templates.map(t => (
+                      <Badge key={t.id} variant="secondary" className="justify-start">
+                        {t.name} ({t.category})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+
+                {migrationPreview.subsectionMatches.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <AlertCircle className="h-4 w-4 text-blue-500" />
+                      Template Linkage Preview (showing first 10)
+                    </h4>
+                    <div className="space-y-1 text-xs">
+                      {migrationPreview.subsectionMatches.map((match, idx) => (
+                        <div key={idx} className="flex items-center justify-between p-2 rounded bg-muted/50">
+                          <span className="font-medium">{match.subsection}</span>
+                          {match.template ? (
+                            <Badge variant="default" className="text-xs">→ {match.template}</Badge>
+                          ) : (
+                            <Badge variant="outline" className="text-xs">No template match</Badge>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {migrationPreview.documentCategories.size > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <FileText className="h-4 w-4 text-purple-500" />
+                      Document Categories ({migrationPreview.documentCategories.size})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(migrationPreview.documentCategories).map(cat => (
+                        <Badge key={cat} variant="outline">{cat}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {migrationPreview.inspectionTypes.size > 0 && (
+                  <div>
+                    <h4 className="font-semibold text-sm mb-2 flex items-center gap-2">
+                      <ImageIcon className="h-4 w-4 text-orange-500" />
+                      Inspection Types Detected ({migrationPreview.inspectionTypes.size})
+                    </h4>
+                    <div className="flex flex-wrap gap-2">
+                      {Array.from(migrationPreview.inspectionTypes).map(type => (
+                        <Badge key={type} variant="secondary">{type}</Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
 
             <Alert>
               <AlertCircle className="h-4 w-4" />
