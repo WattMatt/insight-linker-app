@@ -33,21 +33,53 @@ serve(async (req) => {
     
     // Extract filename from URL or use provided path
     const urlParts = new URL(firebaseStorageUrl).pathname.split('/');
-    const filename = targetPath || decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]);
+    let filename = targetPath || decodeURIComponent(urlParts[urlParts.length - 1].split('?')[0]);
+    
+    // Remove any existing timestamp patterns to ensure consistency
+    filename = filename.replace(/-\d{13,}\./, '.');
 
-    console.log('File downloaded:', { filename, size: fileBlob.size, contentType });
+    console.log('Processing file:', { filename, size: fileBlob.size, contentType });
 
     // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
+    // Check if file already exists
+    const { data: existingFile } = await supabase.storage
+      .from(targetBucket)
+      .list(filename.split('/').slice(0, -1).join('/'), {
+        search: filename.split('/').pop()
+      });
+
+    if (existingFile && existingFile.length > 0) {
+      console.log('File already exists, skipping upload:', filename);
+      
+      // Get public URL for existing file
+      const { data: urlData } = supabase.storage
+        .from(targetBucket)
+        .getPublicUrl(filename);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          path: filename,
+          publicUrl: urlData.publicUrl,
+          skipped: true
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
     // Upload to Supabase Storage
     const { data, error } = await supabase.storage
       .from(targetBucket)
       .upload(filename, fileBlob, {
         contentType,
-        upsert: true,
+        upsert: false, // Don't upsert since we checked above
       });
 
     if (error) {

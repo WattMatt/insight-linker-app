@@ -24,7 +24,43 @@ Deno.serve(async (req) => {
 
     const { imageUrl, bucket, fileName }: MigrateImageRequest = await req.json();
 
-    console.log(`Migrating image: ${imageUrl} to ${bucket}/${fileName}`);
+    // Remove any timestamp patterns from filename to ensure consistency
+    const cleanFileName = fileName.replace(/-\d{13,}\./, '.');
+    
+    console.log(`Migrating image: ${imageUrl} to ${bucket}/${cleanFileName}`);
+    
+    // Check if file already exists
+    const folderPath = cleanFileName.split('/').slice(0, -1).join('/');
+    const fileNameOnly = cleanFileName.split('/').pop();
+    
+    const { data: existingFiles } = await supabase.storage
+      .from(bucket)
+      .list(folderPath, {
+        search: fileNameOnly
+      });
+
+    if (existingFiles && existingFiles.length > 0) {
+      console.log('File already exists, returning existing URL:', cleanFileName);
+      
+      const { data: urlData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(cleanFileName);
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          originalUrl: imageUrl,
+          newUrl: urlData.publicUrl,
+          bucket,
+          fileName: cleanFileName,
+          skipped: true
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
 
     // Download the image from Firebase
     const imageResponse = await fetch(imageUrl);
@@ -43,9 +79,9 @@ Deno.serve(async (req) => {
     // Upload to Supabase Storage
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from(bucket)
-      .upload(fileName, imageBuffer, {
+      .upload(cleanFileName, imageBuffer, {
         contentType,
-        upsert: true,
+        upsert: false, // Don't upsert since we checked above
       });
 
     if (uploadError) {
@@ -58,7 +94,7 @@ Deno.serve(async (req) => {
     // Get the public URL
     const { data: urlData } = supabase.storage
       .from(bucket)
-      .getPublicUrl(fileName);
+      .getPublicUrl(cleanFileName);
 
     const newUrl = urlData.publicUrl;
     console.log('New URL:', newUrl);
@@ -69,7 +105,7 @@ Deno.serve(async (req) => {
         originalUrl: imageUrl,
         newUrl,
         bucket,
-        fileName,
+        fileName: cleanFileName,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
