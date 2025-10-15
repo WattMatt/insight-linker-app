@@ -4,10 +4,12 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { readFirebaseData } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, CheckCircle, AlertCircle, FileText, Image as ImageIcon } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, FileText, Image as ImageIcon, Database } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { MeticulousMigration } from "@/lib/meticulousMigration";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
 interface MigrationStatus {
   clients: {
@@ -395,67 +397,48 @@ const FirebaseSync = () => {
     }
   };
 
-  const executeCompleteMigration = async () => {
-    if (!migrationStatus) return;
-    
+  const [migrationLogs, setMigrationLogs] = useState<Array<{
+    timestamp: string;
+    level: string;
+    message: string;
+  }>>([]);
+
+  const executeMeticulousMigration = async () => {
     setMigrating(true);
+    setMigrationLogs([]);
+    
     try {
-      const { user } = (await supabase.auth.getUser()).data;
-      if (!user) {
-        toast.error("You must be logged in to migrate data");
-        return;
-      }
-
-      toast.info("Starting complete migration with file transfer...");
+      toast.info("Starting meticulous client-by-client migration...");
       
-      // Migrate settings if needed
-      if (migrationStatus.settings.needsUpdate) {
-        toast.info("Migrating app settings...");
-        const { migrateAppSettings } = await import("@/lib/migration");
-        await migrateAppSettings();
-        toast.success("Settings migrated");
-      }
-
-      // Migrate clients if any
-      if (migrationStatus.clients.toMigrate.length > 0) {
-        await migrateClients();
-      }
-
-      // Migrate users if any
-      if (migrationStatus.users.toMigrate.length > 0) {
-        toast.info("Migrating users...");
-        const { migrateUsers } = await import("@/lib/migration");
-        const usersToMigrate = migrationStatus.users.toMigrate.map(u => ({
-          id: u.id,
-          email: u.email,
-          name: u.name
-        }));
-        await migrateUsers(usersToMigrate);
-        toast.success(`Migrated ${usersToMigrate.length} users`);
-      }
-
-      // Migrate calendar events if any
-      if (migrationStatus.calendarEvents.toMigrate > 0) {
-        toast.info("Migrating calendar events...");
-        const { migrateCalendarEvents } = await import("@/lib/migration");
-        const eventsResult = await migrateCalendarEvents();
+      const migration = new MeticulousMigration((log) => {
+        setMigrationLogs(prev => [...prev, log]);
         
-        if (eventsResult.migratedCount > 0) {
-          const message = eventsResult.skipped > 0 
-            ? `Migrated ${eventsResult.migratedCount} calendar events (${eventsResult.skipped} skipped)`
-            : `Migrated ${eventsResult.migratedCount} calendar events`;
-          toast.success(message);
+        // Show important logs as toasts
+        if (log.level === 'error') {
+          console.error(log.message, log.data);
+        } else if (log.level === 'success' && log.message.includes('created')) {
+          // Only toast for major milestones
         }
-      }
+      });
 
-      setMigrationProgress(null);
-      setMigrationComplete(true);
+      const result = await migration.migrateAll();
       
-      // Refresh counts to show updated data
-      toast.info("Refreshing counts...");
-      await scanComplete();
-      
-      toast.success("Migration complete! All data and files transferred to Supabase");
+      if (result.success) {
+        const stats = migration.getStats();
+        toast.success(
+          `Migration complete! Clients: ${stats.clients.migrated}/${stats.clients.total}, ` +
+          `Sites: ${stats.sites.migrated}/${stats.sites.total}, ` +
+          `Subsections: ${stats.subsections.migrated}/${stats.subsections.total}, ` +
+          `Images: ${stats.images.migrated}/${stats.images.total}, ` +
+          `Documents: ${stats.documents.migrated}/${stats.documents.total}`
+        );
+        setMigrationComplete(true);
+        
+        // Refresh scan
+        setTimeout(() => scanComplete(), 1000);
+      } else {
+        toast.error(`Migration failed: ${result.error}`);
+      }
       
     } catch (error: any) {
       console.error("Migration error:", error);
@@ -1174,7 +1157,7 @@ const FirebaseSync = () => {
                 </Alert>
                 
                 <Button 
-                  onClick={executeCompleteMigration} 
+                  onClick={executeMeticulousMigration} 
                   disabled={migrating}
                   size="lg"
                   className="w-full"
@@ -1185,7 +1168,10 @@ const FirebaseSync = () => {
                       Migrating...
                     </>
                   ) : (
-                    "Execute Complete Migration"
+                    <>
+                      <Database className="mr-2 h-4 w-4" />
+                      Execute Meticulous Migration
+                    </>
                   )}
                 </Button>
               </CardContent>
