@@ -802,6 +802,174 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateSubsectionDocuments = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('subsection_documents');
+    try {
+      toast.info("Migrating all subsection documents...");
+
+      // Fetch all clients with firebase_id
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, firebase_id, name')
+        .not('firebase_id', 'is', null);
+
+      if (clientsError) throw clientsError;
+      if (!clients || clients.length === 0) {
+        toast.info("No clients with Firebase ID found");
+        return;
+      }
+
+      let totalMigrated = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+
+      for (const client of clients) {
+        // Fetch all sites for this client with firebase_id
+        const { data: sites, error: sitesError } = await supabase
+          .from('sites')
+          .select('id, firebase_id, name')
+          .eq('client_id', client.id)
+          .not('firebase_id', 'is', null);
+
+        if (sitesError || !sites) continue;
+
+        for (const site of sites) {
+          // Fetch all subsections for this site with firebase_id
+          const { data: subsections, error: subsectionsError } = await supabase
+            .from('subsections')
+            .select('id, firebase_id, name')
+            .eq('site_id', site.id)
+            .not('firebase_id', 'is', null);
+
+          if (subsectionsError || !subsections) continue;
+
+          for (const subsection of subsections) {
+            setMigrationProgress({
+              stage: 'Migrating subsection documents',
+              current: totalMigrated + totalSkipped + totalErrors,
+              total: clients.length * 20, // rough estimate
+              percentage: 0,
+              currentItem: `${client.name} - ${site.name} - ${subsection.name}`,
+            });
+
+            try {
+              // Fetch Firebase documents using correct path
+              const fbSubsectionPath = `clients/${client.firebase_id}/${site.firebase_id}/subsections/${subsection.firebase_id}`;
+              const fbSubsectionData = await readFirebaseData(fbSubsectionPath);
+              if (!fbSubsectionData) continue;
+
+              const subsectionDocuments = fbSubsectionData.documents || fbSubsectionData.Documents || fbSubsectionData.files || fbSubsectionData.Files;
+              if (!subsectionDocuments || typeof subsectionDocuments !== 'object') continue;
+
+              // Iterate through categories and documents
+              for (const [categoryName, categoryDocs] of Object.entries(subsectionDocuments)) {
+                if (!categoryDocs || typeof categoryDocs !== 'object') continue;
+
+                // Get or create document category
+                let categoryId: string;
+                const { data: existingCategory } = await supabase
+                  .from('document_categories')
+                  .select('id')
+                  .eq('subsection_id', subsection.id)
+                  .eq('name', categoryName)
+                  .maybeSingle();
+
+                if (existingCategory) {
+                  categoryId = existingCategory.id;
+                } else {
+                  const { data: newCategory, error: categoryError } = await supabase
+                    .from('document_categories')
+                    .insert({ subsection_id: subsection.id, name: categoryName })
+                    .select('id')
+                    .single();
+
+                  if (categoryError) {
+                    console.error("Failed to create category:", categoryError);
+                    continue;
+                  }
+                  categoryId = newCategory.id;
+                }
+
+                for (const [docKey, docData] of Object.entries(categoryDocs as Record<string, any>)) {
+                  if (!docData || typeof docData !== 'object' || !(docData as any).url) continue;
+
+                  const fbDoc = docData as { url: string; name?: string };
+                  const fileName = fbDoc.name || docKey;
+
+                  // Check if already migrated
+                  const { data: existing } = await supabase
+                    .from('subsection_documents')
+                    .select('id')
+                    .eq('subsection_id', subsection.id)
+                    .eq('file_name', fileName)
+                    .maybeSingle();
+
+                  if (existing) {
+                    totalSkipped++;
+                    continue;
+                  }
+
+                  // Migrate the file using the correct Firebase path structure
+                  const { data: migrateData, error: migrateError } = await supabase.functions.invoke(
+                    'migrate-storage',
+                    {
+                      body: {
+                        firebaseStorageUrl: fbDoc.url,
+                        targetBucket: 'documents',
+                        targetPath: `subsections/${subsection.id}/${fileName}`
+                      }
+                    }
+                  );
+
+                  if (migrateError || !migrateData?.publicUrl) {
+                    console.error("Failed to migrate file:", fileName, migrateError);
+                    totalErrors++;
+                    continue;
+                  }
+
+                  // Create record in subsection_documents
+                  const { error: insertError } = await supabase
+                    .from('subsection_documents')
+                    .insert({
+                      subsection_id: subsection.id,
+                      category_id: categoryId,
+                      file_name: fileName,
+                      file_url: migrateData.publicUrl,
+                    });
+
+                  if (insertError) {
+                    console.error("Failed to insert document record:", insertError);
+                    totalErrors++;
+                  } else {
+                    totalMigrated++;
+                  }
+                }
+              }
+            } catch (error) {
+              console.error(`Error migrating documents for subsection ${subsection.name}:`, error);
+              totalErrors++;
+            }
+          }
+        }
+      }
+
+      setMigrationProgress(null);
+      toast.success(`Migrated ${totalMigrated} subsection documents (${totalSkipped} skipped, ${totalErrors} errors)`);
+      
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate subsection documents");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   const migrateStorageOnly = async () => {
     setMigratingSection('storage');
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
@@ -1762,9 +1930,27 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.storage.subsectionDocuments.supabase}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground italic mt-2">
-                    Migrated with Subsections
-                  </p>
+                  {migrationStatus.storage.subsectionDocuments.firebase > migrationStatus.storage.subsectionDocuments.supabase ? (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateSubsectionDocuments}
+                      disabled={migratingSection !== null || migrating}
+                    >
+                      {migratingSection === 'subsection_documents' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate All Subsection Docs'
+                      )}
+                    </Button>
+                  ) : (
+                    <p className="text-xs text-muted-foreground italic mt-2">
+                      All migrated
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
