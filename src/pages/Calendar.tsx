@@ -322,6 +322,7 @@ const Calendar = () => {
       {/* Year Navigation and Annual Calendar Grid */}
       <Card>
         <CardContent className="p-6">
+          <TooltipProvider>
           <div className="flex items-center justify-between mb-6">
             <Button variant="ghost" size="icon" onClick={previousYear}>
               <ChevronLeft className="h-5 w-5" />
@@ -399,36 +400,34 @@ const Calendar = () => {
                               const isFirstInMonth = isEventStart || !isSameMonth(eventStart, month);
                               
                               return (
-                                <TooltipProvider key={`${event.id}-${idx}`}>
-                                  <Tooltip>
-                                    <TooltipTrigger asChild>
-                                      <div
-                                        className={cn(
-                                          "absolute inset-0 z-0 transition-all cursor-pointer",
-                                          siteColor.bg,
-                                          "opacity-60 hover:opacity-90 hover:scale-105"
-                                        )}
-                                        style={{
-                                          top: `${20 + idx * 8}%`,
-                                          height: '6px',
-                                          left: isFirstInMonth ? '10%' : '0',
-                                          right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
-                                          borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
-                                        }}
-                                        onClick={(e) => {
-                                          e.stopPropagation();
-                                          setSelectedEvent(event);
-                                        }}
-                                      />
-                                    </TooltipTrigger>
-                                    <TooltipContent>
-                                      <div className="text-xs">
-                                        <p className="font-semibold">{event.site_name}</p>
-                                        <p className="text-muted-foreground">{event.title}</p>
-                                      </div>
-                                    </TooltipContent>
-                                  </Tooltip>
-                                </TooltipProvider>
+                                <Tooltip key={`${event.id}-${idx}`}>
+                                  <TooltipTrigger asChild>
+                                    <div
+                                      className={cn(
+                                        "absolute z-10 transition-all cursor-pointer rounded-sm",
+                                        siteColor.bg,
+                                        "opacity-70 hover:opacity-100"
+                                      )}
+                                      style={{
+                                        top: `${20 + idx * 8}%`,
+                                        height: '6px',
+                                        left: isFirstInMonth ? '10%' : '0',
+                                        right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
+                                        borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
+                                      }}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setSelectedEvent(event);
+                                      }}
+                                    />
+                                  </TooltipTrigger>
+                                  <TooltipContent side="top" className="z-50">
+                                    <div className="text-xs space-y-1">
+                                      <p className="font-semibold">{event.site_name}</p>
+                                      <p className="text-muted-foreground">{event.title}</p>
+                                    </div>
+                                  </TooltipContent>
+                                </Tooltip>
                               );
                             })}
                           </div>
@@ -449,6 +448,7 @@ const Calendar = () => {
               );
             })}
           </div>
+          </TooltipProvider>
         </CardContent>
       </Card>
 
