@@ -134,11 +134,13 @@ export class MeticulousMigration {
         .eq('firebase_id', firebaseId)
         .maybeSingle();
       
+      let clientId: string;
+      
       if (existing) {
-        this.log('warning', `Client ${firebaseId} already exists, skipping`);
-        this.stats.clients.failed++;
-        return null;
-      }
+        this.log('info', `Client ${firebaseId} already exists, using existing client`);
+        clientId = existing.id;
+        // Don't increment migrated count, but continue to process sites
+      } else {
 
       // Extract client logo
       const logoUrl = fbData.logoUrl || fbData.logo_url || fbData.LogoUrl || fbData.logo;
@@ -181,32 +183,34 @@ export class MeticulousMigration {
         }
       }
 
-      // Create client
-      const clientInsertData = {
-        name: fbData.name || fbData.clientName || fbData.Name || firebaseId,
-        contact_person: fbData.contactPerson || fbData.contact_person || null,
-        email: fbData.email || fbData.Email || null,
-        phone: fbData.phone || fbData.Phone || null,
-        logo_url: migratedLogoUrl,
-        company_name: fbData.companyName || fbData.company_name || fbData.name || null,
-        firebase_id: firebaseId,
-        created_by: userId,
-      };
+        // Create client (only if not existing)
+        const clientInsertData = {
+          name: fbData.name || fbData.clientName || fbData.Name || firebaseId,
+          contact_person: fbData.contactPerson || fbData.contact_person || null,
+          email: fbData.email || fbData.Email || null,
+          phone: fbData.phone || fbData.Phone || null,
+          logo_url: migratedLogoUrl,
+          company_name: fbData.companyName || fbData.company_name || fbData.name || null,
+          firebase_id: firebaseId,
+          created_by: userId,
+        };
 
-      const { data: newClient, error: clientError } = await supabase
-        .from('clients')
-        .insert([clientInsertData])
-        .select()
-        .single();
+        const { data: newClient, error: clientError } = await supabase
+          .from('clients')
+          .insert([clientInsertData])
+          .select()
+          .single();
 
-      if (clientError || !newClient) {
-        this.stats.clients.failed++;
-        this.log('error', `✗ Failed to create client: ${clientError?.message}`);
-        return null;
+        if (clientError || !newClient) {
+          this.stats.clients.failed++;
+          this.log('error', `✗ Failed to create client: ${clientError?.message}`);
+          return null;
+        }
+
+        this.stats.clients.migrated++;
+        this.log('success', `✓ Client created: ${newClient.id}`);
+        clientId = newClient.id;
       }
-
-      this.stats.clients.migrated++;
-      this.log('success', `✓ Client created: ${newClient.id}`);
 
       // Find sites - check multiple possible locations
       let sitesToMigrate: Record<string, any> = {};
@@ -240,10 +244,10 @@ export class MeticulousMigration {
         const siteData = sitesToMigrate[siteId];
         
         this.log('info', `\n  SITE ${siteIndex + 1}/${siteIds.length}: ${siteId}`);
-        await this.migrateSite(siteId, siteData, newClient.id, userId);
+        await this.migrateSite(siteId, siteData, clientId, userId);
       }
 
-      return newClient;
+      return { id: clientId };
       
     } catch (error: any) {
       this.stats.clients.failed++;
@@ -254,8 +258,21 @@ export class MeticulousMigration {
 
   private async migrateSite(firebaseId: string, fbData: any, clientId: string, userId: string) {
     try {
-      // Log all site fields
-      this.log('info', '  Site Firebase fields:', Object.keys(fbData));
+      // Check if site already exists
+      const { data: existingSite } = await supabase
+        .from('sites')
+        .select('id')
+        .eq('firebase_id', firebaseId)
+        .maybeSingle();
+      
+      let siteId: string;
+      
+      if (existingSite) {
+        this.log('info', `  Site ${firebaseId} already exists, using existing site`);
+        siteId = existingSite.id;
+      } else {
+        // Log all site fields
+        this.log('info', '  Site Firebase fields:', Object.keys(fbData));
       
       // Extract and migrate site image
       const siteImageUrl = fbData.siteImageUrl || fbData.site_image_url || fbData.imageUrl || fbData.image;
@@ -337,37 +354,39 @@ export class MeticulousMigration {
         }
       }
 
-      // Create site
-      const siteInsertData = {
-        name: fbData.name || fbData.siteName || fbData.Name || firebaseId,
-        address: fbData.address || fbData.physicalAddress || fbData.Address || null,
-        site_type: fbData.siteType || fbData.site_type || fbData.type || null,
-        client_id: clientId,
-        firebase_id: firebaseId,
-        created_by: userId,
-        supply_authority: fbData.supplyAuthority || fbData.supply_authority || null,
-        nominated_max_demand: fbData.nominatedMaxDemand || fbData.nominated_max_demand || null,
-        consultant_name: fbData.consultantName || fbData.consultant_name || null,
-        consultant_company: fbData.consultantCompany || fbData.consultant_company || null,
-        consultant_contact: fbData.consultantContact || fbData.consultant_contact || null,
-        site_image_url: migratedSiteImageUrl,
-        client_logo_url: migratedClientLogoUrl,
-      };
+        // Create site
+        const siteInsertData = {
+          name: fbData.name || fbData.siteName || fbData.Name || firebaseId,
+          address: fbData.address || fbData.physicalAddress || fbData.Address || null,
+          site_type: fbData.siteType || fbData.site_type || fbData.type || null,
+          client_id: clientId,
+          firebase_id: firebaseId,
+          created_by: userId,
+          supply_authority: fbData.supplyAuthority || fbData.supply_authority || null,
+          nominated_max_demand: fbData.nominatedMaxDemand || fbData.nominated_max_demand || null,
+          consultant_name: fbData.consultantName || fbData.consultant_name || null,
+          consultant_company: fbData.consultantCompany || fbData.consultant_company || null,
+          consultant_contact: fbData.consultantContact || fbData.consultant_contact || null,
+          site_image_url: migratedSiteImageUrl,
+          client_logo_url: migratedClientLogoUrl,
+        };
 
-      const { data: newSite, error: siteError } = await supabase
-        .from('sites')
-        .insert([siteInsertData])
-        .select()
-        .single();
+        const { data: newSite, error: siteError } = await supabase
+          .from('sites')
+          .insert([siteInsertData])
+          .select()
+          .single();
 
-      if (siteError || !newSite) {
-        this.stats.sites.failed++;
-        this.log('error', `  ✗ Failed to create site: ${siteError?.message}`);
-        return null;
+        if (siteError || !newSite) {
+          this.stats.sites.failed++;
+          this.log('error', `  ✗ Failed to create site: ${siteError?.message}`);
+          return null;
+        }
+
+        this.stats.sites.migrated++;
+        this.log('success', `  ✓ Site created: ${newSite.id}`);
+        siteId = newSite.id;
       }
-
-      this.stats.sites.migrated++;
-      this.log('success', `  ✓ Site created: ${newSite.id}`);
 
       // Migrate site documents
       const siteDocuments = fbData.documents || fbData.Documents || fbData.files || fbData.Files;
@@ -376,7 +395,7 @@ export class MeticulousMigration {
         this.log('info', `  Found ${docIds.length} site documents`);
         
         for (const docId of docIds) {
-          await this.migrateSiteDocument(docId, siteDocuments[docId], newSite.id, userId);
+          await this.migrateSiteDocument(docId, siteDocuments[docId], siteId, userId);
         }
       }
 
@@ -392,11 +411,11 @@ export class MeticulousMigration {
           const subsectionData = subsections[subsectionId];
           
           this.log('info', `\n    SUBSECTION ${subIndex + 1}/${subsectionIds.length}: ${subsectionId}`);
-          await this.migrateSubsection(subsectionId, subsectionData, newSite.id, userId);
+          await this.migrateSubsection(subsectionId, subsectionData, siteId, userId);
         }
       }
 
-      return newSite;
+      return { id: siteId };
       
     } catch (error: any) {
       this.stats.sites.failed++;
