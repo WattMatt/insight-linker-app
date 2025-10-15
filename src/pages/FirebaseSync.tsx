@@ -672,6 +672,136 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateSiteDocuments = async () => {
+    if (!migrationStatus) return;
+    
+    setMigratingSection('site_documents');
+    try {
+      toast.info("Migrating all site documents...");
+
+      // Fetch all clients with firebase_id
+      const { data: clients, error: clientsError } = await supabase
+        .from('clients')
+        .select('id, firebase_id, name')
+        .not('firebase_id', 'is', null);
+
+      if (clientsError) throw clientsError;
+      if (!clients || clients.length === 0) {
+        toast.info("No clients with Firebase ID found");
+        return;
+      }
+
+      let totalMigrated = 0;
+      let totalSkipped = 0;
+      let totalErrors = 0;
+
+      for (const client of clients) {
+        // Fetch all sites for this client with firebase_id
+        const { data: sites, error: sitesError } = await supabase
+          .from('sites')
+          .select('id, firebase_id, name')
+          .eq('client_id', client.id)
+          .not('firebase_id', 'is', null);
+
+        if (sitesError || !sites) continue;
+
+        for (const site of sites) {
+          setMigrationProgress({
+            stage: 'Migrating site documents',
+            current: totalMigrated + totalSkipped + totalErrors,
+            total: clients.length * 10, // rough estimate
+            percentage: 0,
+            currentItem: `${client.name} - ${site.name}`,
+          });
+
+          try {
+            // Fetch Firebase documents using correct path
+            const fbSiteData = await readFirebaseData(`clients/${client.firebase_id}/${site.firebase_id}`);
+            if (!fbSiteData) continue;
+
+            const siteDocuments = fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
+            if (!siteDocuments || typeof siteDocuments !== 'object') continue;
+
+            // Iterate through categories and documents
+            for (const [categoryName, categoryDocs] of Object.entries(siteDocuments)) {
+              if (!categoryDocs || typeof categoryDocs !== 'object') continue;
+
+              for (const [docKey, docData] of Object.entries(categoryDocs as Record<string, any>)) {
+                if (!docData || typeof docData !== 'object' || !(docData as any).url) continue;
+
+                const fbDoc = docData as { url: string; name?: string };
+
+                // Check if already migrated
+                const { data: existing } = await supabase
+                  .from('site_documents')
+                  .select('id')
+                  .eq('site_id', site.id)
+                  .eq('file_url', fbDoc.url)
+                  .maybeSingle();
+
+                if (existing) {
+                  totalSkipped++;
+                  continue;
+                }
+
+                // Migrate the file
+                const { data: migrateData, error: migrateError } = await supabase.functions.invoke(
+                  'migrate-storage',
+                  {
+                    body: {
+                      firebaseStorageUrl: fbDoc.url,
+                      targetBucket: 'documents',
+                      targetPath: `sites/${site.id}/${categoryName}/${fbDoc.name || docKey}`
+                    }
+                  }
+                );
+
+                if (migrateError || !migrateData?.publicUrl) {
+                  console.error("Failed to migrate file:", migrateError);
+                  totalErrors++;
+                  continue;
+                }
+
+                // Create record in site_documents
+                const { error: insertError } = await supabase
+                  .from('site_documents')
+                  .insert({
+                    site_id: site.id,
+                    file_name: fbDoc.name || docKey,
+                    file_url: migrateData.publicUrl,
+                    category: categoryName,
+                  });
+
+                if (insertError) {
+                  console.error("Failed to insert document record:", insertError);
+                  totalErrors++;
+                } else {
+                  totalMigrated++;
+                }
+              }
+            }
+          } catch (error) {
+            console.error(`Error migrating documents for site ${site.name}:`, error);
+            totalErrors++;
+          }
+        }
+      }
+
+      setMigrationProgress(null);
+      toast.success(`Migrated ${totalMigrated} site documents (${totalSkipped} skipped, ${totalErrors} errors)`);
+      
+      setTimeout(async () => {
+        await scanComplete();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Migration error:", error);
+      toast.error(error.message || "Failed to migrate site documents");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   const migrateStorageOnly = async () => {
     setMigratingSection('storage');
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
@@ -1589,9 +1719,28 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.storage.siteDocuments.supabase}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground italic mt-2">
-                    Migrated with Sites
-                  </p>
+                  {migrationStatus.storage.siteDocuments.firebase > migrationStatus.storage.siteDocuments.supabase && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateSiteDocuments}
+                      disabled={migratingSection !== null || migrating}
+                    >
+                      {migratingSection === 'site_documents' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate All Site Docs'
+                      )}
+                    </Button>
+                  )}
+                  {migrationStatus.storage.siteDocuments.firebase === migrationStatus.storage.siteDocuments.supabase && (
+                    <p className="text-xs text-muted-foreground italic mt-2">
+                      All migrated
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
