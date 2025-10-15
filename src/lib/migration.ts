@@ -719,15 +719,13 @@ export const migrateUsers = async (
  */
 export const sendUserInvite = async (email: string, fullName: string): Promise<{ success: boolean; error?: string }> => {
   try {
-    const { error } = await supabase.auth.admin.inviteUserByEmail(
-      email,
-      {
-        data: {
-          full_name: fullName,
-        },
-        redirectTo: `${window.location.origin}/`
-      }
-    );
+    const { data, error } = await supabase.functions.invoke('invite-user', {
+      body: {
+        email,
+        fullName,
+        role: 'User', // Default role for pending invites
+      },
+    });
 
     if (error) {
       return { success: false, error: error.message };
