@@ -296,14 +296,19 @@ const InspectionDetail = () => {
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
-            const logoSize = size * 0.2;
+            const logoSize = size * 0.24;
             const x = (size - logoSize) / 2;
             const y = (size - logoSize) / 2;
+            const padding = 8;
             
+            // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(size / 2, size / 2, logoSize / 2 + 6, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.fillRect(
+              x - padding, 
+              y - padding, 
+              logoSize + (padding * 2), 
+              logoSize + (padding * 2)
+            );
             
             ctx.drawImage(img, x, y, logoSize, logoSize);
             setQrCodeUrl(canvas.toDataURL());

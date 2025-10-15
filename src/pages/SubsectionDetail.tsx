@@ -488,16 +488,20 @@ const SubsectionDetail = () => {
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
-            // Calculate logo size (about 20% of QR code size)
-            const logoSize = size * 0.2;
+            // Calculate logo size (24% of QR code size - increased by 20%)
+            const logoSize = size * 0.24;
             const x = (size - logoSize) / 2;
             const y = (size - logoSize) / 2;
+            const padding = 10;
             
-            // Draw white background circle for logo
+            // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
-            ctx.beginPath();
-            ctx.arc(size / 2, size / 2, logoSize / 2 + 8, 0, Math.PI * 2);
-            ctx.fill();
+            ctx.fillRect(
+              x - padding, 
+              y - padding, 
+              logoSize + (padding * 2), 
+              logoSize + (padding * 2)
+            );
             
             // Draw logo
             ctx.drawImage(img, x, y, logoSize, logoSize);
