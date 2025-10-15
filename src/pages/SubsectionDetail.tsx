@@ -1059,35 +1059,7 @@ const SubsectionDetail = () => {
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
-                                {migratedDocs.has(`${category.name}-${file.name}`) ? (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    disabled
-                                    className="cursor-not-allowed opacity-60"
-                                  >
-                                    Migrated
-                                  </Button>
-                                ) : (
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
-                                    disabled={migratingDocs.has(`${category.name}-${file.name}`)}
-                                  >
-                                    {migratingDocs.has(`${category.name}-${file.name}`) ? (
-                                      <>
-                                        <Upload className="h-4 w-4 mr-1 animate-pulse" />
-                                        Migrating...
-                                      </>
-                                    ) : (
-                                      <>
-                                        <Upload className="h-4 w-4 mr-1" />
-                                        Migrate
-                                      </>
-                                    )}
-                                  </Button>
-                                )}
+                                {/* Firebase migration buttons hidden from UI */}
                               </div>
                             </div>
                           ))}

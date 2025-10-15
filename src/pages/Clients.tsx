@@ -277,16 +277,7 @@ const Clients = () => {
             Managing {firebaseCount} Firebase and {supabaseCount} Supabase clients
           </p>
         </div>
-        {firebaseCount > 0 && (
-          <Button
-            onClick={() => setBulkMigrationOpen(true)}
-            disabled={migrating}
-            variant="outline"
-          >
-            <Download className="mr-2 h-4 w-4" />
-            Migrate All from Firebase ({firebaseCount})
-          </Button>
-        )}
+        {/* Firebase migration button hidden from UI */}
       </div>
 
       {/* Migration Progress */}

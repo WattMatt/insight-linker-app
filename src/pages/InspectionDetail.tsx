@@ -638,67 +638,7 @@ const InspectionDetail = () => {
                     <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-xs truncate opacity-0 group-hover:opacity-100 transition-opacity">
                       {img.name}
                     </div>
-                    {isFirebaseUrl && (
-                      <Button
-                        size="sm"
-                        variant="secondary"
-                        className="absolute top-1 left-1 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={async () => {
-                          setMigratingImages(prev => new Set(prev).add(migrateKey));
-                          try {
-                            const response = await fetch(img.url);
-                            const blob = await response.blob();
-                            const fileExt = img.url.split('.').pop()?.split('?')[0] || 'jpg';
-                            const fileName = `${inspectionId}/${sectionKey}/${img.id}.${fileExt}`;
-                            
-                            const { data, error } = await supabase.storage
-                              .from('inspection-photos')
-                              .upload(fileName, blob);
-
-                            if (error) throw error;
-
-                            const { data: urlData } = supabase.storage
-                              .from('inspection-photos')
-                              .getPublicUrl(data.path);
-
-                            // Update jsonData with new URL
-                            setInspection(prev => {
-                              if (!prev) return null;
-                              const jsonData = prev.jsonData || {};
-                              const sectionData = jsonData[sectionKey] || {};
-                              
-                              return {
-                                ...prev,
-                                jsonData: {
-                                  ...jsonData,
-                                  [sectionKey]: {
-                                    ...sectionData,
-                                    [img.id]: {
-                                      ...sectionData[img.id],
-                                      url: urlData.publicUrl
-                                    }
-                                  }
-                                }
-                              };
-                            });
-
-                            toast.success("Image migrated successfully");
-                          } catch (error) {
-                            console.error("Error migrating image:", error);
-                            toast.error("Failed to migrate image");
-                          } finally {
-                            setMigratingImages(prev => {
-                              const newSet = new Set(prev);
-                              newSet.delete(migrateKey);
-                              return newSet;
-                            });
-                          }
-                        }}
-                        disabled={isMigrating}
-                      >
-                        {isMigrating ? "Migrating..." : "Migrate"}
-                      </Button>
-                    )}
+                    {/* Firebase migration button hidden from UI */}
                   </div>
                 );
               })}
@@ -777,17 +717,7 @@ const InspectionDetail = () => {
                           alt={`Photo ${index + 1}`}
                           className="w-full h-32 object-cover rounded border"
                         />
-                        {isFirebaseUrl && (
-                          <Button
-                            size="sm"
-                            variant="secondary"
-                            className="absolute bottom-1 left-1 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleMigrateImage(sectionKey, itemKey, photo, index)}
-                            disabled={isMigrating}
-                          >
-                            {isMigrating ? "Migrating..." : "Migrate"}
-                          </Button>
-                        )}
+                        {/* Firebase migration button hidden from UI */}
                         <Button
                           size="icon"
                           variant="destructive"

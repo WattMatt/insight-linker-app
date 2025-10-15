@@ -532,8 +532,8 @@ const SiteDetail = () => {
               {documents.length === 0 ? (
                 <div className="text-center py-8">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No documents in Supabase yet</h3>
-                  <p className="text-muted-foreground text-sm">Migrate documents from Firebase below</p>
+                  <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
+                  <p className="text-muted-foreground text-sm">Upload documents to get started</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -551,40 +551,7 @@ const SiteDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Firebase Documents */}
-          {firebaseDocuments.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Firebase Documents</CardTitle>
-                <CardDescription>
-                  Documents stored in Firebase - click migrate to copy to Supabase
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {firebaseDocuments.map((doc) => (
-                    <div key={doc.fbKey} className="flex justify-between items-center p-4 border rounded-lg">
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium">{doc.name}</p>
-                          <p className="text-sm text-muted-foreground">{doc.category}</p>
-                        </div>
-                      </div>
-                      <Button
-                        size="sm"
-                        onClick={() => migrateDocument(doc)}
-                        disabled={migrating === doc.fbKey}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        {migrating === doc.fbKey ? "Migrating..." : "Migrate"}
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
+          {/* Firebase Documents - hidden from UI */}
         </TabsContent>
 
         <TabsContent value="subsections" className="space-y-4">
