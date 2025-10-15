@@ -45,12 +45,21 @@ interface DocumentFile {
   uploadedAt?: string;
 }
 
+interface SiteDocument {
+  id: string;
+  file_name: string;
+  file_url: string;
+  category: string;
+  created_at: string;
+}
+
 const PublicSubsection = () => {
   const { subsectionId } = useParams(); // clientId and siteId are in the URL but not needed since we fetch from Supabase
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
+  const [siteDocuments, setSiteDocuments] = useState<SiteDocument[]>([]);
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
 
@@ -109,7 +118,7 @@ const PublicSubsection = () => {
       setSiteData(subsectionData.sites);
       setClientData(subsectionData.sites.clients);
 
-      // Fetch documents organized by categories
+      // Fetch subsection documents organized by categories
       const { data: categoriesData, error: categoriesError } = await supabase
         .from('document_categories')
         .select(`
@@ -128,7 +137,6 @@ const PublicSubsection = () => {
 
       if (categoriesError) {
         console.error("Error fetching categories:", categoriesError);
-        return;
       }
 
       // Transform data to match DocumentCategory interface
@@ -144,6 +152,20 @@ const PublicSubsection = () => {
         }));
 
       setDocuments(transformedDocs);
+
+      // Fetch site-level documents
+      const { data: siteDocsData, error: siteDocsError } = await supabase
+        .from('site_documents')
+        .select('*')
+        .eq('site_id', subsectionData.sites.id)
+        .order('category', { ascending: true })
+        .order('created_at', { ascending: false });
+
+      if (siteDocsError) {
+        console.error("Error fetching site documents:", siteDocsError);
+      } else {
+        setSiteDocuments(siteDocsData || []);
+      }
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -243,9 +265,9 @@ const PublicSubsection = () => {
           </CardContent>
         </Card>
 
-        {/* Document Categories */}
+        {/* Subsection Document Categories */}
         {documents.map((category, idx) => (
-          <Card key={idx} className="mb-6 shadow-sm">
+          <Card key={`subsection-${idx}`} className="mb-6 shadow-sm">
             <CardHeader className="pb-3">
               <CardTitle className="text-base font-semibold">{category.name}</CardTitle>
             </CardHeader>
@@ -279,11 +301,55 @@ const PublicSubsection = () => {
           </Card>
         ))}
 
-        {documents.length === 0 && (
+        {/* Site-level Documents grouped by category */}
+        {Object.entries(
+          siteDocuments.reduce((acc, doc) => {
+            if (!acc[doc.category]) {
+              acc[doc.category] = [];
+            }
+            acc[doc.category].push(doc);
+            return acc;
+          }, {} as Record<string, SiteDocument[]>)
+        ).map(([category, docs]) => (
+          <Card key={`site-${category}`} className="mb-6 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">{category}</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-2">
+              {docs.map((doc) => (
+                <div
+                  key={doc.id}
+                  className="flex items-center justify-between py-3 border-b last:border-b-0"
+                >
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{doc.file_name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Uploaded on {new Date(doc.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                      </p>
+                    </div>
+                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="ml-2 flex-shrink-0"
+                    onClick={() => handleDownload(doc.file_url, doc.file_name)}
+                  >
+                    <Download className="h-4 w-4 mr-1" />
+                    <span className="text-xs">Download</span>
+                  </Button>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        ))}
+
+        {documents.length === 0 && siteDocuments.length === 0 && (
           <Card>
             <CardContent className="py-12 text-center">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
-              <p className="text-muted-foreground">No documents available for this subsection</p>
+              <p className="text-muted-foreground">No documents available</p>
             </CardContent>
           </Card>
         )}
