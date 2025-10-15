@@ -185,68 +185,59 @@ const PublicSubsection = () => {
       {/* Header with branding */}
       <header className="bg-white border-b shadow-sm">
         <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-xl font-bold">{companySettings?.company_name || 'Watson Mattheus'}</h1>
-            {(clientData.logo_url || companySettings?.company_logo_url) && (
-              <img 
-                src={clientData.logo_url || companySettings?.company_logo_url || ''} 
-                alt="Company Logo" 
-                className="h-10 object-contain" 
-              />
-            )}
+          <div className="flex items-center justify-center">
+            <h1 className="text-lg font-semibold text-center">{companySettings?.company_name || 'Watson Mattheus'}</h1>
           </div>
         </div>
       </header>
 
       {/* Hero section with geometric pattern */}
-      <div className="relative bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 text-white py-16 overflow-hidden">
-        <div className="absolute inset-0 opacity-10">
+      <div className="relative bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 text-white py-12 overflow-hidden">
+        <div className="absolute inset-0 opacity-20">
           <svg className="w-full h-full" xmlns="http://www.w3.org/2000/svg">
             <defs>
-              <pattern id="geometric" x="0" y="0" width="100" height="100" patternUnits="userSpaceOnUse">
-                <circle cx="25" cy="25" r="20" fill="#fbbf24" opacity="0.5"/>
-                <polygon points="75,15 85,35 65,35" fill="#10b981" opacity="0.5"/>
-                <rect x="50" y="55" width="30" height="30" fill="#ef4444" opacity="0.5"/>
+              <pattern id="geometric" x="0" y="0" width="120" height="120" patternUnits="userSpaceOnUse">
+                <circle cx="30" cy="30" r="25" fill="#d4a574" opacity="0.6"/>
+                <polygon points="90,20 105,50 75,50" fill="#4a7c59" opacity="0.6"/>
+                <polygon points="30,80 45,110 15,110" fill="#8b4513" opacity="0.6"/>
+                <rect x="70" y="70" width="35" height="35" fill="#c85a3e" opacity="0.6"/>
               </pattern>
             </defs>
             <rect width="100%" height="100%" fill="url(#geometric)"/>
           </svg>
         </div>
         <div className="container mx-auto px-4 text-center relative z-10">
-          <h2 className="text-4xl font-bold mb-2">{siteData.name}</h2>
-          <p className="text-slate-200 text-lg">{subsection.name}</p>
+          <h2 className="text-3xl font-bold mb-1">{siteData.name}</h2>
+          <p className="text-slate-200 text-sm">{subsection.name}</p>
         </div>
       </div>
 
       {/* Main content */}
       <div className="container mx-auto px-4 py-8 max-w-4xl">
         {/* Subsection Details */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Subsection Details</CardTitle>
+        <Card className="mb-6 shadow-sm">
+          <CardHeader className="pb-4">
+            <CardTitle className="text-lg">Subsection Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid md:grid-cols-2 gap-6">
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Site Name</p>
-                <p className="font-medium">{siteData.name}</p>
+            <div className="grid md:grid-cols-2 gap-x-8 gap-y-4">
+              <div className="flex justify-between items-start">
+                <p className="text-sm text-muted-foreground">Site Name</p>
+                <p className="font-medium text-right">{siteData.name}</p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Subsection / Tenant</p>
-                <p className="font-medium">{subsection.tenant_name || subsection.name}</p>
+              <div className="flex justify-between items-start">
+                <p className="text-sm text-muted-foreground">Subsection / Tenant</p>
+                <p className="font-medium text-right">{subsection.tenant_name || subsection.name}</p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Description</p>
-                <p className="font-medium">{subsection.description || 'N/A'}</p>
+              <div className="flex justify-between items-start">
+                <p className="text-sm text-muted-foreground">Description</p>
+                <p className="font-medium text-right">{subsection.description || 'N/A'}</p>
               </div>
-              <div>
-                <p className="text-sm text-muted-foreground mb-1">Compliance Status</p>
-                <Badge 
-                  variant={isCompliant ? "default" : "destructive"} 
-                  className={isCompliant ? "bg-green-500 hover:bg-green-600" : "bg-red-500 hover:bg-red-600"}
-                >
+              <div className="flex justify-between items-start">
+                <p className="text-sm text-muted-foreground">Compliance Status</p>
+                <p className={`font-medium text-right ${isCompliant ? "text-green-600" : "text-red-600"}`}>
                   {isCompliant ? "Compliant" : "Non-Compliant"}
-                </Badge>
+                </p>
               </div>
             </div>
           </CardContent>
@@ -254,32 +245,33 @@ const PublicSubsection = () => {
 
         {/* Document Categories */}
         {documents.map((category, idx) => (
-          <Card key={idx} className="mb-6">
-            <CardHeader>
-              <CardTitle>{category.name}</CardTitle>
+          <Card key={idx} className="mb-6 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold">{category.name}</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               {category.files.map((file, fileIdx) => (
                 <div
                   key={fileIdx}
-                  className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
+                  className="flex items-center justify-between py-3 border-b last:border-b-0"
                 >
-                  <div className="flex items-center gap-3 flex-1">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{file.name}</p>
-                      <p className="text-sm text-muted-foreground">
-                        Uploaded on {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString() : 'N/A'}
+                  <div className="flex items-center gap-3 flex-1 min-w-0">
+                    <FileText className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium truncate">{file.name}</p>
+                      <p className="text-xs text-muted-foreground">
+                        Uploaded on {file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' }) : 'N/A'}
                       </p>
                     </div>
                   </div>
                   <Button
                     size="sm"
-                    variant="outline"
+                    variant="ghost"
+                    className="ml-2 flex-shrink-0"
                     onClick={() => handleDownload(file.url, file.name)}
                   >
-                    <Download className="mr-2 h-4 w-4" />
-                    Download
+                    <Download className="h-4 w-4 mr-1" />
+                    <span className="text-xs">Download</span>
                   </Button>
                 </div>
               ))}
@@ -300,11 +292,11 @@ const PublicSubsection = () => {
       {/* Footer */}
       <footer className="bg-white border-t mt-12 py-6">
         <div className="container mx-auto px-4 text-center">
-          <p className="text-sm text-muted-foreground flex items-center justify-center gap-2">
-            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-50 text-blue-600 rounded text-xs font-medium">
+          <p className="text-xs text-muted-foreground flex items-center justify-center gap-2">
+            <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-600 text-white rounded text-xs font-bold">
               WM
             </span>
-            Powered by {companySettings?.company_name || 'Watson Mattheus Consulting Electrical Engineers (Pty) Ltd'}
+            Powered by Watson Mattheus Consulting Electrical Engineers (Pty) Ltd
           </p>
         </div>
       </footer>
