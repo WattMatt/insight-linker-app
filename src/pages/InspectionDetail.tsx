@@ -190,8 +190,36 @@ const InspectionDetail = () => {
           setActiveTab('general');
         }
       } else {
-        console.warn("No template found for inspection");
-        setActiveTab('general');
+        // No template - create a basic structure from json_data if it exists
+        if (mappedInspection.jsonData && Object.keys(mappedInspection.jsonData).length > 0) {
+          const sections: any = {};
+          Object.keys(mappedInspection.jsonData).forEach(sectionKey => {
+            sections[sectionKey] = {
+              name: sectionKey,
+              items: {}
+            };
+            const sectionData = mappedInspection.jsonData![sectionKey];
+            Object.keys(sectionData).forEach(itemKey => {
+              sections[sectionKey].items[itemKey] = {
+                name: itemKey,
+                type: 'inspection'
+              };
+            });
+          });
+          setTemplate({
+            name: 'Inspection Template',
+            sections
+          });
+          const firstSection = Object.keys(sections)[0];
+          if (firstSection) {
+            setActiveTab(firstSection);
+          } else {
+            setActiveTab('general');
+          }
+        } else {
+          console.warn("No template or inspection data found");
+          setActiveTab('general');
+        }
       }
 
       // Generate QR code
@@ -579,11 +607,11 @@ const InspectionDetail = () => {
     );
   }
 
-  if (!inspection || !template) {
+  if (!inspection) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
-          <p className="text-muted-foreground">Inspection or template not found</p>
+          <p className="text-muted-foreground">Inspection not found</p>
           <Button 
             className="mt-4" 
             onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
