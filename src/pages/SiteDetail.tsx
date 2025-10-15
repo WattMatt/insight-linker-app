@@ -117,30 +117,40 @@ const SiteDetail = () => {
       setDocuments(aggregated);
 
       // Fetch Firebase documents if site has firebase_id
-      if (siteRes.data.firebase_id) {
+      if (siteRes.data.firebase_id && siteRes.data.clients) {
         try {
-          const fbSiteData = await readFirebaseData(`sites/${siteRes.data.firebase_id}`);
-          if (fbSiteData) {
-            const fbDocs: FirebaseDocument[] = [];
-            const siteDocuments = fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
-            
-            if (siteDocuments && typeof siteDocuments === 'object') {
-              Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
-                if (categoryDocs && typeof categoryDocs === 'object') {
-                  Object.entries(categoryDocs).forEach(([docKey, docData]: [string, any]) => {
-                    if (docData && typeof docData === 'object' && docData.url) {
-                      fbDocs.push({
-                        name: docData.name || docKey,
-                        url: docData.url,
-                        category: categoryName,
-                        fbKey: docKey
-                      });
-                    }
-                  });
-                }
-              });
+          // First, get the client's firebase_id
+          const { data: clientData } = await supabase
+            .from('clients')
+            .select('firebase_id')
+            .eq('id', siteRes.data.client_id)
+            .maybeSingle();
+          
+          if (clientData?.firebase_id) {
+            // Sites are nested under clients in Firebase: clients/{clientFirebaseId}/{siteFirebaseId}
+            const fbSiteData = await readFirebaseData(`clients/${clientData.firebase_id}/${siteRes.data.firebase_id}`);
+            if (fbSiteData) {
+              const fbDocs: FirebaseDocument[] = [];
+              const siteDocuments = fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
+              
+              if (siteDocuments && typeof siteDocuments === 'object') {
+                Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
+                  if (categoryDocs && typeof categoryDocs === 'object') {
+                    Object.entries(categoryDocs).forEach(([docKey, docData]: [string, any]) => {
+                      if (docData && typeof docData === 'object' && docData.url) {
+                        fbDocs.push({
+                          name: docData.name || docKey,
+                          url: docData.url,
+                          category: categoryName,
+                          fbKey: docKey
+                        });
+                      }
+                    });
+                  }
+                });
+              }
+              setFirebaseDocuments(fbDocs);
             }
-            setFirebaseDocuments(fbDocs);
           }
         } catch (fbError) {
           console.error("Error fetching Firebase documents:", fbError);
