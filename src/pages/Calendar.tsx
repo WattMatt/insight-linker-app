@@ -14,6 +14,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 interface CalendarEvent {
@@ -220,21 +226,36 @@ const Calendar = () => {
                               const isFirstInMonth = isEventStart || !isSameMonth(eventStart, month);
                               
                               return (
-                                <div
-                                  key={`${event.id}-${idx}`}
-                                  className={cn(
-                                    "absolute inset-0 z-0",
-                                    siteColor.bg,
-                                    "opacity-60"
-                                  )}
-                                  style={{
-                                    top: `${20 + idx * 8}%`,
-                                    height: '6px',
-                                    left: isFirstInMonth ? '10%' : '0',
-                                    right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
-                                    borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
-                                  }}
-                                />
+                                <TooltipProvider key={`${event.id}-${idx}`}>
+                                  <Tooltip>
+                                    <TooltipTrigger asChild>
+                                      <div
+                                        className={cn(
+                                          "absolute inset-0 z-0 transition-all cursor-pointer",
+                                          siteColor.bg,
+                                          "opacity-60 hover:opacity-90 hover:scale-105"
+                                        )}
+                                        style={{
+                                          top: `${20 + idx * 8}%`,
+                                          height: '6px',
+                                          left: isFirstInMonth ? '10%' : '0',
+                                          right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
+                                          borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
+                                        }}
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setSelectedEvent(event);
+                                        }}
+                                      />
+                                    </TooltipTrigger>
+                                    <TooltipContent>
+                                      <div className="text-xs">
+                                        <p className="font-semibold">{event.site_name}</p>
+                                        <p className="text-muted-foreground">{event.title}</p>
+                                      </div>
+                                    </TooltipContent>
+                                  </Tooltip>
+                                </TooltipProvider>
                               );
                             })}
                           </div>
