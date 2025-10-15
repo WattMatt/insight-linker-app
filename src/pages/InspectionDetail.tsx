@@ -76,8 +76,11 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Fetch inspection from Supabase using firebase_id (since URL contains firebase ID)
-      const { data: inspData, error: inspError } = await supabase
+      // Fetch inspection from Supabase - try firebase_id first, then UUID
+      let inspData, inspError;
+      
+      // First try with firebase_id
+      const { data: fbData, error: fbError } = await supabase
         .from('inspections')
         .select(`
           *,
@@ -99,6 +102,38 @@ const InspectionDetail = () => {
         `)
         .eq('firebase_id', inspectionId)
         .maybeSingle();
+      
+      // If not found by firebase_id, try by UUID
+      if (!fbData) {
+        const { data: uuidData, error: uuidError } = await supabase
+          .from('inspections')
+          .select(`
+            *,
+            inspection_templates!template_id (
+              id,
+              name,
+              sections
+            ),
+            sites!inner (
+              id,
+              name,
+              address,
+              client_id
+            ),
+            subsections!inner (
+              id,
+              name
+            )
+          `)
+          .eq('id', inspectionId)
+          .maybeSingle();
+        
+        inspData = uuidData;
+        inspError = uuidError;
+      } else {
+        inspData = fbData;
+        inspError = fbError;
+      }
 
       if (inspError || !inspData) {
         console.error("Error fetching inspection from Supabase:", inspError);
