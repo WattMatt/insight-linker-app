@@ -1919,6 +1919,12 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.sites.supabase}</Badge>
                   </div>
+                  {migrationStatus.sites.firebase !== migrationStatus.sites.supabase && (
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-sm font-medium text-orange-600">Missing:</span>
+                      <Badge variant="destructive">{migrationStatus.sites.firebase - migrationStatus.sites.supabase}</Badge>
+                    </div>
+                  )}
                   {migrationStatus.sites.supabase > 0 && (
                     <Button 
                       size="sm" 
@@ -1940,9 +1946,15 @@ const FirebaseSync = () => {
                       )}
                     </Button>
                   )}
-                  <p className="text-xs text-muted-foreground italic mt-2">
-                    {migrationStatus.sites.supabase > 0 ? 'Click to update Firebase images' : 'Migrated with Clients'}
-                  </p>
+                  {migrationStatus.sites.firebase === migrationStatus.sites.supabase ? (
+                    <p className="text-xs text-green-600 font-medium italic mt-2">
+                      ✓ All sites migrated
+                    </p>
+                  ) : (
+                    <p className="text-xs text-orange-600 italic mt-2">
+                      Some sites may have failed to migrate
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
