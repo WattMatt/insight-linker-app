@@ -656,7 +656,10 @@ const SubsectionDetail = () => {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-muted-foreground">Subsection data not found</p>
-          <Button className="mt-4" onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}`)}>
+          <Button className="mt-4" onClick={() => {
+            const basePath = (actualClientId || clientId) ? `/clients/${actualClientId || clientId}/sites/${siteId}` : `/sites/${siteId}`;
+            navigate(basePath);
+          }}>
             Back to Site
           </Button>
         </div>
@@ -675,7 +678,10 @@ const SubsectionDetail = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}`)}>
+          <Button variant="ghost" size="icon" onClick={() => {
+            const basePath = (actualClientId || clientId) ? `/clients/${actualClientId || clientId}/sites/${siteId}` : `/sites/${siteId}`;
+            navigate(basePath);
+          }}>
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
@@ -781,7 +787,12 @@ const SubsectionDetail = () => {
                     <div 
                       key={id} 
                       className="flex justify-between items-center p-3 border rounded cursor-pointer hover:bg-muted/50 transition-colors"
-                      onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                      onClick={() => {
+                        const basePath = (actualClientId || clientId) 
+                          ? `/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}` 
+                          : `/sites/${siteId}/subsections/${subsectionId}`;
+                        navigate(`${basePath}/inspections/${id}`);
+                      }}
                     >
                       <div>
                         <p className="font-medium">
@@ -944,7 +955,12 @@ const SubsectionDetail = () => {
                     >
                       <div 
                         className="flex items-center gap-3 flex-1 cursor-pointer"
-                        onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                        onClick={() => {
+                          const basePath = (actualClientId || clientId) 
+                            ? `/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}` 
+                            : `/sites/${siteId}/subsections/${subsectionId}`;
+                          navigate(`${basePath}/inspections/${id}`);
+                        }}
                       >
                          <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>

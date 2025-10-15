@@ -140,7 +140,7 @@ const InspectionDetail = () => {
       if (inspError || !inspData) {
         console.error("Error fetching inspection:", inspError);
         toast.error("Inspection not found");
-        navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`);
+        navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
         return;
       }
 
@@ -783,7 +783,7 @@ const InspectionDetail = () => {
           <p className="text-muted-foreground">Inspection not found</p>
           <Button 
             className="mt-4" 
-            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+            onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
           >
             Back to Subsection
           </Button>
@@ -800,7 +800,7 @@ const InspectionDetail = () => {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+            onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
@@ -820,7 +820,7 @@ const InspectionDetail = () => {
           />
           <Button 
             variant="outline" 
-            onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
+            onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
           >
             <X className="mr-2 h-4 w-4" />
             Exit

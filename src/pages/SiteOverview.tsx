@@ -707,7 +707,10 @@ const SiteOverview = () => {
                         <Button
                           size="sm"
                           variant="ghost"
-                          onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${id}`)}
+                          onClick={() => {
+                            const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+                            navigate(`${basePath}/subsections/${id}`);
+                          }}
                         >
                           <ArrowLeft className="h-4 w-4 rotate-180" />
                         </Button>

@@ -562,7 +562,10 @@ const SiteDetail = () => {
                 Manage all sub-boards or tenants at this site
               </p>
             </div>
-            <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/new`)}>
+            <Button onClick={() => {
+              const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+              navigate(`${basePath}/subsections/new`);
+            }}>
               <Plus className="mr-2 h-4 w-4" />
               Create New Subsection
             </Button>
@@ -600,7 +603,10 @@ const SiteDetail = () => {
                         <TableRow
                           key={sub.id}
                           className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${sub.id}`)}
+                          onClick={() => {
+                            const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+                            navigate(`${basePath}/subsections/${sub.id}`);
+                          }}
                         >
                           <TableCell className="font-medium">{sub.name}</TableCell>
                           <TableCell>{sub.tenant_name || "—"}</TableCell>

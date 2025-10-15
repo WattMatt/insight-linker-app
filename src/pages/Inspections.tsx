@@ -309,7 +309,10 @@ const Inspections = () => {
                         const clientId = inspection.sites.client_id;
                         const siteId = inspection.site_id;
                         const subsectionId = inspection.subsection_id;
-                        navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${inspection.id}`);
+                        const basePath = clientId 
+                          ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}` 
+                          : `/sites/${siteId}/subsections/${subsectionId}`;
+                        navigate(`${basePath}/inspections/${inspection.id}`);
                       } else {
                         toast.info("This inspection is not linked to a subsection");
                       }
