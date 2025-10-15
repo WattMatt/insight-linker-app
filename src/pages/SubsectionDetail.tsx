@@ -452,10 +452,17 @@ const SubsectionDetail = () => {
         .select('company_logo_url')
         .maybeSingle();
       
-      if (error) throw error;
+      if (error) {
+        console.error("Error fetching company logo:", error);
+        throw error;
+      }
+      
+      console.log("Company logo fetched:", data?.company_logo_url);
       
       if (data?.company_logo_url) {
         setCompanyLogo(data.company_logo_url);
+      } else {
+        console.log("No company logo found in settings");
       }
     } catch (error) {
       console.error("Error fetching company logo:", error);
@@ -464,8 +471,13 @@ const SubsectionDetail = () => {
 
   const generateQRCode = async () => {
     try {
+      console.log("Starting QR code generation...");
+      console.log("Subsection ID:", subsectionId);
+      console.log("Company Logo:", companyLogo);
+      
       // Simplified QR code URL - we can fetch all data from subsectionId
       const url = `${window.location.origin}/public/subsections/${subsectionId}`;
+      console.log("QR Code URL:", url);
       
       // Create canvas for QR code
       const canvas = document.createElement('canvas');
@@ -480,14 +492,18 @@ const SubsectionDetail = () => {
         errorCorrectionLevel: 'H' // High error correction allows ~30% of QR code to be covered
       });
       
+      console.log("QR code base generated");
+      
       // If we have a company logo, overlay it in the center
       if (companyLogo) {
+        console.log("Adding logo to QR code...");
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const img = new Image();
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
+            console.log("Logo loaded successfully");
             // Calculate rectangular logo size (24% of QR code size, wider than tall)
             const logoWidth = size * 0.24 * 1.5; // Make it 1.5x wider
             const logoHeight = size * 0.24;
@@ -508,21 +524,29 @@ const SubsectionDetail = () => {
             ctx.drawImage(img, x, y, logoWidth, logoHeight);
             
             // Convert canvas to data URL
-            setQrCodeUrl(canvas.toDataURL());
+            const dataUrl = canvas.toDataURL();
+            console.log("QR code with logo generated successfully");
+            setQrCodeUrl(dataUrl);
           };
           
-          img.onerror = () => {
+          img.onerror = (e) => {
             // If logo fails to load, just use QR code without logo
-            setQrCodeUrl(canvas.toDataURL());
+            console.error("Failed to load logo image:", e);
+            const dataUrl = canvas.toDataURL();
+            console.log("Using QR code without logo");
+            setQrCodeUrl(dataUrl);
           };
           
           img.src = companyLogo;
         } else {
+          console.error("Could not get canvas context");
           setQrCodeUrl(canvas.toDataURL());
         }
       } else {
         // No logo, just use plain QR code
-        setQrCodeUrl(canvas.toDataURL());
+        console.log("No logo available, using plain QR code");
+        const dataUrl = canvas.toDataURL();
+        setQrCodeUrl(dataUrl);
       }
     } catch (error) {
       console.error("Error generating QR code:", error);
