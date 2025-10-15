@@ -13,6 +13,7 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 // Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
+import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
 
 interface InspectionTemplate {
   name: string;
@@ -742,6 +743,11 @@ const InspectionDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
+          <ComprehensiveInspectionReport
+            inspectionData={inspection}
+            siteName={siteData?.siteName || 'Unknown Site'}
+            subsectionName={subsectionData?.name || 'Unknown Subsection'}
+          />
           <Button 
             variant="outline" 
             onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`)}
