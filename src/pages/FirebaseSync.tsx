@@ -271,10 +271,11 @@ const FirebaseSync = () => {
         .from('subsection_documents')
         .select('id');
       
-      const { data: supabaseInspectionItems } = await supabase
-        .from('inspection_items')
-        .select('id')
-        .not('image_url', 'is', null);
+      // Count inspections with Firebase URLs in json_data
+      const { data: inspectionsWithFirebaseImages } = await supabase
+        .from('inspections')
+        .select('json_data')
+        .not('json_data', 'is', null);
       
       const { count: sitesCount } = await supabase
         .from('sites')
@@ -300,6 +301,19 @@ const FirebaseSync = () => {
       const { count: calendarEventsCount } = await supabase
         .from('calendar_events')
         .select('*', { count: 'exact', head: true });
+      
+      // Count Supabase inspections with Firebase image URLs
+      let supabaseInspectionImagesCount = 0;
+      if (inspectionsWithFirebaseImages) {
+        for (const inspection of inspectionsWithFirebaseImages) {
+          if (inspection.json_data) {
+            const jsonStr = JSON.stringify(inspection.json_data);
+            if (jsonStr.includes('firebasestorage.googleapis.com')) {
+              supabaseInspectionImagesCount++;
+            }
+          }
+        }
+      }
       
       // Count storage items from Firebase
       let fbClientLogos = 0;
@@ -461,7 +475,7 @@ const FirebaseSync = () => {
           },
           inspectionPhotos: {
             firebase: fbInspectionPhotos,
-            supabase: supabaseInspectionItems?.length || 0,
+            supabase: supabaseInspectionImagesCount,
           },
         },
       };
