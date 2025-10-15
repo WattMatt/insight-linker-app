@@ -279,10 +279,10 @@ const ClientSites = () => {
               <CardHeader>
                 <div className="flex items-start justify-between">
                   <div className="flex items-start gap-3 flex-1">
-                    {site.site_image_url ? (
+                    {(site.site_image_url || site.client_logo_url) ? (
                       <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center p-1 flex-shrink-0">
                         <img
-                          src={site.site_image_url}
+                          src={site.site_image_url || site.client_logo_url || ''}
                           alt="Site logo"
                           className="w-full h-full object-contain"
                           onError={(e) => {
