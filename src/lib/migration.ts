@@ -355,37 +355,67 @@ export const migrateClientToSupabase = async (
               }
             }
 
-            // Step 5: Migrate Inspections for this site
-            const inspections = (siteData as any).inspections || (siteData as any).Inspections;
-            if (inspections) {
-              onProgress?.(`Migrating inspections for site: ${siteInsertData.name}`);
-              
-              for (const [inspectionId, inspectionData] of Object.entries(inspections || {})) {
-                try {
-                  const inspectionInsertData = {
-                    title: (inspectionData as any).title || (inspectionData as any).Title || 'Unnamed Inspection',
-                    description: (inspectionData as any).description || (inspectionData as any).Description || null,
-                    status: (inspectionData as any).status || (inspectionData as any).Status || 'Pending',
-                    priority: (inspectionData as any).priority || (inspectionData as any).Priority || 'Medium',
-                    site_id: newSite.id,
-                    firebase_id: inspectionId,
-                    inspection_date: (inspectionData as any).inspectionDate || (inspectionData as any).inspection_date || null,
-                    end_date: (inspectionData as any).endDate || (inspectionData as any).end_date || null,
-                    project_name: (inspectionData as any).projectName || (inspectionData as any).project_name || null,
-                    shop_number: (inspectionData as any).shopNumber || (inspectionData as any).shop_number || null,
-                    shop_name: (inspectionData as any).shopName || (inspectionData as any).shop_name || null,
-                    inspector_name: (inspectionData as any).inspectorName || (inspectionData as any).inspector_name || null,
-                    client_rep: (inspectionData as any).clientRep || (inspectionData as any).client_rep || null,
-                    consultant: (inspectionData as any).consultant || (inspectionData as any).Consultant || null,
-                    contractor: (inspectionData as any).contractor || (inspectionData as any).Contractor || null,
-                    testing_party: (inspectionData as any).testingParty || (inspectionData as any).testing_party || null,
-                    location: (inspectionData as any).location || (inspectionData as any).Location || null,
-                  };
+            // Step 5: Migrate Inspections from subsections
+            const siteSubsections = (siteData as any).subsections || (siteData as any).Subsections;
+            if (siteSubsections && typeof siteSubsections === 'object') {
+              for (const [subsectionFbId, subsectionData] of Object.entries(siteSubsections)) {
+                // Find the Supabase subsection ID
+                const { data: supabaseSubsection } = await supabase
+                  .from('subsections')
+                  .select('id')
+                  .eq('firebase_id', subsectionFbId)
+                  .eq('site_id', newSite.id)
+                  .maybeSingle();
 
-                  await supabase.from('inspections').insert([inspectionInsertData]);
-                  inspectionsCount++;
-                } catch (inspectionError) {
-                  console.error('Inspection migration error:', inspectionError);
+                if (supabaseSubsection) {
+                  const inspections = (subsectionData as any).inspections || (subsectionData as any).Inspections;
+                  if (inspections && typeof inspections === 'object') {
+                    onProgress?.(`Migrating inspections for subsection: ${subsectionFbId}`);
+                    
+                    for (const [inspectionId, inspectionData] of Object.entries(inspections)) {
+                      try {
+                        // Find template ID if template name exists
+                        let templateId = null;
+                        const templateName = (inspectionData as any).type || (inspectionData as any).templateId;
+                        if (templateName) {
+                          const { data: template } = await supabase
+                            .from('inspection_templates')
+                            .select('id')
+                            .ilike('name', `%${templateName}%`)
+                            .maybeSingle();
+                          templateId = template?.id || null;
+                        }
+
+                        const inspectionInsertData = {
+                          title: (inspectionData as any).title || (inspectionData as any).Title || (inspectionData as any).type || 'Unnamed Inspection',
+                          description: (inspectionData as any).description || (inspectionData as any).Description || null,
+                          status: (inspectionData as any).status || (inspectionData as any).Status || 'In Progress',
+                          priority: (inspectionData as any).priority || (inspectionData as any).Priority || 'Medium',
+                          site_id: newSite.id,
+                          subsection_id: supabaseSubsection.id,
+                          template_id: templateId,
+                          firebase_id: inspectionId,
+                          inspection_date: (inspectionData as any).date || (inspectionData as any).inspectionDate || (inspectionData as any).inspection_date || null,
+                          end_date: (inspectionData as any).endDate || (inspectionData as any).end_date || null,
+                          project_name: (inspectionData as any).projectName || (inspectionData as any).project_name || null,
+                          shop_number: (inspectionData as any).shopNumber || (inspectionData as any).shop_number || null,
+                          shop_name: (inspectionData as any).shopName || (inspectionData as any).shop_name || null,
+                          inspector_name: (inspectionData as any).inspectorName || (inspectionData as any).inspector_name || null,
+                          client_rep: (inspectionData as any).clientRep || (inspectionData as any).client_rep || null,
+                          consultant: (inspectionData as any).consultant || (inspectionData as any).Consultant || null,
+                          contractor: (inspectionData as any).contractor || (inspectionData as any).Contractor || null,
+                          testing_party: (inspectionData as any).testingParty || (inspectionData as any).testing_party || null,
+                          location: (inspectionData as any).location || (inspectionData as any).Location || null,
+                          json_data: (inspectionData as any).jsonData || (inspectionData as any).json_data || {},
+                        };
+
+                        await supabase.from('inspections').insert([inspectionInsertData]);
+                        inspectionsCount++;
+                      } catch (inspectionError) {
+                        console.error('Inspection migration error:', inspectionError);
+                      }
+                    }
+                  }
                 }
               }
             }

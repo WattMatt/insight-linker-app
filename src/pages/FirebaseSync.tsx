@@ -840,7 +840,7 @@ const FirebaseSync = () => {
                   
                   if (inspections && typeof inspections === 'object') {
                     Object.entries(inspections).forEach(([inspFbId, inspData]: [string, any]) => {
-                  // Check for photos in jsonData structure (new format)
+                      // Check for photos in jsonData structure (new format)
                       const jsonData = inspData?.jsonData;
                       if (jsonData && typeof jsonData === 'object') {
                         Object.entries(jsonData).forEach(([sectionKey, sectionData]: [string, any]) => {
@@ -851,16 +851,16 @@ const FirebaseSync = () => {
                                 photos.forEach((photoUrl: string, photoIdx: number) => {
                                   if (photoUrl && photoUrl.includes('firebase')) {
                                     console.log(`✓ Found inspection photo in ${subsectionFbId}/${inspFbId}/${sectionKey}/${itemKey}`);
-                                    imagesToMigrate.push({
-                                      url: photoUrl,
-                                      bucket: 'inspection-photos',
-                                      fileName: `${supabaseSubsection.id}/${inspFbId}/${sectionKey}-${itemKey}-${photoIdx}.jpg`,
-                                      table: 'temp_inspection_photos',
-                                      id: `${supabaseSubsection.id}/${inspFbId}/${sectionKey}/${itemKey}`,
-                                      column: 'photo_url',
-                                      type: 'inspection_photo',
-                                      metadata: { sectionKey, itemKey, index: photoIdx }
-                                    });
+                                     imagesToMigrate.push({
+                                       url: photoUrl,
+                                       bucket: 'inspection-photos',
+                                       fileName: `${supabaseSubsection.id}/${inspFbId}/${sectionKey}-${itemKey}-${photoIdx}.jpg`,
+                                       table: 'temp_inspection_photos',
+                                       id: `${supabaseSubsection.id}/${inspFbId}/${sectionKey}/${itemKey}`,
+                                       column: 'photo_url',
+                                       type: 'inspection_photo',
+                                       metadata: { inspectionFbId: inspFbId, sectionKey, itemKey, index: photoIdx }
+                                     });
                                   }
                                 });
                               }
@@ -882,14 +882,15 @@ const FirebaseSync = () => {
                           if (photoUrl && typeof photoUrl === 'string' && photoUrl.includes('firebase')) {
                             console.log(`✓ Found legacy inspection photo in ${subsectionFbId}: ${photoUrl}`);
                             imagesToMigrate.push({
-                              url: photoUrl,
-                              bucket: 'inspection-photos',
-                              fileName: `${supabaseSubsection.id}/${inspFbId}-${photoId}.png`,
-                              table: 'temp_inspection_photos',
-                              id: `${supabaseSubsection.id}/${inspFbId}`,
-                              column: 'image_url',
-                              type: 'inspection_photo',
-                            });
+                               url: photoUrl,
+                               bucket: 'inspection-photos',
+                               fileName: `${supabaseSubsection.id}/${inspFbId}-${photoId}.png`,
+                               table: 'temp_inspection_photos',
+                               id: `${supabaseSubsection.id}/${inspFbId}`,
+                               column: 'image_url',
+                               type: 'inspection_photo',
+                               metadata: { inspectionFbId: inspFbId }
+                             });
                           }
                         });
                       }
@@ -1098,9 +1099,53 @@ const FirebaseSync = () => {
               }
               
             } else if (file.type === 'inspection_photo') {
-              // Handle inspection photos - these go into json_data
-              console.log(`Inspection photo migrated: ${newUrl}`);
-              // TODO: Update inspection json_data with new photo URL
+              // Update inspection json_data with new photo URL
+              const { inspectionFbId, sectionKey, itemKey } = file.metadata || {};
+              
+              if (inspectionFbId && sectionKey && itemKey) {
+                // Find the inspection by firebase_id
+                const { data: inspection } = await supabase
+                  .from('inspections')
+                  .select('id, json_data')
+                  .eq('firebase_id', inspectionFbId)
+                  .maybeSingle();
+                
+                if (inspection) {
+                  const jsonData = (inspection.json_data as any) || {};
+                  const sectionData = jsonData[sectionKey] || {};
+                  const itemData = sectionData[itemKey] || {};
+                  const photos = itemData.photos || [];
+                  
+                  // Replace old Firebase URL with new Supabase URL
+                  const updatedPhotos = photos.map((url: string) =>
+                    url === file.url ? newUrl : url
+                  );
+                  
+                  // If photo wasn't in array, add it
+                  if (!photos.includes(file.url)) {
+                    updatedPhotos.push(newUrl);
+                  }
+                  
+                  // Update json_data
+                  const updatedJsonData = {
+                    ...jsonData,
+                    [sectionKey]: {
+                      ...sectionData,
+                      [itemKey]: {
+                        ...itemData,
+                        photos: updatedPhotos
+                      }
+                    }
+                  };
+                  
+                  await supabase
+                    .from('inspections')
+                    .update({ json_data: updatedJsonData })
+                    .eq('id', inspection.id);
+                  
+                  console.log(`Updated inspection ${inspectionFbId} photo: ${newUrl}`);
+                }
+              }
               
             } else {
               // For site images and client logos - update the main table
