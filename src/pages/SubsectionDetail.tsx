@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, ClipboardList } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, ClipboardList, Trash2, Plus } from "lucide-react";
 import { TemplateBasedReport } from "@/components/TemplateBasedReport";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
@@ -15,6 +15,9 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { readFirebaseData } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface SubsectionData {
   name: string;
@@ -62,6 +65,10 @@ const SubsectionDetail = () => {
   const [cocType, setCocType] = useState<string>("");
   const [cocValidationStatus, setCocValidationStatus] = useState<string>("");
   const [saving, setSaving] = useState(false);
+  const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
+  const [newInspectionType, setNewInspectionType] = useState("");
+  const [newInspectionDate, setNewInspectionDate] = useState("");
+  const [deleteInspectionId, setDeleteInspectionId] = useState<string | null>(null);
 
   useEffect(() => {
     if (clientId && siteId && subsectionId) {
@@ -233,6 +240,74 @@ const SubsectionDetail = () => {
     }
     window.open(url, '_blank');
     toast.success(`Opening ${fileName}`);
+  };
+
+  const handleCreateInspection = async () => {
+    if (!newInspectionType || !newInspectionDate) {
+      toast.error("Please fill in all fields");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        .insert({
+          subsection_id: subsectionId,
+          site_id: siteId,
+          title: newInspectionType,
+          inspection_date: newInspectionDate,
+          status: 'Pending',
+          priority: 'Medium'
+        });
+
+      if (error) throw error;
+
+      toast.success("Inspection created successfully");
+      setIsCreateInspectionOpen(false);
+      setNewInspectionType("");
+      setNewInspectionDate("");
+      fetchSubsectionData();
+    } catch (error) {
+      console.error("Error creating inspection:", error);
+      toast.error("Failed to create inspection");
+    }
+  };
+
+  const handleUpdateInspectionStatus = async (inspectionId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        .update({ status: newStatus })
+        .eq('id', inspectionId);
+
+      if (error) throw error;
+
+      toast.success("Inspection status updated");
+      fetchSubsectionData();
+    } catch (error) {
+      console.error("Error updating inspection:", error);
+      toast.error("Failed to update inspection status");
+    }
+  };
+
+  const handleDeleteInspection = async () => {
+    if (!deleteInspectionId) return;
+
+    try {
+      const { error } = await supabase
+        .from('inspections')
+        .delete()
+        .eq('id', deleteInspectionId);
+
+      if (error) throw error;
+
+      toast.success("Inspection deleted successfully");
+      setDeleteInspectionId(null);
+      fetchSubsectionData();
+    } catch (error) {
+      console.error("Error deleting inspection:", error);
+      toast.error("Failed to delete inspection");
+    }
   };
 
   if (loading) {
@@ -467,8 +542,49 @@ const SubsectionDetail = () => {
         {/* Inspections Tab */}
         <TabsContent value="inspections" className="space-y-4">
           <Card>
-            <CardHeader>
+            <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Inspections</CardTitle>
+              <Dialog open={isCreateInspectionOpen} onOpenChange={setIsCreateInspectionOpen}>
+                <DialogTrigger asChild>
+                  <Button size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    New Inspection
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Create New Inspection</DialogTitle>
+                  </DialogHeader>
+                  <div className="space-y-4 py-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="inspectionType">Inspection Type</Label>
+                      <Input
+                        id="inspectionType"
+                        placeholder="e.g., Electrical Inspection"
+                        value={newInspectionType}
+                        onChange={(e) => setNewInspectionType(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="inspectionDate">Inspection Date</Label>
+                      <Input
+                        id="inspectionDate"
+                        type="date"
+                        value={newInspectionDate}
+                        onChange={(e) => setNewInspectionDate(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2">
+                    <Button variant="outline" onClick={() => setIsCreateInspectionOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button onClick={handleCreateInspection}>
+                      Create Inspection
+                    </Button>
+                  </div>
+                </DialogContent>
+              </Dialog>
             </CardHeader>
             <CardContent>
               {inspectionArray.length === 0 ? (
@@ -481,10 +597,12 @@ const SubsectionDetail = () => {
                   {inspectionArray.map(([id, inspection]) => (
                     <div 
                       key={id}
-                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent cursor-pointer transition-colors"
-                      onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                      className="flex items-center justify-between p-4 border rounded-lg hover:bg-accent transition-colors"
                     >
-                      <div className="flex items-center gap-3">
+                      <div 
+                        className="flex items-center gap-3 flex-1 cursor-pointer"
+                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
+                      >
                         <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">{inspection.type || 'Inspection'}</p>
@@ -493,15 +611,55 @@ const SubsectionDetail = () => {
                           </p>
                         </div>
                       </div>
-                      <Badge variant="default" className="bg-blue-500">
-                        Completed
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Select
+                          value={inspection.status || 'Pending'}
+                          onValueChange={(value) => handleUpdateInspectionStatus(id, value)}
+                        >
+                          <SelectTrigger className="w-32" onClick={(e) => e.stopPropagation()}>
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Pending">Pending</SelectItem>
+                            <SelectItem value="In Progress">In Progress</SelectItem>
+                            <SelectItem value="Completed">Completed</SelectItem>
+                            <SelectItem value="Failed">Failed</SelectItem>
+                          </SelectContent>
+                        </Select>
+                        <Button
+                          size="icon"
+                          variant="ghost"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setDeleteInspectionId(id);
+                          }}
+                        >
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        </Button>
+                      </div>
                     </div>
                   ))}
                 </div>
               )}
             </CardContent>
           </Card>
+
+          <AlertDialog open={deleteInspectionId !== null} onOpenChange={() => setDeleteInspectionId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Inspection</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this inspection? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={handleDeleteInspection} className="bg-destructive text-destructive-foreground hover:bg-destructive/90">
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* Documents Tab */}
