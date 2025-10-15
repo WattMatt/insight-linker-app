@@ -470,11 +470,12 @@ const FirebaseSync = () => {
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
 
     try {
-      toast.info("Reading Firebase data for image URLs...");
+      toast.info("Reading Firebase data for all files and images...");
 
-      // Get all clients and sites from Supabase
+      // Get all data from Supabase
       const { data: supabaseSites } = await supabase.from("sites").select("id, firebase_id, client_id");
       const { data: supabaseClients } = await supabase.from("clients").select("id, firebase_id, logo_url");
+      const { data: supabaseSubsections } = await supabase.from("subsections").select("id, firebase_id, site_id");
       
       // Read Firebase data to get actual image URLs
       const firebaseData = await readFirebaseData("/clients");
@@ -489,8 +490,11 @@ const FirebaseSync = () => {
         fileName: string; 
         table: string; 
         id: string; 
-        column: string 
+        column: string;
+        type?: string;
       }[] = [];
+
+      console.log("Starting storage scan...");
 
       // Collect client logos from Firebase
       supabaseClients?.forEach(client => {
@@ -535,9 +539,12 @@ const FirebaseSync = () => {
           }
 
           if (siteData) {
+            console.log(`Found site data for ${site.firebase_id}`, Object.keys(siteData));
+            
             // Check for site image
-            const siteImageUrl = siteData.siteImageUrl || siteData.site_image_url || siteData.imageUrl;
-            if (siteImageUrl && siteImageUrl.includes('firebase')) {
+            const siteImageUrl = siteData.siteImageUrl || siteData.site_image_url || siteData.imageUrl || siteData.image;
+            if (siteImageUrl && typeof siteImageUrl === 'string' && siteImageUrl.includes('firebase')) {
+              console.log(`Found site image for ${site.firebase_id}: ${siteImageUrl}`);
               imagesToMigrate.push({
                 url: siteImageUrl,
                 bucket: 'site-images',
@@ -545,6 +552,7 @@ const FirebaseSync = () => {
                 table: 'sites',
                 id: site.id,
                 column: 'site_image_url',
+                type: 'site_image',
               });
             }
 
@@ -558,11 +566,92 @@ const FirebaseSync = () => {
                 table: 'sites',
                 id: site.id,
                 column: 'client_logo_url',
+                type: 'client_logo',
+              });
+            }
+
+            // Check for subsections with images and documents
+            const subsections = siteData.subsections || siteData.Subsections;
+            if (subsections && typeof subsections === 'object') {
+              Object.entries(subsections).forEach(([subsectionFbId, subsectionData]: [string, any]) => {
+                // Find matching Supabase subsection
+                const supabaseSubsection = supabaseSubsections?.find(
+                  sub => sub.firebase_id === subsectionFbId && sub.site_id === site.id
+                );
+
+                if (supabaseSubsection && subsectionData) {
+                  // Migrate inspection photos
+                  const inspections = subsectionData.inspections || subsectionData.Inspections;
+                  if (inspections && typeof inspections === 'object') {
+                    Object.entries(inspections).forEach(([inspFbId, inspData]: [string, any]) => {
+                      if (inspData?.photos && typeof inspData.photos === 'object') {
+                        Object.values(inspData.photos).forEach((photoData: any) => {
+                          const photoUrl = photoData?.url || photoData?.imageUrl;
+                          if (photoUrl && photoUrl.includes('firebase')) {
+                            console.log(`Found inspection photo: ${photoUrl}`);
+                            // Store as temp record to create later
+                            imagesToMigrate.push({
+                              url: photoUrl,
+                              bucket: 'inspection-photos',
+                              fileName: `${supabaseSubsection.id}/${inspFbId}-${Date.now()}.png`,
+                              table: 'temp_inspection_photos',
+                              id: supabaseSubsection.id,
+                              column: 'url',
+                              type: 'inspection_photo',
+                            });
+                          }
+                        });
+                      }
+                    });
+                  }
+
+                  // Migrate subsection documents
+                  const documents = subsectionData.documents || subsectionData.Documents;
+                  if (documents && typeof documents === 'object') {
+                    Object.entries(documents).forEach(([docFbId, docData]: [string, any]) => {
+                      const docUrl = docData?.url || docData?.fileUrl || docData?.downloadUrl;
+                      if (docUrl && docUrl.includes('firebase')) {
+                        console.log(`Found subsection document: ${docUrl}`);
+                        imagesToMigrate.push({
+                          url: docUrl,
+                          bucket: 'documents',
+                          fileName: `subsections/${supabaseSubsection.id}/${docFbId}-${Date.now()}.pdf`,
+                          table: 'temp_subsection_docs',
+                          id: supabaseSubsection.id,
+                          column: 'url',
+                          type: 'subsection_document',
+                        });
+                      }
+                    });
+                  }
+                }
+              });
+            }
+
+            // Check for site-level documents
+            const siteDocuments = siteData.documents || siteData.Documents;
+            if (siteDocuments && typeof siteDocuments === 'object') {
+              Object.entries(siteDocuments).forEach(([docFbId, docData]: [string, any]) => {
+                const docUrl = docData?.url || docData?.fileUrl || docData?.downloadUrl;
+                if (docUrl && docUrl.includes('firebase')) {
+                  console.log(`Found site document: ${docUrl}`);
+                  imagesToMigrate.push({
+                    url: docUrl,
+                    bucket: 'documents',
+                    fileName: `sites/${site.id}/${docFbId}-${Date.now()}.pdf`,
+                    table: 'temp_site_docs',
+                    id: site.id,
+                    column: 'url',
+                    type: 'site_document',
+                  });
+                }
               });
             }
           }
         }
       });
+
+      console.log(`Total files found to migrate: ${imagesToMigrate.length}`);
 
       setStorageMigrationStats(prev => ({ ...prev, total: imagesToMigrate.length }));
 
@@ -572,42 +661,59 @@ const FirebaseSync = () => {
         return;
       }
 
-      // Migrate images
+      toast.info(`Found ${imagesToMigrate.length} files to migrate`);
+
+      // Migrate files
       for (let i = 0; i < imagesToMigrate.length; i++) {
-        const image = imagesToMigrate[i];
+        const file = imagesToMigrate[i];
         try {
           setMigrationProgress({
-            stage: 'Migrating storage files',
+            stage: `Migrating ${file.type || 'file'}`,
             current: i + 1,
             total: imagesToMigrate.length,
             percentage: Math.round(((i + 1) / imagesToMigrate.length) * 100),
-            currentItem: image.fileName,
+            currentItem: file.fileName,
           });
 
-          const { data, error } = await supabase.functions.invoke('migrate-images', {
-            body: {
-              imageUrl: image.url,
-              bucket: image.bucket,
-              fileName: image.fileName,
+          // Choose appropriate edge function based on file type
+          const isImage = file.bucket === 'site-images' || file.bucket === 'client-logos' || file.bucket === 'inspection-photos';
+          const functionName = isImage ? 'migrate-images' : 'migrate-storage';
+
+          const { data, error } = await supabase.functions.invoke(functionName, {
+            body: isImage ? {
+              imageUrl: file.url,
+              bucket: file.bucket,
+              fileName: file.fileName,
+            } : {
+              firebaseStorageUrl: file.url,
+              targetBucket: file.bucket,
+              targetPath: file.fileName,
             },
           });
 
           if (error) throw error;
 
           if (data?.success) {
-            // Update the record with new URL
-            const updateData: any = { [image.column]: data.newUrl };
-            await supabase
-              .from(image.table as any)
-              .update(updateData)
-              .eq('id', image.id);
+            const newUrl = data.newUrl || data.publicUrl;
+            
+            // Update the appropriate table
+            if (!file.table.startsWith('temp_')) {
+              const updateData: any = { [file.column]: newUrl };
+              await supabase
+                .from(file.table as any)
+                .update(updateData)
+                .eq('id', file.id);
+            } else {
+              // Log for manual review - these need to be inserted into proper tables
+              console.log(`Migrated ${file.type}: ${newUrl} for ${file.id}`);
+            }
 
             setStorageMigrationStats(prev => ({ ...prev, migrated: prev.migrated + 1 }));
           } else {
             throw new Error(data?.error || 'Migration failed');
           }
         } catch (err) {
-          console.error(`Failed to migrate ${image.fileName}:`, err);
+          console.error(`Failed to migrate ${file.fileName}:`, err);
           setStorageMigrationStats(prev => ({ ...prev, failed: prev.failed + 1 }));
         }
       }
