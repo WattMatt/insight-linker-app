@@ -162,8 +162,15 @@ export const migrateClientToSupabase = async (
           let migratedSiteImageUrl = null;
           let migratedClientLogoUrl = null;
           
-          const firebaseSiteImageUrl = (siteData as any).siteImageUrl || (siteData as any).site_image_url;
-          const firebaseClientLogoUrl = (siteData as any).clientLogoUrl || (siteData as any).client_logo_url;
+          const firebaseSiteImageUrl = (siteData as any).siteImageUrl || 
+                                      (siteData as any).site_image_url || 
+                                      (siteData as any).siteImage;
+          const firebaseClientLogoUrl = (siteData as any).clientLogoUrl || 
+                                        (siteData as any).client_logo_url || 
+                                        (siteData as any).projectLogoUrl || 
+                                        (siteData as any).project_logo_url || 
+                                        (siteData as any).projectLogo ||
+                                        (siteData as any).clientLogo;
           
           // Migrate site image if it exists
           if (firebaseSiteImageUrl && firebaseSiteImageUrl.startsWith('http')) {
