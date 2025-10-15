@@ -76,15 +76,23 @@ const SubsectionDetail = () => {
   const [migratedDocs, setMigratedDocs] = useState<Set<string>>(new Set());
   const [uploadingFile, setUploadingFile] = useState(false);
   const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
       fetchSubsectionData();
-      generateQRCode();
+      fetchCompanyLogo();
       fetchTemplates();
       fetchDocumentCategories();
     }
   }, [subsectionId]);
+
+  useEffect(() => {
+    // Generate QR code after logo is fetched
+    if (subsectionId) {
+      generateQRCode();
+    }
+  }, [subsectionId, companyLogo]);
 
   const fetchDocumentCategories = async () => {
     try {
@@ -437,12 +445,80 @@ const SubsectionDetail = () => {
     }
   };
 
+  const fetchCompanyLogo = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('company_logo_url')
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      if (data?.company_logo_url) {
+        setCompanyLogo(data.company_logo_url);
+      }
+    } catch (error) {
+      console.error("Error fetching company logo:", error);
+    }
+  };
+
   const generateQRCode = async () => {
     try {
       // Simplified QR code URL - we can fetch all data from subsectionId
       const url = `${window.location.origin}/public/subsections/${subsectionId}`;
-      const qrDataUrl = await QRCode.toDataURL(url, { width: 300, margin: 2 });
-      setQrCodeUrl(qrDataUrl);
+      
+      // Create canvas for QR code
+      const canvas = document.createElement('canvas');
+      const size = 300;
+      canvas.width = size;
+      canvas.height = size;
+      
+      // Generate QR code with high error correction to allow logo overlay
+      await QRCode.toCanvas(canvas, url, {
+        width: size,
+        margin: 2,
+        errorCorrectionLevel: 'H' // High error correction allows ~30% of QR code to be covered
+      });
+      
+      // If we have a company logo, overlay it in the center
+      if (companyLogo) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          
+          img.onload = () => {
+            // Calculate logo size (about 20% of QR code size)
+            const logoSize = size * 0.2;
+            const x = (size - logoSize) / 2;
+            const y = (size - logoSize) / 2;
+            
+            // Draw white background circle for logo
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, logoSize / 2 + 8, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw logo
+            ctx.drawImage(img, x, y, logoSize, logoSize);
+            
+            // Convert canvas to data URL
+            setQrCodeUrl(canvas.toDataURL());
+          };
+          
+          img.onerror = () => {
+            // If logo fails to load, just use QR code without logo
+            setQrCodeUrl(canvas.toDataURL());
+          };
+          
+          img.src = companyLogo;
+        } else {
+          setQrCodeUrl(canvas.toDataURL());
+        }
+      } else {
+        // No logo, just use plain QR code
+        setQrCodeUrl(canvas.toDataURL());
+      }
     } catch (error) {
       console.error("Error generating QR code:", error);
     }

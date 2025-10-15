@@ -78,12 +78,31 @@ const InspectionDetail = () => {
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
   const [migratingImages, setMigratingImages] = useState<Set<string>>(new Set());
+  const [companyLogo, setCompanyLogo] = useState<string | null>(null);
 
   useEffect(() => {
     if (clientId && siteId && subsectionId && inspectionId) {
       fetchInspectionData();
+      fetchCompanyLogo();
     }
   }, [clientId, siteId, subsectionId, inspectionId]);
+
+  const fetchCompanyLogo = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('settings')
+        .select('company_logo_url')
+        .maybeSingle();
+      
+      if (error) throw error;
+      
+      if (data?.company_logo_url) {
+        setCompanyLogo(data.company_logo_url);
+      }
+    } catch (error) {
+      console.error("Error fetching company logo:", error);
+    }
+  };
 
   const fetchInspectionData = async () => {
     try {
@@ -256,10 +275,51 @@ const InspectionDetail = () => {
         }
       }
 
-      // Generate QR code
+      // Generate QR code with logo
       const url = `${window.location.origin}/public/subsections/${inspData.subsection_id || subsectionId}`;
-      const qrDataUrl = await QRCode.toDataURL(url, { width: 200, margin: 2 });
-      setQrCodeUrl(qrDataUrl);
+      
+      const canvas = document.createElement('canvas');
+      const size = 200;
+      canvas.width = size;
+      canvas.height = size;
+      
+      await QRCode.toCanvas(canvas, url, {
+        width: size,
+        margin: 2,
+        errorCorrectionLevel: 'H'
+      });
+      
+      if (companyLogo) {
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          
+          img.onload = () => {
+            const logoSize = size * 0.2;
+            const x = (size - logoSize) / 2;
+            const y = (size - logoSize) / 2;
+            
+            ctx.fillStyle = 'white';
+            ctx.beginPath();
+            ctx.arc(size / 2, size / 2, logoSize / 2 + 6, 0, Math.PI * 2);
+            ctx.fill();
+            
+            ctx.drawImage(img, x, y, logoSize, logoSize);
+            setQrCodeUrl(canvas.toDataURL());
+          };
+          
+          img.onerror = () => {
+            setQrCodeUrl(canvas.toDataURL());
+          };
+          
+          img.src = companyLogo;
+        } else {
+          setQrCodeUrl(canvas.toDataURL());
+        }
+      } else {
+        setQrCodeUrl(canvas.toDataURL());
+      }
     } catch (error) {
       console.error("Error fetching inspection data:", error);
       toast.error("Failed to load inspection data");
