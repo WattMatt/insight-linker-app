@@ -360,6 +360,40 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     yPos = (doc as any).lastAutoTable.finalY + 5;
     
+    // COC Details
+    doc.setFontSize(10);
+    doc.setTextColor(63, 81, 181);
+    doc.setFont(undefined, 'bold');
+    doc.text("Certificate of Compliance", 20, yPos);
+    yPos += 5;
+    
+    doc.setFontSize(9);
+    doc.setTextColor(33, 33, 33);
+    doc.setFont(undefined, 'normal');
+    
+    if (subsection.is_coc_required) {
+      autoTable(doc, {
+        startY: yPos,
+        margin: { left: 20, right: 20 },
+        body: [
+          ['COC Number:', subsection.coc_number || 'N/A'],
+          ['COC Type:', subsection.coc_type || 'N/A'],
+          ['Issue Date:', subsection.coc_issue_date ? new Date(subsection.coc_issue_date).toLocaleDateString('en-ZA') : 'N/A'],
+          ['Status:', subsection.coc_status || 'Missing']
+        ],
+        theme: 'plain',
+        styles: { fontSize: 8, cellPadding: 1 },
+        columnStyles: { 0: { fontStyle: 'bold', cellWidth: 50 } }
+      });
+      
+      yPos = (doc as any).lastAutoTable.finalY + 5;
+    } else {
+      doc.setFontSize(8);
+      doc.setTextColor(100, 100, 100);
+      doc.text("COC not required for this subsection.", 20, yPos);
+      yPos += 6;
+    }
+    
     // Snag List (Blue heading)
     doc.setFontSize(10);
     doc.setTextColor(63, 81, 181);
