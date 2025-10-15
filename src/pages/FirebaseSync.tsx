@@ -470,12 +470,19 @@ const FirebaseSync = () => {
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
 
     try {
-      toast.info("Fetching records with Firebase storage URLs...");
+      toast.info("Reading Firebase data for image URLs...");
 
-      // Fetch all records that might have Firebase storage URLs
-      const { data: sites } = await supabase.from("sites").select("id, site_image_url, client_logo_url");
-      const { data: clients } = await supabase.from("clients").select("id, logo_url");
+      // Get all clients and sites from Supabase
+      const { data: supabaseSites } = await supabase.from("sites").select("id, firebase_id, client_id");
+      const { data: supabaseClients } = await supabase.from("clients").select("id, firebase_id, logo_url");
       
+      // Read Firebase data to get actual image URLs
+      const firebaseData = await readFirebaseData("/clients");
+      if (!firebaseData) {
+        toast.error("No Firebase data found");
+        return;
+      }
+
       const imagesToMigrate: { 
         url: string; 
         bucket: string; 
@@ -485,41 +492,75 @@ const FirebaseSync = () => {
         column: string 
       }[] = [];
 
-      // Collect site images
-      sites?.forEach(site => {
-        if (site.site_image_url?.includes('firebase')) {
-          imagesToMigrate.push({
-            url: site.site_image_url,
-            bucket: 'site-images',
-            fileName: `${site.id}/site-image-${Date.now()}.png`,
-            table: 'sites',
-            id: site.id,
-            column: 'site_image_url',
-          });
-        }
-        if (site.client_logo_url?.includes('firebase')) {
-          imagesToMigrate.push({
-            url: site.client_logo_url,
-            bucket: 'site-images',
-            fileName: `${site.id}/client-logo-${Date.now()}.png`,
-            table: 'sites',
-            id: site.id,
-            column: 'client_logo_url',
-          });
+      // Collect client logos from Firebase
+      supabaseClients?.forEach(client => {
+        if (client.firebase_id && !client.logo_url) {
+          const fbClientData = firebaseData[client.firebase_id];
+          const logoUrl = fbClientData?.logoUrl || fbClientData?.logo_url || fbClientData?.LogoUrl;
+          
+          if (logoUrl && logoUrl.includes('firebase')) {
+            imagesToMigrate.push({
+              url: logoUrl,
+              bucket: 'client-logos',
+              fileName: `${client.id}/logo-${Date.now()}.png`,
+              table: 'clients',
+              id: client.id,
+              column: 'logo_url',
+            });
+          }
         }
       });
 
-      // Collect client logos
-      clients?.forEach(client => {
-        if (client.logo_url?.includes('firebase')) {
-          imagesToMigrate.push({
-            url: client.logo_url,
-            bucket: 'client-logos',
-            fileName: `${client.id}/logo-${Date.now()}.png`,
-            table: 'clients',
-            id: client.id,
-            column: 'logo_url',
-          });
+      // Collect site images from Firebase
+      supabaseSites?.forEach(site => {
+        if (site.firebase_id) {
+          // Find the client this site belongs to
+          const client = supabaseClients?.find(c => c.id === site.client_id);
+          if (!client?.firebase_id) return;
+          
+          const fbClientData = firebaseData[client.firebase_id];
+          if (!fbClientData) return;
+
+          // Look for site data in Firebase
+          let siteData = null;
+          
+          // Try sites object first
+          if (fbClientData.sites && fbClientData.sites[site.firebase_id]) {
+            siteData = fbClientData.sites[site.firebase_id];
+          } else if (fbClientData.Sites && fbClientData.Sites[site.firebase_id]) {
+            siteData = fbClientData.Sites[site.firebase_id];
+          } else if (fbClientData[site.firebase_id]) {
+            // Site might be a direct child
+            siteData = fbClientData[site.firebase_id];
+          }
+
+          if (siteData) {
+            // Check for site image
+            const siteImageUrl = siteData.siteImageUrl || siteData.site_image_url || siteData.imageUrl;
+            if (siteImageUrl && siteImageUrl.includes('firebase')) {
+              imagesToMigrate.push({
+                url: siteImageUrl,
+                bucket: 'site-images',
+                fileName: `${site.id}/site-image-${Date.now()}.png`,
+                table: 'sites',
+                id: site.id,
+                column: 'site_image_url',
+              });
+            }
+
+            // Check for client logo at site level
+            const clientLogoUrl = siteData.clientLogoUrl || siteData.client_logo_url;
+            if (clientLogoUrl && clientLogoUrl.includes('firebase')) {
+              imagesToMigrate.push({
+                url: clientLogoUrl,
+                bucket: 'client-logos',
+                fileName: `${site.id}/logo-${Date.now()}.png`,
+                table: 'sites',
+                id: site.id,
+                column: 'client_logo_url',
+              });
+            }
+          }
         }
       });
 
