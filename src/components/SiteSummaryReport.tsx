@@ -292,8 +292,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const pageWidth = doc.internal.pageSize.getWidth();
     const cardHeight = 115;
     
-    // Red border card
-    doc.setDrawColor(220, 53, 69);
+    // Determine status color
+    const isCompliant = subsection.is_compliant;
+    const borderColor = isCompliant ? [76, 175, 80] : [220, 53, 69]; // Green or Red
+    
+    // Card border
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.setLineWidth(1);
     doc.roundedRect(15, startY, pageWidth - 30, cardHeight, 3, 3, 'S');
     
@@ -302,24 +306,27 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     doc.roundedRect(15, startY, pageWidth - 30, cardHeight, 3, 3, 'F');
     
     // Re-draw border
-    doc.setDrawColor(220, 53, 69);
+    doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
     doc.roundedRect(15, startY, pageWidth - 30, cardHeight, 3, 3, 'S');
     
-    // Title with icon
-    doc.setFontSize(12);
+    // Title (subsection name)
+    doc.setFontSize(11);
     doc.setTextColor(33, 33, 33);
     doc.setFont(undefined, 'bold');
-    doc.text(`⚡ ${subsection.name} (${siteName})`, 20, startY + 10);
+    doc.text(`${subsection.name} (${siteName})`, 20, startY + 10);
     
-    // Status icon
-    const isCompliant = subsection.is_compliant;
-    doc.setDrawColor(220, 53, 69);
-    doc.setLineWidth(1.5);
-    doc.circle(pageWidth - 25, startY + 8, 3, 'S');
-    if (!isCompliant) {
-      doc.line(pageWidth - 27, startY + 6, pageWidth - 23, startY + 10);
-      doc.line(pageWidth - 23, startY + 6, pageWidth - 27, startY + 10);
-    }
+    // Status badge (Pass/Fail)
+    const statusText = isCompliant ? 'PASS' : 'FAIL';
+    const statusWidth = 20;
+    const statusX = pageWidth - 35;
+    
+    doc.setFillColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.roundedRect(statusX, startY + 5, statusWidth, 6, 1, 1, 'F');
+    
+    doc.setFontSize(8);
+    doc.setTextColor(255, 255, 255);
+    doc.setFont(undefined, 'bold');
+    doc.text(statusText, statusX + statusWidth / 2, startY + 9, { align: 'center' });
     
     let yPos = startY + 20;
     
@@ -390,15 +397,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     if (allSnags.length > 0) {
       doc.setFontSize(8);
       doc.setFont(undefined, 'normal');
-      allSnags.slice(0, 2).forEach(snag => {
+      allSnags.slice(0, 2).forEach((snag, idx) => {
         const color = snag.urgency === 'High' ? [220, 53, 69] : snag.urgency === 'Medium' ? [255, 193, 7] : [108, 117, 125];
         doc.setTextColor(color[0], color[1], color[2]);
         doc.setFont(undefined, 'bold');
         doc.text(`${snag.urgency}:`, 20, yPos);
         doc.setTextColor(33, 33, 33);
         doc.setFont(undefined, 'normal');
-        const description = snag.description.substring(0, 60) + (snag.description.length > 60 ? '...' : '');
-        doc.text(` ${description}`, 35, yPos);
+        const maxLength = 55;
+        const description = snag.description.substring(0, maxLength) + (snag.description.length > maxLength ? '...' : '');
+        doc.text(`${idx + 1}. ${description}`, 35, yPos);
         yPos += 4;
       });
     } else {
@@ -446,20 +454,36 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     const docs = subsectionDocuments.filter(d => d.subsection_id === subsection.id);
     
-    // Group docs by category
-    const docCategories = ['01 COC', '03 Line Diagram', '06 Thermal Reports', '08 Standby Legend Cards'];
-    const availableDocs = docCategories.filter(cat => 
-      docs.some(d => d.file_name?.includes(cat.substring(0, 2)))
-    );
-    
-    if (availableDocs.length > 0) {
+    if (docs.length > 0) {
       doc.setFontSize(8);
       doc.setTextColor(33, 33, 33);
       doc.setFont(undefined, 'normal');
-      availableDocs.slice(0, 4).forEach(docCat => {
-        doc.text(`- ${docCat}`, 20, yPos);
+      
+      // Group documents by common prefixes/categories
+      const docsByCategory: Record<string, string[]> = {};
+      docs.forEach(d => {
+        const fileName = d.file_name || 'Unknown';
+        // Try to extract category from filename (e.g., "01 COC", "03 Line Diagram")
+        const match = fileName.match(/^(\d+\s+[A-Za-z\s]+)/);
+        const category = match ? match[1] : fileName.split('_')[0] || 'Other';
+        
+        if (!docsByCategory[category]) {
+          docsByCategory[category] = [];
+        }
+        docsByCategory[category].push(fileName);
+      });
+      
+      // Display categories
+      const categoryEntries = Object.entries(docsByCategory).slice(0, 4);
+      categoryEntries.forEach(([category, files]) => {
+        doc.text(`- ${category} (${files.length})`, 20, yPos);
         yPos += 4;
       });
+      
+      if (Object.keys(docsByCategory).length === 0) {
+        doc.setTextColor(100, 100, 100);
+        doc.text("Documents uploaded but uncategorized.", 20, yPos);
+      }
     } else {
       doc.setFontSize(8);
       doc.setTextColor(100, 100, 100);
