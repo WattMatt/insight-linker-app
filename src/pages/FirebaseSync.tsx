@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { readFirebaseData } from "@/lib/firebase";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, CheckCircle, AlertCircle, FileText, Image as ImageIcon, Database } from "lucide-react";
+import { Loader2, CheckCircle, AlertCircle, FileText, Image as ImageIcon, Database, Camera } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -1227,6 +1227,138 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateInspectionImages = async () => {
+    setMigrating(true);
+    setMigratingSection('inspection_images');
+    const logs: Array<{ timestamp: string; level: 'info' | 'success' | 'warning' | 'error'; message: string }> = [];
+    
+    const addLog = (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+      logs.push({ timestamp: new Date().toISOString(), level, message });
+      setMigrationLogs([...logs]);
+    };
+    
+    try {
+      addLog("Starting inspection images migration...", 'info');
+
+      // Fetch all inspections with Firebase data
+      const { data: inspections, error: inspError } = await supabase
+        .from('inspections')
+        .select('id, firebase_id, json_data')
+        .not('firebase_id', 'is', null);
+
+      if (inspError) throw inspError;
+
+      let migratedCount = 0;
+      let totalImages = 0;
+
+      for (const inspection of inspections || []) {
+        if (!inspection.json_data) continue;
+
+        const jsonData = inspection.json_data as any;
+        let updatedJsonData = JSON.parse(JSON.stringify(jsonData));
+        let hasChanges = false;
+
+        // Helper to extract and migrate images from nested objects
+        const processImageObject = async (obj: any, path: string): Promise<any> => {
+          if (!obj || typeof obj !== 'object') return obj;
+
+          // Check if this object has images
+          if (obj.images && typeof obj.images === 'object') {
+            const newImages: any = {};
+            
+            for (const [imgKey, imgData] of Object.entries(obj.images)) {
+              const imgInfo = imgData as any;
+              const firebaseUrl = imgInfo?.url;
+              
+              if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebase')) {
+                totalImages++;
+                addLog(`Migrating image from ${path}...`, 'info');
+
+                try {
+                  // Call migrate-storage function
+                  const { data: migrateResult, error: migrateError } = await supabase.functions.invoke(
+                    'migrate-storage',
+                    {
+                      body: {
+                        firebaseStorageUrl: firebaseUrl,
+                        targetBucket: 'inspection-photos',
+                        targetPath: `inspections/${inspection.id}/${imgInfo.name || imgKey}`
+                      }
+                    }
+                  );
+
+                  if (migrateError) throw migrateError;
+
+                  if (migrateResult?.publicUrl) {
+                    newImages[imgKey] = {
+                      ...imgInfo,
+                      url: migrateResult.publicUrl
+                    };
+                    hasChanges = true;
+                    migratedCount++;
+                    addLog(`✓ Migrated: ${imgInfo.name || imgKey}`, 'success');
+                  } else {
+                    newImages[imgKey] = imgInfo; // Keep original
+                    addLog(`⚠ Skipped: ${imgInfo.name || imgKey}`, 'warning');
+                  }
+                } catch (err) {
+                  console.error('Image migration error:', err);
+                  newImages[imgKey] = imgInfo; // Keep original on error
+                  addLog(`✗ Failed: ${imgInfo.name || imgKey}`, 'error');
+                }
+              } else {
+                newImages[imgKey] = imgInfo; // Already migrated or not Firebase
+              }
+            }
+            
+            return { ...obj, images: newImages };
+          }
+
+          // Recursively process nested objects
+          const processed: any = {};
+          for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object') {
+              processed[key] = await processImageObject(value, `${path}.${key}`);
+            } else {
+              processed[key] = value;
+            }
+          }
+          return processed;
+        };
+
+        // Process all sections
+        updatedJsonData = await processImageObject(updatedJsonData, 'root');
+
+        // Update inspection if changes were made
+        if (hasChanges) {
+          const { error: updateError } = await supabase
+            .from('inspections')
+            .update({ json_data: updatedJsonData })
+            .eq('id', inspection.id);
+
+          if (updateError) {
+            addLog(`✗ Failed to update inspection ${inspection.id}`, 'error');
+            console.error(updateError);
+          } else {
+            addLog(`✓ Updated inspection ${inspection.id}`, 'success');
+          }
+        }
+      }
+
+      addLog(`✅ Migration complete! Migrated ${migratedCount}/${totalImages} images`, 'success');
+      toast.success(`Migrated ${migratedCount} inspection images`);
+      
+      await scanComplete();
+    } catch (error) {
+      console.error('Inspection images migration error:', error);
+      addLog(`❌ Migration failed: ${error}`, 'error');
+      toast.error('Failed to migrate inspection images');
+    } finally {
+      setMigrating(false);
+      setMigratingSection(null);
+    }
+  };
+
   const migrateStorageOnly = async () => {
     setMigratingSection('storage');
     setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
@@ -2199,6 +2331,41 @@ const FirebaseSync = () => {
                       All migrated
                     </p>
                   )}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <Camera className="h-4 w-4" />
+                  Inspection Images
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Status:</span>
+                    <Badge variant="secondary">In json_data</Badge>
+                  </div>
+                  <Button 
+                    size="sm" 
+                    className="w-full mt-2"
+                    onClick={migrateInspectionImages}
+                    disabled={migratingSection !== null || migrating}
+                  >
+                    {migratingSection === 'inspection_images' ? (
+                      <>
+                        <span className="animate-spin mr-2">⏳</span>
+                        Migrating...
+                      </>
+                    ) : (
+                      'Migrate All Inspection Images'
+                    )}
+                  </Button>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Extracts images from json_data and migrates to Supabase Storage
+                  </p>
                 </div>
               </CardContent>
             </Card>
