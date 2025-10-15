@@ -400,12 +400,30 @@ const SubsectionDetail = () => {
     ).flatMap(cat => cat.files);
   };
 
+  // Helper function to get Supabase COC documents
+  const getSupabaseCocDocuments = () => {
+    const cocCategory = documentCategories.find(cat => 
+      cat.name.toLowerCase().includes('coc')
+    );
+    if (!cocCategory) return [];
+    return supabaseDocuments.filter(doc => doc.category_id === cocCategory.id);
+  };
+
   // Helper function to find metering documents
   const getMeteringDocuments = () => {
     return documents.filter(cat => 
       cat.name.toLowerCase().includes('meter') || 
       cat.name.toLowerCase().includes('metering')
     ).flatMap(cat => cat.files);
+  };
+
+  // Helper function to get Supabase metering documents
+  const getSupabaseMeteringDocuments = () => {
+    const meteringCategory = documentCategories.find(cat => 
+      cat.name.toLowerCase().includes('meter')
+    );
+    if (!meteringCategory) return [];
+    return supabaseDocuments.filter(doc => doc.category_id === meteringCategory.id);
   };
 
   const handleDocumentUpload = async (file: File, categoryName: string) => {
@@ -1361,7 +1379,145 @@ const SubsectionDetail = () => {
                 {/* Existing COC Documents */}
                 {(() => {
                   const cocDocs = getCocDocuments();
-                  return cocDocs.length > 0 ? (
+                  const supabaseCocDocs = getSupabaseCocDocuments();
+                  const hasDocs = cocDocs.length > 0 || supabaseCocDocs.length > 0;
+                  
+                  return hasDocs ? (
+                    <div className="space-y-4">
+                      {/* Supabase COC Documents */}
+                      {supabaseCocDocs.map((doc) => (
+                        <div key={doc.id} className="border rounded-lg p-4">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-muted-foreground" />
+                              <div>
+                                <p className="font-medium">{doc.file_name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(doc.uploaded_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => window.open(doc.file_url, '_blank')}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setDeleteDocumentId(doc.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+
+                          <div className="grid md:grid-cols-2 gap-4">
+                            <div>
+                              <Label>COC Number</Label>
+                              <Input
+                                value={subsection.cocNumber || ''}
+                                placeholder="ECA 642760"
+                                className="mt-1"
+                                readOnly
+                              />
+                            </div>
+                            <div>
+                              <Label>Issue Date</Label>
+                              <Input
+                                type="date"
+                                value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                                className="mt-1"
+                                readOnly
+                              />
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>Type</Label>
+                            <div className="flex gap-4 mt-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${doc.id}`}
+                                  value="Pass"
+                                  checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Pass</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${doc.id}`}
+                                  value="Fail"
+                                  checked={cocType === 'Fail'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Fail</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${doc.id}`}
+                                  value="Pending"
+                                  checked={cocType === 'Pending'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Pending</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>Validation Status</Label>
+                            <Input
+                              value={cocValidationStatus}
+                              onChange={(e) => setCocValidationStatus(e.target.value)}
+                              placeholder="Enter validation status"
+                              className="mt-1"
+                            />
+                          </div>
+
+                          <Button 
+                            onClick={handleSaveCocDetails} 
+                            disabled={saving}
+                            className="mt-4 bg-blue-500 hover:bg-blue-600"
+                          >
+                            {saving ? "Saving..." : "Save Details"}
+                          </Button>
+                        </div>
+                      ))}
+                      
+                      {/* Firebase COC Documents (Legacy) */}
+                      {cocDocs.map((doc, idx) => (
+                        <div key={idx} className="border rounded-lg p-4 bg-muted/30">
+                          <div className="flex items-center justify-between mb-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-5 w-5 text-muted-foreground" />
+                              <div>
+                                <p className="font-medium">{doc.name}</p>
+                                <Badge variant="secondary" className="text-xs">Legacy</Badge>
+                              </div>
+                            </div>
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              onClick={() => handleDownloadDocument(doc.url, doc.name)}
+                            >
+                              <Download className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : subsection.cocNumber ? (
                     <div className="space-y-4">
                       {cocDocs.map((doc, idx) => (
                         <div key={idx} className="border rounded-lg p-4">
@@ -1622,16 +1778,55 @@ const SubsectionDetail = () => {
                   <Label>Metering Documents</Label>
                   {(() => {
                     const meteringDocs = getMeteringDocuments();
-                    return meteringDocs.length > 0 ? (
+                    const supabaseMeteringDocs = getSupabaseMeteringDocuments();
+                    const hasDocs = meteringDocs.length > 0 || supabaseMeteringDocs.length > 0;
+                    
+                    return hasDocs ? (
                       <div className="mt-2 space-y-2">
+                        {/* Supabase Metering Documents */}
+                        {supabaseMeteringDocs.map((doc) => (
+                          <div
+                            key={doc.id}
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                          >
+                            <div className="flex items-center gap-3 flex-1">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <div>
+                                <span className="text-sm font-medium">{doc.file_name}</span>
+                                <p className="text-xs text-muted-foreground">
+                                  {new Date(doc.uploaded_at).toLocaleDateString()}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => window.open(doc.file_url, '_blank')}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setDeleteDocumentId(doc.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                        
+                        {/* Firebase Metering Documents (Legacy) */}
                         {meteringDocs.map((doc, idx) => (
                           <div
                             key={idx}
-                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                            className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors bg-muted/30"
                           >
                             <div className="flex items-center gap-3">
                               <FileText className="h-4 w-4 text-muted-foreground" />
                               <span className="text-sm font-medium">{doc.name}</span>
+                              <Badge variant="secondary" className="text-xs">Legacy</Badge>
                             </div>
                             <Button
                               size="sm"
