@@ -71,6 +71,7 @@ const SubsectionDetail = () => {
   const [linkedTemplate, setLinkedTemplate] = useState<{id: string, name: string, category: string} | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
 
   useEffect(() => {
     if (subsectionId) {
@@ -90,6 +91,17 @@ const SubsectionDetail = () => {
       if (error) throw error;
       
       setAvailableTemplates(data || []);
+      
+      // Create a mapping from category (which matches Firebase templateId) to template name
+      const nameMap: Record<string, string> = {};
+      data?.forEach(template => {
+        // Map both the category and name (lowercase) to the template name for flexible matching
+        if (template.category) {
+          nameMap[template.category.toLowerCase()] = template.name;
+        }
+        nameMap[template.name.toLowerCase()] = template.name;
+      });
+      setTemplateNameMap(nameMap);
     } catch (error) {
       console.error("Error fetching templates:", error);
     }
@@ -531,7 +543,11 @@ const SubsectionDetail = () => {
                       onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
                     >
                       <div>
-                        <p className="font-medium">{inspection.type || 'Inspection'}</p>
+                        <p className="font-medium">
+                          {inspection.templateId 
+                            ? (templateNameMap[inspection.templateId.toLowerCase()] || inspection.templateId)
+                            : (inspection.type || 'Inspection')}
+                        </p>
                         <p className="text-sm text-muted-foreground">
                           {inspection.date ? format(new Date(inspection.date), "dd MMMM yyyy") : "No date"}
                         </p>
@@ -691,9 +707,13 @@ const SubsectionDetail = () => {
                         className="flex items-center gap-3 flex-1 cursor-pointer"
                         onClick={() => navigate(`/clients/${actualClientId || clientId}/sites/${siteId}/subsections/${subsectionId}/inspections/${id}`)}
                       >
-                        <FileText className="h-5 w-5 text-muted-foreground" />
+                         <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
-                          <p className="font-medium">{inspection.type || 'Inspection'}</p>
+                          <p className="font-medium">
+                            {inspection.templateId 
+                              ? (templateNameMap[inspection.templateId.toLowerCase()] || inspection.templateId)
+                              : (inspection.type || 'Inspection')}
+                          </p>
                           <p className="text-sm text-muted-foreground">
                             {inspection.date ? format(new Date(inspection.date), "dd MMMM yyyy") : "No date"}
                           </p>
