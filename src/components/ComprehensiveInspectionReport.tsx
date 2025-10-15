@@ -4,17 +4,20 @@ import { FileText } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { supabase } from "@/integrations/supabase/client";
 
 interface ComprehensiveInspectionReportProps {
   inspectionData: any;
   siteName: string;
   subsectionName: string;
+  templateId?: string | null;
 }
 
 export const ComprehensiveInspectionReport = ({
   inspectionData,
   siteName,
   subsectionName,
+  templateId,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -25,14 +28,21 @@ export const ComprehensiveInspectionReport = ({
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Extract Firebase data structure
-      const firebaseData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
-      const generalInfo = firebaseData.generalInfo || {};
-      const electrical = firebaseData.electrical || {};
-      const observations = firebaseData.observations || [];
-      const relayStatus = firebaseData.relayStatus || {};
+      // Extract inspection data
+      const jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
+      
+      // Fetch template if available
+      let template: any = null;
+      if (templateId) {
+        const { data: templateData } = await supabase
+          .from('inspection_templates')
+          .select('*')
+          .eq('id', templateId)
+          .maybeSingle();
+        template = templateData;
+      }
 
-      // Image categories
+      // Image categories to check (Firebase format)
       const imageCategories = [
         'General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'
       ];
@@ -73,16 +83,17 @@ export const ComprehensiveInspectionReport = ({
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
 
+      const generalInfo = jsonData.generalInfo || {};
       const generalInfoData = [
-        ['Project Name', generalInfo.projectName || inspectionData.projectName || 'N/A'],
-        ['Shop Number', generalInfo.shopNumber || inspectionData.shopNumber || 'N/A'],
-        ['Shop Name', generalInfo.shopName || inspectionData.shopName || 'N/A'],
-        ['Inspector Name', generalInfo.inspectorName || inspectionData.inspectorName || 'N/A'],
-        ['Inspection Date', generalInfo.date || inspectionData.date || 'N/A'],
-        ['Client Representative', generalInfo.clientRep || inspectionData.clientRep || 'N/A'],
+        ['Project Name', generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'N/A'],
+        ['Shop Number', generalInfo.shopNumber || inspectionData.shopNumber || inspectionData.shop_number || 'N/A'],
+        ['Shop Name', generalInfo.shopName || inspectionData.shopName || inspectionData.shop_name || 'N/A'],
+        ['Inspector Name', generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'N/A'],
+        ['Inspection Date', generalInfo.date || inspectionData.date || inspectionData.inspection_date || 'N/A'],
+        ['Client Representative', generalInfo.clientRep || inspectionData.clientRep || inspectionData.client_rep || 'N/A'],
         ['Consultant', generalInfo.consultant || inspectionData.consultant || 'N/A'],
         ['Contractor', generalInfo.contractor || inspectionData.contractor || 'N/A'],
-        ['Testing Party', generalInfo.testingParty || inspectionData.testingParty || 'N/A'],
+        ['Testing Party', generalInfo.testingParty || inspectionData.testingParty || inspectionData.testing_party || 'N/A'],
         ['Location', generalInfo.location || inspectionData.location || 'N/A'],
       ];
 
@@ -101,7 +112,64 @@ export const ComprehensiveInspectionReport = ({
 
       yPos = (doc as any).lastAutoTable.finalY + 15;
 
-      // ===== ELECTRICAL DETAILS =====
+      // ===== TEMPLATE-BASED SECTIONS =====
+      if (template && template.sections) {
+        const sections = template.sections as any;
+        
+        for (const [sectionKey, section] of Object.entries(sections)) {
+          const sectionData = section as any;
+          const items = sectionData.items || {};
+          
+          // Check if there's data for this section
+          const hasData = jsonData[sectionKey] && Object.keys(jsonData[sectionKey]).length > 0;
+          
+          if (Object.keys(items).length === 0 && !hasData) continue;
+
+          if (yPos > pageHeight - 60) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          doc.setFontSize(18);
+          doc.setFont(undefined, 'bold');
+          doc.text(sectionData.name || sectionKey, 20, yPos);
+          yPos += 10;
+
+          const tableData: any[] = [];
+          
+          for (const [itemKey, item] of Object.entries(items)) {
+            const itemInfo = item as any;
+            const itemData = jsonData[sectionKey]?.[itemKey] || {};
+            
+            tableData.push([
+              itemInfo.name || itemKey,
+              itemData.status || 'N/A',
+              itemData.notes || ''
+            ]);
+          }
+
+          if (tableData.length > 0) {
+            autoTable(doc, {
+              startY: yPos,
+              head: [['Item', 'Status', 'Notes']],
+              body: tableData,
+              theme: 'grid',
+              headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+              styles: { fontSize: 9, cellPadding: 3 },
+              margin: { left: 20, right: 20 }
+            });
+
+            yPos = (doc as any).lastAutoTable.finalY + 15;
+          }
+        }
+      }
+
+      // ===== ADDITIONAL DATA (for Firebase legacy format) =====
+      const electrical = jsonData.electrical || {};
+      const observations = jsonData.observations || [];
+      const relayStatus = jsonData.relayStatus || {};
+
+      // Electrical Details
       if (Object.keys(electrical).length > 0) {
         if (yPos > pageHeight - 60) {
           doc.addPage();
@@ -113,97 +181,45 @@ export const ComprehensiveInspectionReport = ({
         doc.text('Electrical Details', 20, yPos);
         yPos += 10;
 
-        // DB Details
-        if (electrical.dbDetails) {
-          const dbData = [
-            ['DB Number', electrical.dbDetails.dbNumber || 'N/A'],
-            ['DB Rating', electrical.dbDetails.dbRating || 'N/A'],
-            ['Voltage', electrical.dbDetails.voltage || 'N/A'],
-            ['Type', electrical.dbDetails.type || 'N/A'],
-          ];
-
-          autoTable(doc, {
-            startY: yPos,
-            head: [['DB Details', '']],
-            body: dbData,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 9, cellPadding: 3 },
-            columnStyles: {
-              0: { fontStyle: 'bold', cellWidth: 60 },
-              1: { cellWidth: 120 }
-            },
-            margin: { left: 20, right: 20 }
-          });
-
-          yPos = (doc as any).lastAutoTable.finalY + 10;
-        }
-
-        // Earthing Details
-        if (electrical.earthing) {
-          if (yPos > pageHeight - 40) {
-            doc.addPage();
-            yPos = 20;
+        // Flatten electrical data
+        const electricalData: any[] = [];
+        const flattenObject = (obj: any, prefix = '') => {
+          for (const [key, value] of Object.entries(obj)) {
+            if (value && typeof value === 'object' && !Array.isArray(value)) {
+              flattenObject(value, prefix + key + ' - ');
+            } else {
+              electricalData.push([
+                prefix + key.replace(/([A-Z])/g, ' $1').trim(),
+                String(value || 'N/A')
+              ]);
+            }
           }
+        };
+        flattenObject(electrical);
 
-          const earthingData = [
-            ['Type', electrical.earthing.type || 'N/A'],
-            ['Resistance', electrical.earthing.resistance || 'N/A'],
-            ['Test Date', electrical.earthing.testDate || 'N/A'],
-          ];
-
+        if (electricalData.length > 0) {
           autoTable(doc, {
             startY: yPos,
-            head: [['Earthing', '']],
-            body: earthingData,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+            head: [],
+            body: electricalData,
+            theme: 'striped',
             styles: { fontSize: 9, cellPadding: 3 },
             columnStyles: {
-              0: { fontStyle: 'bold', cellWidth: 60 },
-              1: { cellWidth: 120 }
+              0: { fontStyle: 'bold', cellWidth: 80 },
+              1: { cellWidth: 100 }
             },
             margin: { left: 20, right: 20 }
           });
-
-          yPos = (doc as any).lastAutoTable.finalY + 10;
-        }
-
-        // Isolator Details
-        if (electrical.isolator) {
-          if (yPos > pageHeight - 40) {
-            doc.addPage();
-            yPos = 20;
-          }
-
-          const isolatorData = [
-            ['Type', electrical.isolator.type || 'N/A'],
-            ['Rating', electrical.isolator.rating || 'N/A'],
-            ['Status', electrical.isolator.status || 'N/A'],
-          ];
-
-          autoTable(doc, {
-            startY: yPos,
-            head: [['Isolator', '']],
-            body: isolatorData,
-            theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-            styles: { fontSize: 9, cellPadding: 3 },
-            columnStyles: {
-              0: { fontStyle: 'bold', cellWidth: 60 },
-              1: { cellWidth: 120 }
-            },
-            margin: { left: 20, right: 20 }
-          });
-
           yPos = (doc as any).lastAutoTable.finalY + 15;
         }
       }
 
-      // ===== OBSERVATIONS =====
-      if (observations.length > 0) {
-        doc.addPage();
-        yPos = 20;
+      // Observations
+      if (Array.isArray(observations) && observations.length > 0) {
+        if (yPos > pageHeight - 60) {
+          doc.addPage();
+          yPos = 20;
+        }
 
         doc.setFontSize(18);
         doc.setFont(undefined, 'bold');
@@ -230,9 +246,9 @@ export const ComprehensiveInspectionReport = ({
         yPos = (doc as any).lastAutoTable.finalY + 15;
       }
 
-      // ===== RELAY STATUS =====
+      // Relay Status
       if (Object.keys(relayStatus).length > 0) {
-        if (yPos > pageHeight - 40) {
+        if (yPos > pageHeight - 60) {
           doc.addPage();
           yPos = 20;
         }
@@ -261,9 +277,76 @@ export const ComprehensiveInspectionReport = ({
         });
       }
 
-      // ===== IMAGES =====
+      // ===== IMAGES FROM TEMPLATE SECTIONS =====
+      // First collect images from template-based sections
+      if (template && template.sections) {
+        const sections = template.sections as any;
+        
+        for (const [sectionKey, section] of Object.entries(sections)) {
+          const sectionData = section as any;
+          const items = sectionData.items || {};
+          
+          for (const [itemKey, item] of Object.entries(items)) {
+            const itemData = jsonData[sectionKey]?.[itemKey] || {};
+            const photos = itemData.photos || [];
+            const images = itemData.images || {};
+            
+            // Combine photos array and images object
+            const allImages: any[] = [...photos];
+            if (typeof images === 'object') {
+              allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
+            }
+            
+            if (allImages.length > 0) {
+              doc.addPage();
+              yPos = 20;
+
+              doc.setFontSize(18);
+              doc.setFont(undefined, 'bold');
+              doc.text(`${sectionData.name} - ${(item as any).name}`, 20, yPos);
+              yPos += 15;
+
+              for (const img of allImages) {
+                try {
+                  const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
+                  if (typeof imgUrl === 'string') {
+                    const response = await fetch(imgUrl);
+                    const blob = await response.blob();
+                    const dataUrl = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.readAsDataURL(blob);
+                    });
+
+                    const imgWidth = 80;
+                    const imgHeight = 60;
+
+                    if (yPos + imgHeight > pageHeight - 20) {
+                      doc.addPage();
+                      yPos = 20;
+                    }
+
+                    doc.addImage(dataUrl, 'JPEG', 20, yPos, imgWidth, imgHeight);
+                    
+                    doc.setFontSize(8);
+                    doc.setFont(undefined, 'normal');
+                    const imgName = typeof img === 'object' ? (img.name || img.fileName || 'Image') : 'Image';
+                    doc.text(imgName, 20, yPos + imgHeight + 5);
+                    
+                    yPos += imgHeight + 15;
+                  }
+                } catch (error) {
+                  console.error('Error embedding image:', error);
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // ===== IMAGES FROM FIREBASE LEGACY FORMAT =====
       for (const category of imageCategories) {
-        const images = firebaseData[`images${category}`] || {};
+        const images = jsonData[`images${category}`] || {};
         const imageArray = Object.values(images).filter((img: any) => img && img.url);
 
         if (imageArray.length > 0) {

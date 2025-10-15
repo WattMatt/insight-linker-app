@@ -69,6 +69,7 @@ const InspectionDetail = () => {
   const [inspection, setInspection] = useState<InspectionData | null>(null);
   const [siteData, setSiteData] = useState<any>(null);
   const [subsectionData, setSubsectionData] = useState<any>(null);
+  const [templateId, setTemplateId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [qrCodeUrl, setQrCodeUrl] = useState("");
@@ -153,6 +154,7 @@ const InspectionDetail = () => {
 
         if (template && !templateError) {
           templateData = template;
+          setTemplateId(inspData.template_id); // Store template ID
         }
       }
 
@@ -747,6 +749,7 @@ const InspectionDetail = () => {
             inspectionData={inspection}
             siteName={siteData?.siteName || 'Unknown Site'}
             subsectionName={subsectionData?.name || 'Unknown Subsection'}
+            templateId={templateId}
           />
           <Button 
             variant="outline" 
