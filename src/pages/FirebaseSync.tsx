@@ -1254,19 +1254,31 @@ const FirebaseSync = () => {
     try {
       addLog("Starting inspection images migration...", 'info');
 
-      // Fetch all inspections with Firebase data
+      // Fetch all inspections with json_data (don't filter by firebase_id)
       const { data: inspections, error: inspError } = await supabase
         .from('inspections')
         .select('id, firebase_id, json_data')
-        .not('firebase_id', 'is', null);
+        .not('json_data', 'is', null);
 
       if (inspError) throw inspError;
 
+      addLog(`Found ${inspections?.length || 0} inspections with json_data`, 'info');
+
       let migratedCount = 0;
       let totalImages = 0;
+      let inspectionsProcessed = 0;
 
       for (const inspection of inspections || []) {
         if (!inspection.json_data) continue;
+        
+        // Check if json_data contains Firebase URLs
+        const jsonStr = JSON.stringify(inspection.json_data);
+        if (!jsonStr.includes('firebasestorage.googleapis.com')) {
+          continue; // Skip if no Firebase URLs
+        }
+        
+        inspectionsProcessed++;
+        addLog(`Processing inspection ${inspection.id}...`, 'info');
 
         const jsonData = inspection.json_data as any;
         let updatedJsonData = JSON.parse(JSON.stringify(jsonData));
@@ -1284,7 +1296,7 @@ const FirebaseSync = () => {
               const imgInfo = imgData as any;
               const firebaseUrl = imgInfo?.url;
               
-              if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebase')) {
+              if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebasestorage.googleapis.com')) {
                 totalImages++;
                 addLog(`Migrating image from ${path}...`, 'info');
 
@@ -1359,8 +1371,8 @@ const FirebaseSync = () => {
         }
       }
 
-      addLog(`✅ Migration complete! Migrated ${migratedCount}/${totalImages} images`, 'success');
-      toast.success(`Migrated ${migratedCount} inspection images`);
+      addLog(`✅ Migration complete! Processed ${inspectionsProcessed} inspections, migrated ${migratedCount}/${totalImages} images`, 'success');
+      toast.success(`Migrated ${migratedCount} inspection images from ${inspectionsProcessed} inspections`);
       
       await scanComplete();
     } catch (error) {
