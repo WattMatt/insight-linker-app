@@ -110,10 +110,15 @@ const ClientSites = () => {
           site_type: siteData.siteType || siteData.site_type || siteData.type || null,
           source: 'firebase' as const,
           site_image_url: siteData.siteImageUrl || siteData.site_image_url || siteData.siteImage || null,
-          client_logo_url: siteData.clientLogoUrl || siteData.client_logo_url || siteData.clientLogo || 
-                          siteData.projectLogoUrl || siteData.project_logo_url || siteData.projectLogo || null,
+          client_logo_url: siteData.clientLogoUrl || siteData.client_logo_url || siteData.clientLogo || null,
           project_logo_url: siteData.projectLogoUrl || siteData.project_logo_url || siteData.projectLogo || siteData.logo || null,
         };
+
+        console.log(`Site ${siteKey} logos:`, {
+          site_image_url: site.site_image_url,
+          client_logo_url: site.client_logo_url,
+          project_logo_url: site.project_logo_url
+        });
 
         transformedSites.push(site);
       }
