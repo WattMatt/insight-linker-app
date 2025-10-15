@@ -2220,6 +2220,12 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Supabase:</span>
                     <Badge variant="default">{migrationStatus.storage.subsectionDocuments.supabase}</Badge>
                   </div>
+                  {migrationStatus.storage.subsectionDocuments.firebase !== migrationStatus.storage.subsectionDocuments.supabase && (
+                    <div className="flex justify-between items-center pt-1">
+                      <span className="text-sm font-medium text-orange-600">Missing:</span>
+                      <Badge variant="destructive">{migrationStatus.storage.subsectionDocuments.firebase - migrationStatus.storage.subsectionDocuments.supabase}</Badge>
+                    </div>
+                  )}
                   {migrationStatus.storage.subsectionDocuments.firebase > migrationStatus.storage.subsectionDocuments.supabase ? (
                     <Button 
                       size="sm" 
@@ -2236,9 +2242,13 @@ const FirebaseSync = () => {
                         'Migrate All Subsection Docs'
                       )}
                     </Button>
+                  ) : migrationStatus.storage.subsectionDocuments.firebase === migrationStatus.storage.subsectionDocuments.supabase ? (
+                    <p className="text-xs text-green-600 font-medium italic mt-2">
+                      ✓ All subsection docs migrated
+                    </p>
                   ) : (
-                    <p className="text-xs text-muted-foreground italic mt-2">
-                      All migrated
+                    <p className="text-xs text-orange-600 italic mt-2">
+                      Some docs failed to migrate (not found in Firebase)
                     </p>
                   )}
                 </div>
