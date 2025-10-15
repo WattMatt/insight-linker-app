@@ -37,7 +37,11 @@ interface Subsection {
   coc_status: string;
   metering_status: string;
   is_compliant: boolean;
+  is_coc_required: boolean;
   tenant_name: string | null;
+  coc_number: string | null;
+  meter_serial_number: string | null;
+  ct_ratio: string | null;
 }
 
 interface SiteDocument {
@@ -173,9 +177,47 @@ const SiteDetail = () => {
         }
       }
 
-      // Calculate stats from inspection data
+      // Calculate stats from inspection data with Firebase rules
       const totalSubsections = subs.length;
-      const compliantCount = subs.filter((s) => s.is_compliant).length;
+      
+      // Calculate compliant count using Firebase rules
+      let compliantCount = 0;
+      subs.forEach(sub => {
+        // Rule 1: If COC required, must be approved
+        if (sub.is_coc_required && sub.coc_status !== 'Approved') {
+          return; // Not compliant
+        }
+        
+        // Rule 2: If COC required, metering must not be missing
+        if (sub.is_coc_required && sub.metering_status === 'Missing') {
+          return; // Not compliant
+        }
+        
+        // Rule 3: Check for open snags
+        const latestInspection = insp.find(i => i.subsection_id === sub.id);
+        let hasOpenSnags = false;
+        if (latestInspection?.json_data) {
+          const jsonData = latestInspection.json_data as any;
+          if (jsonData.sections && Array.isArray(jsonData.sections)) {
+            jsonData.sections.forEach((section: any) => {
+              if (section.items && Array.isArray(section.items)) {
+                const openItems = section.items.filter((item: any) => 
+                  item.status !== 'Pass' && item.status !== 'N/A'
+                );
+                if (openItems.length > 0) hasOpenSnags = true;
+              }
+            });
+          }
+        }
+        
+        if (hasOpenSnags) {
+          return; // Not compliant
+        }
+        
+        // All checks passed
+        compliantCount++;
+      });
+      
       const cocApprovedCount = subs.filter((s) => s.coc_status === "Approved").length;
       const meteringInstalledCount = subs.filter((s) => s.metering_status === "Installed").length;
       
@@ -301,6 +343,27 @@ const SiteDetail = () => {
     );
   }
 
+  // Calculate compliance based on Firebase rules
+  const calculateCompliance = (subsection: Subsection) => {
+    // Rule 1: If COC is required, must have approved COC
+    if (subsection.is_coc_required && subsection.coc_status !== 'Approved') {
+      return false;
+    }
+    
+    // Rule 2: If COC is required, metering must not be missing
+    if (subsection.is_coc_required && subsection.metering_status === 'Missing') {
+      return false;
+    }
+    
+    // Rule 3: Must have zero open snags
+    const openSnags = getOpenSnags(subsection.id);
+    if (openSnags > 0) {
+      return false;
+    }
+    
+    return true;
+  };
+  
   const overallHealth = stats ? Math.round((stats.compliantCount / stats.totalSubsections) * 100) || 0 : 0;
   const cocCompliance = stats ? Math.round((stats.cocApprovedCount / stats.totalSubsections) * 100) || 0 : 0;
   const meteringPercentage = stats ? Math.round((stats.meteringInstalledCount / stats.totalSubsections) * 100) || 0 : 0;
@@ -563,6 +626,7 @@ const SiteDetail = () => {
                     {subsections.map((sub) => {
                       const lastInspected = getLastInspectionDate(sub.id);
                       const openSnags = getOpenSnags(sub.id);
+                      const isCompliant = calculateCompliance(sub);
                       
                       return (
                         <TableRow
@@ -579,12 +643,12 @@ const SiteDetail = () => {
                             <Badge
                               variant="outline"
                               className={
-                                sub.is_compliant
+                                isCompliant
                                   ? "bg-green-500/10 text-green-500"
                                   : "bg-red-500/10 text-red-500"
                               }
                             >
-                              {sub.is_compliant ? "Pass" : "Fail"}
+                              {isCompliant ? "Pass" : "Fail"}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -593,10 +657,12 @@ const SiteDetail = () => {
                               className={
                                 sub.coc_status === "Approved"
                                   ? "bg-green-500/10 text-green-500"
-                                  : "bg-red-500/10 text-red-500"
+                                  : sub.is_coc_required
+                                  ? "bg-red-500/10 text-red-500"
+                                  : "bg-gray-500/10 text-gray-500"
                               }
                             >
-                              {sub.coc_status}
+                              {sub.is_coc_required ? sub.coc_status : "N/A"}
                             </Badge>
                           </TableCell>
                           <TableCell>
@@ -605,10 +671,12 @@ const SiteDetail = () => {
                               className={
                                 sub.metering_status === "Installed"
                                   ? "bg-green-500/10 text-green-500"
-                                  : "bg-red-500/10 text-red-500"
+                                  : sub.is_coc_required
+                                  ? "bg-red-500/10 text-red-500"
+                                  : "bg-gray-500/10 text-gray-500"
                               }
                             >
-                              {sub.metering_status}
+                              {sub.is_coc_required ? sub.metering_status : "N/A"}
                             </Badge>
                           </TableCell>
                           <TableCell className="text-sm text-muted-foreground">
