@@ -268,10 +268,89 @@ const Calendar = () => {
     doc.setFontSize(12);
     doc.text(`Generated: ${format(new Date(), "MMMM dd, yyyy")}`, 105, 85, { align: "center" });
     
-    // Add new page for calendar data
+    // Add new page for calendar view
     doc.addPage();
     doc.setFontSize(16);
-    doc.text("Calendar Events", 14, 20);
+    doc.text("Calendar View", 14, 15);
+    
+    // Draw calendar grid (3x4 grid for 12 months)
+    const monthWidth = 60;
+    const monthHeight = 45;
+    const startX = 15;
+    const startY = 25;
+    const spacing = 5;
+    
+    monthsInYear.forEach((month, index) => {
+      const row = Math.floor(index / 3);
+      const col = index % 3;
+      const x = startX + col * (monthWidth + spacing);
+      const y = startY + row * (monthHeight + spacing);
+      
+      // Draw month border
+      doc.setDrawColor(200, 200, 200);
+      doc.rect(x, y, monthWidth, monthHeight);
+      
+      // Month name
+      doc.setFontSize(9);
+      doc.setFont(undefined, 'bold');
+      doc.text(format(month, "MMM yyyy"), x + monthWidth / 2, y + 5, { align: "center" });
+      
+      // Draw mini calendar
+      const monthStart = startOfMonth(month);
+      const monthEnd = endOfMonth(month);
+      const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd });
+      
+      // Day headers (S M T W T F S)
+      doc.setFontSize(6);
+      doc.setFont(undefined, 'normal');
+      const dayHeaders = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+      const cellWidth = monthWidth / 7;
+      const cellHeight = 4;
+      
+      dayHeaders.forEach((day, i) => {
+        doc.text(day, x + i * cellWidth + cellWidth / 2, y + 10, { align: "center" });
+      });
+      
+      // Draw days
+      let currentRow = 0;
+      daysInMonth.forEach((day, dayIndex) => {
+        const dayOfWeek = day.getDay();
+        if (dayIndex === 0) {
+          currentRow = 0;
+        } else if (dayOfWeek === 0 && dayIndex > 0) {
+          currentRow++;
+        }
+        
+        const dayX = x + dayOfWeek * cellWidth;
+        const dayY = y + 13 + currentRow * cellHeight;
+        
+        // Check if day has events
+        const dayEvents = getEventsForDay(day);
+        const hasEvents = dayEvents.length > 0;
+        
+        // Draw day cell with color if has events
+        if (hasEvents) {
+          doc.setFillColor(59, 130, 246, 0.3);
+          doc.rect(dayX, dayY - 2, cellWidth, cellHeight, 'F');
+        }
+        
+        // Day number
+        doc.setFontSize(6);
+        doc.text(format(day, "d"), dayX + cellWidth / 2, dayY + 1, { align: "center" });
+      });
+    });
+    
+    // Add legend
+    doc.setFontSize(8);
+    doc.text("Legend:", 15, startY + 4 * (monthHeight + spacing) + 5);
+    doc.setFillColor(59, 130, 246, 0.3);
+    doc.rect(30, startY + 4 * (monthHeight + spacing) + 1, 4, 4, 'F');
+    doc.text("= Days with events", 36, startY + 4 * (monthHeight + spacing) + 5);
+    
+    // Add new page for event summary table
+    doc.addPage();
+    doc.setFontSize(16);
+    doc.text("Event Summary", 14, 20);
     
     // Prepare table data
     const tableData = events?.map(event => [
