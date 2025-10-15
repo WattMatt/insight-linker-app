@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -1329,18 +1329,29 @@ const SubsectionDetail = () => {
                   <p className="text-sm text-muted-foreground mt-4 text-center max-w-md">
                     Scan this QR code to view public subsection details, documents, and COC
                   </p>
-                  <Button 
-                    className="mt-4"
-                    onClick={() => {
-                      const link = document.createElement('a');
-                      link.download = `${subsection.name}-qr-code.png`;
-                      link.href = qrCodeUrl;
-                      link.click();
-                      toast.success('QR code downloaded');
-                    }}
-                  >
-                    Download QR Code
-                  </Button>
+                  <div className="flex gap-3 mt-4">
+                    <Button 
+                      onClick={() => {
+                        const link = document.createElement('a');
+                        link.download = `${subsection.name}-qr-code.png`;
+                        link.href = qrCodeUrl;
+                        link.click();
+                        toast.success('QR code downloaded');
+                      }}
+                    >
+                      Download QR Code
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        const publicUrl = `${window.location.origin}/public/clients/${clientId || 'unknown'}/sites/${siteId || 'unknown'}/subsections/${subsectionId}`;
+                        window.open(publicUrl, '_blank');
+                      }}
+                    >
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      View Public Page
+                    </Button>
+                  </div>
                 </>
               ) : (
                 <p className="text-muted-foreground">Generating QR code...</p>
