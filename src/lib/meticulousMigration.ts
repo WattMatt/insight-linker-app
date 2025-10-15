@@ -550,31 +550,57 @@ export class MeticulousMigration {
       // Log all subsection fields
       this.log('info', '    Subsection Firebase fields:', Object.keys(fbData));
       
-      // Create subsection
-      // Find matching inspection template based on category or inspection type
-      const category = fbData.category || fbData.Category;
-      const inspectionType = fbData.inspectionType || fbData.inspection_type;
-      
+      // First, check inspections to find the templateId
       let templateId = null;
-      if (category || inspectionType) {
-        const searchTerm = inspectionType || category;
-        const { data: matchingTemplate } = await supabase
-          .from('inspection_templates')
-          .select('id')
-          .ilike('category', `%${searchTerm}%`)
-          .limit(1)
-          .single();
+      const subsectionInspections = fbData.inspections || fbData.Inspections || fbData.inspection || fbData.Inspection;
+      if (subsectionInspections && typeof subsectionInspections === 'object') {
+        // Look for templateId in any inspection
+        for (const [inspId, inspData] of Object.entries(subsectionInspections)) {
+          const inspObj = inspData as Record<string, any>;
+          const fbTemplateId = inspObj.templateId || inspObj.template_id || inspObj.TemplateId;
+          if (fbTemplateId) {
+            // Try to find matching template by category/name
+            const { data: matchingTemplate } = await supabase
+              .from('inspection_templates')
+              .select('id, category, name')
+              .or(`category.ilike.%${fbTemplateId}%,name.ilike.%${fbTemplateId}%`)
+              .limit(1)
+              .maybeSingle();
+            
+            if (matchingTemplate) {
+              templateId = matchingTemplate.id;
+              this.log('info', `    ✓ Found template "${matchingTemplate.name}" from inspection templateId: ${fbTemplateId}`);
+              break;
+            }
+          }
+        }
+      }
+      
+      // Fallback to category/inspection type if no template found from inspections
+      if (!templateId) {
+        const category = fbData.category || fbData.Category;
+        const inspectionType = fbData.inspectionType || fbData.inspection_type;
         
-        if (matchingTemplate) {
-          templateId = matchingTemplate.id;
-          this.log('info', `    Found matching template for ${searchTerm}`);
+        if (category || inspectionType) {
+          const searchTerm = inspectionType || category;
+          const { data: matchingTemplate } = await supabase
+            .from('inspection_templates')
+            .select('id, name')
+            .ilike('category', `%${searchTerm}%`)
+            .limit(1)
+            .maybeSingle();
+          
+          if (matchingTemplate) {
+            templateId = matchingTemplate.id;
+            this.log('info', `    ✓ Found template "${matchingTemplate.name}" from category: ${searchTerm}`);
+          }
         }
       }
 
       const subsectionInsertData = {
         name: fbData.name || fbData.subsectionName || fbData.Name || firebaseId,
         description: fbData.description || fbData.Description || null,
-        category: category || null,
+        category: fbData.category || fbData.Category || null,
         site_id: siteId,
         firebase_id: firebaseId,
         tenant_name: fbData.tenantName || fbData.tenant_name || null,

@@ -149,18 +149,36 @@ const FirebaseSync = () => {
                     const category = subObj?.category || subObj?.Category;
                     const inspType = subObj?.inspectionType || subObj?.inspection_type;
                     
-                    if (inspType) inspectionTypes.add(inspType);
+                    // Check inspections for templateId (primary source)
+                    let detectedTemplateId: string | null = null;
+                    const inspections = subObj?.inspections || subObj?.Inspections;
+                    if (inspections && typeof inspections === 'object') {
+                      for (const [inspId, inspData] of Object.entries(inspections as Record<string, any>)) {
+                        const inspObj = inspData as Record<string, any>;
+                        const templateId = inspObj?.templateId || inspObj?.template_id || inspObj?.TemplateId;
+                        if (templateId) {
+                          detectedTemplateId = templateId;
+                          inspectionTypes.add(templateId);
+                          break;
+                        }
+                      }
+                    }
                     
-                    // Find matching template
-                    const searchTerm = inspType || category;
+                    if (inspType && !detectedTemplateId) inspectionTypes.add(inspType);
+                    
+                    // Find matching template - prefer templateId from inspections
+                    const searchTerm = detectedTemplateId || inspType || category;
                     const matchedTemplate = searchTerm && templates ? 
-                      templates.find(t => t.category?.toLowerCase().includes(searchTerm.toLowerCase())) : 
+                      templates.find(t => 
+                        t.category?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                        t.name?.toLowerCase().includes(searchTerm.toLowerCase())
+                      ) : 
                       null;
                     
                     subsectionMatches.push({
                       subsection: subObj?.name || subObj?.Name || subId,
                       template: matchedTemplate?.name || null,
-                      category: category || 'Unknown'
+                      category: detectedTemplateId || category || 'Unknown'
                     });
                   }
                 }
