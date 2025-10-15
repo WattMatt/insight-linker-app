@@ -551,10 +551,30 @@ export class MeticulousMigration {
       this.log('info', '    Subsection Firebase fields:', Object.keys(fbData));
       
       // Create subsection
+      // Find matching inspection template based on category or inspection type
+      const category = fbData.category || fbData.Category;
+      const inspectionType = fbData.inspectionType || fbData.inspection_type;
+      
+      let templateId = null;
+      if (category || inspectionType) {
+        const searchTerm = inspectionType || category;
+        const { data: matchingTemplate } = await supabase
+          .from('inspection_templates')
+          .select('id')
+          .ilike('category', `%${searchTerm}%`)
+          .limit(1)
+          .single();
+        
+        if (matchingTemplate) {
+          templateId = matchingTemplate.id;
+          this.log('info', `    Found matching template for ${searchTerm}`);
+        }
+      }
+
       const subsectionInsertData = {
         name: fbData.name || fbData.subsectionName || fbData.Name || firebaseId,
         description: fbData.description || fbData.Description || null,
-        category: fbData.category || fbData.Category || null,
+        category: category || null,
         site_id: siteId,
         firebase_id: firebaseId,
         tenant_name: fbData.tenantName || fbData.tenant_name || null,
@@ -566,6 +586,7 @@ export class MeticulousMigration {
         metering_status: fbData.meteringStatus || fbData.metering_status || 'Missing',
         is_compliant: fbData.isCompliant ?? fbData.is_compliant ?? true,
         is_coc_required: fbData.isCocRequired ?? fbData.is_coc_required ?? true,
+        inspection_template_id: templateId,
       };
 
       const { data: newSubsection, error: subsectionError } = await supabase

@@ -70,6 +70,7 @@ const SubsectionDetail = () => {
   const [newInspectionDate, setNewInspectionDate] = useState("");
   const [deleteInspectionId, setDeleteInspectionId] = useState<string | null>(null);
   const [actualClientId, setActualClientId] = useState<string | null>(null);
+  const [linkedTemplate, setLinkedTemplate] = useState<{id: string, name: string, category: string} | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
@@ -89,6 +90,12 @@ const SubsectionDetail = () => {
           id,
           firebase_id,
           site_id,
+          inspection_template_id,
+          inspection_templates!inspection_template_id (
+            id,
+            name,
+            category
+          ),
           sites!inner (
             id,
             firebase_id,
@@ -115,6 +122,11 @@ const SubsectionDetail = () => {
       const supabaseClientId = supabaseSubsection.sites.clients.id;
       
       setActualClientId(supabaseClientId);
+      
+      // Store linked template if available
+      if (supabaseSubsection.inspection_templates) {
+        setLinkedTemplate(supabaseSubsection.inspection_templates as any);
+      }
 
       console.log('Firebase IDs:', { firebaseClientId, firebaseSiteId, firebaseSubsectionId });
 
@@ -281,19 +293,22 @@ const SubsectionDetail = () => {
   };
 
   const handleCreateInspection = async () => {
-    if (!newInspectionType || !newInspectionDate) {
-      toast.error("Please fill in all fields");
+    if (!newInspectionDate) {
+      toast.error("Please select an inspection date");
       return;
     }
 
     try {
+      // Use the linked template name as the title if no type is specified
+      const inspectionTitle = newInspectionType || linkedTemplate?.name || 'New Inspection';
+      
       // siteId from URL is already the Supabase UUID, so we can use it directly
       const { error } = await supabase
         .from('inspections')
         .insert({
           subsection_id: subsectionId,
           site_id: siteId,
-          title: newInspectionType,
+          title: inspectionTitle,
           inspection_date: newInspectionDate,
           status: 'Pending',
           priority: 'Medium'
@@ -595,11 +610,22 @@ const SubsectionDetail = () => {
                     <DialogTitle>Create New Inspection</DialogTitle>
                   </DialogHeader>
                   <div className="space-y-4 py-4">
+                    {linkedTemplate && (
+                      <Alert>
+                        <AlertCircle className="h-4 w-4" />
+                        <AlertDescription>
+                          This subsection is linked to the <strong>{linkedTemplate.name}</strong> template.
+                          Leave the inspection type empty to use this template.
+                        </AlertDescription>
+                      </Alert>
+                    )}
                     <div className="space-y-2">
-                      <Label htmlFor="inspectionType">Inspection Type</Label>
+                      <Label htmlFor="inspectionType">
+                        Inspection Type {linkedTemplate && "(optional)"}
+                      </Label>
                       <Input
                         id="inspectionType"
-                        placeholder="e.g., Electrical Inspection"
+                        placeholder={linkedTemplate ? `Default: ${linkedTemplate.name}` : "e.g., Electrical Inspection"}
                         value={newInspectionType}
                         onChange={(e) => setNewInspectionType(e.target.value)}
                       />

@@ -686,6 +686,7 @@ export type Database = {
           description: string | null
           firebase_id: string | null
           id: string
+          inspection_template_id: string | null
           is_coc_required: boolean | null
           is_compliant: boolean | null
           meter_serial_number: string | null
@@ -706,6 +707,7 @@ export type Database = {
           description?: string | null
           firebase_id?: string | null
           id?: string
+          inspection_template_id?: string | null
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
           meter_serial_number?: string | null
@@ -726,6 +728,7 @@ export type Database = {
           description?: string | null
           firebase_id?: string | null
           id?: string
+          inspection_template_id?: string | null
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
           meter_serial_number?: string | null
@@ -736,6 +739,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "subsections_inspection_template_id_fkey"
+            columns: ["inspection_template_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_templates"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "subsections_site_id_fkey"
             columns: ["site_id"]
