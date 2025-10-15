@@ -95,15 +95,23 @@ const ClientSites = () => {
         // Skip if not an object
         if (typeof siteData !== 'object' || siteData === null) continue;
 
+        // Log all available fields to identify image field names
+        console.log(`Site ${siteKey} fields:`, Object.keys(siteData));
+        console.log(`Site ${siteKey} data sample:`, {
+          ...siteData,
+          // Truncate long fields for readability
+          subsections: siteData.subsections ? '[subsections data]' : undefined
+        });
+
         const site: Site = {
           id: siteKey,
           name: siteData.siteName || siteData.name || siteData.Name || siteKey,
           address: siteData.physicalAddress || siteData.address || siteData.Address || null,
           site_type: siteData.siteType || siteData.site_type || siteData.type || null,
           source: 'firebase' as const,
-          site_image_url: siteData.siteImageUrl || siteData.site_image_url || null,
-          client_logo_url: siteData.clientLogoUrl || siteData.client_logo_url || null,
-          project_logo_url: siteData.projectLogoUrl || siteData.project_logo_url || null,
+          site_image_url: siteData.siteImageUrl || siteData.site_image_url || siteData.siteImage || null,
+          client_logo_url: siteData.clientLogoUrl || siteData.client_logo_url || siteData.clientLogo || null,
+          project_logo_url: siteData.projectLogoUrl || siteData.project_logo_url || siteData.projectLogo || siteData.logo || null,
         };
 
         transformedSites.push(site);
