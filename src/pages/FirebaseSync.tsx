@@ -1047,7 +1047,22 @@ const FirebaseSync = () => {
 
                 // Find or create template
                 let templateId: string | null = null;
-                if (inspection.type || inspection.templateName) {
+                
+                // Priority 1: Use templateId (Firebase field)
+                if (inspection.templateId) {
+                  const { data: template } = await supabase
+                    .from('inspection_templates')
+                    .select('id')
+                    .or(`category.ilike.%${inspection.templateId}%,name.ilike.%${inspection.templateId}%`)
+                    .maybeSingle();
+
+                  if (template) {
+                    templateId = template.id;
+                  }
+                }
+                
+                // Priority 2: Use templateName or type as fallback
+                if (!templateId && (inspection.type || inspection.templateName)) {
                   const templateName = inspection.templateName || inspection.type;
                   const { data: template } = await supabase
                     .from('inspection_templates')
