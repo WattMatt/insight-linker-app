@@ -72,6 +72,7 @@ const SubsectionDetail = () => {
   const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
+  const [migratingDocs, setMigratingDocs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (subsectionId) {
@@ -350,6 +351,98 @@ const SubsectionDetail = () => {
     }
     window.open(url, '_blank');
     toast.success(`Opening ${fileName}`);
+  };
+
+  const handleMigrateDocument = async (firebaseUrl: string, fileName: string, categoryName: string) => {
+    const docKey = `${categoryName}-${fileName}`;
+    
+    if (migratingDocs.has(docKey)) {
+      return; // Already migrating
+    }
+
+    setMigratingDocs(prev => new Set(prev).add(docKey));
+    
+    try {
+      // Check if document already exists in Supabase
+      const { data: existingDoc, error: checkError } = await supabase
+        .from('subsection_documents')
+        .select('id')
+        .eq('subsection_id', subsectionId)
+        .eq('file_name', fileName)
+        .maybeSingle();
+
+      if (checkError) throw checkError;
+
+      if (existingDoc) {
+        toast.info(`${fileName} is already migrated`);
+        setMigratingDocs(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(docKey);
+          return newSet;
+        });
+        return;
+      }
+
+      // Get or create document category
+      let categoryId: string;
+      const { data: existingCategory } = await supabase
+        .from('document_categories')
+        .select('id')
+        .eq('subsection_id', subsectionId)
+        .eq('name', categoryName)
+        .maybeSingle();
+
+      if (existingCategory) {
+        categoryId = existingCategory.id;
+      } else {
+        const { data: newCategory, error: categoryError } = await supabase
+          .from('document_categories')
+          .insert({ subsection_id: subsectionId, name: categoryName })
+          .select('id')
+          .single();
+
+        if (categoryError) throw categoryError;
+        categoryId = newCategory.id;
+      }
+
+      // Migrate file using edge function
+      const { data: migrationResult, error: migrationError } = await supabase.functions.invoke('migrate-storage', {
+        body: {
+          firebaseStorageUrl: firebaseUrl,
+          targetBucket: 'documents',
+          targetPath: `subsections/${subsectionId}/${fileName}`
+        }
+      });
+
+      if (migrationError) throw migrationError;
+
+      // Create subsection_documents record
+      const { error: insertError } = await supabase
+        .from('subsection_documents')
+        .insert({
+          subsection_id: subsectionId,
+          category_id: categoryId,
+          file_name: fileName,
+          file_url: migrationResult.publicUrl
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success(`${fileName} migrated successfully`);
+      
+      // Refresh the data
+      await fetchSubsectionData();
+      
+    } catch (error) {
+      console.error('Error migrating document:', error);
+      toast.error(`Failed to migrate ${fileName}: ${error.message}`);
+    } finally {
+      setMigratingDocs(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(docKey);
+        return newSet;
+      });
+    }
   };
 
   const handleCreateInspection = async () => {
@@ -856,14 +949,33 @@ const SubsectionDetail = () => {
                                   )}
                                 </div>
                               </div>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => handleDownloadDocument(file.url, file.name)}
-                                className="ml-2"
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
+                              <div className="flex items-center gap-2">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => handleDownloadDocument(file.url, file.name)}
+                                >
+                                  <Download className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
+                                  disabled={migratingDocs.has(`${category.name}-${file.name}`)}
+                                >
+                                  {migratingDocs.has(`${category.name}-${file.name}`) ? (
+                                    <>
+                                      <Upload className="h-4 w-4 mr-1 animate-pulse" />
+                                      Migrating...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Upload className="h-4 w-4 mr-1" />
+                                      Migrate
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           ))}
                         </div>
