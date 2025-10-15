@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Table,
   TableBody,
@@ -38,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserPlus, Mail, Send, MoreVertical, Edit } from "lucide-react";
+import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 interface UserProfile {
@@ -89,6 +90,8 @@ const Users = () => {
     postal_code: "",
     bio: "",
   });
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string>("");
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -254,6 +257,7 @@ const Users = () => {
     onSuccess: () => {
       toast.success("User profile updated successfully");
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["current-user-profile"] });
       setEditOpen(false);
     },
     onError: (error: any) => {
@@ -277,13 +281,72 @@ const Users = () => {
       postal_code: user.postal_code || "",
       bio: user.bio || "",
     });
+    setAvatarPreview(user.avatar_url || "");
+    setAvatarFile(null);
     setEditOpen(true);
+  };
+
+  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      if (file.size > 5 * 1024 * 1024) {
+        toast.error("Image size must be less than 5MB");
+        return;
+      }
+      setAvatarFile(file);
+      setAvatarPreview(URL.createObjectURL(file));
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreview("");
+  };
+
+  const getInitials = (name: string | null) => {
+    if (!name) return "U";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
   };
 
   const handleSaveEdit = async () => {
     if (!selectedUser) return;
 
     try {
+      let avatarUrl = editFormData.full_name ? selectedUser.avatar_url : null;
+
+      // Upload avatar if a new file is selected
+      if (avatarFile) {
+        const fileExt = avatarFile.name.split(".").pop();
+        const fileName = `${selectedUser.id}/avatar.${fileExt}`;
+
+        // Delete old avatar if exists
+        if (selectedUser.avatar_url) {
+          const oldPath = selectedUser.avatar_url.split("/").slice(-2).join("/");
+          await supabase.storage.from("profile-images").remove([oldPath]);
+        }
+
+        const { error: uploadError } = await supabase.storage
+          .from("profile-images")
+          .upload(fileName, avatarFile, { upsert: true });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("profile-images")
+          .getPublicUrl(fileName);
+
+        avatarUrl = publicUrl;
+      } else if (!avatarPreview && selectedUser.avatar_url) {
+        // Remove avatar if preview is cleared
+        const oldPath = selectedUser.avatar_url.split("/").slice(-2).join("/");
+        await supabase.storage.from("profile-images").remove([oldPath]);
+        avatarUrl = null;
+      }
+
       await Promise.all([
         updateRoleMutation.mutateAsync({
           userId: selectedUser.id,
@@ -295,11 +358,11 @@ const Users = () => {
         }),
         updateProfileMutation.mutateAsync({
           userId: selectedUser.id,
-          profileData: editFormData,
+          profileData: { ...editFormData, avatar_url: avatarUrl },
         }),
       ]);
-    } catch (error) {
-      // Errors are handled by mutations
+    } catch (error: any) {
+      toast.error(error.message || "Failed to update user");
     }
   };
 
@@ -534,6 +597,51 @@ const Users = () => {
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-4 py-4">
+            {/* Profile Image Section */}
+            <div className="space-y-3">
+              <h3 className="text-sm font-semibold text-foreground">Profile Image</h3>
+              <div className="flex items-center gap-4">
+                <Avatar className="h-20 w-20">
+                  <AvatarImage src={avatarPreview} alt={editFormData.full_name} />
+                  <AvatarFallback className="bg-primary text-primary-foreground text-xl">
+                    {getInitials(editFormData.full_name)}
+                  </AvatarFallback>
+                </Avatar>
+                <div className="flex-1 space-y-2">
+                  <div className="flex gap-2">
+                    <Label
+                      htmlFor="avatar-upload"
+                      className="cursor-pointer inline-flex items-center justify-center rounded-md text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 px-4 py-2"
+                    >
+                      <Upload className="h-4 w-4 mr-2" />
+                      Upload Image
+                    </Label>
+                    <Input
+                      id="avatar-upload"
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleAvatarChange}
+                    />
+                    {avatarPreview && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRemoveAvatar}
+                      >
+                        <X className="h-4 w-4 mr-2" />
+                        Remove
+                      </Button>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    JPG, PNG or WEBP. Max 5MB.
+                  </p>
+                </div>
+              </div>
+            </div>
+
             {/* Account Information */}
             <div className="space-y-3">
               <h3 className="text-sm font-semibold text-foreground">Account Information</h3>

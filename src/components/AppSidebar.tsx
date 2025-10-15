@@ -9,12 +9,14 @@ import {
   CalendarDays,
   CloudUpload,
   FileText,
-  Settings as SettingsIcon
+  Settings as SettingsIcon,
+  User as UserIcon
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
   Sidebar,
   SidebarContent,
@@ -57,6 +59,33 @@ export function AppSidebar() {
       return data;
     },
   });
+
+  // Fetch current user profile
+  const { data: currentUser } = useQuery({
+    queryKey: ["current-user-profile"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("full_name, avatar_url, email")
+        .eq("id", user.id)
+        .single();
+      
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const getInitials = (name: string | null | undefined) => {
+    if (!name) return "U";
+    const parts = name.trim().split(" ");
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+  };
 
   const handleLogout = async () => {
     const { error } = await supabase.auth.signOut();
@@ -121,14 +150,39 @@ export function AppSidebar() {
       </SidebarContent>
 
       <SidebarFooter className="border-t border-sidebar-border p-4">
-        <SidebarMenu>
-          <SidebarMenuItem>
-            <SidebarMenuButton onClick={handleLogout}>
-              <LogOut className="h-4 w-4" />
-              {!collapsed && <span>Logout</span>}
-            </SidebarMenuButton>
-          </SidebarMenuItem>
-        </SidebarMenu>
+        <div className="space-y-2">
+          {/* User Profile Section */}
+          {currentUser && (
+            <div className={`flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50 ${collapsed ? 'justify-center' : ''}`}>
+              <Avatar className="h-8 w-8 flex-shrink-0">
+                <AvatarImage src={currentUser.avatar_url || undefined} alt={currentUser.full_name || "User"} />
+                <AvatarFallback className="bg-primary text-primary-foreground text-xs">
+                  {getInitials(currentUser.full_name)}
+                </AvatarFallback>
+              </Avatar>
+              {!collapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-sidebar-foreground truncate">
+                    {currentUser.full_name || "User"}
+                  </p>
+                  <p className="text-xs text-muted-foreground truncate">
+                    {currentUser.email}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          
+          {/* Logout Button */}
+          <SidebarMenu>
+            <SidebarMenuItem>
+              <SidebarMenuButton onClick={handleLogout}>
+                <LogOut className="h-4 w-4" />
+                {!collapsed && <span>Logout</span>}
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+          </SidebarMenu>
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
