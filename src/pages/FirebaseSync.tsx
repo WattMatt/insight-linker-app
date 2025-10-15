@@ -41,10 +41,27 @@ interface MigrationStatus {
     hasSupabaseConfig: boolean;
     needsUpdate: boolean;
   };
-  files: {
-    images: number;
-    documents: number;
-    toMigrate: Array<{url: string; type: string; path: string}>;
+  storage: {
+    clientLogos: {
+      firebase: number;
+      supabase: number;
+    };
+    siteImages: {
+      firebase: number;
+      supabase: number;
+    };
+    siteDocuments: {
+      firebase: number;
+      supabase: number;
+    };
+    subsectionDocuments: {
+      firebase: number;
+      supabase: number;
+    };
+    inspectionPhotos: {
+      firebase: number;
+      supabase: number;
+    };
   };
 }
 
@@ -240,7 +257,24 @@ const FirebaseSync = () => {
       // Scan Supabase
       const { data: supabaseClients } = await supabase
         .from('clients')
-        .select('firebase_id');
+        .select('firebase_id, logo_url');
+      
+      const { data: supabaseSites } = await supabase
+        .from('sites')
+        .select('firebase_id, site_image_url');
+      
+      const { data: supabaseSiteDocuments } = await supabase
+        .from('site_documents')
+        .select('id');
+      
+      const { data: supabaseSubsectionDocuments } = await supabase
+        .from('subsection_documents')
+        .select('id');
+      
+      const { data: supabaseInspectionItems } = await supabase
+        .from('inspection_items')
+        .select('id')
+        .not('image_url', 'is', null);
       
       const { count: sitesCount } = await supabase
         .from('sites')
@@ -266,6 +300,93 @@ const FirebaseSync = () => {
       const { count: calendarEventsCount } = await supabase
         .from('calendar_events')
         .select('*', { count: 'exact', head: true });
+      
+      // Count storage items from Firebase
+      let fbClientLogos = 0;
+      let fbSiteImages = 0;
+      let fbSiteDocuments = 0;
+      let fbSubsectionDocuments = 0;
+      let fbInspectionPhotos = 0;
+      
+      for (const [clientId, clientData] of Object.entries(firebaseData)) {
+        if (typeof clientData === 'object' && clientData !== null) {
+          const clientObj = clientData as Record<string, any>;
+          
+          // Count client logos
+          if (clientObj.logoUrl || clientObj.logo_url || clientObj.LogoUrl) {
+            fbClientLogos++;
+          }
+          
+          for (const [siteKey, siteData] of Object.entries(clientObj)) {
+            if (['name', 'clientName', 'email', 'phone', 'logo', 'logoUrl'].some(prop => 
+              siteKey.toLowerCase().includes(prop.toLowerCase()))) continue;
+            
+            if (typeof siteData === 'object' && siteData !== null) {
+              const siteObj = siteData as Record<string, any>;
+              
+              // Count site images
+              if (siteObj.siteImageUrl || siteObj.site_image_url || siteObj.imageUrl) {
+                fbSiteImages++;
+              }
+              
+              // Count site documents
+              const docs = siteObj.documents || siteObj.Documents || siteObj.files || siteObj.Files;
+              if (docs && typeof docs === 'object') {
+                for (const [categoryKey, categoryData] of Object.entries(docs)) {
+                  if (typeof categoryData === 'object' && categoryData !== null) {
+                    fbSiteDocuments += Object.keys(categoryData).length;
+                  }
+                }
+              }
+              
+              // Count subsection documents and inspection photos
+              const subsections = siteObj.subsections;
+              if (subsections && typeof subsections === 'object') {
+                for (const [subId, subData] of Object.entries(subsections as Record<string, any>)) {
+                  const subObj = subData as Record<string, any>;
+                  
+                  // Count subsection documents
+                  const subDocs = subObj.documents || subObj.Documents || subObj.files || subObj.Files;
+                  if (subDocs && typeof subDocs === 'object') {
+                    for (const [catKey, catData] of Object.entries(subDocs)) {
+                      if (typeof catData === 'object' && catData !== null) {
+                        fbSubsectionDocuments += Object.keys(catData).length;
+                      }
+                    }
+                  }
+                  
+                  // Count inspection photos
+                  const inspections = subObj.inspections || subObj.Inspections;
+                  if (inspections && typeof inspections === 'object') {
+                    for (const [inspId, inspData] of Object.entries(inspections as Record<string, any>)) {
+                      const inspObj = inspData as Record<string, any>;
+                      
+                      // Count photos in jsonData or other fields
+                      const jsonData = inspObj.jsonData;
+                      if (jsonData && typeof jsonData === 'object') {
+                        const countPhotos = (obj: any): number => {
+                          let count = 0;
+                          if (obj && typeof obj === 'object') {
+                            for (const [key, value] of Object.entries(obj)) {
+                              if (key === 'images' && typeof value === 'object') {
+                                count += Object.keys(value).length;
+                              } else if (typeof value === 'object') {
+                                count += countPhotos(value);
+                              }
+                            }
+                          }
+                          return count;
+                        };
+                        fbInspectionPhotos += countPhotos(jsonData);
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
       
       const migratedFirebaseIds = new Set(
         (supabaseClients || []).map(c => c.firebase_id).filter(Boolean)
@@ -321,10 +442,27 @@ const FirebaseSync = () => {
           hasSupabaseConfig,
           needsUpdate: needsSettingsUpdate,
         },
-        files: {
-          images: imageUrls.length,
-          documents: documentUrls.length,
-          toMigrate: allFileUrls,
+        storage: {
+          clientLogos: {
+            firebase: fbClientLogos,
+            supabase: supabaseClients?.filter(c => c.logo_url).length || 0,
+          },
+          siteImages: {
+            firebase: fbSiteImages,
+            supabase: supabaseSites?.filter(s => s.site_image_url).length || 0,
+          },
+          siteDocuments: {
+            firebase: fbSiteDocuments,
+            supabase: supabaseSiteDocuments?.length || 0,
+          },
+          subsectionDocuments: {
+            firebase: fbSubsectionDocuments,
+            supabase: supabaseSubsectionDocuments?.length || 0,
+          },
+          inspectionPhotos: {
+            firebase: fbInspectionPhotos,
+            supabase: supabaseInspectionItems?.length || 0,
+          },
         },
       };
 
@@ -1224,8 +1362,12 @@ const FirebaseSync = () => {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">To Migrate:</span>
-                    <Badge variant="secondary">Auto</Badge>
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.storage.clientLogos.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.storage.clientLogos.supabase}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Clients
@@ -1244,8 +1386,12 @@ const FirebaseSync = () => {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">To Migrate:</span>
-                    <Badge variant="secondary">Auto</Badge>
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.storage.siteImages.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.storage.siteImages.supabase}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Sites
@@ -1264,8 +1410,12 @@ const FirebaseSync = () => {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">To Migrate:</span>
-                    <Badge variant="secondary">Auto</Badge>
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.storage.siteDocuments.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.storage.siteDocuments.supabase}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Sites
@@ -1284,8 +1434,12 @@ const FirebaseSync = () => {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">To Migrate:</span>
-                    <Badge variant="secondary">Auto</Badge>
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.storage.subsectionDocuments.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.storage.subsectionDocuments.supabase}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Subsections
@@ -1304,8 +1458,12 @@ const FirebaseSync = () => {
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">To Migrate:</span>
-                    <Badge variant="secondary">Auto</Badge>
+                    <span className="text-sm text-muted-foreground">Firebase:</span>
+                    <Badge variant="secondary">{migrationStatus.storage.inspectionPhotos.firebase}</Badge>
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">Supabase:</span>
+                    <Badge variant="default">{migrationStatus.storage.inspectionPhotos.supabase}</Badge>
                   </div>
                   <p className="text-xs text-muted-foreground italic mt-2">
                     Migrated with Inspections
@@ -1433,7 +1591,7 @@ const FirebaseSync = () => {
                       <li>Create {migrationStatus.clients.toMigrate.length} client(s) in Supabase</li>
                       <li>Migrate all associated sites and subsections</li>
                       <li>Migrate {migrationStatus.calendarEvents.toMigrate} calendar event(s)</li>
-                      <li>Copy {migrationStatus.files.toMigrate.length} file(s) to Supabase Storage</li>
+                      <li>Copy all storage files (client logos, site images/documents, subsection docs, inspection photos)</li>
                       <li>Update all URLs to point to Supabase</li>
                     </ul>
                   </AlertDescription>
