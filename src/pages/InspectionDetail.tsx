@@ -20,6 +20,7 @@ interface InspectionTemplate {
   sections: {
     [key: string]: {
       name: string;
+      isImageGallery?: boolean;
       items: {
         [key: string]: {
           name: string;
@@ -206,19 +207,39 @@ const InspectionDetail = () => {
         // No template - create a basic structure from json_data if it exists
         if (mappedInspection.jsonData && Object.keys(mappedInspection.jsonData).length > 0) {
           const sections: any = {};
+          const imageCategories = ['General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'];
+          
           Object.keys(mappedInspection.jsonData).forEach(sectionKey => {
-            sections[sectionKey] = {
-              name: sectionKey,
-              items: {}
-            };
-            const sectionData = mappedInspection.jsonData![sectionKey];
-            Object.keys(sectionData).forEach(itemKey => {
-              sections[sectionKey].items[itemKey] = {
-                name: itemKey,
-                type: 'inspection'
+            // Check if this is an image category (imagesGeneral, imagesDB, etc.)
+            const isImageCategory = imageCategories.some(cat => sectionKey === `images${cat}`);
+            
+            if (isImageCategory) {
+              // Create a special section for image categories
+              const categoryName = sectionKey.replace('images', '');
+              sections[sectionKey] = {
+                name: `${categoryName} Images`,
+                items: {},
+                isImageGallery: true
               };
-            });
+            } else if (typeof mappedInspection.jsonData![sectionKey] === 'object' && 
+                       !Array.isArray(mappedInspection.jsonData![sectionKey])) {
+              // Regular section with items
+              sections[sectionKey] = {
+                name: sectionKey,
+                items: {}
+              };
+              const sectionData = mappedInspection.jsonData![sectionKey];
+              if (sectionData && typeof sectionData === 'object') {
+                Object.keys(sectionData).forEach(itemKey => {
+                  sections[sectionKey].items[itemKey] = {
+                    name: itemKey,
+                    type: 'inspection'
+                  };
+                });
+              }
+            }
           });
+          
           setTemplate({
             name: 'Inspection Template',
             sections
@@ -574,6 +595,122 @@ const InspectionDetail = () => {
     </Card>
   );
 
+  const renderImageGallery = (sectionKey: string) => {
+    const imagesData = inspection?.jsonData?.[sectionKey] || {};
+    const images: Array<{ url: string; name: string; id: string }> = [];
+    
+    // Extract images from Firebase structure
+    if (typeof imagesData === 'object' && !Array.isArray(imagesData)) {
+      Object.entries(imagesData).forEach(([imgId, imgData]: [string, any]) => {
+        if (imgData && (imgData.url || imgData.path)) {
+          images.push({
+            id: imgId,
+            url: imgData.url || imgData.path,
+            name: imgData.name || imgData.fileName || imgId
+          });
+        }
+      });
+    }
+
+    return (
+      <Card>
+        <CardHeader>
+          <CardTitle>{sectionKey.replace('images', '')} Images</CardTitle>
+          <p className="text-sm text-muted-foreground">
+            {images.length} image{images.length !== 1 ? 's' : ''} in this category
+          </p>
+        </CardHeader>
+        <CardContent>
+          {images.length > 0 ? (
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {images.map((img, index) => {
+                const isFirebaseUrl = img.url.includes('firebasestorage.googleapis.com');
+                const migrateKey = `${sectionKey}-${img.id}`;
+                const isMigrating = migratingImages.has(migrateKey);
+                
+                return (
+                  <div key={img.id} className="relative group">
+                    <img
+                      src={img.url}
+                      alt={img.name}
+                      className="w-full h-48 object-cover rounded border"
+                    />
+                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-xs truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                      {img.name}
+                    </div>
+                    {isFirebaseUrl && (
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        className="absolute top-1 left-1 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={async () => {
+                          setMigratingImages(prev => new Set(prev).add(migrateKey));
+                          try {
+                            const response = await fetch(img.url);
+                            const blob = await response.blob();
+                            const fileExt = img.url.split('.').pop()?.split('?')[0] || 'jpg';
+                            const fileName = `${inspectionId}/${sectionKey}/${img.id}.${fileExt}`;
+                            
+                            const { data, error } = await supabase.storage
+                              .from('inspection-photos')
+                              .upload(fileName, blob);
+
+                            if (error) throw error;
+
+                            const { data: urlData } = supabase.storage
+                              .from('inspection-photos')
+                              .getPublicUrl(data.path);
+
+                            // Update jsonData with new URL
+                            setInspection(prev => {
+                              if (!prev) return null;
+                              const jsonData = prev.jsonData || {};
+                              const sectionData = jsonData[sectionKey] || {};
+                              
+                              return {
+                                ...prev,
+                                jsonData: {
+                                  ...jsonData,
+                                  [sectionKey]: {
+                                    ...sectionData,
+                                    [img.id]: {
+                                      ...sectionData[img.id],
+                                      url: urlData.publicUrl
+                                    }
+                                  }
+                                }
+                              };
+                            });
+
+                            toast.success("Image migrated successfully");
+                          } catch (error) {
+                            console.error("Error migrating image:", error);
+                            toast.error("Failed to migrate image");
+                          } finally {
+                            setMigratingImages(prev => {
+                              const newSet = new Set(prev);
+                              newSet.delete(migrateKey);
+                              return newSet;
+                            });
+                          }
+                        }}
+                        disabled={isMigrating}
+                      >
+                        {isMigrating ? "Migrating..." : "Migrate"}
+                      </Button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="text-sm text-muted-foreground">No images in this category</p>
+          )}
+        </CardContent>
+      </Card>
+    );
+  };
+
   const renderInspectionItem = (sectionKey: string, itemKey: string, item: any) => {
     const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
     
@@ -783,16 +920,20 @@ const InspectionDetail = () => {
 
         {Object.entries(template.sections || {}).map(([sectionKey, section]) => (
           <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{section.name}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                {Object.entries(section.items || {}).map(([itemKey, item]) =>
-                  renderInspectionItem(sectionKey, itemKey, item)
-                )}
-              </CardContent>
-            </Card>
+            {section.isImageGallery ? (
+              renderImageGallery(sectionKey)
+            ) : (
+              <Card>
+                <CardHeader>
+                  <CardTitle>{section.name}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {Object.entries(section.items || {}).map(([itemKey, item]) =>
+                    renderInspectionItem(sectionKey, itemKey, item)
+                  )}
+                </CardContent>
+              </Card>
+            )}
           </TabsContent>
         ))}
 
