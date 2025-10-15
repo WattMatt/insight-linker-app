@@ -38,25 +38,18 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     doc.setFont(undefined, 'normal');
     doc.text(title, x + width / 2, y + 10, { align: 'center', maxWidth: width - 4 });
     
-    // Circular progress
+    // Circular progress - fully filled circle
     const centerX = x + width / 2;
     const centerY = y + 28;
     const radius = 12;
     
-    // Background circle
-    doc.setFillColor(230, 230, 230);
+    // Fill the entire circle with color
+    doc.setFillColor(colorR, colorG, colorB);
     doc.circle(centerX, centerY, radius, 'F');
     
-    // Progress arc
-    const endAngle = (percentage / 100) * 360;
-    if (percentage > 0) {
-      doc.setFillColor(colorR, colorG, colorB);
-      drawArc(doc, centerX, centerY, radius, 0, endAngle);
-    }
-    
-    // Percentage text
+    // Percentage text (white on colored circle)
     doc.setFontSize(14);
-    doc.setTextColor(colorR, colorG, colorB);
+    doc.setTextColor(255, 255, 255);
     doc.setFont(undefined, 'bold');
     doc.text(`${percentage}%`, centerX, centerY + 3, { align: 'center' });
     
@@ -236,12 +229,23 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         return acc;
       }, {} as Record<string, { total: number; compliant: number }>);
       
+      // Abbreviate category names
+      const categoryAbbreviations: Record<string, string> = {
+        'Commercial Activity': 'CA',
+        'Electrical Equipment': 'EE',
+        'Line Shop': 'LS',
+        'Lightning Protection': 'LP',
+        'Generator': 'GEN',
+        'Transformer': 'TRANS'
+      };
+      
       const categories = Object.keys(categoryGroups).slice(0, 3);
       categories.forEach((cat, idx) => {
         const data = categoryGroups[cat];
         const percentage = Math.round((data.compliant / data.total) * 100) || 0;
         const xPos = startX + (cardWidth + cardSpacing) * idx;
-        drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, cat.toUpperCase().replace('_', ' '), percentage, `${data.compliant} of ${data.total} compliant`, 220, 53, 69);
+        const abbrev = categoryAbbreviations[cat] || cat.substring(0, 3).toUpperCase();
+        drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant} of ${data.total} compliant`, 220, 53, 69);
       });
       
       // Footer
@@ -298,7 +302,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     // Card border
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
-    doc.setLineWidth(1);
+    doc.setLineWidth(2);
     doc.roundedRect(15, startY, pageWidth - 30, cardHeight, 3, 3, 'S');
     
     // White background
@@ -307,6 +311,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     // Re-draw border
     doc.setDrawColor(borderColor[0], borderColor[1], borderColor[2]);
+    doc.setLineWidth(2);
     doc.roundedRect(15, startY, pageWidth - 30, cardHeight, 3, 3, 'S');
     
     // Title (subsection name)
@@ -355,33 +360,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     yPos = (doc as any).lastAutoTable.finalY + 5;
     
-    // Certificates of Compliance
-    if (subsection.coc_number) {
-      doc.setFontSize(10);
-      doc.setTextColor(63, 81, 181);
-      doc.setFont(undefined, 'bold');
-      doc.text("Certificates of Compliance", 20, yPos);
-      yPos += 3;
-      
-      autoTable(doc, {
-        startY: yPos,
-        margin: { left: 20, right: 20 },
-        head: [['COC #', 'Issue Date', 'Type', 'Status']],
-        body: [[
-          subsection.coc_number || 'N/A',
-          subsection.coc_issue_date || 'N/A',
-          subsection.coc_type || 'N/A',
-          subsection.is_compliant ? 'Pass' : 'Fail'
-        ]],
-        theme: 'plain',
-        styles: { fontSize: 8, cellPadding: 1.5 },
-        headStyles: { fillColor: [240, 240, 240], textColor: [33, 33, 33], fontStyle: 'bold' }
-      });
-      
-      yPos = (doc as any).lastAutoTable.finalY + 5;
-    }
-    
-    // Snag List
+    // Snag List (Blue heading)
     doc.setFontSize(10);
     doc.setTextColor(63, 81, 181);
     doc.setFont(undefined, 'bold');
@@ -459,30 +438,22 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       doc.setTextColor(33, 33, 33);
       doc.setFont(undefined, 'normal');
       
-      // Group documents by common prefixes/categories
-      const docsByCategory: Record<string, string[]> = {};
+      // Show full filenames with count
+      const fileGroups: Record<string, number> = {};
       docs.forEach(d => {
         const fileName = d.file_name || 'Unknown';
-        // Try to extract category from filename (e.g., "01 COC", "03 Line Diagram")
-        const match = fileName.match(/^(\d+\s+[A-Za-z\s]+)/);
-        const category = match ? match[1] : fileName.split('_')[0] || 'Other';
-        
-        if (!docsByCategory[category]) {
-          docsByCategory[category] = [];
-        }
-        docsByCategory[category].push(fileName);
+        fileGroups[fileName] = (fileGroups[fileName] || 0) + 1;
       });
       
-      // Display categories
-      const categoryEntries = Object.entries(docsByCategory).slice(0, 4);
-      categoryEntries.forEach(([category, files]) => {
-        doc.text(`- ${category} (${files.length})`, 20, yPos);
+      // Display up to 3 files
+      Object.entries(fileGroups).slice(0, 3).forEach(([fileName, count]) => {
+        doc.text(`- ${fileName} (${count})`, 20, yPos);
         yPos += 4;
       });
       
-      if (Object.keys(docsByCategory).length === 0) {
+      if (Object.keys(fileGroups).length > 3) {
         doc.setTextColor(100, 100, 100);
-        doc.text("Documents uploaded but uncategorized.", 20, yPos);
+        doc.text(`... and ${Object.keys(fileGroups).length - 3} more files`, 20, yPos);
       }
     } else {
       doc.setFontSize(8);
