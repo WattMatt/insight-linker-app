@@ -273,7 +273,7 @@ const Users = () => {
       company: user.company || "",
       address: user.address || "",
       city: user.city || "",
-      country: user.country || "",
+      country: user.country || "South Africa",
       postal_code: user.postal_code || "",
       bio: user.bio || "",
     });
@@ -581,7 +581,7 @@ const Users = () => {
                     id="edit-full-name"
                     value={editFormData.full_name}
                     onChange={(e) => setEditFormData({ ...editFormData, full_name: e.target.value })}
-                    placeholder="John Doe"
+                    placeholder="Thabo Mbeki"
                   />
                 </div>
                 <div className="space-y-2">
@@ -591,7 +591,7 @@ const Users = () => {
                     type="tel"
                     value={editFormData.phone}
                     onChange={(e) => setEditFormData({ ...editFormData, phone: e.target.value })}
-                    placeholder="+1 (555) 123-4567"
+                    placeholder="+27 82 123 4567"
                   />
                 </div>
               </div>
@@ -607,7 +607,7 @@ const Users = () => {
                     id="edit-job-title"
                     value={editFormData.job_title}
                     onChange={(e) => setEditFormData({ ...editFormData, job_title: e.target.value })}
-                    placeholder="Senior Engineer"
+                    placeholder="Electrical Engineer"
                   />
                 </div>
                 <div className="space-y-2">
@@ -626,7 +626,7 @@ const Users = () => {
                   id="edit-company"
                   value={editFormData.company}
                   onChange={(e) => setEditFormData({ ...editFormData, company: e.target.value })}
-                  placeholder="Acme Corporation"
+                  placeholder="Eskom Holdings"
                 />
               </div>
             </div>
@@ -640,7 +640,7 @@ const Users = () => {
                   id="edit-address"
                   value={editFormData.address}
                   onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
-                  placeholder="123 Main Street"
+                  placeholder="123 Nelson Mandela Boulevard"
                 />
               </div>
               <div className="grid grid-cols-3 gap-4">
@@ -650,16 +650,16 @@ const Users = () => {
                     id="edit-city"
                     value={editFormData.city}
                     onChange={(e) => setEditFormData({ ...editFormData, city: e.target.value })}
-                    placeholder="New York"
+                    placeholder="Johannesburg"
                   />
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="edit-country">Country</Label>
                   <Input
                     id="edit-country"
-                    value={editFormData.country}
+                    value={editFormData.country || "South Africa"}
                     onChange={(e) => setEditFormData({ ...editFormData, country: e.target.value })}
-                    placeholder="United States"
+                    placeholder="South Africa"
                   />
                 </div>
                 <div className="space-y-2">
@@ -668,7 +668,7 @@ const Users = () => {
                     id="edit-postal-code"
                     value={editFormData.postal_code}
                     onChange={(e) => setEditFormData({ ...editFormData, postal_code: e.target.value })}
-                    placeholder="10001"
+                    placeholder="2001"
                   />
                 </div>
               </div>
