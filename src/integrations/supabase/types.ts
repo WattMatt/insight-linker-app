@@ -280,6 +280,7 @@ export type Database = {
           inspection_date: string | null
           inspector_id: string | null
           inspector_name: string | null
+          json_data: Json | null
           location: string | null
           priority: string | null
           project_name: string | null
@@ -289,6 +290,7 @@ export type Database = {
           site_id: string
           status: string
           subsection_id: string | null
+          template_id: string | null
           testing_party: string | null
           title: string
           updated_at: string
@@ -306,6 +308,7 @@ export type Database = {
           inspection_date?: string | null
           inspector_id?: string | null
           inspector_name?: string | null
+          json_data?: Json | null
           location?: string | null
           priority?: string | null
           project_name?: string | null
@@ -315,6 +318,7 @@ export type Database = {
           site_id: string
           status?: string
           subsection_id?: string | null
+          template_id?: string | null
           testing_party?: string | null
           title: string
           updated_at?: string
@@ -332,6 +336,7 @@ export type Database = {
           inspection_date?: string | null
           inspector_id?: string | null
           inspector_name?: string | null
+          json_data?: Json | null
           location?: string | null
           priority?: string | null
           project_name?: string | null
@@ -341,6 +346,7 @@ export type Database = {
           site_id?: string
           status?: string
           subsection_id?: string | null
+          template_id?: string | null
           testing_party?: string | null
           title?: string
           updated_at?: string
@@ -358,6 +364,13 @@ export type Database = {
             columns: ["subsection_id"]
             isOneToOne: false
             referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspections_template_id_fkey"
+            columns: ["template_id"]
+            isOneToOne: false
+            referencedRelation: "inspection_templates"
             referencedColumns: ["id"]
           },
         ]

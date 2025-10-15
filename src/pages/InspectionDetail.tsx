@@ -11,7 +11,7 @@ import { X, Save, Camera, Upload, Trash2, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
-import { readFirebaseData, updateFirebaseData } from "@/lib/firebase";
+// Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
 
 interface InspectionTemplate {
@@ -76,67 +76,58 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // First, fetch the subsection from Supabase to get Firebase IDs
-      const { data: supabaseSubsection, error: subsectionError } = await supabase
-        .from('subsections')
+      // Fetch inspection from Supabase
+      const { data: inspData, error: inspError } = await supabase
+        .from('inspections')
         .select(`
-          id,
-          firebase_id,
-          site_id,
+          *,
           sites!inner (
             id,
-            firebase_id,
-            client_id,
-            clients!inner (
-              id,
-              firebase_id
-            )
+            name,
+            address,
+            client_id
+          ),
+          subsections!inner (
+            id,
+            name
           )
         `)
-        .eq('id', subsectionId)
+        .eq('id', inspectionId)
         .maybeSingle();
 
-      if (subsectionError || !supabaseSubsection) {
-        console.error("Error fetching subsection from Supabase:", subsectionError);
-        toast.error("Subsection not found in database");
-        return;
-      }
-
-      // Extract Firebase IDs
-      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
-      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
-      const firebaseSubsectionId = supabaseSubsection.firebase_id;
-
-      console.log('Firebase IDs:', { firebaseClientId, firebaseSiteId, firebaseSubsectionId, inspectionId });
-
-      // Fetch inspection data using Firebase IDs
-      const inspectionPath = `/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}/inspections/${inspectionId}`;
-      const inspData = await readFirebaseData(inspectionPath);
-
-      if (!inspData) {
+      if (inspError || !inspData) {
+        console.error("Error fetching inspection from Supabase:", inspError);
         toast.error("Inspection not found");
         navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`);
         return;
       }
 
-      setInspection(inspData);
+      // Map Supabase data to inspection format
+      const mappedInspection: InspectionData = {
+        type: inspData.status || '',
+        date: inspData.inspection_date || '',
+        projectName: inspData.project_name || '',
+        shopNumber: inspData.shop_number || '',
+        shopName: inspData.shop_name || '',
+        inspectorName: inspData.inspector_name || '',
+        clientRep: inspData.client_rep || '',
+        consultant: inspData.consultant || '',
+        contractor: inspData.contractor || '',
+        testingParty: inspData.testing_party || '',
+        location: inspData.location || '',
+        jsonData: (inspData.json_data as InspectionData['jsonData']) || {}
+      };
 
-      // Fetch site and subsection data
-      const siteInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}`);
-      const subsectionInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}`);
-      setSiteData(siteInfo);
-      setSubsectionData(subsectionInfo);
+      setInspection(mappedInspection);
+      setSiteData({ siteName: inspData.sites.name, physicalAddress: inspData.sites.address });
+      setSubsectionData({ name: inspData.subsections.name });
 
-      // Fetch template - use templateId if available, fallback to type
-      const templateId = inspData.templateId || inspData.type;
-      
-      // Try fetching from Supabase templates first
-      if (templateId) {
+      // Fetch template
+      if (inspData.template_id) {
         const { data: supabaseTemplate } = await supabase
           .from('inspection_templates')
           .select('*')
-          .or(`category.ilike.%${templateId}%,name.ilike.%${templateId}%`)
-          .limit(1)
+          .eq('id', inspData.template_id)
           .maybeSingle();
         
         if (supabaseTemplate && supabaseTemplate.sections) {
@@ -149,19 +140,6 @@ const InspectionDetail = () => {
           const firstSection = Object.keys(supabaseTemplate.sections as any)[0];
           if (firstSection) {
             setActiveTab(firstSection);
-          }
-        } else {
-          // Fallback to Firebase templates
-          const templatePath = `/reportTemplates/${templateId}`;
-          const templateData = await readFirebaseData(templatePath);
-
-          if (templateData) {
-            setTemplate(templateData);
-            // Set first section as active tab
-            const firstSection = Object.keys(templateData.sections || {})[0];
-            if (firstSection) {
-              setActiveTab(firstSection);
-            }
           }
         }
       }
@@ -316,32 +294,26 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Get Firebase IDs from the subsection
-      const { data: supabaseSubsection } = await supabase
-        .from('subsections')
-        .select(`
-          firebase_id,
-          sites!inner (
-            firebase_id,
-            clients!inner (
-              firebase_id
-            )
-          )
-        `)
-        .eq('id', subsectionId)
-        .maybeSingle();
+      // Update Supabase inspection
+      const { error } = await supabase
+        .from('inspections')
+        .update({
+          project_name: inspection.projectName,
+          shop_number: inspection.shopNumber,
+          shop_name: inspection.shopName,
+          inspection_date: inspection.date,
+          inspector_name: inspection.inspectorName,
+          client_rep: inspection.clientRep,
+          consultant: inspection.consultant,
+          contractor: inspection.contractor,
+          testing_party: inspection.testingParty,
+          location: inspection.location,
+          json_data: inspection.jsonData,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', inspectionId);
 
-      if (!supabaseSubsection) {
-        throw new Error("Could not find subsection");
-      }
-
-      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
-      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
-      const firebaseSubsectionId = supabaseSubsection.firebase_id;
-
-      // Update Firebase with the inspection data
-      const inspectionPath = `/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}/inspections/${inspectionId}`;
-      await updateFirebaseData(inspectionPath, inspection);
+      if (error) throw error;
 
       toast.success("Inspection saved successfully");
     } catch (error) {

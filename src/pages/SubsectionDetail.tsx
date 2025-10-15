@@ -167,7 +167,36 @@ const SubsectionDetail = () => {
       }
 
       console.log('Subsection data:', data);
-      setSubsection(data);
+      
+      // Fetch inspections from Supabase
+      const { data: inspectionsData, error: inspectionsError } = await supabase
+        .from('inspections')
+        .select('*')
+        .eq('subsection_id', subsectionId)
+        .order('inspection_date', { ascending: false });
+
+      if (inspectionsError) {
+        console.error("Error fetching inspections:", inspectionsError);
+      }
+
+      // Convert inspections array to object keyed by ID (to match Firebase structure)
+      const inspectionsObj: Record<string, any> = {};
+      inspectionsData?.forEach(inspection => {
+        inspectionsObj[inspection.id] = {
+          templateId: inspection.template_id,
+          date: inspection.inspection_date,
+          status: inspection.status,
+          priority: inspection.priority,
+          title: inspection.title,
+          // Include other fields as needed
+        };
+      });
+
+      // Merge Firebase data with Supabase inspections
+      setSubsection({
+        ...data,
+        inspections: inspectionsObj
+      });
       setCocType(data.cocType || '');
       setCocValidationStatus(data.cocValidationStatus || '');
       
@@ -337,16 +366,18 @@ const SubsectionDetail = () => {
       const template = availableTemplates.find(t => t.id === templateToUse) || linkedTemplate;
       const inspectionTitle = template?.name || 'New Inspection';
       
-      // siteId from URL is already the Supabase UUID, so we can use it directly
+      // Create inspection in Supabase with template_id link
       const { error } = await supabase
         .from('inspections')
         .insert({
           subsection_id: subsectionId,
           site_id: siteId,
+          template_id: templateToUse,
           title: inspectionTitle,
           inspection_date: newInspectionDate,
           status: 'Pending',
-          priority: 'Medium'
+          priority: 'Medium',
+          json_data: {} // Initialize empty jsonData
         });
 
       if (error) throw error;
