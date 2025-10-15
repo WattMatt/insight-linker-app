@@ -179,16 +179,16 @@ const SubsectionDetail = () => {
         console.error("Error fetching inspections:", inspectionsError);
       }
 
-      // Convert inspections array to object keyed by ID (to match Firebase structure)
+      // Convert inspections array to object keyed by firebase_id (to match Firebase structure)
       const inspectionsObj: Record<string, any> = {};
       inspectionsData?.forEach(inspection => {
-        inspectionsObj[inspection.id] = {
+        const key = inspection.firebase_id || inspection.id;
+        inspectionsObj[key] = {
           templateId: inspection.template_id,
           date: inspection.inspection_date,
           status: inspection.status,
           priority: inspection.priority,
           title: inspection.title,
-          // Include other fields as needed
         };
       });
 
@@ -366,19 +366,25 @@ const SubsectionDetail = () => {
       const template = availableTemplates.find(t => t.id === templateToUse) || linkedTemplate;
       const inspectionTitle = template?.name || 'New Inspection';
       
-      // Create inspection in Supabase with template_id link
-      const { error } = await supabase
+      // Generate a unique firebase-style ID for backwards compatibility
+      const firebaseId = `-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create inspection in Supabase with template_id link and firebase_id
+      const { data: newInspection, error } = await supabase
         .from('inspections')
         .insert({
           subsection_id: subsectionId,
           site_id: siteId,
           template_id: templateToUse,
+          firebase_id: firebaseId,
           title: inspectionTitle,
           inspection_date: newInspectionDate,
           status: 'Pending',
           priority: 'Medium',
           json_data: {} // Initialize empty jsonData
-        });
+        })
+        .select()
+        .single();
 
       if (error) throw error;
 
@@ -395,10 +401,11 @@ const SubsectionDetail = () => {
 
   const handleUpdateInspectionStatus = async (inspectionId: string, newStatus: string) => {
     try {
+      // Update using firebase_id (since inspectionId from the list is the firebase_id)
       const { error } = await supabase
         .from('inspections')
         .update({ status: newStatus })
-        .eq('id', inspectionId);
+        .eq('firebase_id', inspectionId);
 
       if (error) throw error;
 
@@ -414,10 +421,11 @@ const SubsectionDetail = () => {
     if (!deleteInspectionId) return;
 
     try {
+      // Delete using firebase_id (since deleteInspectionId is the firebase_id)
       const { error } = await supabase
         .from('inspections')
         .delete()
-        .eq('id', deleteInspectionId);
+        .eq('firebase_id', deleteInspectionId);
 
       if (error) throw error;
 

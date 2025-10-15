@@ -76,11 +76,16 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Fetch inspection from Supabase
+      // Fetch inspection from Supabase using firebase_id (since URL contains firebase ID)
       const { data: inspData, error: inspError } = await supabase
         .from('inspections')
         .select(`
           *,
+          inspection_templates!template_id (
+            id,
+            name,
+            sections
+          ),
           sites!inner (
             id,
             name,
@@ -92,7 +97,7 @@ const InspectionDetail = () => {
             name
           )
         `)
-        .eq('id', inspectionId)
+        .eq('firebase_id', inspectionId)
         .maybeSingle();
 
       if (inspError || !inspData) {
@@ -122,26 +127,22 @@ const InspectionDetail = () => {
       setSiteData({ siteName: inspData.sites.name, physicalAddress: inspData.sites.address });
       setSubsectionData({ name: inspData.subsections.name });
 
-      // Fetch template
-      if (inspData.template_id) {
-        const { data: supabaseTemplate } = await supabase
-          .from('inspection_templates')
-          .select('*')
-          .eq('id', inspData.template_id)
-          .maybeSingle();
+      // Fetch template from the joined data
+      if (inspData.inspection_templates && inspData.inspection_templates.sections) {
+        const templateData = inspData.inspection_templates;
+        setTemplate({
+          name: templateData.name,
+          sections: templateData.sections as any
+        });
         
-        if (supabaseTemplate && supabaseTemplate.sections) {
-          setTemplate({
-            name: supabaseTemplate.name,
-            sections: supabaseTemplate.sections as any
-          });
-          
-          // Set first section as active tab
-          const firstSection = Object.keys(supabaseTemplate.sections as any)[0];
-          if (firstSection) {
-            setActiveTab(firstSection);
-          }
+        // Set first section as active tab
+        const firstSection = Object.keys(templateData.sections as any)[0];
+        if (firstSection) {
+          setActiveTab(firstSection);
         }
+      } else {
+        console.warn("No template found for inspection");
+        toast.error("Inspection template not found");
       }
 
       // Generate QR code
@@ -294,7 +295,7 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Update Supabase inspection
+      // Update Supabase inspection using firebase_id
       const { error } = await supabase
         .from('inspections')
         .update({
@@ -311,7 +312,7 @@ const InspectionDetail = () => {
           json_data: inspection.jsonData,
           updated_at: new Date().toISOString()
         })
-        .eq('id', inspectionId);
+        .eq('firebase_id', inspectionId);
 
       if (error) throw error;
 
