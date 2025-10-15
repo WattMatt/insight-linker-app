@@ -1247,6 +1247,7 @@ const FirebaseSync = () => {
     const logs: Array<{ timestamp: string; level: 'info' | 'success' | 'warning' | 'error'; message: string }> = [];
     
     const addLog = (message: string, level: 'info' | 'success' | 'warning' | 'error' = 'info') => {
+      console.log(`[Migration] ${level.toUpperCase()}: ${message}`);
       logs.push({ timestamp: new Date().toISOString(), level, message });
       setMigrationLogs([...logs]);
     };
@@ -1254,66 +1255,92 @@ const FirebaseSync = () => {
     try {
       addLog("Starting inspection images migration...", 'info');
 
-      // Fetch all inspections with json_data (don't filter by firebase_id)
+      // Fetch all inspections with json_data
       const { data: inspections, error: inspError } = await supabase
         .from('inspections')
-        .select('id, firebase_id, json_data')
+        .select('id, firebase_id, json_data, title')
         .not('json_data', 'is', null);
 
-      if (inspError) throw inspError;
+      if (inspError) {
+        addLog(`Database error: ${inspError.message}`, 'error');
+        throw inspError;
+      }
 
       addLog(`Found ${inspections?.length || 0} inspections with json_data`, 'info');
+
+      if (!inspections || inspections.length === 0) {
+        addLog("No inspections found to process", 'warning');
+        toast.info("No inspections found with data to migrate");
+        return;
+      }
 
       let migratedCount = 0;
       let totalImages = 0;
       let inspectionsProcessed = 0;
+      let skippedInspections = 0;
 
-      for (const inspection of inspections || []) {
-        if (!inspection.json_data) continue;
+      for (const inspection of inspections) {
+        if (!inspection.json_data) {
+          addLog(`Inspection ${inspection.id} has no json_data`, 'warning');
+          continue;
+        }
         
         // Check if json_data contains Firebase URLs
         const jsonStr = JSON.stringify(inspection.json_data);
         if (!jsonStr.includes('firebasestorage.googleapis.com')) {
-          continue; // Skip if no Firebase URLs
+          skippedInspections++;
+          addLog(`Skipping ${inspection.title || inspection.id} - no Firebase URLs`, 'info');
+          continue;
         }
         
         inspectionsProcessed++;
-        addLog(`Processing inspection ${inspection.id}...`, 'info');
+        addLog(`Processing inspection: ${inspection.title || inspection.id}`, 'info');
+        console.log('Inspection json_data structure:', inspection.json_data);
 
         const jsonData = inspection.json_data as any;
         let updatedJsonData = JSON.parse(JSON.stringify(jsonData));
         let hasChanges = false;
+        let inspectionImageCount = 0;
 
-        // Helper to extract and migrate images from nested objects
-        const processImageObject = async (obj: any, path: string): Promise<any> => {
+        // Helper to find and migrate images from nested structures
+        const processNode = async (obj: any, path: string): Promise<any> => {
           if (!obj || typeof obj !== 'object') return obj;
 
-          // Check if this object has images
+          // If this node has an 'images' property with nested objects containing URLs
           if (obj.images && typeof obj.images === 'object') {
+            console.log(`Found images object at ${path}`, obj.images);
             const newImages: any = {};
             
             for (const [imgKey, imgData] of Object.entries(obj.images)) {
               const imgInfo = imgData as any;
-              const firebaseUrl = imgInfo?.url;
+              const firebaseUrl = imgInfo?.url || imgInfo?.firebaseUrl;
               
               if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebasestorage.googleapis.com')) {
                 totalImages++;
-                addLog(`Migrating image from ${path}...`, 'info');
+                inspectionImageCount++;
+                const imgName = imgInfo.name || imgInfo.fileName || imgKey;
+                addLog(`  → Migrating: ${imgName}`, 'info');
 
                 try {
-                  // Call migrate-storage function
+                  console.log('Calling migrate-storage for:', firebaseUrl);
                   const { data: migrateResult, error: migrateError } = await supabase.functions.invoke(
                     'migrate-storage',
                     {
                       body: {
                         firebaseStorageUrl: firebaseUrl,
                         targetBucket: 'inspection-photos',
-                        targetPath: `inspections/${inspection.id}/${imgInfo.name || imgKey}`
+                        targetPath: `inspections/${inspection.id}/${imgName}`
                       }
                     }
                   );
 
-                  if (migrateError) throw migrateError;
+                  if (migrateError) {
+                    console.error('Edge function error:', migrateError);
+                    addLog(`    ✗ Error: ${migrateError.message}`, 'error');
+                    throw migrateError;
+                  }
+
+                  console.log('Migration result:', migrateResult);
 
                   if (migrateResult?.publicUrl) {
                     newImages[imgKey] = {
@@ -1322,29 +1349,30 @@ const FirebaseSync = () => {
                     };
                     hasChanges = true;
                     migratedCount++;
-                    addLog(`✓ Migrated: ${imgInfo.name || imgKey}`, 'success');
+                    addLog(`    ✓ Success: ${migrateResult.skipped ? 'Already exists' : 'Uploaded'}`, 'success');
                   } else {
-                    newImages[imgKey] = imgInfo; // Keep original
-                    addLog(`⚠ Skipped: ${imgInfo.name || imgKey}`, 'warning');
+                    newImages[imgKey] = imgInfo;
+                    addLog(`    ⚠ No URL returned`, 'warning');
                   }
-                } catch (err) {
+                } catch (err: any) {
                   console.error('Image migration error:', err);
-                  newImages[imgKey] = imgInfo; // Keep original on error
-                  addLog(`✗ Failed: ${imgInfo.name || imgKey}`, 'error');
+                  newImages[imgKey] = imgInfo;
+                  addLog(`    ✗ Failed: ${err.message || 'Unknown error'}`, 'error');
                 }
               } else {
-                newImages[imgKey] = imgInfo; // Already migrated or not Firebase
+                // Not a Firebase URL or already migrated
+                newImages[imgKey] = imgInfo;
               }
             }
             
             return { ...obj, images: newImages };
           }
 
-          // Recursively process nested objects
-          const processed: any = {};
+          // Recursively process all nested objects
+          const processed: any = Array.isArray(obj) ? [] : {};
           for (const [key, value] of Object.entries(obj)) {
             if (value && typeof value === 'object') {
-              processed[key] = await processImageObject(value, `${path}.${key}`);
+              processed[key] = await processNode(value, `${path}.${key}`);
             } else {
               processed[key] = value;
             }
@@ -1352,33 +1380,37 @@ const FirebaseSync = () => {
           return processed;
         };
 
-        // Process all sections
-        updatedJsonData = await processImageObject(updatedJsonData, 'root');
+        // Process the entire json_data structure
+        updatedJsonData = await processNode(updatedJsonData, 'root');
 
         // Update inspection if changes were made
         if (hasChanges) {
+          addLog(`  Updating database with ${inspectionImageCount} migrated images`, 'info');
           const { error: updateError } = await supabase
             .from('inspections')
             .update({ json_data: updatedJsonData })
             .eq('id', inspection.id);
 
           if (updateError) {
-            addLog(`✗ Failed to update inspection ${inspection.id}`, 'error');
-            console.error(updateError);
+            addLog(`✗ Failed to update inspection: ${updateError.message}`, 'error');
+            console.error('Update error:', updateError);
           } else {
-            addLog(`✓ Updated inspection ${inspection.id}`, 'success');
+            addLog(`✓ Updated inspection successfully`, 'success');
           }
+        } else {
+          addLog(`  No changes needed for this inspection`, 'info');
         }
       }
 
-      addLog(`✅ Migration complete! Processed ${inspectionsProcessed} inspections, migrated ${migratedCount}/${totalImages} images`, 'success');
-      toast.success(`Migrated ${migratedCount} inspection images from ${inspectionsProcessed} inspections`);
+      const summary = `✅ Complete! Processed ${inspectionsProcessed} inspections (${skippedInspections} skipped), migrated ${migratedCount}/${totalImages} images`;
+      addLog(summary, 'success');
+      toast.success(`Migrated ${migratedCount} images from ${inspectionsProcessed} inspections`);
       
       await scanComplete();
-    } catch (error) {
+    } catch (error: any) {
       console.error('Inspection images migration error:', error);
-      addLog(`❌ Migration failed: ${error}`, 'error');
-      toast.error('Failed to migrate inspection images');
+      addLog(`❌ Migration failed: ${error.message || error}`, 'error');
+      toast.error(`Migration failed: ${error.message || 'Unknown error'}`);
     } finally {
       setMigrating(false);
       setMigratingSection(null);
