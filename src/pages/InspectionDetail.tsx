@@ -76,33 +76,93 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Fetch inspection data
-      const inspectionPath = `/clients/${clientId}/${siteId}/subsections/${subsectionId}/inspections/${inspectionId}`;
+      // First, fetch the subsection from Supabase to get Firebase IDs
+      const { data: supabaseSubsection, error: subsectionError } = await supabase
+        .from('subsections')
+        .select(`
+          id,
+          firebase_id,
+          site_id,
+          sites!inner (
+            id,
+            firebase_id,
+            client_id,
+            clients!inner (
+              id,
+              firebase_id
+            )
+          )
+        `)
+        .eq('id', subsectionId)
+        .maybeSingle();
+
+      if (subsectionError || !supabaseSubsection) {
+        console.error("Error fetching subsection from Supabase:", subsectionError);
+        toast.error("Subsection not found in database");
+        return;
+      }
+
+      // Extract Firebase IDs
+      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
+      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
+      const firebaseSubsectionId = supabaseSubsection.firebase_id;
+
+      console.log('Firebase IDs:', { firebaseClientId, firebaseSiteId, firebaseSubsectionId, inspectionId });
+
+      // Fetch inspection data using Firebase IDs
+      const inspectionPath = `/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}/inspections/${inspectionId}`;
       const inspData = await readFirebaseData(inspectionPath);
 
       if (!inspData) {
         toast.error("Inspection not found");
+        navigate(`/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`);
         return;
       }
 
       setInspection(inspData);
 
       // Fetch site and subsection data
-      const siteInfo = await readFirebaseData(`/clients/${clientId}/${siteId}`);
-      const subsectionInfo = await readFirebaseData(`/clients/${clientId}/${siteId}/subsections/${subsectionId}`);
+      const siteInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}`);
+      const subsectionInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}`);
       setSiteData(siteInfo);
       setSubsectionData(subsectionInfo);
 
-      // Fetch template
-      const templatePath = `/reportTemplates/${inspData.type}`;
-      const templateData = await readFirebaseData(templatePath);
+      // Fetch template - use templateId if available, fallback to type
+      const templateId = inspData.templateId || inspData.type;
+      
+      // Try fetching from Supabase templates first
+      if (templateId) {
+        const { data: supabaseTemplate } = await supabase
+          .from('inspection_templates')
+          .select('*')
+          .or(`category.ilike.%${templateId}%,name.ilike.%${templateId}%`)
+          .limit(1)
+          .maybeSingle();
+        
+        if (supabaseTemplate && supabaseTemplate.sections) {
+          setTemplate({
+            name: supabaseTemplate.name,
+            sections: supabaseTemplate.sections as any
+          });
+          
+          // Set first section as active tab
+          const firstSection = Object.keys(supabaseTemplate.sections as any)[0];
+          if (firstSection) {
+            setActiveTab(firstSection);
+          }
+        } else {
+          // Fallback to Firebase templates
+          const templatePath = `/reportTemplates/${templateId}`;
+          const templateData = await readFirebaseData(templatePath);
 
-      if (templateData) {
-        setTemplate(templateData);
-        // Set first section as active tab
-        const firstSection = Object.keys(templateData.sections || {})[0];
-        if (firstSection) {
-          setActiveTab(firstSection);
+          if (templateData) {
+            setTemplate(templateData);
+            // Set first section as active tab
+            const firstSection = Object.keys(templateData.sections || {})[0];
+            if (firstSection) {
+              setActiveTab(firstSection);
+            }
+          }
         }
       }
 
