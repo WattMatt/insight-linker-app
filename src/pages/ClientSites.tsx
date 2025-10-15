@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, MapPin, Building2, Database } from "lucide-react";
+import { ArrowLeft, MapPin, Building2, Database, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { readFirebaseData } from "@/lib/firebase";
 
@@ -26,6 +26,7 @@ const ClientSites = () => {
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
   const [isFirebaseClient, setIsFirebaseClient] = useState(false);
+  const [migratingImages, setMigratingImages] = useState(false);
 
   useEffect(() => {
     if (clientId) {
@@ -116,6 +117,93 @@ const ClientSites = () => {
     }
   };
 
+  const migrateSiteImages = async () => {
+    setMigratingImages(true);
+    let successCount = 0;
+    let errorCount = 0;
+
+    try {
+      for (const site of sites) {
+        // Check if site has images that need migration (Firebase URLs)
+        const imagesToMigrate: { url: string; bucket: 'site-images'; fileName: string }[] = [];
+
+        if (site.site_image_url && site.site_image_url.includes('firebase')) {
+          imagesToMigrate.push({
+            url: site.site_image_url,
+            bucket: 'site-images',
+            fileName: `${site.id}/site-image.png`,
+          });
+        }
+
+        if (site.project_logo_url && site.project_logo_url.includes('firebase')) {
+          imagesToMigrate.push({
+            url: site.project_logo_url,
+            bucket: 'site-images',
+            fileName: `${site.id}/project-logo.png`,
+          });
+        }
+
+        // Migrate each image
+        for (const image of imagesToMigrate) {
+          try {
+            const { data, error } = await supabase.functions.invoke('migrate-images', {
+              body: {
+                imageUrl: image.url,
+                bucket: image.bucket,
+                fileName: image.fileName,
+              },
+            });
+
+            if (error) throw error;
+
+            if (data?.success) {
+              // Update the site record with the new URL
+              const updateData: any = {};
+              
+              if (image.fileName.includes('site-image')) {
+                updateData.site_image_url = data.newUrl;
+              } else if (image.fileName.includes('project-logo')) {
+                updateData.client_logo_url = data.newUrl;
+              }
+
+              if (Object.keys(updateData).length > 0) {
+                await supabase
+                  .from('sites')
+                  .update(updateData)
+                  .eq('id', site.id);
+              }
+
+              successCount++;
+            }
+          } catch (err) {
+            console.error(`Failed to migrate image for site ${site.name}:`, err);
+            errorCount++;
+          }
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Successfully migrated ${successCount} image(s)`);
+        // Refresh sites to show new URLs
+        await fetchSites();
+      }
+      if (errorCount > 0) {
+        toast.error(`Failed to migrate ${errorCount} image(s)`);
+      }
+    } catch (error) {
+      console.error('Error during image migration:', error);
+      toast.error('Failed to migrate images');
+    } finally {
+      setMigratingImages(false);
+    }
+  };
+
+  const hasFirebaseImages = sites.some(site => 
+    (site.site_image_url && site.site_image_url.includes('firebase')) ||
+    (site.project_logo_url && site.project_logo_url.includes('firebase')) ||
+    (site.client_logo_url && site.client_logo_url.includes('firebase'))
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -133,12 +221,22 @@ const ClientSites = () => {
         <Button variant="ghost" size="icon" onClick={() => navigate("/clients")}>
           <ArrowLeft className="h-4 w-4" />
         </Button>
-        <div>
+        <div className="flex-1">
           <h1 className="text-3xl font-bold tracking-tight">{clientName}</h1>
           <p className="text-muted-foreground mt-1">
             {sites.length} {sites.length === 1 ? 'site' : 'sites'}
           </p>
         </div>
+        {hasFirebaseImages && !isFirebaseClient && (
+          <Button 
+            onClick={migrateSiteImages}
+            disabled={migratingImages}
+            variant="outline"
+          >
+            <Upload className="h-4 w-4 mr-2" />
+            {migratingImages ? 'Migrating...' : 'Migrate Images to Supabase'}
+          </Button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
