@@ -74,14 +74,60 @@ const SubsectionDetail = () => {
   const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
   const [migratingDocs, setMigratingDocs] = useState<Set<string>>(new Set());
   const [migratedDocs, setMigratedDocs] = useState<Set<string>>(new Set());
+  const [uploadingFile, setUploadingFile] = useState(false);
+  const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
 
   useEffect(() => {
     if (subsectionId) {
       fetchSubsectionData();
       generateQRCode();
       fetchTemplates();
+      fetchDocumentCategories();
     }
   }, [subsectionId]);
+
+  const fetchDocumentCategories = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('document_categories')
+        .select('id, name')
+        .eq('subsection_id', subsectionId)
+        .order('order_index');
+      
+      if (error) throw error;
+      
+      // If no categories exist, create default ones
+      if (!data || data.length === 0) {
+        const defaultCategories = [
+          { name: '01 COC', order_index: 1 },
+          { name: '02 Manuals', order_index: 2 },
+          { name: '03 Line Diagram', order_index: 3 },
+          { name: '04 Metering', order_index: 4 },
+          { name: '05 Photos', order_index: 5 },
+          { name: '06 Thermal Reports', order_index: 6 },
+          { name: '07 Other', order_index: 7 }
+        ];
+        
+        const { data: newCategories, error: insertError } = await supabase
+          .from('document_categories')
+          .insert(
+            defaultCategories.map(cat => ({
+              subsection_id: subsectionId,
+              ...cat
+            }))
+          )
+          .select('id, name');
+        
+        if (!insertError && newCategories) {
+          setDocumentCategories(newCategories);
+        }
+      } else {
+        setDocumentCategories(data);
+      }
+    } catch (error) {
+      console.error("Error fetching document categories:", error);
+    }
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -332,6 +378,63 @@ const SubsectionDetail = () => {
       cat.name.toLowerCase().includes('meter') || 
       cat.name.toLowerCase().includes('metering')
     ).flatMap(cat => cat.files);
+  };
+
+  const handleDocumentUpload = async (file: File, categoryName: string) => {
+    if (!file || !subsectionId) return;
+    
+    try {
+      setUploadingFile(true);
+      toast.info("Uploading document...");
+
+      // Find the category ID
+      const category = documentCategories.find(cat => cat.name === categoryName);
+      if (!category) {
+        toast.error("Document category not found");
+        return;
+      }
+
+      // Upload file to Supabase storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${subsectionId}/${categoryName}/${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(uploadData.path);
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+
+      // Insert document record
+      const { error: insertError } = await supabase
+        .from('subsection_documents')
+        .insert({
+          subsection_id: subsectionId,
+          category_id: category.id,
+          file_name: file.name,
+          file_url: urlData.publicUrl,
+          file_size: file.size,
+          uploaded_by: user?.id
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success("Document uploaded successfully!");
+      // Refresh data to show new document
+      fetchSubsectionData();
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      toast.error("Failed to upload document");
+    } finally {
+      setUploadingFile(false);
+    }
   };
 
   const generateQRCode = async () => {
@@ -1215,12 +1318,22 @@ const SubsectionDetail = () => {
                 {/* Upload New COC */}
                 <div>
                   <p className="text-sm font-medium mb-2">Upload a new COC document</p>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer">
+                  <label className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer block">
                     <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      Click to select or drag & drop files
+                      {uploadingFile ? "Uploading..." : "Click to select or drag & drop files"}
                     </p>
-                  </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      disabled={uploadingFile}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleDocumentUpload(file, '01 COC');
+                      }}
+                    />
+                  </label>
                 </div>
               </CardContent>
             </Card>
@@ -1296,12 +1409,22 @@ const SubsectionDetail = () => {
                 {/* Upload Metering Document */}
                 <div>
                   <p className="text-sm font-medium mb-2">Upload a new metering document</p>
-                  <div className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer">
+                  <label className="border-2 border-dashed rounded-lg p-8 text-center bg-muted/20 hover:bg-muted/40 transition-colors cursor-pointer block">
                     <Upload className="h-6 w-6 text-muted-foreground mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">
-                      Click to select or drag & drop files
+                      {uploadingFile ? "Uploading..." : "Click to select or drag & drop files"}
                     </p>
-                  </div>
+                    <input
+                      type="file"
+                      className="hidden"
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      disabled={uploadingFile}
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleDocumentUpload(file, '04 Metering');
+                      }}
+                    />
+                  </label>
                 </div>
 
                 <Button className="w-full md:w-auto bg-blue-500 hover:bg-blue-600">
