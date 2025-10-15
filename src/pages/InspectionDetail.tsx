@@ -47,6 +47,15 @@ interface InspectionData {
         status?: string;
         notes?: string;
         photos?: string[];
+        images?: {
+          [imageId: string]: {
+            id?: string;
+            url?: string;
+            name?: string;
+            path?: string;
+            size?: number;
+          };
+        };
       };
     };
   };
@@ -564,7 +573,16 @@ const InspectionDetail = () => {
 
   const renderInspectionItem = (sectionKey: string, itemKey: string, item: any) => {
     const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
-    const photos = itemData.photos || [];
+    
+    // Handle both Firebase structure (images as objects) and Supabase structure (photos as array)
+    let photos: string[] = [];
+    if (itemData.photos && Array.isArray(itemData.photos)) {
+      photos = itemData.photos;
+    } else if (itemData.images && typeof itemData.images === 'object') {
+      // Firebase structure: images is an object with image IDs as keys
+      photos = Object.values(itemData.images).map((img: any) => img?.url).filter(Boolean);
+    }
+    
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
 
