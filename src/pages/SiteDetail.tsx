@@ -81,7 +81,7 @@ const SiteDetail = () => {
           .order("name"),
         supabase
           .from("site_documents")
-          .select("category, file_count")
+          .select("category, id")
           .eq("site_id", siteId),
       ]);
 
@@ -91,7 +91,20 @@ const SiteDetail = () => {
       setSite(siteRes.data);
       const subs = subsectionsRes.data || [];
       setSubsections(subs);
-      setDocuments(docsRes.data || []);
+      
+      // Aggregate documents by category
+      const docsData = docsRes.data || [];
+      const aggregated = docsData.reduce((acc, doc) => {
+        const existing = acc.find(d => d.category === doc.category);
+        if (existing) {
+          existing.file_count++;
+        } else {
+          acc.push({ category: doc.category, file_count: 1 });
+        }
+        return acc;
+      }, [] as SiteDocument[]);
+      
+      setDocuments(aggregated);
 
       // Calculate stats
       const totalSubsections = subs.length;
