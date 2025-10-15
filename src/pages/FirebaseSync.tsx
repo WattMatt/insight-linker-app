@@ -60,6 +60,11 @@ const FirebaseSync = () => {
   const [migratingSection, setMigratingSection] = useState<string | null>(null);
   const [migrationProgress, setMigrationProgress] = useState<MigrationProgress | null>(null);
   const [migrationComplete, setMigrationComplete] = useState(false);
+  const [storageMigrationStats, setStorageMigrationStats] = useState({
+    total: 0,
+    migrated: 0,
+    failed: 0,
+  });
 
   const extractFileUrls = (obj: any, urls: Array<{url: string; type: string; path: string}> = [], path: string = ''): Array<{url: string; type: string; path: string}> => {
     if (!obj || typeof obj !== 'object') return urls;
@@ -460,6 +465,126 @@ const FirebaseSync = () => {
     }
   };
 
+  const migrateStorageOnly = async () => {
+    setMigratingSection('storage');
+    setStorageMigrationStats({ total: 0, migrated: 0, failed: 0 });
+
+    try {
+      toast.info("Fetching records with Firebase storage URLs...");
+
+      // Fetch all records that might have Firebase storage URLs
+      const { data: sites } = await supabase.from("sites").select("id, site_image_url, client_logo_url");
+      const { data: clients } = await supabase.from("clients").select("id, logo_url");
+      
+      const imagesToMigrate: { 
+        url: string; 
+        bucket: string; 
+        fileName: string; 
+        table: string; 
+        id: string; 
+        column: string 
+      }[] = [];
+
+      // Collect site images
+      sites?.forEach(site => {
+        if (site.site_image_url?.includes('firebase')) {
+          imagesToMigrate.push({
+            url: site.site_image_url,
+            bucket: 'site-images',
+            fileName: `${site.id}/site-image-${Date.now()}.png`,
+            table: 'sites',
+            id: site.id,
+            column: 'site_image_url',
+          });
+        }
+        if (site.client_logo_url?.includes('firebase')) {
+          imagesToMigrate.push({
+            url: site.client_logo_url,
+            bucket: 'site-images',
+            fileName: `${site.id}/client-logo-${Date.now()}.png`,
+            table: 'sites',
+            id: site.id,
+            column: 'client_logo_url',
+          });
+        }
+      });
+
+      // Collect client logos
+      clients?.forEach(client => {
+        if (client.logo_url?.includes('firebase')) {
+          imagesToMigrate.push({
+            url: client.logo_url,
+            bucket: 'client-logos',
+            fileName: `${client.id}/logo-${Date.now()}.png`,
+            table: 'clients',
+            id: client.id,
+            column: 'logo_url',
+          });
+        }
+      });
+
+      setStorageMigrationStats(prev => ({ ...prev, total: imagesToMigrate.length }));
+
+      if (imagesToMigrate.length === 0) {
+        toast.info("No Firebase storage URLs found to migrate");
+        setMigratingSection(null);
+        return;
+      }
+
+      // Migrate images
+      for (let i = 0; i < imagesToMigrate.length; i++) {
+        const image = imagesToMigrate[i];
+        try {
+          setMigrationProgress({
+            stage: 'Migrating storage files',
+            current: i + 1,
+            total: imagesToMigrate.length,
+            percentage: Math.round(((i + 1) / imagesToMigrate.length) * 100),
+            currentItem: image.fileName,
+          });
+
+          const { data, error } = await supabase.functions.invoke('migrate-images', {
+            body: {
+              imageUrl: image.url,
+              bucket: image.bucket,
+              fileName: image.fileName,
+            },
+          });
+
+          if (error) throw error;
+
+          if (data?.success) {
+            // Update the record with new URL
+            const updateData: any = { [image.column]: data.newUrl };
+            await supabase
+              .from(image.table as any)
+              .update(updateData)
+              .eq('id', image.id);
+
+            setStorageMigrationStats(prev => ({ ...prev, migrated: prev.migrated + 1 }));
+          } else {
+            throw new Error(data?.error || 'Migration failed');
+          }
+        } catch (err) {
+          console.error(`Failed to migrate ${image.fileName}:`, err);
+          setStorageMigrationStats(prev => ({ ...prev, failed: prev.failed + 1 }));
+        }
+      }
+
+      setMigrationProgress(null);
+      const finalStats = storageMigrationStats;
+      toast.success(`Storage migration complete! Migrated: ${finalStats.migrated + imagesToMigrate.length - finalStats.failed}, Failed: ${finalStats.failed}`);
+      
+      // Refresh scan
+      await scanComplete();
+    } catch (error) {
+      console.error("Storage migration error:", error);
+      toast.error("Failed to migrate storage");
+    } finally {
+      setMigratingSection(null);
+    }
+  };
+
   return (
     <div className="container mx-auto p-6 space-y-6">
       <div>
@@ -742,9 +867,28 @@ const FirebaseSync = () => {
                     <span className="text-sm text-muted-foreground">Documents:</span>
                     <Badge variant="secondary">{migrationStatus.files.documents}</Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground italic mt-2">
-                    Migrated with Clients
-                  </p>
+                  {migrationStatus.files.toMigrate.length > 0 && (
+                    <Button 
+                      size="sm" 
+                      className="w-full mt-2"
+                      onClick={migrateStorageOnly}
+                      disabled={migratingSection !== null || migrating}
+                    >
+                      {migratingSection === 'storage' ? (
+                        <>
+                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+                          Migrating...
+                        </>
+                      ) : (
+                        'Migrate Storage Now'
+                      )}
+                    </Button>
+                  )}
+                  {migrationStatus.files.toMigrate.length === 0 && (
+                    <p className="text-xs text-muted-foreground italic mt-2">
+                      No Firebase files found
+                    </p>
+                  )}
                 </div>
               </CardContent>
             </Card>
