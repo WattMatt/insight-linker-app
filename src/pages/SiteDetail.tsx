@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { readFirebaseData } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Breadcrumbs } from "@/components/Breadcrumb";
@@ -8,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download } from "lucide-react";
 import { toast } from "sonner";
 
 interface Site {
@@ -44,6 +45,13 @@ interface SiteDocument {
   file_count: number;
 }
 
+interface FirebaseDocument {
+  name: string;
+  url: string;
+  category: string;
+  fbKey: string;
+}
+
 interface SiteStats {
   totalSubsections: number;
   compliantCount: number;
@@ -58,8 +66,10 @@ const SiteDetail = () => {
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [documents, setDocuments] = useState<SiteDocument[]>([]);
+  const [firebaseDocuments, setFirebaseDocuments] = useState<FirebaseDocument[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
+  const [migrating, setMigrating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
 
   useEffect(() => {
@@ -106,6 +116,37 @@ const SiteDetail = () => {
       
       setDocuments(aggregated);
 
+      // Fetch Firebase documents if site has firebase_id
+      if (siteRes.data.firebase_id) {
+        try {
+          const fbSiteData = await readFirebaseData(`sites/${siteRes.data.firebase_id}`);
+          if (fbSiteData) {
+            const fbDocs: FirebaseDocument[] = [];
+            const siteDocuments = fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
+            
+            if (siteDocuments && typeof siteDocuments === 'object') {
+              Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
+                if (categoryDocs && typeof categoryDocs === 'object') {
+                  Object.entries(categoryDocs).forEach(([docKey, docData]: [string, any]) => {
+                    if (docData && typeof docData === 'object' && docData.url) {
+                      fbDocs.push({
+                        name: docData.name || docKey,
+                        url: docData.url,
+                        category: categoryName,
+                        fbKey: docKey
+                      });
+                    }
+                  });
+                }
+              });
+            }
+            setFirebaseDocuments(fbDocs);
+          }
+        } catch (fbError) {
+          console.error("Error fetching Firebase documents:", fbError);
+        }
+      }
+
       // Calculate stats
       const totalSubsections = subs.length;
       const compliantCount = subs.filter((s) => s.is_compliant).length;
@@ -125,6 +166,45 @@ const SiteDetail = () => {
       toast.error("Failed to fetch site data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const migrateDocument = async (doc: FirebaseDocument) => {
+    if (!site) return;
+    
+    setMigrating(doc.fbKey);
+    try {
+      // Check if already migrated
+      const { data: existing } = await supabase
+        .from('site_documents')
+        .select('id')
+        .eq('site_id', site.id)
+        .eq('file_url', doc.url)
+        .maybeSingle();
+
+      if (existing) {
+        toast.info("Document already migrated");
+        setMigrating(null);
+        return;
+      }
+
+      // Insert site document record
+      const { error: insertError } = await supabase.from('site_documents').insert([{
+        site_id: site.id,
+        category: doc.category,
+        file_name: doc.name,
+        file_url: doc.url,
+      }]);
+
+      if (insertError) throw insertError;
+
+      toast.success(`Migrated: ${doc.name}`);
+      await fetchSiteData(); // Refresh data
+    } catch (error) {
+      console.error("Migration error:", error);
+      toast.error("Failed to migrate document");
+    } finally {
+      setMigrating(null);
     }
   };
 
@@ -311,17 +391,18 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
+          {/* Supabase Documents */}
           <Card>
             <CardHeader>
-              <CardTitle>Site Documents</CardTitle>
-              <CardDescription>A summary of all uploaded site-level documents</CardDescription>
+              <CardTitle>Supabase Documents</CardTitle>
+              <CardDescription>Documents migrated to Supabase storage</CardDescription>
             </CardHeader>
             <CardContent>
               {documents.length === 0 ? (
-                <div className="text-center py-12">
+                <div className="text-center py-8">
                   <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-                  <p className="text-muted-foreground">Upload documents for this site</p>
+                  <h3 className="text-lg font-semibold mb-2">No documents in Supabase yet</h3>
+                  <p className="text-muted-foreground text-sm">Migrate documents from Firebase below</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -338,6 +419,41 @@ const SiteDetail = () => {
               )}
             </CardContent>
           </Card>
+
+          {/* Firebase Documents */}
+          {firebaseDocuments.length > 0 && (
+            <Card>
+              <CardHeader>
+                <CardTitle>Firebase Documents</CardTitle>
+                <CardDescription>
+                  Documents stored in Firebase - click migrate to copy to Supabase
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  {firebaseDocuments.map((doc) => (
+                    <div key={doc.fbKey} className="flex justify-between items-center p-4 border rounded-lg">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium">{doc.name}</p>
+                          <p className="text-sm text-muted-foreground">{doc.category}</p>
+                        </div>
+                      </div>
+                      <Button
+                        size="sm"
+                        onClick={() => migrateDocument(doc)}
+                        disabled={migrating === doc.fbKey}
+                      >
+                        <Download className="h-4 w-4 mr-2" />
+                        {migrating === doc.fbKey ? "Migrating..." : "Migrate"}
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
         </TabsContent>
 
         <TabsContent value="subsections" className="space-y-4">
