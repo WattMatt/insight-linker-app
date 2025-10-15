@@ -261,12 +261,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         doc.setFillColor(245, 245, 245);
         doc.rect(0, 0, pageWidth, pageHeight, 'F');
         
-        // First subsection on page
-        renderSubsectionCard(doc, subsections[i], 15, allInspections, subsectionDocuments);
+        // Calculate compliance for first subsection
+        const isFirstCompliant = calculateSubsectionCompliance(subsections[i], allInspections, subsectionDocuments);
+        renderSubsectionCard(doc, subsections[i], 15, allInspections, subsectionDocuments, isFirstCompliant);
         
         // Second subsection on page (if exists)
         if (i + 1 < subsections.length) {
-          renderSubsectionCard(doc, subsections[i + 1], 140, allInspections, subsectionDocuments);
+          const isSecondCompliant = calculateSubsectionCompliance(subsections[i + 1], allInspections, subsectionDocuments);
+          renderSubsectionCard(doc, subsections[i + 1], 140, allInspections, subsectionDocuments, isSecondCompliant);
         }
         
         // Footer
@@ -291,13 +293,13 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     subsection: any, 
     startY: number,
     allInspections: any[],
-    subsectionDocuments: any[]
+    subsectionDocuments: any[],
+    isCompliant: boolean
   ) => {
     const pageWidth = doc.internal.pageSize.getWidth();
     const cardHeight = 115;
     
-    // Determine status color
-    const isCompliant = subsection.is_compliant;
+    // Determine status color based on calculated compliance
     const borderColor = isCompliant ? [76, 175, 80] : [220, 53, 69]; // Green or Red
     
     // Card border
@@ -494,6 +496,39 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       doc.setTextColor(100, 100, 100);
       doc.text("No documents uploaded.", 20, yPos);
     }
+  };
+
+  const calculateSubsectionCompliance = (
+    subsection: any,
+    inspections: any[],
+    documents: any[]
+  ): boolean => {
+    // Rule 1: If COC is required, must have at least one COC document
+    if (subsection.is_coc_required) {
+      const hasCocDoc = documents.some(
+        doc => doc.subsection_id === subsection.id && 
+        (doc.file_name?.toLowerCase().includes('coc') || 
+         doc.file_name?.toLowerCase().includes('certificate'))
+      );
+      if (!hasCocDoc) return false;
+    }
+
+    // Rule 2: If COC is required, must have metering details
+    if (subsection.is_coc_required) {
+      if (!subsection.meter_serial_number || !subsection.ct_ratio) {
+        return false;
+      }
+    }
+
+    // Rule 3: Must not have any open snags from latest inspection
+    const subsectionInspections = inspections.filter(i => i.subsection_id === subsection.id);
+    const allSnags: any[] = [];
+    subsectionInspections.forEach(insp => {
+      allSnags.push(...extractSnags(insp.json_data));
+    });
+    if (allSnags.length > 0) return false;
+
+    return true;
   };
 
   const extractSnags = (jsonData: any): Array<{ description: string; urgency: string }> => {
