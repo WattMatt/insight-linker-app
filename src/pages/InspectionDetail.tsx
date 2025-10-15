@@ -76,23 +76,53 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Fetch inspection - handle both UUID and firebase_id
-      const { data: inspData, error: inspError } = await supabase
-        .from('inspections')
-        .select(`
-          *,
-          sites (
-            id,
-            name,
-            address
-          ),
-          subsections (
-            id,
-            name
-          )
-        `)
-        .or(`id.eq.${inspectionId},firebase_id.eq.${inspectionId}`)
-        .maybeSingle();
+      // Determine if inspectionId is a UUID or Firebase ID
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId || '');
+      
+      // Fetch inspection - use appropriate column based on ID format
+      let inspData, inspError;
+      
+      if (isUUID) {
+        // Query by UUID
+        const result = await supabase
+          .from('inspections')
+          .select(`
+            *,
+            sites (
+              id,
+              name,
+              address
+            ),
+            subsections (
+              id,
+              name
+            )
+          `)
+          .eq('id', inspectionId)
+          .maybeSingle();
+        inspData = result.data;
+        inspError = result.error;
+      } else {
+        // Query by firebase_id
+        const result = await supabase
+          .from('inspections')
+          .select(`
+            *,
+            sites (
+              id,
+              name,
+              address
+            ),
+            subsections (
+              id,
+              name
+            )
+          `)
+          .eq('firebase_id', inspectionId)
+          .maybeSingle();
+        inspData = result.data;
+        inspError = result.error;
+      }
 
       if (inspError || !inspData) {
         console.error("Error fetching inspection:", inspError);
@@ -314,7 +344,10 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Update inspection - handle both UUID and firebase_id
+      // Determine if inspectionId is a UUID or Firebase ID
+      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId || '');
+      
+      // Update inspection - use appropriate column based on ID format
       const { error } = await supabase
         .from('inspections')
         .update({
@@ -332,7 +365,7 @@ const InspectionDetail = () => {
           json_data: inspection.jsonData,
           updated_at: new Date().toISOString()
         })
-        .or(`id.eq.${inspectionId},firebase_id.eq.${inspectionId}`);
+        .eq(isUUID ? 'id' : 'firebase_id', inspectionId);
 
       if (error) throw error;
 
