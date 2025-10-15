@@ -7,8 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, ClipboardList, Trash2, Plus } from "lucide-react";
-import { TemplateBasedReport } from "@/components/TemplateBasedReport";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -66,18 +65,35 @@ const SubsectionDetail = () => {
   const [cocValidationStatus, setCocValidationStatus] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
-  const [newInspectionType, setNewInspectionType] = useState("");
   const [newInspectionDate, setNewInspectionDate] = useState("");
   const [deleteInspectionId, setDeleteInspectionId] = useState<string | null>(null);
   const [actualClientId, setActualClientId] = useState<string | null>(null);
   const [linkedTemplate, setLinkedTemplate] = useState<{id: string, name: string, category: string} | null>(null);
+  const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
 
   useEffect(() => {
     if (subsectionId) {
       fetchSubsectionData();
       generateQRCode();
+      fetchTemplates();
     }
   }, [subsectionId]);
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('inspection_templates')
+        .select('id, name, category')
+        .order('name');
+      
+      if (error) throw error;
+      
+      setAvailableTemplates(data || []);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
+    }
+  };
 
   const fetchSubsectionData = async () => {
     try {
@@ -298,9 +314,16 @@ const SubsectionDetail = () => {
       return;
     }
 
+    const templateToUse = selectedTemplateId || linkedTemplate?.id;
+    if (!templateToUse) {
+      toast.error("Please select an inspection template");
+      return;
+    }
+
     try {
-      // Use the linked template name as the title if no type is specified
-      const inspectionTitle = newInspectionType || linkedTemplate?.name || 'New Inspection';
+      // Get template name
+      const template = availableTemplates.find(t => t.id === templateToUse) || linkedTemplate;
+      const inspectionTitle = template?.name || 'New Inspection';
       
       // siteId from URL is already the Supabase UUID, so we can use it directly
       const { error } = await supabase
@@ -318,7 +341,7 @@ const SubsectionDetail = () => {
 
       toast.success("Inspection created successfully");
       setIsCreateInspectionOpen(false);
-      setNewInspectionType("");
+      setSelectedTemplateId("");
       setNewInspectionDate("");
       fetchSubsectionData();
     } catch (error) {
@@ -434,10 +457,6 @@ const SubsectionDetail = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
-          <TabsTrigger value="reports">
-            <ClipboardList className="mr-2 h-4 w-4" />
-            Template Reports
-          </TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="coc-metering">COC Docs & Metering Data</TabsTrigger>
           <TabsTrigger value="qr-code">QR Code</TabsTrigger>
@@ -584,15 +603,6 @@ const SubsectionDetail = () => {
           )}
         </TabsContent>
 
-        {/* Template Reports Tab */}
-        <TabsContent value="reports" className="space-y-4">
-          <TemplateBasedReport 
-            subsectionId={subsectionId || ''}
-            subsectionName={subsection.name}
-            siteName={siteData.siteName}
-          />
-        </TabsContent>
-
         {/* Inspections Tab */}
         <TabsContent value="inspections" className="space-y-4">
           <Card>
@@ -605,7 +615,7 @@ const SubsectionDetail = () => {
                     New Inspection
                   </Button>
                 </DialogTrigger>
-                <DialogContent>
+                <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>Create New Inspection</DialogTitle>
                   </DialogHeader>
@@ -614,21 +624,30 @@ const SubsectionDetail = () => {
                       <Alert>
                         <AlertCircle className="h-4 w-4" />
                         <AlertDescription>
-                          This subsection is linked to the <strong>{linkedTemplate.name}</strong> template.
-                          Leave the inspection type empty to use this template.
+                          This subsection is linked to the <strong>{linkedTemplate.name}</strong> template by default.
                         </AlertDescription>
                       </Alert>
                     )}
                     <div className="space-y-2">
-                      <Label htmlFor="inspectionType">
-                        Inspection Type {linkedTemplate && "(optional)"}
-                      </Label>
-                      <Input
-                        id="inspectionType"
-                        placeholder={linkedTemplate ? `Default: ${linkedTemplate.name}` : "e.g., Electrical Inspection"}
-                        value={newInspectionType}
-                        onChange={(e) => setNewInspectionType(e.target.value)}
-                      />
+                      <Label htmlFor="templateSelect">Inspection Template</Label>
+                      <Select 
+                        value={selectedTemplateId || linkedTemplate?.id || ""} 
+                        onValueChange={setSelectedTemplateId}
+                      >
+                        <SelectTrigger id="templateSelect" className="bg-background">
+                          <SelectValue placeholder="Select a template" />
+                        </SelectTrigger>
+                        <SelectContent className="bg-popover z-50">
+                          {availableTemplates.map(template => (
+                            <SelectItem key={template.id} value={template.id}>
+                              <div>
+                                <p className="font-medium">{template.name}</p>
+                                <p className="text-xs text-muted-foreground">{template.category}</p>
+                              </div>
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
                     </div>
                     <div className="space-y-2">
                       <Label htmlFor="inspectionDate">Inspection Date</Label>
@@ -641,7 +660,11 @@ const SubsectionDetail = () => {
                     </div>
                   </div>
                   <div className="flex justify-end gap-2">
-                    <Button variant="outline" onClick={() => setIsCreateInspectionOpen(false)}>
+                    <Button variant="outline" onClick={() => {
+                      setIsCreateInspectionOpen(false);
+                      setSelectedTemplateId("");
+                      setNewInspectionDate("");
+                    }}>
                       Cancel
                     </Button>
                     <Button onClick={handleCreateInspection}>
