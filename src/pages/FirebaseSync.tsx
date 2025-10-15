@@ -525,7 +525,7 @@ const FirebaseSync = () => {
           const fbClientData = firebaseData[client.firebase_id];
           if (!fbClientData) return;
 
-          // Look for site data in Firebase
+          // Look for site data in Firebase - check multiple possible locations
           let siteData = null;
           
           // Try sites object first
@@ -539,12 +539,24 @@ const FirebaseSync = () => {
           }
 
           if (siteData) {
-            console.log(`Found site data for ${site.firebase_id}`, Object.keys(siteData));
+            console.log(`Scanning site ${site.firebase_id}:`, {
+              hasImage: !!(siteData.siteImageUrl || siteData.site_image_url || siteData.imageUrl || siteData.image),
+              hasLogo: !!(siteData.clientLogoUrl || siteData.client_logo_url),
+              hasSubsections: !!(siteData.subsections || siteData.Subsections),
+              hasDocuments: !!(siteData.documents || siteData.Documents),
+              keys: Object.keys(siteData)
+            });
             
-            // Check for site image
-            const siteImageUrl = siteData.siteImageUrl || siteData.site_image_url || siteData.imageUrl || siteData.image;
+            // Check for site image - try all possible field names
+            const siteImageUrl = siteData.siteImageUrl || 
+                                siteData.site_image_url || 
+                                siteData.imageUrl || 
+                                siteData.image ||
+                                siteData.siteImage ||
+                                siteData.Image;
+            
             if (siteImageUrl && typeof siteImageUrl === 'string' && siteImageUrl.includes('firebase')) {
-              console.log(`Found site image for ${site.firebase_id}: ${siteImageUrl}`);
+              console.log(`✓ Found site image for ${site.firebase_id}: ${siteImageUrl}`);
               imagesToMigrate.push({
                 url: siteImageUrl,
                 bucket: 'site-images',
@@ -557,8 +569,13 @@ const FirebaseSync = () => {
             }
 
             // Check for client logo at site level
-            const clientLogoUrl = siteData.clientLogoUrl || siteData.client_logo_url;
-            if (clientLogoUrl && clientLogoUrl.includes('firebase')) {
+            const clientLogoUrl = siteData.clientLogoUrl || 
+                                 siteData.client_logo_url || 
+                                 siteData.clientLogo ||
+                                 siteData.logo;
+            
+            if (clientLogoUrl && typeof clientLogoUrl === 'string' && clientLogoUrl.includes('firebase')) {
+              console.log(`✓ Found client logo for ${site.firebase_id}: ${clientLogoUrl}`);
               imagesToMigrate.push({
                 url: clientLogoUrl,
                 bucket: 'client-logos',
@@ -573,6 +590,8 @@ const FirebaseSync = () => {
             // Check for subsections with images and documents
             const subsections = siteData.subsections || siteData.Subsections;
             if (subsections && typeof subsections === 'object') {
+              console.log(`Scanning ${Object.keys(subsections).length} subsections for ${site.firebase_id}`);
+              
               Object.entries(subsections).forEach(([subsectionFbId, subsectionData]: [string, any]) => {
                 // Find matching Supabase subsection
                 const supabaseSubsection = supabaseSubsections?.find(
@@ -580,23 +599,36 @@ const FirebaseSync = () => {
                 );
 
                 if (supabaseSubsection && subsectionData) {
-                  // Migrate inspection photos
-                  const inspections = subsectionData.inspections || subsectionData.Inspections;
+                  // Migrate inspection photos - check all possible structures
+                  const inspections = subsectionData.inspections || 
+                                     subsectionData.Inspections || 
+                                     subsectionData.inspection ||
+                                     subsectionData.Inspection;
+                  
                   if (inspections && typeof inspections === 'object') {
                     Object.entries(inspections).forEach(([inspFbId, inspData]: [string, any]) => {
-                      if (inspData?.photos && typeof inspData.photos === 'object') {
-                        Object.values(inspData.photos).forEach((photoData: any) => {
-                          const photoUrl = photoData?.url || photoData?.imageUrl;
-                          if (photoUrl && photoUrl.includes('firebase')) {
-                            console.log(`Found inspection photo: ${photoUrl}`);
-                            // Store as temp record to create later
+                      // Check for photos in multiple possible structures
+                      const photos = inspData?.photos || 
+                                    inspData?.Photos || 
+                                    inspData?.images || 
+                                    inspData?.Images;
+                      
+                      if (photos && typeof photos === 'object') {
+                        Object.entries(photos).forEach(([photoId, photoData]: [string, any]) => {
+                          const photoUrl = photoData?.url || 
+                                         photoData?.imageUrl || 
+                                         photoData?.downloadUrl ||
+                                         photoData?.URL;
+                          
+                          if (photoUrl && typeof photoUrl === 'string' && photoUrl.includes('firebase')) {
+                            console.log(`✓ Found inspection photo in ${subsectionFbId}: ${photoUrl}`);
                             imagesToMigrate.push({
                               url: photoUrl,
                               bucket: 'inspection-photos',
-                              fileName: `${supabaseSubsection.id}/${inspFbId}-${Date.now()}.png`,
-                              table: 'temp_inspection_photos',
+                              fileName: `${supabaseSubsection.id}/${inspFbId}-${photoId}-${Date.now()}.png`,
+                              table: 'inspection_items',
                               id: supabaseSubsection.id,
-                              column: 'url',
+                              column: 'image_url',
                               type: 'inspection_photo',
                             });
                           }
@@ -605,20 +637,36 @@ const FirebaseSync = () => {
                     });
                   }
 
-                  // Migrate subsection documents
-                  const documents = subsectionData.documents || subsectionData.Documents;
+                  // Migrate subsection documents - check all possible structures
+                  const documents = subsectionData.documents || 
+                                   subsectionData.Documents || 
+                                   subsectionData.files ||
+                                   subsectionData.Files;
+                  
                   if (documents && typeof documents === 'object') {
+                    console.log(`Found ${Object.keys(documents).length} documents in subsection ${subsectionFbId}`);
+                    
                     Object.entries(documents).forEach(([docFbId, docData]: [string, any]) => {
-                      const docUrl = docData?.url || docData?.fileUrl || docData?.downloadUrl;
-                      if (docUrl && docUrl.includes('firebase')) {
-                        console.log(`Found subsection document: ${docUrl}`);
+                      const docUrl = docData?.url || 
+                                    docData?.fileUrl || 
+                                    docData?.downloadUrl ||
+                                    docData?.URL ||
+                                    (typeof docData === 'string' ? docData : null);
+                      
+                      const fileName = docData?.name || 
+                                      docData?.fileName || 
+                                      docData?.file_name ||
+                                      `document-${docFbId}`;
+                      
+                      if (docUrl && typeof docUrl === 'string' && docUrl.includes('firebase')) {
+                        console.log(`✓ Found subsection document in ${subsectionFbId}: ${docUrl}`);
                         imagesToMigrate.push({
                           url: docUrl,
                           bucket: 'documents',
-                          fileName: `subsections/${supabaseSubsection.id}/${docFbId}-${Date.now()}.pdf`,
-                          table: 'temp_subsection_docs',
+                          fileName: `subsections/${supabaseSubsection.id}/${fileName}-${Date.now()}.pdf`,
+                          table: 'subsection_documents',
                           id: supabaseSubsection.id,
-                          column: 'url',
+                          column: 'file_url',
                           type: 'subsection_document',
                         });
                       }
@@ -629,19 +677,35 @@ const FirebaseSync = () => {
             }
 
             // Check for site-level documents
-            const siteDocuments = siteData.documents || siteData.Documents;
+            const siteDocuments = siteData.documents || 
+                                 siteData.Documents || 
+                                 siteData.files ||
+                                 siteData.Files;
+            
             if (siteDocuments && typeof siteDocuments === 'object') {
+              console.log(`Found ${Object.keys(siteDocuments).length} documents for site ${site.firebase_id}`);
+              
               Object.entries(siteDocuments).forEach(([docFbId, docData]: [string, any]) => {
-                const docUrl = docData?.url || docData?.fileUrl || docData?.downloadUrl;
-                if (docUrl && docUrl.includes('firebase')) {
-                  console.log(`Found site document: ${docUrl}`);
+                const docUrl = docData?.url || 
+                              docData?.fileUrl || 
+                              docData?.downloadUrl ||
+                              docData?.URL ||
+                              (typeof docData === 'string' ? docData : null);
+                
+                const fileName = docData?.name || 
+                                docData?.fileName || 
+                                docData?.file_name ||
+                                `document-${docFbId}`;
+                
+                if (docUrl && typeof docUrl === 'string' && docUrl.includes('firebase')) {
+                  console.log(`✓ Found site document for ${site.firebase_id}: ${docUrl}`);
                   imagesToMigrate.push({
                     url: docUrl,
                     bucket: 'documents',
-                    fileName: `sites/${site.id}/${docFbId}-${Date.now()}.pdf`,
-                    table: 'temp_site_docs',
+                    fileName: `sites/${site.id}/${fileName}-${Date.now()}.pdf`,
+                    table: 'site_documents',
                     id: site.id,
-                    column: 'url',
+                    column: 'file_url',
                     type: 'site_document',
                   });
                 }
@@ -651,7 +715,13 @@ const FirebaseSync = () => {
         }
       });
 
-      console.log(`Total files found to migrate: ${imagesToMigrate.length}`);
+      console.log(`\n=== Migration Summary ===`);
+      console.log(`Total files found: ${imagesToMigrate.length}`);
+      console.log(`- Site images: ${imagesToMigrate.filter(f => f.type === 'site_image').length}`);
+      console.log(`- Client logos: ${imagesToMigrate.filter(f => f.type === 'client_logo').length}`);
+      console.log(`- Inspection photos: ${imagesToMigrate.filter(f => f.type === 'inspection_photo').length}`);
+      console.log(`- Site documents: ${imagesToMigrate.filter(f => f.type === 'site_document').length}`);
+      console.log(`- Subsection documents: ${imagesToMigrate.filter(f => f.type === 'subsection_document').length}`);
 
       setStorageMigrationStats(prev => ({ ...prev, total: imagesToMigrate.length }));
 
