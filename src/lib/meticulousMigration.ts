@@ -122,7 +122,8 @@ export class MeticulousMigration {
     }
   }
 
-  private async migrateClient(firebaseId: string, fbData: any, userId: string) {
+  // Public method to migrate a single client
+  async migrateClient(firebaseId: string, fbData: any, userId: string) {
     try {
       // Log all client fields
       this.log('info', 'Client Firebase fields:', Object.keys(fbData));

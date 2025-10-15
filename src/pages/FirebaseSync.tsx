@@ -10,6 +10,7 @@ import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { MeticulousMigration } from "@/lib/meticulousMigration";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { MigrationSelector } from "@/components/MigrationSelector";
 
 interface MigrationStatus {
   clients: {
@@ -1095,21 +1096,38 @@ const FirebaseSync = () => {
           </div>
 
           {migrationStatus.clients.toMigrate.length > 0 && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Clients to Migrate</CardTitle>
-                <CardDescription>
-                  These clients will be migrated with all their sites, subsections, and files
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="flex flex-wrap gap-2">
-                  {migrationStatus.clients.toMigrate.map(clientId => (
-                    <Badge key={clientId} variant="outline">{clientId}</Badge>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            <MigrationSelector 
+              onMigrate={async (selections) => {
+                setMigrating(true);
+                try {
+                  const { data: { user } } = await supabase.auth.getUser();
+                  if (!user) throw new Error('Not authenticated');
+
+                  const migration = new MeticulousMigration((log) => {
+                    console.log(log);
+                  });
+
+                  // For now, migrate all selected clients with their full hierarchy
+                  // TODO: Implement partial migration for individual sites/subsections
+                  const firebaseData = await readFirebaseData("/clients");
+                  if (!firebaseData) throw new Error('No Firebase data');
+
+                  for (const clientId of selections.clientIds) {
+                    const clientData = firebaseData[clientId];
+                    if (clientData) {
+                      await migration.migrateClient(clientId, clientData, user.id);
+                    }
+                  }
+
+                  toast.success("Migration completed!");
+                  await scanComplete();
+                } catch (error: any) {
+                  toast.error(`Migration failed: ${error.message}`);
+                } finally {
+                  setMigrating(false);
+                }
+              }}
+            />
           )}
 
           {migrationProgress && (
