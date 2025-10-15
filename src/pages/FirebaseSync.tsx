@@ -1218,41 +1218,98 @@ const FirebaseSync = () => {
               <CardHeader className="pb-3">
                 <CardTitle className="text-sm font-medium flex items-center gap-2">
                   <ImageIcon className="h-4 w-4" />
-                  Files
+                  Client Logos
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Images:</span>
-                    <Badge variant="secondary">{migrationStatus.files.images}</Badge>
+                    <span className="text-sm text-muted-foreground">To Migrate:</span>
+                    <Badge variant="secondary">Auto</Badge>
                   </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Clients
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Site Images
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
                   <div className="flex justify-between items-center">
-                    <span className="text-sm text-muted-foreground">Documents:</span>
-                    <Badge variant="secondary">{migrationStatus.files.documents}</Badge>
+                    <span className="text-sm text-muted-foreground">To Migrate:</span>
+                    <Badge variant="secondary">Auto</Badge>
                   </div>
-                  {migrationStatus.files.toMigrate.length > 0 && (
-                    <Button 
-                      size="sm" 
-                      className="w-full mt-2"
-                      onClick={migrateStorageOnly}
-                      disabled={migratingSection !== null || migrating}
-                    >
-                      {migratingSection === 'storage' ? (
-                        <>
-                          <Loader2 className="mr-2 h-3 w-3 animate-spin" />
-                          Migrating...
-                        </>
-                      ) : (
-                        'Migrate Storage Now'
-                      )}
-                    </Button>
-                  )}
-                  {migrationStatus.files.toMigrate.length === 0 && (
-                    <p className="text-xs text-muted-foreground italic mt-2">
-                      No Firebase files found
-                    </p>
-                  )}
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Sites
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Site Documents
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">To Migrate:</span>
+                    <Badge variant="secondary">Auto</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Sites
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <FileText className="h-4 w-4" />
+                  Subsection Docs
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">To Migrate:</span>
+                    <Badge variant="secondary">Auto</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Subsections
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader className="pb-3">
+                <CardTitle className="text-sm font-medium flex items-center gap-2">
+                  <ImageIcon className="h-4 w-4" />
+                  Inspection Photos
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-2">
+                  <div className="flex justify-between items-center">
+                    <span className="text-sm text-muted-foreground">To Migrate:</span>
+                    <Badge variant="secondary">Auto</Badge>
+                  </div>
+                  <p className="text-xs text-muted-foreground italic mt-2">
+                    Migrated with Inspections
+                  </p>
                 </div>
               </CardContent>
             </Card>
