@@ -73,6 +73,7 @@ const SubsectionDetail = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
   const [migratingDocs, setMigratingDocs] = useState<Set<string>>(new Set());
+  const [migratedDocs, setMigratedDocs] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (subsectionId) {
@@ -374,6 +375,7 @@ const SubsectionDetail = () => {
       if (checkError) throw checkError;
 
       if (existingDoc) {
+        setMigratedDocs(prev => new Set(prev).add(docKey));
         toast.info(`${fileName} is already migrated`);
         setMigratingDocs(prev => {
           const newSet = new Set(prev);
@@ -428,6 +430,7 @@ const SubsectionDetail = () => {
 
       if (insertError) throw insertError;
 
+      setMigratedDocs(prev => new Set(prev).add(docKey));
       toast.success(`${fileName} migrated successfully`);
       
       // Refresh the data
@@ -957,24 +960,35 @@ const SubsectionDetail = () => {
                                 >
                                   <Download className="h-4 w-4" />
                                 </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
-                                  disabled={migratingDocs.has(`${category.name}-${file.name}`)}
-                                >
-                                  {migratingDocs.has(`${category.name}-${file.name}`) ? (
-                                    <>
-                                      <Upload className="h-4 w-4 mr-1 animate-pulse" />
-                                      Migrating...
-                                    </>
-                                  ) : (
-                                    <>
-                                      <Upload className="h-4 w-4 mr-1" />
-                                      Migrate
-                                    </>
-                                  )}
-                                </Button>
+                                {migratedDocs.has(`${category.name}-${file.name}`) ? (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    disabled
+                                    className="cursor-not-allowed opacity-60"
+                                  >
+                                    Migrated
+                                  </Button>
+                                ) : (
+                                  <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
+                                    disabled={migratingDocs.has(`${category.name}-${file.name}`)}
+                                  >
+                                    {migratingDocs.has(`${category.name}-${file.name}`) ? (
+                                      <>
+                                        <Upload className="h-4 w-4 mr-1 animate-pulse" />
+                                        Migrating...
+                                      </>
+                                    ) : (
+                                      <>
+                                        <Upload className="h-4 w-4 mr-1" />
+                                        Migrate
+                                      </>
+                                    )}
+                                  </Button>
+                                )}
                               </div>
                             </div>
                           ))}
