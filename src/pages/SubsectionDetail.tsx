@@ -88,8 +88,10 @@ const SubsectionDetail = () => {
   }, [subsectionId]);
 
   useEffect(() => {
-    // Generate QR code after logo is fetched
+    // Force regenerate QR code when component mounts or logo changes
     if (subsectionId) {
+      console.log("Regenerating QR code...");
+      setQrCodeUrl(null); // Clear old QR code first
       generateQRCode();
     }
   }, [subsectionId, companyLogo]);
