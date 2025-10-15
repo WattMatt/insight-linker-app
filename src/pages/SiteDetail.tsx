@@ -52,12 +52,19 @@ interface FirebaseDocument {
   fbKey: string;
 }
 
+interface Inspection {
+  id: string;
+  subsection_id: string | null;
+  inspection_date: string;
+  json_data: any;
+}
+
 interface SiteStats {
   totalSubsections: number;
   compliantCount: number;
   cocApprovedCount: number;
   meteringInstalledCount: number;
-  snaggedCount: number;
+  openSnags: number;
 }
 
 const SiteDetail = () => {
@@ -65,6 +72,7 @@ const SiteDetail = () => {
   const navigate = useNavigate();
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
+  const [inspections, setInspections] = useState<Inspection[]>([]);
   const [documents, setDocuments] = useState<SiteDocument[]>([]);
   const [firebaseDocuments, setFirebaseDocuments] = useState<FirebaseDocument[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
@@ -78,17 +86,22 @@ const SiteDetail = () => {
 
   const fetchSiteData = async () => {
     try {
-      const [siteRes, subsectionsRes, docsRes] = await Promise.all([
+      const [siteRes, subsectionsRes, inspectionsRes, docsRes] = await Promise.all([
         supabase
           .from("sites")
           .select("*, clients(id, name)")
           .eq("id", siteId)
-          .single(),
+          .maybeSingle(),
         supabase
           .from("subsections")
           .select("*")
           .eq("site_id", siteId)
           .order("name"),
+        supabase
+          .from("inspections")
+          .select("id, subsection_id, inspection_date, json_data")
+          .eq("site_id", siteId)
+          .order("inspection_date", { ascending: false }),
         supabase
           .from("site_documents")
           .select("category, id")
@@ -97,10 +110,13 @@ const SiteDetail = () => {
 
       if (siteRes.error) throw siteRes.error;
       if (subsectionsRes.error) throw subsectionsRes.error;
+      if (inspectionsRes.error) throw inspectionsRes.error;
 
       setSite(siteRes.data);
       const subs = subsectionsRes.data || [];
+      const insp = inspectionsRes.data || [];
       setSubsections(subs);
+      setInspections(insp);
       
       // Aggregate documents by category
       const docsData = docsRes.data || [];
@@ -157,19 +173,37 @@ const SiteDetail = () => {
         }
       }
 
-      // Calculate stats
+      // Calculate stats from inspection data
       const totalSubsections = subs.length;
       const compliantCount = subs.filter((s) => s.is_compliant).length;
       const cocApprovedCount = subs.filter((s) => s.coc_status === "Approved").length;
       const meteringInstalledCount = subs.filter((s) => s.metering_status === "Installed").length;
-      const snaggedCount = subs.filter((s) => !s.is_compliant || s.coc_status !== "Approved").length;
+      
+      // Calculate open snags from inspections
+      let totalOpenSnags = 0;
+      subs.forEach(sub => {
+        const latestInspection = insp.find(i => i.subsection_id === sub.id);
+        if (latestInspection?.json_data) {
+          const jsonData = latestInspection.json_data as any;
+          if (jsonData.sections && Array.isArray(jsonData.sections)) {
+            jsonData.sections.forEach((section: any) => {
+              if (section.items && Array.isArray(section.items)) {
+                const openItems = section.items.filter((item: any) => 
+                  item.status !== 'Pass' && item.status !== 'N/A'
+                );
+                totalOpenSnags += openItems.length;
+              }
+            });
+          }
+        }
+      });
 
       setStats({
         totalSubsections,
         compliantCount,
         cocApprovedCount,
         meteringInstalledCount,
-        snaggedCount,
+        openSnags: totalOpenSnags,
       });
     } catch (error) {
       console.error("Error fetching site data:", error);
@@ -269,8 +303,31 @@ const SiteDetail = () => {
 
   const overallHealth = stats ? Math.round((stats.compliantCount / stats.totalSubsections) * 100) || 0 : 0;
   const cocCompliance = stats ? Math.round((stats.cocApprovedCount / stats.totalSubsections) * 100) || 0 : 0;
-  const snaggedPercentage = stats ? Math.round((stats.snaggedCount / stats.totalSubsections) * 100) || 0 : 0;
   const meteringPercentage = stats ? Math.round((stats.meteringInstalledCount / stats.totalSubsections) * 100) || 0 : 0;
+  
+  // Helper functions
+  const getLastInspectionDate = (subsectionId: string) => {
+    const inspection = inspections.find(i => i.subsection_id === subsectionId);
+    return inspection?.inspection_date || null;
+  };
+  
+  const getOpenSnags = (subsectionId: string) => {
+    const inspection = inspections.find(i => i.subsection_id === subsectionId);
+    if (!inspection?.json_data) return 0;
+    
+    const jsonData = inspection.json_data as any;
+    if (!jsonData.sections || !Array.isArray(jsonData.sections)) return 0;
+    
+    let count = 0;
+    jsonData.sections.forEach((section: any) => {
+      if (section.items && Array.isArray(section.items)) {
+        count += section.items.filter((item: any) => 
+          item.status !== 'Pass' && item.status !== 'N/A'
+        ).length;
+      }
+    });
+    return count;
+  };
 
   return (
     <div className="space-y-6">
@@ -376,12 +433,12 @@ const SiteDetail = () => {
 
             <Card>
               <CardHeader>
-                <CardTitle className="text-base">Snagged Subsections</CardTitle>
+                <CardTitle className="text-base">Open Snags</CardTitle>
               </CardHeader>
               <CardContent className="flex flex-col items-center">
-                <CircularProgress value={snaggedPercentage} color="text-red-500" />
-                <p className="text-sm text-muted-foreground mt-4 text-center">
-                  {stats?.snaggedCount || 0} of {stats?.totalSubsections || 0} subsections have open snags
+                <div className="text-5xl font-bold text-red-500 mb-2">{stats?.openSnags || 0}</div>
+                <p className="text-sm text-muted-foreground text-center">
+                  Total open snags across all subsections
                 </p>
               </CardContent>
             </Card>
@@ -494,64 +551,80 @@ const SiteDetail = () => {
                     <TableRow>
                       <TableHead>Name</TableHead>
                       <TableHead>Tenant</TableHead>
+                      <TableHead>Category</TableHead>
                       <TableHead>Status</TableHead>
                       <TableHead>CoC</TableHead>
                       <TableHead>Metering</TableHead>
-                      <TableHead>Snagging</TableHead>
+                      <TableHead>Last Inspected</TableHead>
+                      <TableHead>Open Snags</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {subsections.map((sub) => (
-                      <TableRow
-                        key={sub.id}
-                        className="cursor-pointer hover:bg-muted/50"
-                        onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${sub.id}`)}
-                      >
-                        <TableCell className="font-medium">{sub.name}</TableCell>
-                        <TableCell>{sub.tenant_name || "—"}</TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              sub.is_compliant
-                                ? "bg-green-500/10 text-green-500"
-                                : "bg-red-500/10 text-red-500"
-                            }
-                          >
-                            {sub.is_compliant ? "Compliant" : "Non-Compliant"}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              sub.coc_status === "Approved"
-                                ? "bg-green-500/10 text-green-500"
-                                : "bg-red-500/10 text-red-500"
-                            }
-                          >
-                            {sub.coc_status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge
-                            variant="outline"
-                            className={
-                              sub.metering_status === "Installed"
-                                ? "bg-green-500/10 text-green-500"
-                                : "bg-red-500/10 text-red-500"
-                            }
-                          >
-                            {sub.metering_status}
-                          </Badge>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline">
-                            {sub.is_compliant ? "0" : "1+"}
-                          </Badge>
-                        </TableCell>
-                      </TableRow>
-                    ))}
+                    {subsections.map((sub) => {
+                      const lastInspected = getLastInspectionDate(sub.id);
+                      const openSnags = getOpenSnags(sub.id);
+                      
+                      return (
+                        <TableRow
+                          key={sub.id}
+                          className="cursor-pointer hover:bg-muted/50"
+                          onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/${sub.id}`)}
+                        >
+                          <TableCell className="font-medium">{sub.name}</TableCell>
+                          <TableCell>{sub.tenant_name || "—"}</TableCell>
+                          <TableCell>
+                            <Badge variant="secondary">{sub.category || "—"}</Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                sub.is_compliant
+                                  ? "bg-green-500/10 text-green-500"
+                                  : "bg-red-500/10 text-red-500"
+                              }
+                            >
+                              {sub.is_compliant ? "Pass" : "Fail"}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                sub.coc_status === "Approved"
+                                  ? "bg-green-500/10 text-green-500"
+                                  : "bg-red-500/10 text-red-500"
+                              }
+                            >
+                              {sub.coc_status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell>
+                            <Badge
+                              variant="outline"
+                              className={
+                                sub.metering_status === "Installed"
+                                  ? "bg-green-500/10 text-green-500"
+                                  : "bg-red-500/10 text-red-500"
+                              }
+                            >
+                              {sub.metering_status}
+                            </Badge>
+                          </TableCell>
+                          <TableCell className="text-sm text-muted-foreground">
+                            {lastInspected ? new Date(lastInspected).toLocaleDateString() : "Never"}
+                          </TableCell>
+                          <TableCell>
+                            <Badge 
+                              variant="outline"
+                              className={openSnags > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
+                            >
+                              {openSnags}
+                            </Badge>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               )}
