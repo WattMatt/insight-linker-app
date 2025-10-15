@@ -1208,7 +1208,8 @@ const FirebaseSync = () => {
                     contractor: inspection.contractor || null,
                     testing_party: inspection.testingParty || null,
                     location: inspection.location || null,
-                    json_data: inspection.sections || inspection.jsonData || {},
+                    // Wrap entire inspection data in jsonData structure to preserve Firebase format
+                    json_data: { jsonData: inspection.jsonData || inspection.sections || inspection },
                   });
 
                 if (insertError) {
@@ -1306,77 +1307,82 @@ const FirebaseSync = () => {
         const processNode = async (obj: any, path: string): Promise<any> => {
           if (!obj || typeof obj !== 'object') return obj;
 
-          // If this node has an 'images' property with nested objects containing URLs
-          if (obj.images && typeof obj.images === 'object') {
-            console.log(`Found images object at ${path}`, obj.images);
-            const newImages: any = {};
-            
-            for (const [imgKey, imgData] of Object.entries(obj.images)) {
-              const imgInfo = imgData as any;
-              const firebaseUrl = imgInfo?.url || imgInfo?.firebaseUrl;
-              
-              if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebasestorage.googleapis.com')) {
-                totalImages++;
-                inspectionImageCount++;
-                const imgName = imgInfo.name || imgInfo.fileName || imgKey;
-                addLog(`  → Migrating: ${imgName}`, 'info');
-
-                try {
-                  console.log('Calling migrate-storage for:', firebaseUrl);
-                  const { data: migrateResult, error: migrateError } = await supabase.functions.invoke(
-                    'migrate-storage',
-                    {
-                      body: {
-                        firebaseStorageUrl: firebaseUrl,
-                        targetBucket: 'inspection-photos',
-                        targetPath: `inspections/${inspection.id}/${imgName}`
-                      }
-                    }
-                  );
-
-                  if (migrateError) {
-                    console.error('Edge function error:', migrateError);
-                    addLog(`    ✗ Error: ${migrateError.message}`, 'error');
-                    throw migrateError;
-                  }
-
-                  console.log('Migration result:', migrateResult);
-
-                  if (migrateResult?.publicUrl) {
-                    newImages[imgKey] = {
-                      ...imgInfo,
-                      url: migrateResult.publicUrl
-                    };
-                    hasChanges = true;
-                    migratedCount++;
-                    addLog(`    ✓ Success: ${migrateResult.skipped ? 'Already exists' : 'Uploaded'}`, 'success');
-                  } else {
-                    newImages[imgKey] = imgInfo;
-                    addLog(`    ⚠ No URL returned`, 'warning');
-                  }
-                } catch (err: any) {
-                  console.error('Image migration error:', err);
-                  newImages[imgKey] = imgInfo;
-                  addLog(`    ✗ Failed: ${err.message || 'Unknown error'}`, 'error');
-                }
-              } else {
-                // Not a Firebase URL or already migrated
-                newImages[imgKey] = imgInfo;
-              }
-            }
-            
-            return { ...obj, images: newImages };
-          }
-
-          // Recursively process all nested objects
+          // Check for image category properties (imagesGeneral, imagesDB, imagesEarthing, etc.)
+          const imageCategories = ['General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'];
           const processed: any = Array.isArray(obj) ? [] : {};
+          
           for (const [key, value] of Object.entries(obj)) {
-            if (value && typeof value === 'object') {
+            // Check if this is an images category property
+            const isImageCategory = imageCategories.some(cat => key === `images${cat}`);
+            
+            if (isImageCategory && typeof value === 'object' && value !== null) {
+              const categoryName = key.replace('images', '');
+              console.log(`Found ${categoryName} images at ${path}.${key}`, value);
+              const newImages: any = {};
+              
+              for (const [imgKey, imgData] of Object.entries(value)) {
+                const imgInfo = imgData as any;
+                const firebaseUrl = imgInfo?.url || imgInfo?.firebaseUrl || imgInfo?.path;
+                
+                if (firebaseUrl && typeof firebaseUrl === 'string' && firebaseUrl.includes('firebasestorage.googleapis.com')) {
+                  totalImages++;
+                  inspectionImageCount++;
+                  const imgName = imgInfo.name || imgInfo.fileName || `${categoryName}_${imgKey}`;
+                  addLog(`  → Migrating ${categoryName}: ${imgName}`, 'info');
+
+                  try {
+                    console.log('Calling migrate-storage for:', firebaseUrl);
+                    const { data: migrateResult, error: migrateError } = await supabase.functions.invoke(
+                      'migrate-storage',
+                      {
+                        body: {
+                          firebaseStorageUrl: firebaseUrl,
+                          targetBucket: 'inspection-photos',
+                          targetPath: `inspections/${inspection.id}/${categoryName}/${imgName}`
+                        }
+                      }
+                    );
+
+                    if (migrateError) {
+                      console.error('Edge function error:', migrateError);
+                      addLog(`    ✗ Error: ${migrateError.message}`, 'error');
+                      throw migrateError;
+                    }
+
+                    console.log('Migration result:', migrateResult);
+
+                    if (migrateResult?.publicUrl) {
+                      newImages[imgKey] = {
+                        ...imgInfo,
+                        url: migrateResult.publicUrl
+                      };
+                      hasChanges = true;
+                      migratedCount++;
+                      addLog(`    ✓ Success: ${migrateResult.skipped ? 'Already exists' : 'Uploaded'}`, 'success');
+                    } else {
+                      newImages[imgKey] = imgInfo;
+                      addLog(`    ⚠ No URL returned`, 'warning');
+                    }
+                  } catch (err: any) {
+                    console.error('Image migration error:', err);
+                    newImages[imgKey] = imgInfo;
+                    addLog(`    ✗ Failed: ${err.message || 'Unknown error'}`, 'error');
+                  }
+                } else {
+                  // Not a Firebase URL or already migrated
+                  newImages[imgKey] = imgInfo;
+                }
+              }
+              
+              processed[key] = newImages;
+            } else if (value && typeof value === 'object') {
+              // Recursively process nested objects
               processed[key] = await processNode(value, `${path}.${key}`);
             } else {
               processed[key] = value;
             }
           }
+          
           return processed;
         };
 
@@ -2422,7 +2428,7 @@ const FirebaseSync = () => {
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground italic mt-2">
-                    Extracts images from json_data and migrates to Supabase Storage
+                    Migrates all image categories (General, DB, Earthing, LV, HV, Generator, Relay, Signage) from Firebase Storage to Supabase and updates json_data with new URLs
                   </p>
                 </div>
               </CardContent>
@@ -2509,7 +2515,7 @@ const FirebaseSync = () => {
                     )}
                   </Button>
                   <p className="text-xs text-muted-foreground italic mt-2">
-                    Migrates inspections from Firebase to Supabase
+                    Migrates inspections from Firebase including general info, electrical details, observations, and relay status to Supabase json_data
                   </p>
                 </div>
               </CardContent>
