@@ -65,6 +65,7 @@ const InspectionDetail = () => {
   const [activeTab, setActiveTab] = useState("");
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
+  const [migratingImages, setMigratingImages] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     if (clientId && siteId && subsectionId && inspectionId) {
@@ -326,6 +327,69 @@ const InspectionDetail = () => {
     }
   };
 
+  const handleMigrateImage = async (sectionKey: string, itemKey: string, firebaseUrl: string, index: number) => {
+    const migrateKey = `${sectionKey}-${itemKey}-${index}`;
+    setMigratingImages(prev => new Set(prev).add(migrateKey));
+
+    try {
+      // Download image from Firebase
+      const response = await fetch(firebaseUrl);
+      const blob = await response.blob();
+      
+      // Create a file from the blob
+      const fileExt = firebaseUrl.split('.').pop()?.split('?')[0] || 'jpg';
+      const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}.${fileExt}`;
+      
+      // Upload to Supabase
+      const { data, error } = await supabase.storage
+        .from('inspection-photos')
+        .upload(fileName, blob);
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('inspection-photos')
+        .getPublicUrl(data.path);
+
+      // Replace Firebase URL with Supabase URL
+      setInspection(prev => {
+        if (!prev) return null;
+
+        const jsonData = prev.jsonData || {};
+        const sectionData = jsonData[sectionKey] || {};
+        const itemData = sectionData[itemKey] || {};
+        const photos = itemData.photos || [];
+        const updatedPhotos = [...photos];
+        updatedPhotos[index] = urlData.publicUrl;
+
+        return {
+          ...prev,
+          jsonData: {
+            ...jsonData,
+            [sectionKey]: {
+              ...sectionData,
+              [itemKey]: {
+                ...itemData,
+                photos: updatedPhotos
+              }
+            }
+          }
+        };
+      });
+
+      toast.success("Image migrated successfully");
+    } catch (error) {
+      console.error("Error migrating image:", error);
+      toast.error("Failed to migrate image");
+    } finally {
+      setMigratingImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(migrateKey);
+        return newSet;
+      });
+    }
+  };
+
   const handleDeleteImage = async (sectionKey: string, itemKey: string, photoUrl: string, index: number) => {
     try {
       // Extract file path from URL
@@ -543,23 +607,40 @@ const InspectionDetail = () => {
             <div className="mt-2 space-y-3">
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
-                  {photos.map((photo: string, index: number) => (
-                    <div key={index} className="relative group">
-                      <img
-                        src={photo}
-                        alt={`Photo ${index + 1}`}
-                        className="w-full h-32 object-cover rounded border"
-                      />
-                      <Button
-                        size="icon"
-                        variant="destructive"
-                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
-                      >
-                        <Trash2 className="h-3 w-3" />
-                      </Button>
-                    </div>
-                  ))}
+                  {photos.map((photo: string, index: number) => {
+                    const isFirebaseUrl = photo.includes('firebasestorage.googleapis.com');
+                    const migrateKey = `${sectionKey}-${itemKey}-${index}`;
+                    const isMigrating = migratingImages.has(migrateKey);
+                    
+                    return (
+                      <div key={index} className="relative group">
+                        <img
+                          src={photo}
+                          alt={`Photo ${index + 1}`}
+                          className="w-full h-32 object-cover rounded border"
+                        />
+                        {isFirebaseUrl && (
+                          <Button
+                            size="sm"
+                            variant="secondary"
+                            className="absolute bottom-1 left-1 h-6 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleMigrateImage(sectionKey, itemKey, photo, index)}
+                            disabled={isMigrating}
+                          >
+                            {isMigrating ? "Migrating..." : "Migrate"}
+                          </Button>
+                        )}
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
               
