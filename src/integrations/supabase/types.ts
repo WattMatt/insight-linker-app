@@ -288,6 +288,7 @@ export type Database = {
           priority: string | null
           project_name: string | null
           qr_code_url: string | null
+          quality_rating: number | null
           shop_name: string | null
           shop_number: string | null
           site_id: string
@@ -316,6 +317,7 @@ export type Database = {
           priority?: string | null
           project_name?: string | null
           qr_code_url?: string | null
+          quality_rating?: number | null
           shop_name?: string | null
           shop_number?: string | null
           site_id: string
@@ -344,6 +346,7 @@ export type Database = {
           priority?: string | null
           project_name?: string | null
           qr_code_url?: string | null
+          quality_rating?: number | null
           shop_name?: string | null
           shop_number?: string | null
           site_id?: string
@@ -680,6 +683,63 @@ export type Database = {
             columns: ["client_id"]
             isOneToOne: false
             referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      snags: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          description: string | null
+          id: string
+          inspection_id: string | null
+          notes: string | null
+          photos: Json | null
+          status: string
+          subsection_id: string
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          inspection_id?: string | null
+          notes?: string | null
+          photos?: Json | null
+          status?: string
+          subsection_id: string
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          id?: string
+          inspection_id?: string | null
+          notes?: string | null
+          photos?: Json | null
+          status?: string
+          subsection_id?: string
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "snags_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "snags_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
             referencedColumns: ["id"]
           },
         ]

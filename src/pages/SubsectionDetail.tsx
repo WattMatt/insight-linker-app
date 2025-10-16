@@ -78,6 +78,8 @@ const SubsectionDetail = () => {
     category: "",
     is_coc_required: true
   });
+  const [snags, setSnags] = useState<any[]>([]);
+  const [openSnagsCount, setOpenSnagsCount] = useState(0);
 
   useEffect(() => {
     if (subsectionId) {
@@ -86,6 +88,7 @@ const SubsectionDetail = () => {
       fetchTemplates();
       fetchDocumentCategories();
       fetchSupabaseDocuments();
+      fetchSnags();
     }
   }, [subsectionId]);
 
@@ -152,6 +155,26 @@ const SubsectionDetail = () => {
       setSupabaseDocuments(data || []);
     } catch (error) {
       console.error("Error fetching Supabase documents:", error);
+    }
+  };
+
+  const fetchSnags = async () => {
+    if (!subsectionId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('snags')
+        .select('*')
+        .eq('subsection_id', subsectionId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      
+      const allSnags = data || [];
+      setSnags(allSnags);
+      setOpenSnagsCount(allSnags.filter(s => s.status === 'Open').length);
+    } catch (error) {
+      console.error("Error fetching snags:", error);
     }
   };
 
@@ -1010,8 +1033,8 @@ const SubsectionDetail = () => {
 
   const inspections = subsection.inspections || {};
   const inspectionArray = Object.entries(inspections);
-  const hasSnags = subsection.snags && subsection.snags.length > 0;
-  const cocExpired = !subsection.cocNumber;
+  const hasSnags = openSnagsCount > 0;
+  const cocExpired = subsection.isCocRequired && subsection.cocValidationStatus !== 'Approved';
   const isNotCompliant = hasSnags || cocExpired;
 
   return (
@@ -1077,10 +1100,8 @@ const SubsectionDetail = () => {
                 <br />
                 This status is determined by open snags and COC validation. The following issues were found:
                 <ul className="list-disc list-inside mt-2">
-                  {cocExpired && <li>Certificate of Compliance is missing or expired.</li>}
-                  {hasSnags && subsection.snags?.map((snag, idx) => (
-                    <li key={idx}>{snag.description || 'Open snag'}</li>
-                  ))}
+                  {cocExpired && <li>Certificate of Compliance is missing or not approved.</li>}
+                  {hasSnags && <li>{openSnagsCount} open snag{openSnagsCount !== 1 ? 's' : ''} requiring attention</li>}
                 </ul>
               </AlertDescription>
             </Alert>

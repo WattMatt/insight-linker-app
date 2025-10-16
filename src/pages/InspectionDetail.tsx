@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Save, Camera, Upload, Trash2, ArrowLeft } from "lucide-react";
+import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
@@ -18,6 +18,7 @@ import { SiteDrawingReport } from "@/components/SiteDrawingReport";
 import { SiteDrawingInspection } from "@/components/SiteDrawingInspection";
 import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface InspectionTemplate {
   name: string;
@@ -47,6 +48,7 @@ interface InspectionData {
   contractor?: string;
   testingParty?: string;
   location?: string;
+  quality_rating?: number;
   jsonData?: {
     [sectionKey: string]: {
       [itemKey: string]: {
@@ -84,11 +86,22 @@ const InspectionDetail = () => {
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
   const [migratingImages, setMigratingImages] = useState<Set<string>>(new Set());
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
+  const [snags, setSnags] = useState<any[]>([]);
+  const [loadingSnags, setLoadingSnags] = useState(false);
+  const [snagDialogOpen, setSnagDialogOpen] = useState(false);
+  const [newSnag, setNewSnag] = useState({
+    title: '',
+    description: '',
+    notes: '',
+    photos: [] as string[]
+  });
+  const [uploadingSnagPhotos, setUploadingSnagPhotos] = useState(false);
 
   useEffect(() => {
     if (clientId && siteId && subsectionId && inspectionId) {
       fetchInspectionData();
       fetchCompanyLogo();
+      fetchSnags();
     }
   }, [clientId, siteId, subsectionId, inspectionId]);
 
@@ -106,6 +119,161 @@ const InspectionDetail = () => {
       }
     } catch (error) {
       console.error("Error fetching company logo:", error);
+    }
+  };
+
+  const fetchSnags = async () => {
+    if (!subsectionId) return;
+    
+    try {
+      setLoadingSnags(true);
+      const { data, error } = await supabase
+        .from('snags')
+        .select('*')
+        .eq('subsection_id', subsectionId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      setSnags(data || []);
+    } catch (error) {
+      console.error("Error fetching snags:", error);
+      toast.error("Failed to load snags");
+    } finally {
+      setLoadingSnags(false);
+    }
+  };
+
+  const handleCreateSnag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!newSnag.title.trim()) {
+      toast.error("Snag title is required");
+      return;
+    }
+
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from('snags')
+        .insert({
+          subsection_id: subsectionId,
+          inspection_id: inspectionId,
+          title: newSnag.title,
+          description: newSnag.description,
+          notes: newSnag.notes,
+          photos: newSnag.photos,
+          status: 'Open',
+          created_by: user?.id
+        });
+      
+      if (error) throw error;
+      
+      toast.success("Snag created successfully");
+      setSnagDialogOpen(false);
+      setNewSnag({ title: '', description: '', notes: '', photos: [] });
+      fetchSnags();
+    } catch (error) {
+      console.error("Error creating snag:", error);
+      toast.error("Failed to create snag");
+    }
+  };
+
+  const handleToggleSnagStatus = async (snagId: string, currentStatus: string) => {
+    const newStatus = currentStatus === 'Open' ? 'Closed' : 'Open';
+    
+    try {
+      const { error } = await supabase
+        .from('snags')
+        .update({ status: newStatus })
+        .eq('id', snagId);
+      
+      if (error) throw error;
+      
+      toast.success(`Snag ${newStatus.toLowerCase()} successfully`);
+      fetchSnags();
+    } catch (error) {
+      console.error("Error updating snag status:", error);
+      toast.error("Failed to update snag status");
+    }
+  };
+
+  const handleDeleteSnag = async (snagId: string) => {
+    if (!confirm("Are you sure you want to delete this snag?")) return;
+    
+    try {
+      const { error } = await supabase
+        .from('snags')
+        .delete()
+        .eq('id', snagId);
+      
+      if (error) throw error;
+      
+      toast.success("Snag deleted successfully");
+      fetchSnags();
+    } catch (error) {
+      console.error("Error deleting snag:", error);
+      toast.error("Failed to delete snag");
+    }
+  };
+
+  const handleSnagPhotoUpload = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    setUploadingSnagPhotos(true);
+    try {
+      const uploadedUrls: string[] = [];
+      
+      for (let i = 0; i < files.length; i++) {
+        let file = files[i];
+        
+        // Convert HEIC if needed
+        const inputFileName = file.name.toLowerCase();
+        const isHEIC = file.type === 'image/heic' || file.type === 'image/heif' || 
+                       (file.type === '' && (inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif'))) ||
+                       inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif');
+        
+        if (isHEIC) {
+          try {
+            const heic2any = (await import('heic2any')).default;
+            const convertedBlob = await heic2any({
+              blob: file,
+              toType: 'image/jpeg',
+              quality: 0.9
+            });
+            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+            file = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
+          } catch (conversionError) {
+            console.error("Error converting HEIC:", conversionError);
+            toast.error(`Failed to convert ${file.name}`);
+            continue;
+          }
+        }
+        
+        const fileExt = file.name.split('.').pop();
+        const timestamp = Date.now();
+        const fileName = `${subsectionId}/snags/${timestamp}-${i + 1}.${fileExt}`;
+        
+        const { data, error } = await supabase.storage
+          .from('inspection-photos')
+          .upload(fileName, file);
+        
+        if (error) throw error;
+        
+        const { data: urlData } = supabase.storage
+          .from('inspection-photos')
+          .getPublicUrl(data.path);
+        
+        uploadedUrls.push(urlData.publicUrl);
+      }
+      
+      setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
+      toast.success(`${uploadedUrls.length} photo(s) uploaded`);
+    } catch (error) {
+      console.error("Error uploading snag photos:", error);
+      toast.error("Failed to upload photos");
+    } finally {
+      setUploadingSnagPhotos(false);
     }
   };
 
@@ -197,6 +365,7 @@ const InspectionDetail = () => {
         contractor: inspData.contractor || '',
         testingParty: inspData.testing_party || '',
         location: inspData.location || '',
+        quality_rating: inspData.quality_rating || undefined,
         jsonData: (inspData.json_data as InspectionData['jsonData']) || {}
       };
 
@@ -614,6 +783,7 @@ const InspectionDetail = () => {
           testing_party: inspection.testingParty,
           location: inspection.location,
           status: inspection.type,
+          quality_rating: inspection.quality_rating,
           json_data: inspection.jsonData,
           updated_at: new Date().toISOString()
         })
@@ -709,6 +879,25 @@ const InspectionDetail = () => {
             value={inspection?.location || siteData?.physicalAddress || ''}
             onChange={(e) => handleFieldChange('location', e.target.value)}
           />
+        </div>
+        <div>
+          <Label>Overall Quality Rating</Label>
+          <Select
+            value={inspection?.quality_rating?.toString() || ''}
+            onValueChange={(value) => handleFieldChange('quality_rating', parseInt(value))}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select quality rating (1-5)" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">1 - Poor</SelectItem>
+              <SelectItem value="2">2 - Below Average</SelectItem>
+              <SelectItem value="3">3 - Average</SelectItem>
+              <SelectItem value="4">4 - Good</SelectItem>
+              <SelectItem value="5">5 - Excellent</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">Rate the overall quality of this inspection from 1 (lowest) to 5 (highest)</p>
         </div>
         <div>
           <Label>QR Code</Label>
@@ -1056,21 +1245,201 @@ const InspectionDetail = () => {
             <TabsContent value="snag-list" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>Snag List</CardTitle>
-                  <p className="text-sm text-muted-foreground">
-                    Items marked as "Fail" or issues identified during inspection
-                  </p>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Snag List</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Track and manage issues identified during inspection
+                      </p>
+                    </div>
+                    <Button onClick={() => setSnagDialogOpen(true)}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Snag
+                    </Button>
+                  </div>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-sm text-muted-foreground">
-                    Snag list functionality coming soon...
-                  </p>
+                  {loadingSnags ? (
+                    <div className="text-center py-8">
+                      <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+                      <p className="text-muted-foreground">Loading snags...</p>
+                    </div>
+                  ) : snags.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        No snags recorded for this inspection yet
+                      </p>
+                      <Button onClick={() => setSnagDialogOpen(true)} variant="outline">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add First Snag
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {snags.map((snag) => (
+                        <Card key={snag.id} className={`${snag.status === 'Closed' ? 'opacity-60' : ''}`}>
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-2">
+                                  <h4 className="font-semibold">{snag.title}</h4>
+                                  <Badge variant={snag.status === 'Open' ? 'destructive' : 'secondary'}>
+                                    {snag.status}
+                                  </Badge>
+                                </div>
+                                {snag.description && (
+                                  <p className="text-sm text-muted-foreground mb-2">{snag.description}</p>
+                                )}
+                                {snag.notes && (
+                                  <p className="text-sm text-muted-foreground mb-2">
+                                    <strong>Notes:</strong> {snag.notes}
+                                  </p>
+                                )}
+                                <p className="text-xs text-muted-foreground">
+                                  Created: {format(new Date(snag.created_at), 'MMM dd, yyyy HH:mm')}
+                                </p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleToggleSnagStatus(snag.id, snag.status)}
+                                >
+                                  {snag.status === 'Open' ? 'Close' : 'Reopen'}
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteSnag(snag.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            {snag.photos && Array.isArray(snag.photos) && snag.photos.length > 0 && (
+                              <div className="grid grid-cols-4 gap-2 mt-3">
+                                {snag.photos.map((photo: string, index: number) => (
+                                  <img
+                                    key={index}
+                                    src={photo}
+                                    alt={`Snag photo ${index + 1}`}
+                                    className="w-full h-24 object-cover rounded border"
+                                  />
+                                ))}
+                              </div>
+                            )}
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
                 </CardContent>
               </Card>
             </TabsContent>
           </>
         )}
       </Tabs>
+
+      {/* Snag Creation Dialog */}
+      <Dialog open={snagDialogOpen} onOpenChange={setSnagDialogOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Create New Snag</DialogTitle>
+            <DialogDescription>
+              Document an issue or defect found during this inspection
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleCreateSnag}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="snag-title">Title *</Label>
+                <Input
+                  id="snag-title"
+                  value={newSnag.title}
+                  onChange={(e) => setNewSnag({ ...newSnag, title: e.target.value })}
+                  placeholder="Brief description of the issue"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="snag-description">Description</Label>
+                <Textarea
+                  id="snag-description"
+                  value={newSnag.description}
+                  onChange={(e) => setNewSnag({ ...newSnag, description: e.target.value })}
+                  placeholder="Detailed description of the issue"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="snag-notes">Notes / Comments</Label>
+                <Textarea
+                  id="snag-notes"
+                  value={newSnag.notes}
+                  onChange={(e) => setNewSnag({ ...newSnag, notes: e.target.value })}
+                  placeholder="Additional notes or action items"
+                  rows={3}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label>Photos</Label>
+                {newSnag.photos.length > 0 && (
+                  <div className="grid grid-cols-4 gap-2 mb-2">
+                    {newSnag.photos.map((photo, index) => (
+                      <div key={index} className="relative group">
+                        <img
+                          src={photo}
+                          alt={`Snag photo ${index + 1}`}
+                          className="w-full h-24 object-cover rounded border"
+                        />
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100"
+                          onClick={() => setNewSnag(prev => ({
+                            ...prev,
+                            photos: prev.photos.filter((_, i) => i !== index)
+                          }))}
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept="image/*"
+                  multiple
+                  capture="environment"
+                  className="hidden"
+                  id="snag-photo-upload"
+                  onChange={(e) => handleSnagPhotoUpload(e.target.files)}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => document.getElementById('snag-photo-upload')?.click()}
+                  disabled={uploadingSnagPhotos}
+                >
+                  <Camera className="mr-2 h-4 w-4" />
+                  {uploadingSnagPhotos ? 'Uploading...' : 'Add Photos'}
+                </Button>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setSnagDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                Create Snag
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
