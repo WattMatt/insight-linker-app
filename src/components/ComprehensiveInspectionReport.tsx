@@ -55,39 +55,50 @@ export const ComprehensiveInspectionReport = ({
         day: 'numeric' 
       });
 
+      // Extract general info once for reuse
+      const generalInfo = jsonData.generalInfo || {};
+
       // ===== COVER PAGE =====
       doc.setFillColor(41, 128, 185);
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(32);
+      doc.setFontSize(28);
       doc.setFont(undefined, 'bold');
       
       // Use template name if available
       const reportTitle = template?.name || 'Inspection Report';
-      doc.text(reportTitle, pageWidth / 2, 70, { align: 'center' });
+      doc.text(reportTitle, pageWidth / 2, 60, { align: 'center' });
+      
+      doc.setFontSize(22);
+      doc.setFont(undefined, 'bold');
+      doc.text(subsectionName, pageWidth / 2, 85, { align: 'center' });
+      
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Report Date: ${date}`, pageWidth / 2, 105, { align: 'center' });
+      
+      const inspector = generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'Inspector';
+      const project = generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || siteName;
+      const location = generalInfo.location || inspectionData.location || siteName;
+      
+      doc.text(`Inspector: ${inspector}`, pageWidth / 2, 120, { align: 'center' });
+      doc.text(`Project: ${project}`, pageWidth / 2, 135, { align: 'center' });
+      doc.text(`Location: ${location}`, pageWidth / 2, 150, { align: 'center' });
       
       // Use template cover page data if available
       const coverPage = template?.cover_page || {};
-      
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'normal');
-      doc.text(subsectionName, pageWidth / 2, 95, { align: 'center' });
-      doc.text(siteName, pageWidth / 2, 110, { align: 'center' });
-      
-      doc.setFontSize(14);
       const companyName = coverPage.company || 'Watson Mattheus';
-      doc.text(companyName, pageWidth / 2, 130, { align: 'center' });
+      
+      doc.setFontSize(12);
+      doc.text(companyName, pageWidth / 2, 175, { align: 'center' });
       
       // Add template description if available
       if (template?.description) {
-        doc.setFontSize(11);
+        doc.setFontSize(10);
         const splitDescription = doc.splitTextToSize(template.description, pageWidth - 60);
-        doc.text(splitDescription, pageWidth / 2, 145, { align: 'center' });
+        doc.text(splitDescription, pageWidth / 2, 195, { align: 'center' });
       }
-      
-      doc.setFontSize(12);
-      doc.text(`Generated: ${date}`, pageWidth / 2, pageHeight - 40, { align: 'center' });
 
       // ===== GENERAL INFORMATION =====
       doc.addPage();
@@ -100,7 +111,6 @@ export const ComprehensiveInspectionReport = ({
       doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
 
-      const generalInfo = jsonData.generalInfo || {};
       const generalInfoData = [
         ['Project Name', generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'N/A'],
         ['Shop Number', generalInfo.shopNumber || inspectionData.shopNumber || inspectionData.shop_number || 'N/A'],
@@ -132,6 +142,7 @@ export const ComprehensiveInspectionReport = ({
       // ===== TEMPLATE-BASED SECTIONS WITH VISUAL LAYOUT =====
       if (template && template.sections) {
         const sections = template.sections as any;
+        let pageCounter = 2; // Start from page 2 (after cover and general info)
         
         for (const [sectionKey, section] of Object.entries(sections)) {
           const sectionData = section as any;
@@ -141,18 +152,15 @@ export const ComprehensiveInspectionReport = ({
 
           // Start new page for each section
           doc.addPage();
-          yPos = 20;
+          yPos = 30;
 
-          // Section header
-          doc.setFontSize(20);
+          // Section header - centered and styled
+          doc.setFontSize(16);
           doc.setFont(undefined, 'bold');
-          doc.setTextColor(41, 128, 185);
+          doc.setTextColor(0, 0, 0);
           const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
           doc.text(sectionTitle, pageWidth / 2, yPos, { align: 'center' });
-          yPos += 15;
-
-          // Reset text color
-          doc.setTextColor(0, 0, 0);
+          yPos += 20;
 
           let itemNumber = 1;
           
@@ -168,100 +176,102 @@ export const ComprehensiveInspectionReport = ({
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
 
-            // Check if we need a new page (need space for item header + at least one photo)
-            if (yPos > pageHeight - 100) {
+            // Calculate space needed for this item
+            const photoHeight = 100;
+            const itemHeaderHeight = 15;
+            const notesHeight = itemData.notes ? 25 : 0;
+            const totalItemHeight = itemHeaderHeight + photoHeight + notesHeight + 20;
+
+            // Check if we need a new page
+            if (yPos + totalItemHeight > pageHeight - 30) {
               doc.addPage();
-              yPos = 20;
+              yPos = 30;
+              pageCounter++;
             }
 
             // Item number and name
-            doc.setFontSize(14);
+            doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
+            doc.setTextColor(0, 0, 0);
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
-            yPos += 10;
+            yPos += 12;
 
-            // Display photos if available
+            // Display photo or placeholder
+            const imgWidth = 120;
+            const imgHeight = 90;
+            const imgX = 30;
+
             if (allImages.length > 0) {
-              const imgWidth = 80;
-              const imgHeight = 60;
-              const leftMargin = 30;
+              // Use the first image
+              const img = allImages[0];
+              try {
+                const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
+                if (typeof imgUrl === 'string') {
+                  const response = await fetch(imgUrl);
+                  const blob = await response.blob();
+                  const dataUrl = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                  });
 
-              for (const img of allImages) {
-                try {
-                  const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
-                  if (typeof imgUrl === 'string') {
-                    const response = await fetch(imgUrl);
-                    const blob = await response.blob();
-                    const dataUrl = await new Promise<string>((resolve) => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => resolve(reader.result as string);
-                      reader.readAsDataURL(blob);
-                    });
-
-                    // Check if we need a new page for this image
-                    if (yPos + imgHeight + 15 > pageHeight - 20) {
-                      doc.addPage();
-                      yPos = 20;
-                    }
-
-                    // Draw photo
-                    doc.addImage(dataUrl, 'JPEG', leftMargin, yPos, imgWidth, imgHeight);
-                    yPos += imgHeight + 5;
-                  }
-                } catch (error) {
-                  console.error('Error embedding image:', error);
-                  // Draw placeholder box if image fails
-                  doc.setDrawColor(200, 200, 200);
-                  doc.setFillColor(245, 245, 245);
-                  doc.rect(leftMargin, yPos, imgWidth, imgHeight, 'FD');
-                  doc.setFontSize(10);
-                  doc.setFont(undefined, 'italic');
-                  doc.setTextColor(128, 128, 128);
-                  doc.text('Photo', leftMargin + imgWidth / 2, yPos + imgHeight / 2, { align: 'center' });
-                  doc.text('Placeholder', leftMargin + imgWidth / 2, yPos + imgHeight / 2 + 5, { align: 'center' });
-                  doc.setTextColor(0, 0, 0);
-                  yPos += imgHeight + 5;
+                  // Draw photo with border
+                  doc.setDrawColor(180, 180, 180);
+                  doc.setLineWidth(0.5);
+                  doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
+                  doc.rect(imgX, yPos, imgWidth, imgHeight);
+                  yPos += imgHeight + 8;
                 }
+              } catch (error) {
+                console.error('Error embedding image:', error);
+                // Draw placeholder on error
+                doc.setDrawColor(200, 200, 200);
+                doc.setFillColor(250, 250, 250);
+                doc.setLineWidth(0.5);
+                doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
+                
+                doc.setFontSize(10);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(150, 150, 150);
+                doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 3, { align: 'center' });
+                doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
+                doc.setTextColor(0, 0, 0);
+                yPos += imgHeight + 8;
               }
             } else {
-              // Draw placeholder box if no images
-              const imgWidth = 80;
-              const imgHeight = 60;
-              const leftMargin = 30;
-              
-              if (yPos + imgHeight + 15 > pageHeight - 20) {
-                doc.addPage();
-                yPos = 20;
-              }
-              
+              // Draw placeholder box
               doc.setDrawColor(200, 200, 200);
-              doc.setFillColor(245, 245, 245);
-              doc.rect(leftMargin, yPos, imgWidth, imgHeight, 'FD');
+              doc.setFillColor(250, 250, 250);
+              doc.setLineWidth(0.5);
+              doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
+              
               doc.setFontSize(10);
-              doc.setFont(undefined, 'italic');
-              doc.setTextColor(128, 128, 128);
-              doc.text('Photo', leftMargin + imgWidth / 2, yPos + imgHeight / 2, { align: 'center' });
-              doc.text('Placeholder', leftMargin + imgWidth / 2, yPos + imgHeight / 2 + 5, { align: 'center' });
+              doc.setFont(undefined, 'normal');
+              doc.setTextColor(150, 150, 150);
+              doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 3, { align: 'center' });
+              doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
               doc.setTextColor(0, 0, 0);
-              yPos += imgHeight + 5;
+              yPos += imgHeight + 8;
             }
 
             // Display notes if available
             if (itemData.notes) {
-              doc.setFontSize(10);
+              doc.setFontSize(9);
               doc.setFont(undefined, 'normal');
-              doc.text('Notes:', 30, yPos);
+              doc.text('Notes:', imgX, yPos);
               yPos += 5;
               
               const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
-              doc.text(notesLines, 30, yPos);
-              yPos += (notesLines.length * 5) + 5;
+              doc.text(notesLines, imgX, yPos);
+              yPos += (notesLines.length * 4) + 5;
             }
 
             // Add spacing between items
-            yPos += 10;
+            yPos += 15;
             itemNumber++;
           }
+          
+          pageCounter++;
         }
       }
 
@@ -269,15 +279,11 @@ export const ComprehensiveInspectionReport = ({
       const totalPages = doc.getNumberOfPages();
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFontSize(10);
-        doc.setTextColor(128, 128, 128);
+        doc.setFontSize(9);
+        doc.setTextColor(100, 100, 100);
         if (i > 1) {
-          doc.text(
-            `Page ${i - 1} of ${totalPages - 1}`,
-            pageWidth / 2,
-            pageHeight - 10,
-            { align: 'center' }
-          );
+          const footerText = `${reportTitle} - Page ${i - 1}`;
+          doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
         }
       }
 
