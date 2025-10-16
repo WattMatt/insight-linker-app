@@ -11,6 +11,7 @@ interface ComprehensiveInspectionReportProps {
   siteName: string;
   subsectionName: string;
   templateId?: string | null;
+  subsectionId?: string;
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -18,6 +19,7 @@ export const ComprehensiveInspectionReport = ({
   siteName,
   subsectionName,
   templateId,
+  subsectionId,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -57,6 +59,37 @@ export const ComprehensiveInspectionReport = ({
 
       // Extract general info once for reuse
       const generalInfo = jsonData.generalInfo || {};
+
+      // Fetch subsection QR code if available
+      let qrCodeDataUrl: string | null = null;
+      const subId = subsectionId || inspectionData.subsection_id;
+      if (subId) {
+        try {
+          const { data: subsectionData } = await supabase
+            .from('subsections')
+            .select('id')
+            .eq('id', subId)
+            .maybeSingle();
+          
+          if (subsectionData) {
+            // Generate QR code URL that points to the public subsection page
+            const qrCodeUrl = `https://oltzgidkjxwsukvkomof.supabase.co/functions/v1/qr-redirect?subsection=${subId}`;
+            
+            // Use QRCode library to generate QR code
+            const QRCode = (await import('qrcode')).default;
+            qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl, {
+              width: 150,
+              margin: 1,
+              color: {
+                dark: '#000000',
+                light: '#FFFFFF'
+              }
+            });
+          }
+        } catch (error) {
+          console.error('Error generating QR code:', error);
+        }
+      }
 
       // ===== COVER PAGE =====
       // White background
@@ -144,6 +177,21 @@ export const ComprehensiveInspectionReport = ({
       doc.text('Location:', 55, detailY);
       doc.setFont(undefined, 'normal');
       doc.text(location, 95, detailY);
+      
+      // QR Code on the right side if available
+      if (qrCodeDataUrl) {
+        const qrSize = 40;
+        const qrX = pageWidth - qrSize - 20;
+        const qrY = detailsBoxY;
+        
+        doc.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+        
+        // Add label below QR code
+        doc.setFontSize(8);
+        doc.setTextColor(100, 100, 100);
+        doc.setFont(undefined, 'normal');
+        doc.text('Scan for details', qrX + qrSize / 2, qrY + qrSize + 5, { align: 'center' });
+      }
       
       // Company name at bottom (above blue bar)
       const coverPage = template?.cover_page || {};
