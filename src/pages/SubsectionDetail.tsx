@@ -120,9 +120,8 @@ const SubsectionDetail = () => {
           { name: '02 Manuals', order_index: 2 },
           { name: '03 Line Diagram', order_index: 3 },
           { name: '04 Metering', order_index: 4 },
-          { name: '05 Photos', order_index: 5 },
-          { name: '06 Thermal Reports', order_index: 6 },
-          { name: '07 Other', order_index: 7 }
+          { name: '05 Thermal Reports', order_index: 5 },
+          { name: '06 Other', order_index: 6 }
         ];
         
         const { data: newCategories, error: insertError } = await supabase
