@@ -123,12 +123,11 @@ const Clients = () => {
       // Upload logo if provided
       if (logoFile) {
         const fileExt = logoFile.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const fileName = `new-client-${Date.now()}/logo.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('client-logos')
-          .upload(filePath, logoFile, {
+          .upload(fileName, logoFile, {
             upsert: true
           });
 
@@ -136,7 +135,7 @@ const Clients = () => {
 
         const { data: { publicUrl } } = supabase.storage
           .from('client-logos')
-          .getPublicUrl(filePath);
+          .getPublicUrl(fileName);
 
         logo_url = publicUrl;
       }
@@ -150,6 +149,47 @@ const Clients = () => {
       ]);
 
       if (error) throw error;
+
+      // If logo was uploaded, rename the folder to use the actual client ID
+      if (logo_url) {
+        const insertedClient = await supabase
+          .from("clients")
+          .select("id")
+          .eq("logo_url", logo_url)
+          .single();
+        
+        if (insertedClient.data) {
+          const fileExt = logoFile!.name.split('.').pop();
+          const oldPath = `new-client-${Date.now()}/logo.${fileExt}`;
+          const newPath = `${insertedClient.data.id}/logo.${fileExt}`;
+          
+          // Copy to new location
+          const { data: fileData } = await supabase.storage
+            .from('client-logos')
+            .download(oldPath);
+          
+          if (fileData) {
+            await supabase.storage
+              .from('client-logos')
+              .upload(newPath, fileData, { upsert: true });
+            
+            // Delete old file
+            await supabase.storage
+              .from('client-logos')
+              .remove([oldPath]);
+            
+            // Update URL
+            const { data: { publicUrl: newPublicUrl } } = supabase.storage
+              .from('client-logos')
+              .getPublicUrl(newPath);
+            
+            await supabase
+              .from("clients")
+              .update({ logo_url: newPublicUrl })
+              .eq("id", insertedClient.data.id);
+          }
+        }
+      }
 
       toast.success("Client added successfully");
       setDialogOpen(false);
@@ -213,12 +253,11 @@ const Clients = () => {
       // Upload new logo if provided
       if (logoFile) {
         const fileExt = logoFile.name.split('.').pop();
-        const fileName = `${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
+        const fileName = `${editingClient.id}/logo.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('client-logos')
-          .upload(filePath, logoFile, {
+          .upload(fileName, logoFile, {
             upsert: true
           });
 
@@ -226,7 +265,7 @@ const Clients = () => {
 
         const { data: { publicUrl } } = supabase.storage
           .from('client-logos')
-          .getPublicUrl(filePath);
+          .getPublicUrl(fileName);
 
         logo_url = publicUrl;
       }

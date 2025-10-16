@@ -372,13 +372,15 @@ const SiteDetail = () => {
       setUploadingImage(imageType);
       toast.info("Uploading image...");
 
-      // Upload file to Supabase storage
+      // Upload file to Supabase storage with organized naming
       const fileExt = file.name.split('.').pop();
-      const fileName = `${siteId}/${imageType}-${Date.now()}.${fileExt}`;
+      const fileName = `${siteId}/${imageType === 'site_image' ? 'site-image' : 'client-logo'}.${fileExt}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('site-images')
-        .upload(fileName, file);
+        .upload(fileName, file, {
+          upsert: true
+        });
 
       if (uploadError) throw uploadError;
 

@@ -440,9 +440,11 @@ const SubsectionDetail = () => {
         return;
       }
 
-      // Upload file to Supabase storage
+      // Upload file to Supabase storage with organized naming
       const fileExt = file.name.split('.').pop();
-      const fileName = `${subsectionId}/${categoryName}/${Date.now()}.${fileExt}`;
+      const timestamp = Date.now();
+      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${subsectionId}/${categoryName}/${timestamp}-${sanitizedFileName}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')

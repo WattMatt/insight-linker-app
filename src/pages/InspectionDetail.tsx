@@ -375,7 +375,8 @@ const InspectionDetail = () => {
       for (let i = 0; i < files.length; i++) {
         const file = files[i];
         const fileExt = file.name.split('.').pop();
-        const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}-${i}.${fileExt}`;
+        const timestamp = Date.now();
+        const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${timestamp}-${i + 1}.${fileExt}`;
 
         const { data, error } = await supabase.storage
           .from('inspection-photos')
