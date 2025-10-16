@@ -378,7 +378,28 @@ const InspectionDetail = () => {
       const uploadedUrls: string[] = [];
 
       for (let i = 0; i < files.length; i++) {
-        const file = files[i];
+        let file = files[i];
+        
+        // Convert HEIC/HEIF images to JPEG for cross-browser compatibility
+        if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+          try {
+            const heic2any = (await import('heic2any')).default;
+            const convertedBlob = await heic2any({
+              blob: file,
+              toType: 'image/jpeg',
+              quality: 0.9
+            });
+            
+            // heic2any can return Blob or Blob[], handle both cases
+            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+            file = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
+          } catch (conversionError) {
+            console.error("Error converting HEIC image:", conversionError);
+            toast.error("Failed to convert HEIC image. Please use JPG or PNG.");
+            continue;
+          }
+        }
+        
         const fileExt = file.name.split('.').pop();
         const timestamp = Date.now();
         const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${timestamp}-${i + 1}.${fileExt}`;

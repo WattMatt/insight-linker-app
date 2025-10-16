@@ -83,12 +83,34 @@ export const DynamicFieldManager = ({
     setUploadingImages(prev => new Set(prev).add(fieldId));
 
     try {
-      const fileName = `${Date.now()}-${file.name}`;
+      let processedFile = file;
+      
+      // Convert HEIC/HEIF images to JPEG for cross-browser compatibility
+      if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+        try {
+          const heic2any = (await import('heic2any')).default;
+          const convertedBlob = await heic2any({
+            blob: file,
+            toType: 'image/jpeg',
+            quality: 0.9
+          });
+          
+          // heic2any can return Blob or Blob[], handle both cases
+          const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
+          processedFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
+        } catch (conversionError) {
+          console.error("Error converting HEIC image:", conversionError);
+          toast.error("Failed to convert HEIC image. Please use JPG or PNG.");
+          return;
+        }
+      }
+      
+      const fileName = `${Date.now()}-${processedFile.name}`;
       const filePath = `${inspectionId}/${sectionKey}/${fileName}`;
 
       const { error: uploadError, data } = await supabase.storage
         .from("inspection-photos")
-        .upload(filePath, file);
+        .upload(filePath, processedFile);
 
       if (uploadError) throw uploadError;
 
@@ -100,7 +122,7 @@ export const DynamicFieldManager = ({
         if (f.id === fieldId) {
           return {
             ...f,
-            images: [...(f.images || []), { url: publicUrl, name: file.name }]
+            images: [...(f.images || []), { url: publicUrl, name: processedFile.name }]
           };
         }
         return f;
