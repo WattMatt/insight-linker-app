@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Building2, Zap, Sun, Activity, Users } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -75,11 +75,6 @@ const SubsectionDetail = () => {
     name: "",
     tenant_name: "",
     category: "",
-    coc_number: "",
-    coc_type: "",
-    coc_issue_date: "",
-    meter_serial_number: "",
-    ct_ratio: "",
     is_coc_required: true
   });
 
@@ -322,11 +317,6 @@ const SubsectionDetail = () => {
       name: data.name || "",
       tenant_name: data.tenant_name || "",
       category: data.category || "",
-      coc_number: data.coc_number || "",
-      coc_type: data.coc_type || "",
-      coc_issue_date: data.coc_issue_date || "",
-      meter_serial_number: data.meter_serial_number || "",
-      ct_ratio: data.ct_ratio || "",
       is_coc_required: data.is_coc_required ?? true
     });
     
@@ -334,6 +324,16 @@ const SubsectionDetail = () => {
   };
 
   const handleSaveEdit = async () => {
+    if (!editFormData.name.trim()) {
+      toast.error("Subsection name is required");
+      return;
+    }
+
+    if (!editFormData.category) {
+      toast.error("Please select a category");
+      return;
+    }
+
     try {
       setSaving(true);
       
@@ -343,11 +343,6 @@ const SubsectionDetail = () => {
           name: editFormData.name,
           tenant_name: editFormData.tenant_name,
           category: editFormData.category,
-          coc_number: editFormData.coc_number,
-          coc_type: editFormData.coc_type,
-          coc_issue_date: editFormData.coc_issue_date || null,
-          meter_serial_number: editFormData.meter_serial_number,
-          ct_ratio: editFormData.ct_ratio,
           is_coc_required: editFormData.is_coc_required
         })
         .eq('id', subsectionId);
@@ -2198,124 +2193,183 @@ const SubsectionDetail = () => {
 
       {/* Edit Subsection Dialog */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Edit Subsection</DialogTitle>
+            <DialogTitle className="text-2xl">Edit Subsection</DialogTitle>
+            <p className="text-sm text-muted-foreground">
+              A subsection can be a tenant, a piece of equipment, or a specific area on site.
+            </p>
           </DialogHeader>
           
-          <div className="space-y-4 py-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-name">Subsection Name*</Label>
-                <Input
-                  id="edit-name"
-                  value={editFormData.name}
-                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
-                  placeholder="e.g., Shop 1A"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-tenant">Tenant Name</Label>
-                <Input
-                  id="edit-tenant"
-                  value={editFormData.tenant_name}
-                  onChange={(e) => setEditFormData({...editFormData, tenant_name: e.target.value})}
-                  placeholder="e.g., ABC Corporation"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="edit-category">Category</Label>
-                <Input
-                  id="edit-category"
-                  value={editFormData.category}
-                  onChange={(e) => setEditFormData({...editFormData, category: e.target.value})}
-                  placeholder="e.g., Electrical"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="edit-coc-required">COC Required</Label>
-                <Select 
-                  value={editFormData.is_coc_required ? "yes" : "no"}
-                  onValueChange={(value) => setEditFormData({...editFormData, is_coc_required: value === "yes"})}
+          <div className="space-y-6 py-4">
+            {/* Subsection Category */}
+            <div className="space-y-3">
+              <Label className="text-base font-medium">Subsection Category *</Label>
+              <div className="grid grid-cols-2 gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Line Shop"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Line Shop"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
                 >
-                  <SelectTrigger id="edit-coc-required">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="yes">Yes</SelectItem>
-                    <SelectItem value="no">No</SelectItem>
-                  </SelectContent>
-                </Select>
+                  <div className="h-6 w-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded">
+                    <Building2 className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Line Shop</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Electrical Equipment"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Electrical Equipment"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="h-6 w-6 flex items-center justify-center bg-red-100 text-red-600 rounded">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Electrical Equipment</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Solar"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Solar"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="h-6 w-6 flex items-center justify-center bg-yellow-100 text-yellow-600 rounded">
+                    <Sun className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Solar</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Metering"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Metering"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="h-6 w-6 flex items-center justify-center bg-green-100 text-green-600 rounded">
+                    <Activity className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Metering</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Lightning Protection"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Lightning Protection"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="h-6 w-6 flex items-center justify-center bg-purple-100 text-purple-600 rounded">
+                    <Zap className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Lightning Protection</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, category: "Common Area"})}
+                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                    editFormData.category === "Common Area"
+                      ? "border-primary bg-primary/5"
+                      : "border-border hover:border-primary/50"
+                  }`}
+                >
+                  <div className="h-6 w-6 flex items-center justify-center bg-gray-100 text-gray-600 rounded">
+                    <Users className="h-4 w-4" />
+                  </div>
+                  <span className="font-medium">Common Area</span>
+                </button>
               </div>
             </div>
 
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-medium mb-3">Certificate of Compliance (COC)</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-coc-number">COC Number</Label>
-                  <Input
-                    id="edit-coc-number"
-                    value={editFormData.coc_number}
-                    onChange={(e) => setEditFormData({...editFormData, coc_number: e.target.value})}
-                    placeholder="e.g., COC-2024-001"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-coc-type">COC Type</Label>
-                  <Input
-                    id="edit-coc-type"
-                    value={editFormData.coc_type}
-                    onChange={(e) => setEditFormData({...editFormData, coc_type: e.target.value})}
-                    placeholder="e.g., Electrical"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-coc-date">COC Issue Date</Label>
-                  <Input
-                    id="edit-coc-date"
-                    type="date"
-                    value={editFormData.coc_issue_date}
-                    onChange={(e) => setEditFormData({...editFormData, coc_issue_date: e.target.value})}
-                  />
-                </div>
-              </div>
+            {/* Subsection Name */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-name" className="text-base font-medium">
+                Subsection Name *
+              </Label>
+              <Input
+                id="edit-name"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                placeholder="e.g., Shop 101, Main LV Board"
+                className="h-11"
+              />
             </div>
 
-            <div className="border-t pt-4 mt-4">
-              <h4 className="font-medium mb-3">Metering Information</h4>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-2">
-                  <Label htmlFor="edit-meter-serial">Meter Serial Number</Label>
-                  <Input
-                    id="edit-meter-serial"
-                    value={editFormData.meter_serial_number}
-                    onChange={(e) => setEditFormData({...editFormData, meter_serial_number: e.target.value})}
-                    placeholder="e.g., MTR-123456"
-                  />
-                </div>
-                
-                <div className="space-y-2">
-                  <Label htmlFor="edit-ct-ratio">CT Ratio</Label>
-                  <Input
-                    id="edit-ct-ratio"
-                    value={editFormData.ct_ratio}
-                    onChange={(e) => setEditFormData({...editFormData, ct_ratio: e.target.value})}
-                    placeholder="e.g., 100:5"
-                  />
-                </div>
+            {/* Tenant Name */}
+            <div className="space-y-2">
+              <Label htmlFor="edit-tenant" className="text-base font-medium">
+                Tenant Name (Optional)
+              </Label>
+              <Input
+                id="edit-tenant"
+                value={editFormData.tenant_name}
+                onChange={(e) => setEditFormData({...editFormData, tenant_name: e.target.value})}
+                placeholder="e.g., ABC Retailers"
+                className="h-11"
+              />
+            </div>
+
+            {/* COC Required */}
+            <div className="space-y-3">
+              <Label className="text-base font-medium">
+                Is a Certificate of Compliance (COC) required for this subsection?
+              </Label>
+              <div className="flex gap-4">
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, is_coc_required: true})}
+                  className={`flex items-center gap-2 ${
+                    editFormData.is_coc_required ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
+                    editFormData.is_coc_required ? "border-primary" : "border-muted-foreground"
+                  }`}>
+                    {editFormData.is_coc_required && (
+                      <div className="h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </div>
+                  <span>Yes</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setEditFormData({...editFormData, is_coc_required: false})}
+                  className={`flex items-center gap-2 ${
+                    !editFormData.is_coc_required ? "text-primary" : "text-muted-foreground"
+                  }`}
+                >
+                  <div className={`h-4 w-4 rounded-full border-2 flex items-center justify-center ${
+                    !editFormData.is_coc_required ? "border-primary" : "border-muted-foreground"
+                  }`}>
+                    {!editFormData.is_coc_required && (
+                      <div className="h-2 w-2 rounded-full bg-primary" />
+                    )}
+                  </div>
+                  <span>No</span>
+                </button>
               </div>
             </div>
           </div>
 
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-2 pt-4 border-t">
             <Button 
               variant="outline" 
               onClick={() => setIsEditDialogOpen(false)}
@@ -2325,7 +2379,7 @@ const SubsectionDetail = () => {
             </Button>
             <Button 
               onClick={handleSaveEdit}
-              disabled={saving || !editFormData.name}
+              disabled={saving || !editFormData.name || !editFormData.category}
             >
               {saving ? "Saving..." : "Save Changes"}
             </Button>
