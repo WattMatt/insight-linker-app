@@ -734,7 +734,7 @@ const SiteDetail = () => {
       <Breadcrumbs
         items={[
           { label: "Clients", href: "/clients" },
-          { label: site.clients.name, href: `/clients/${clientId}` },
+          { label: site.clients.name, href: `/clients/${site.client_id}` },
           { label: site.name },
         ]}
       />
