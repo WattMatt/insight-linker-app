@@ -64,6 +64,7 @@ interface FirebaseDocument {
   url: string;
   category: string;
   fbKey: string;
+  alreadyMigrated?: boolean;
 }
 
 interface Inspection {
@@ -365,7 +366,15 @@ const SiteDetail = () => {
                 });
               }
               
-              console.log(`Found ${fbDocs.length} Firebase documents for site`);
+              // Check which documents are already migrated
+              if (fbDocs.length > 0 && docsRes.data) {
+                const migratedUrls = new Set(docsRes.data.map((d: any) => d.file_url));
+                fbDocs.forEach(doc => {
+                  doc.alreadyMigrated = migratedUrls.has(doc.url);
+                });
+              }
+              
+              console.log(`Found ${fbDocs.length} Firebase documents for site (${fbDocs.filter(d => d.alreadyMigrated).length} already migrated)`);
               setFirebaseDocuments(fbDocs);
             }
           }
@@ -1334,11 +1343,20 @@ const SiteDetail = () => {
                         {docs.map((doc) => (
                           <div
                             key={doc.fbKey}
-                            className="flex items-center justify-between p-2 rounded bg-muted/50"
+                            className={`flex items-center justify-between p-2 rounded ${
+                              doc.alreadyMigrated ? 'bg-green-500/10' : 'bg-muted/50'
+                            }`}
                           >
                             <div className="flex items-center gap-2 flex-1">
-                              <div className="w-2 h-2 rounded-full bg-amber-500" />
+                              <div className={`w-2 h-2 rounded-full ${
+                                doc.alreadyMigrated ? 'bg-green-500' : 'bg-amber-500'
+                              }`} />
                               <span className="text-sm">{doc.name}</span>
+                              {doc.alreadyMigrated && (
+                                <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30">
+                                  Migrated
+                                </Badge>
+                              )}
                             </div>
                             <div className="flex items-center gap-2">
                               <Button
@@ -1352,9 +1370,9 @@ const SiteDetail = () => {
                                 size="sm"
                                 variant="outline"
                                 onClick={() => migrateDocument(doc)}
-                                disabled={migrating === doc.fbKey}
+                                disabled={migrating === doc.fbKey || doc.alreadyMigrated}
                               >
-                                {migrating === doc.fbKey ? 'Migrating...' : 'Migrate'}
+                                {doc.alreadyMigrated ? 'Already Migrated' : migrating === doc.fbKey ? 'Migrating...' : 'Migrate'}
                               </Button>
                             </div>
                           </div>
