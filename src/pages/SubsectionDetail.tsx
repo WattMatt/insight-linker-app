@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -1481,57 +1481,100 @@ const SubsectionDetail = () => {
 
           {/* Firebase Documents (Legacy) */}
           {documents.length > 0 && (
-            <Card>
+            <Card className="border-amber-500/50">
               <CardHeader>
-                <CardTitle>Firebase Documents (Legacy)</CardTitle>
+                <div>
+                  <CardTitle className="flex items-center gap-2">
+                    Firebase Documents (Legacy)
+                    <Badge variant="secondary">Migration Available</Badge>
+                  </CardTitle>
+                  <CardDescription>
+                    These documents exist in Firebase and can be migrated to Supabase
+                  </CardDescription>
+                </div>
               </CardHeader>
               <CardContent>
                 <Accordion type="multiple" className="w-full">
-                  {documents.map((category, idx) => (
-                    <AccordionItem key={idx} value={`category-${idx}`}>
-                      <AccordionTrigger className="hover:no-underline">
-                        <div className="flex items-center justify-between w-full pr-4">
-                          <div className="flex items-center gap-3">
-                            <FileText className="h-4 w-4 text-muted-foreground" />
-                            <span className="font-medium">{category.name}</span>
-                          </div>
-                          <Badge variant="outline">{category.files.length}</Badge>
-                        </div>
-                      </AccordionTrigger>
-                      <AccordionContent>
-                        <div className="space-y-2 pl-7 pt-2">
-                          <p className="text-sm text-muted-foreground mb-3">{category.status}</p>
-                          {category.files.map((file, fileIdx) => (
-                            <div
-                              key={fileIdx}
-                              className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
-                            >
-                              <div className="flex items-center gap-3 flex-1">
-                                <div className="w-2 h-2 rounded-full bg-primary" />
-                                <div className="flex-1">
-                                  <p className="text-sm font-medium">{file.name}</p>
-                                  {file.uploadedAt && (
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(file.uploadedAt).toLocaleDateString()}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => handleDownloadDocument(file.url, file.name)}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                              </div>
+                  {documents.map((category, idx) => {
+                    const categoryDocKey = (docName: string) => `${category.name}-${docName}`;
+                    const isMigrated = (docName: string) => {
+                      const docKey = categoryDocKey(docName);
+                      return migratedDocs.has(docKey) || supabaseDocuments.some(d => d.file_name === docName);
+                    };
+                    
+                    return (
+                      <AccordionItem key={idx} value={`category-${idx}`}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-amber-500" />
+                              <span className="font-medium">{category.name}</span>
                             </div>
-                          ))}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
+                            <Badge variant="outline" className="bg-amber-500/10">
+                              {category.files.length} files
+                            </Badge>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 pl-7 pt-2">
+                            <p className="text-sm text-muted-foreground mb-3">{category.status}</p>
+                            {category.files.map((file, fileIdx) => {
+                              const docKey = categoryDocKey(file.name);
+                              const isAlreadyMigrated = isMigrated(file.name);
+                              const isMigrating = migratingDocs.has(docKey);
+                              
+                              return (
+                                <div
+                                  key={fileIdx}
+                                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
+                                    isAlreadyMigrated ? 'bg-green-500/10' : 'hover:bg-accent'
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className={`w-2 h-2 rounded-full ${
+                                      isAlreadyMigrated ? 'bg-green-500' : 'bg-amber-500'
+                                    }`} />
+                                    <div className="flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <p className="text-sm font-medium">{file.name}</p>
+                                        {isAlreadyMigrated && (
+                                          <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30">
+                                            Migrated
+                                          </Badge>
+                                        )}
+                                      </div>
+                                      {file.uploadedAt && (
+                                        <p className="text-xs text-muted-foreground">
+                                          {new Date(file.uploadedAt).toLocaleDateString()}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => handleDownloadDocument(file.url, file.name)}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
+                                      disabled={isMigrating || isAlreadyMigrated}
+                                    >
+                                      {isAlreadyMigrated ? 'Already Migrated' : isMigrating ? 'Migrating...' : 'Migrate'}
+                                    </Button>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
                 </Accordion>
               </CardContent>
             </Card>
