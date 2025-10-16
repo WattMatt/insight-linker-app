@@ -13,6 +13,7 @@ interface ComprehensiveInspectionReportProps {
   templateId?: string | null;
   subsectionId?: string;
   siteLogoUrl?: string | null;
+  companyLogoUrl?: string | null;
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -22,6 +23,7 @@ export const ComprehensiveInspectionReport = ({
   templateId,
   subsectionId,
   siteLogoUrl,
+  companyLogoUrl,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -62,7 +64,7 @@ export const ComprehensiveInspectionReport = ({
       // Extract general info once for reuse
       const generalInfo = jsonData.generalInfo || {};
 
-      // Fetch subsection QR code if available
+      // Fetch subsection QR code if available with logo overlay
       let qrCodeDataUrl: string | null = null;
       const subId = subsectionId || inspectionData.subsection_id;
       if (subId) {
@@ -77,16 +79,61 @@ export const ComprehensiveInspectionReport = ({
             // Generate QR code URL that points to the public subsection page
             const qrCodeUrl = `https://oltzgidkjxwsukvkomof.supabase.co/functions/v1/qr-redirect?subsection=${subId}`;
             
-            // Use QRCode library to generate QR code
+            // Create canvas for QR code with logo
+            const canvas = document.createElement('canvas');
+            const qrSize = 300;
+            canvas.width = qrSize;
+            canvas.height = qrSize;
+            
+            // Use QRCode library to generate QR code with high error correction
             const QRCode = (await import('qrcode')).default;
-            qrCodeDataUrl = await QRCode.toDataURL(qrCodeUrl, {
-              width: 150,
-              margin: 1,
-              color: {
-                dark: '#000000',
-                light: '#FFFFFF'
-              }
+            await QRCode.toCanvas(canvas, qrCodeUrl, {
+              width: qrSize,
+              margin: 2,
+              errorCorrectionLevel: 'H' // High error correction allows ~30% of QR code to be covered
             });
+            
+            // If we have a company logo, overlay it in the center
+            if (companyLogoUrl) {
+              const ctx = canvas.getContext('2d');
+              if (ctx) {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                
+                await new Promise<void>((resolve, reject) => {
+                  img.onload = () => {
+                    // Calculate rectangular logo size (24% of QR code size, wider than tall)
+                    const logoWidth = qrSize * 0.24 * 1.5;
+                    const logoHeight = qrSize * 0.24;
+                    const x = (qrSize - logoWidth) / 2;
+                    const y = (qrSize - logoHeight) / 2;
+                    const padding = logoHeight * 0.1;
+                    
+                    // Draw white rectangular background for logo
+                    ctx.fillStyle = 'white';
+                    ctx.fillRect(
+                      x - padding, 
+                      y - padding, 
+                      logoWidth + (padding * 2), 
+                      logoHeight + (padding * 2)
+                    );
+                    
+                    // Draw logo
+                    ctx.drawImage(img, x, y, logoWidth, logoHeight);
+                    resolve();
+                  };
+                  
+                  img.onerror = () => {
+                    // If logo fails to load, just use QR code without logo
+                    resolve();
+                  };
+                  
+                  img.src = companyLogoUrl;
+                });
+              }
+            }
+            
+            qrCodeDataUrl = canvas.toDataURL();
           }
         } catch (error) {
           console.error('Error generating QR code:', error);
@@ -108,7 +155,7 @@ export const ComprehensiveInspectionReport = ({
       
       // QR Code in top left corner if available
       if (qrCodeDataUrl) {
-        const qrSize = 50;
+        const qrSize = 35; // Reduced size
         const qrX = 20;
         const qrY = 30;
         

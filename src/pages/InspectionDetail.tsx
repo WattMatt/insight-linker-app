@@ -1179,6 +1179,7 @@ const InspectionDetail = () => {
             templateId={templateId}
             subsectionId={subsectionId}
             siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
+            companyLogoUrl={siteData?.clientLogoUrl || null}
           />
           <Button 
             variant="outline" 
