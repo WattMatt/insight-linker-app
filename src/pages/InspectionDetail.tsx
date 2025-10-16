@@ -376,13 +376,27 @@ const InspectionDetail = () => {
 
     try {
       const uploadedUrls: string[] = [];
+      const totalFiles = files.length;
+      let processedFiles = 0;
 
       for (let i = 0; i < files.length; i++) {
         let file = files[i];
         
+        console.log(`Processing file ${i + 1}/${totalFiles}:`, file.name, 'Type:', file.type, 'Size:', file.size);
+        
         // Convert HEIC/HEIF images to JPEG for cross-browser compatibility
-        if (file.type === 'image/heic' || file.type === 'image/heif' || file.name.toLowerCase().endsWith('.heic') || file.name.toLowerCase().endsWith('.heif')) {
+        // Check both MIME type and file extension since iOS doesn't always set MIME type correctly
+        const inputFileName = file.name.toLowerCase();
+        const isHEIC = file.type === 'image/heic' || 
+                       file.type === 'image/heif' || 
+                       file.type === '' && (inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif')) ||
+                       inputFileName.endsWith('.heic') || 
+                       inputFileName.endsWith('.heif');
+        
+        if (isHEIC) {
+          console.log('HEIC/HEIF file detected, converting...');
           try {
+            toast.info(`Converting ${file.name} to JPEG...`);
             const heic2any = (await import('heic2any')).default;
             const convertedBlob = await heic2any({
               blob: file,
@@ -393,9 +407,10 @@ const InspectionDetail = () => {
             // heic2any can return Blob or Blob[], handle both cases
             const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
             file = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
+            console.log('HEIC conversion successful, new file:', file.name, file.type, 'Size:', file.size);
           } catch (conversionError) {
             console.error("Error converting HEIC image:", conversionError);
-            toast.error("Failed to convert HEIC image. Please use JPG or PNG.");
+            toast.error(`Failed to convert ${file.name}. Please use JPG or PNG.`);
             continue;
           }
         }
@@ -404,17 +419,28 @@ const InspectionDetail = () => {
         const timestamp = Date.now();
         const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${timestamp}-${i + 1}.${fileExt}`;
 
+        console.log('Uploading to storage:', fileName);
         const { data, error } = await supabase.storage
           .from('inspection-photos')
           .upload(fileName, file);
 
-        if (error) throw error;
+        if (error) {
+          console.error('Upload error:', error);
+          throw error;
+        }
 
+        console.log('Upload successful:', data.path);
         const { data: urlData } = supabase.storage
           .from('inspection-photos')
           .getPublicUrl(data.path);
 
         uploadedUrls.push(urlData.publicUrl);
+        processedFiles++;
+      }
+
+      if (uploadedUrls.length === 0) {
+        toast.error("No images were uploaded successfully");
+        return;
       }
 
       // Add uploaded URLs to inspection data
@@ -442,9 +468,10 @@ const InspectionDetail = () => {
       });
 
       toast.success(`${uploadedUrls.length} image(s) uploaded successfully`);
+      console.log(`Upload complete: ${uploadedUrls.length}/${totalFiles} images uploaded`);
     } catch (error) {
       console.error("Error uploading images:", error);
-      toast.error("Failed to upload images");
+      toast.error("Failed to upload images: " + (error as Error).message);
     } finally {
       setUploadingImages(prev => {
         const newSet = new Set(prev);
