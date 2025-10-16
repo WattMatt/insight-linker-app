@@ -82,15 +82,20 @@ const Clients = () => {
     const { data, error } = await supabase
       .from("clients")
       .select("*, sites(id)")
-      .order("name", { ascending: true });
+      .order("name", { ascending: true, nullsFirst: false });
 
     if (error) {
       console.error("Error fetching Supabase clients:", error);
       return [];
     }
     
+    // Ensure case-insensitive alphabetical sorting
+    const sortedData = (data || []).sort((a, b) => 
+      a.name.toLowerCase().localeCompare(b.name.toLowerCase())
+    );
+    
     // Map and count sites for each client
-    return (data || []).map(client => ({
+    return sortedData.map(client => ({
       ...client,
       sitesCount: (client.sites as any[])?.length || 0,
       sites: undefined, // Remove sites array to keep data clean
