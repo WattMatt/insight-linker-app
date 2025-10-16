@@ -379,7 +379,7 @@ const InspectionTemplates = () => {
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {currentTemplates.map((template) => (
               <Card key={template.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader>
+                <CardHeader className="pb-3">
                   <div className="flex items-start justify-between mb-2">
                     <FileText className="h-5 w-5 text-primary" />
                     <Badge variant="secondary">{template.category}</Badge>
@@ -392,6 +392,18 @@ const InspectionTemplates = () => {
                   )}
                 </CardHeader>
                 <CardContent className="space-y-4">
+                  {/* Uniform template preview image */}
+                  <div className="w-full h-40 bg-muted rounded-md overflow-hidden flex items-center justify-center">
+                    {template.cover_page?.logo_url ? (
+                      <img 
+                        src={template.cover_page.logo_url} 
+                        alt={template.name}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <FileText className="h-16 w-16 text-muted-foreground" />
+                    )}
+                  </div>
                   <div className="flex gap-4 text-sm text-muted-foreground">
                     <div>
                       <span className="font-semibold text-foreground">
