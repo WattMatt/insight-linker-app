@@ -482,11 +482,11 @@ const SubsectionDetail = () => {
     try {
       setSaving(true);
       
-      // Find the subsection in Supabase by firebase_id
+      // Find the subsection in Supabase by id
       const { data: supabaseSubsection, error: findError } = await supabase
         .from('subsections')
         .select('id, firebase_id')
-        .eq('firebase_id', subsectionId)
+        .eq('id', subsectionId)
         .maybeSingle();
       
       if (findError) {
