@@ -43,6 +43,7 @@ const TEMPLATE_CATEGORIES = [
   "Generator",
   "Solar",
   "Progress",
+  "Site Drawing",
 ];
 
 const FIELD_TYPES = [

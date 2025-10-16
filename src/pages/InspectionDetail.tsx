@@ -14,6 +14,8 @@ import QRCode from "qrcode";
 // Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
+import { SiteDrawingReport } from "@/components/SiteDrawingReport";
+import { SiteDrawingInspection } from "@/components/SiteDrawingInspection";
 import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
 
@@ -919,7 +921,7 @@ const InspectionDetail = () => {
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
-          <TabsTrigger value="general">General Info</TabsTrigger>
+          {templateCategory !== "Site Drawing" && <TabsTrigger value="general">General Info</TabsTrigger>}
           {Object.entries(template.sections || {})
             .filter(([key]) => key !== 'generalInfo') // Skip if template has its own generalInfo section
             .map(([key, section]) => (
@@ -927,74 +929,99 @@ const InspectionDetail = () => {
                 {section.name}
               </TabsTrigger>
             ))}
-          <TabsTrigger value="snag-list">Snag List</TabsTrigger>
+          {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
         </TabsList>
 
-        <TabsContent value="general" className="space-y-4">
-          {renderGeneralInfo()}
-        </TabsContent>
+        {templateCategory === "Site Drawing" ? (
+          <TabsContent value={Object.keys(template.sections || {})[0] || "general"} className="space-y-4">
+            <SiteDrawingInspection
+              inspectionId={inspectionId!}
+              initialPdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf}
+              initialPins={(inspection?.jsonData as any)?.siteDrawingPins || []}
+              onDataChange={(pdfUrl, pins) => {
+                setInspection(prev => {
+                  if (!prev) return null;
+                  return {
+                    ...prev,
+                    jsonData: {
+                      ...prev.jsonData,
+                      siteDrawingPdf: pdfUrl,
+                      siteDrawingPins: pins
+                    } as any
+                  };
+                });
+              }}
+            />
+          </TabsContent>
+        ) : (
+          <>
+            <TabsContent value="general" className="space-y-4">
+              {renderGeneralInfo()}
+            </TabsContent>
 
-        {Object.entries(template.sections || {}).map(([sectionKey, section]) => (
-          <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
-            {section.isImageGallery ? (
-              renderImageGallery(sectionKey)
-            ) : (
+            {Object.entries(template.sections || {}).map(([sectionKey, section]) => (
+              <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
+                {section.isImageGallery ? (
+                  renderImageGallery(sectionKey)
+                ) : (
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>{section.name}</CardTitle>
+                      {templateCategory === "Progress" && (
+                        <p className="text-sm text-muted-foreground">
+                          Add custom fields and images for this progress report section
+                        </p>
+                      )}
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      {Object.entries(section.items || {}).map(([itemKey, item]) =>
+                        renderInspectionItem(sectionKey, itemKey, item)
+                      )}
+                      
+                      {templateCategory === "Progress" && (
+                        <div className="mt-6 pt-6 border-t">
+                          <DynamicFieldManager
+                            inspectionId={inspectionId!}
+                            sectionKey={sectionKey}
+                            initialFields={(inspection?.jsonData?.[`${sectionKey}_customFields`] as any) || []}
+                            onFieldsChange={(fields) => {
+                              setInspection(prev => {
+                                if (!prev) return null;
+                                return {
+                                  ...prev,
+                                  jsonData: {
+                                    ...prev.jsonData,
+                                    [`${sectionKey}_customFields`]: fields as any
+                                  }
+                                };
+                              });
+                            }}
+                          />
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </TabsContent>
+            ))}
+
+            <TabsContent value="snag-list" className="space-y-4">
               <Card>
                 <CardHeader>
-                  <CardTitle>{section.name}</CardTitle>
-                  {templateCategory === "Progress" && (
-                    <p className="text-sm text-muted-foreground">
-                      Add custom fields and images for this progress report section
-                    </p>
-                  )}
+                  <CardTitle>Snag List</CardTitle>
+                  <p className="text-sm text-muted-foreground">
+                    Items marked as "Fail" or issues identified during inspection
+                  </p>
                 </CardHeader>
-                <CardContent className="space-y-4">
-                  {Object.entries(section.items || {}).map(([itemKey, item]) =>
-                    renderInspectionItem(sectionKey, itemKey, item)
-                  )}
-                  
-                  {templateCategory === "Progress" && (
-                    <div className="mt-6 pt-6 border-t">
-                      <DynamicFieldManager
-                        inspectionId={inspectionId!}
-                        sectionKey={sectionKey}
-                        initialFields={(inspection?.jsonData?.[`${sectionKey}_customFields`] as any) || []}
-                        onFieldsChange={(fields) => {
-                          setInspection(prev => {
-                            if (!prev) return null;
-                            return {
-                              ...prev,
-                              jsonData: {
-                                ...prev.jsonData,
-                                [`${sectionKey}_customFields`]: fields as any
-                              }
-                            };
-                          });
-                        }}
-                      />
-                    </div>
-                  )}
+                <CardContent>
+                  <p className="text-sm text-muted-foreground">
+                    Snag list functionality coming soon...
+                  </p>
                 </CardContent>
               </Card>
-            )}
-          </TabsContent>
-        ))}
-
-        <TabsContent value="snag-list" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>Snag List</CardTitle>
-              <p className="text-sm text-muted-foreground">
-                Items marked as "Fail" or issues identified during inspection
-              </p>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground">
-                Snag list functionality coming soon...
-              </p>
-            </CardContent>
-          </Card>
-        </TabsContent>
+            </TabsContent>
+          </>
+        )}
       </Tabs>
     </div>
   );

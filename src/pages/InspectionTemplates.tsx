@@ -56,6 +56,7 @@ const TEMPLATE_CATEGORIES = [
   { value: "Generator", label: "Generator" },
   { value: "Solar", label: "Solar" },
   { value: "Progress", label: "Progress" },
+  { value: "Site Drawing", label: "Site Drawing" },
 ] as const;
 
 const InspectionTemplates = () => {
@@ -382,7 +383,7 @@ const InspectionTemplates = () => {
       </div>
 
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           {TEMPLATE_CATEGORIES.map((category) => (
             <TabsTrigger key={category.value} value={category.value}>
               {category.label}
