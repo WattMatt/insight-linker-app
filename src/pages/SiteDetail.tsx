@@ -11,6 +11,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 
@@ -92,6 +95,17 @@ const SiteDetail = () => {
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
   const [imagePreview, setImagePreview] = useState<{site_image?: string, client_logo?: string}>({});
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: '',
+    address: '',
+    site_type: '',
+    supply_authority: '',
+    nominated_max_demand: '',
+    consultant_name: '',
+    consultant_company: '',
+    consultant_contact: '',
+  });
 
   useEffect(() => {
     fetchSiteData();
@@ -409,6 +423,42 @@ const SiteDetail = () => {
     }
   };
 
+  const handleEditSite = () => {
+    if (!site) return;
+    setEditFormData({
+      name: site.name || '',
+      address: site.address || '',
+      site_type: site.site_type || '',
+      supply_authority: site.supply_authority || '',
+      nominated_max_demand: site.nominated_max_demand || '',
+      consultant_name: site.consultant_name || '',
+      consultant_company: site.consultant_company || '',
+      consultant_contact: site.consultant_contact || '',
+    });
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdateSite = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!site) return;
+
+    try {
+      const { error } = await supabase
+        .from('sites')
+        .update(editFormData)
+        .eq('id', site.id);
+
+      if (error) throw error;
+
+      toast.success("Site updated successfully");
+      setEditDialogOpen(false);
+      fetchSiteData();
+    } catch (error) {
+      console.error("Error updating site:", error);
+      toast.error("Failed to update site");
+    }
+  };
+
   const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
     if (!site) return;
 
@@ -573,7 +623,7 @@ const SiteDetail = () => {
           <h1 className="text-3xl font-bold tracking-tight">{site.name}</h1>
           <p className="text-muted-foreground mt-1">{site.address}</p>
         </div>
-        <Button variant="outline">
+        <Button variant="outline" onClick={handleEditSite}>
           Edit Site
         </Button>
       </div>
@@ -1099,6 +1149,114 @@ const SiteDetail = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Site Dialog */}
+      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Site</DialogTitle>
+            <DialogDescription>
+              Update the site information
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUpdateSite}>
+            <div className="space-y-6 py-4">
+              <div className="space-y-4">
+                <h3 className="font-semibold">Basic Information</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-name">Site Name *</Label>
+                  <Input
+                    id="edit-name"
+                    value={editFormData.name}
+                    onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+                    placeholder="e.g., Waterfall Mall"
+                    required
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-address">Physical Address</Label>
+                  <Input
+                    id="edit-address"
+                    value={editFormData.address}
+                    onChange={(e) => setEditFormData({ ...editFormData, address: e.target.value })}
+                    placeholder="e.g., 123 Main Street, City"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-site-type">Site Type</Label>
+                  <Input
+                    id="edit-site-type"
+                    value={editFormData.site_type}
+                    onChange={(e) => setEditFormData({ ...editFormData, site_type: e.target.value })}
+                    placeholder="e.g., Retail, Office, Industrial"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-semibold">Electrical Details</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-supply-authority">Supply Authority</Label>
+                  <Input
+                    id="edit-supply-authority"
+                    value={editFormData.supply_authority}
+                    onChange={(e) => setEditFormData({ ...editFormData, supply_authority: e.target.value })}
+                    placeholder="e.g., City Power"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-nmd">Nominated Max Demand (NMD)</Label>
+                  <Input
+                    id="edit-nmd"
+                    value={editFormData.nominated_max_demand}
+                    onChange={(e) => setEditFormData({ ...editFormData, nominated_max_demand: e.target.value })}
+                    placeholder="e.g., 500 kVA"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="font-semibold">Consultant Information</h3>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-consultant-company">Consultant Company</Label>
+                  <Input
+                    id="edit-consultant-company"
+                    value={editFormData.consultant_company}
+                    onChange={(e) => setEditFormData({ ...editFormData, consultant_company: e.target.value })}
+                    placeholder="e.g., Watson Mattheus Consulting"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-consultant-name">Consultant Name</Label>
+                  <Input
+                    id="edit-consultant-name"
+                    value={editFormData.consultant_name}
+                    onChange={(e) => setEditFormData({ ...editFormData, consultant_name: e.target.value })}
+                    placeholder="e.g., John Smith"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="edit-consultant-contact">Consultant Contact</Label>
+                  <Input
+                    id="edit-consultant-contact"
+                    value={editFormData.consultant_contact}
+                    onChange={(e) => setEditFormData({ ...editFormData, consultant_contact: e.target.value })}
+                    placeholder="e.g., john@company.com or +27 123 456 789"
+                  />
+                </div>
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit">
+                Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
