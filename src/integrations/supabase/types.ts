@@ -818,16 +818,19 @@ export type Database = {
           data: Json | null
           id: number
           imported_at: string | null
+          imported_by: string | null
         }
         Insert: {
           data?: Json | null
           id?: number
           imported_at?: string | null
+          imported_by?: string | null
         }
         Update: {
           data?: Json | null
           id?: number
           imported_at?: string | null
+          imported_by?: string | null
         }
         Relationships: []
       }
