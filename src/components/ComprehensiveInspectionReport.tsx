@@ -106,6 +106,15 @@ export const ComprehensiveInspectionReport = ({
       doc.setFillColor(21, 122, 171);
       doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
       
+      // QR Code in top left corner if available
+      if (qrCodeDataUrl) {
+        const qrSize = 50;
+        const qrX = 20;
+        const qrY = 30;
+        
+        doc.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
+      }
+      
       // Main title - black, bold, large (Site Name + Subsection Name)
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(28);
@@ -152,21 +161,6 @@ export const ComprehensiveInspectionReport = ({
       doc.text('Location:', 55, detailY);
       doc.setFont(undefined, 'normal');
       doc.text(location, 95, detailY);
-      
-      // QR Code on the right side if available
-      if (qrCodeDataUrl) {
-        const qrSize = 40;
-        const qrX = pageWidth - qrSize - 20;
-        const qrY = detailsBoxY;
-        
-        doc.addImage(qrCodeDataUrl, 'PNG', qrX, qrY, qrSize, qrSize);
-        
-        // Add label below QR code
-        doc.setFontSize(8);
-        doc.setTextColor(100, 100, 100);
-        doc.setFont(undefined, 'normal');
-        doc.text('Scan for details', qrX + qrSize / 2, qrY + qrSize + 5, { align: 'center' });
-      }
       
       // Company name at bottom (above blue bar)
       const coverPage = template?.cover_page || {};
