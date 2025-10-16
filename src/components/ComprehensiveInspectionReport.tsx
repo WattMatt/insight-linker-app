@@ -88,8 +88,8 @@ export const ComprehensiveInspectionReport = ({
             .maybeSingle();
           
           if (subsectionData) {
-            // Generate QR code URL that points to the public subsection page
-            const qrCodeUrl = `https://oltzgidkjxwsukvkomof.supabase.co/functions/v1/qr-redirect?subsection=${subId}`;
+            // Generate QR code URL that points to the edge function with the subsection ID as a path parameter
+            const qrCodeUrl = `https://oltzgidkjxwsukvkomof.supabase.co/functions/v1/qr-redirect/${subId}`;
             
             // Create canvas for QR code with logo
             const canvas = document.createElement('canvas');
