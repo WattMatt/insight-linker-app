@@ -75,6 +75,7 @@ const Users = () => {
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
+  const [temporaryPassword, setTemporaryPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
@@ -164,13 +165,14 @@ const Users = () => {
 
   // Invite user mutation
   const inviteMutation = useMutation({
-    mutationFn: async (userData: { email: string; fullName: string; role: string }) => {
+    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: userData.email,
           fullName: userData.fullName,
           role: userData.role,
           isResend: false,
+          temporaryPassword: userData.temporaryPassword,
         },
       });
 
@@ -180,11 +182,19 @@ const Users = () => {
       return data;
     },
     onSuccess: (data) => {
-      toast.success(data.message || "Invitation sent successfully!");
+      if (data.temporaryPassword) {
+        toast.success(
+          `User created! Temporary password: ${data.temporaryPassword}`,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(data.message || "Invitation sent successfully!");
+      }
       setOpen(false);
       setEmail("");
       setFullName("");
       setRole("User");
+      setTemporaryPassword("");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
@@ -398,7 +408,12 @@ const Users = () => {
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
-    inviteMutation.mutate({ email, fullName, role });
+    inviteMutation.mutate({ 
+      email, 
+      fullName, 
+      role,
+      temporaryPassword: temporaryPassword || undefined 
+    });
   };
 
   return (
@@ -422,7 +437,7 @@ const Users = () => {
             <DialogHeader>
               <DialogTitle>Invite New User</DialogTitle>
               <DialogDescription>
-                Send an invitation email to a new user. They'll receive an email with a secure link to create their password and access the system.
+                Set a temporary password for instant access, or leave blank to send an email invitation.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleInvite}>
@@ -461,6 +476,20 @@ const Users = () => {
                       <SelectItem value="Contractor">Contractor</SelectItem>
                     </SelectContent>
                   </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="temporaryPassword">Temporary Password (Optional)</Label>
+                  <Input
+                    id="temporaryPassword"
+                    type="text"
+                    placeholder="Leave blank to send email invite"
+                    value={temporaryPassword}
+                    onChange={(e) => setTemporaryPassword(e.target.value)}
+                    minLength={6}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    If set, user can login immediately and will be required to change password on first login.
+                  </p>
                 </div>
               </div>
               <DialogFooter>

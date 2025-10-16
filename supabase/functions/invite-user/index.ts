@@ -10,6 +10,7 @@ interface InviteUserRequest {
   fullName: string;
   role: string;
   isResend?: boolean;
+  temporaryPassword?: string;
 }
 
 Deno.serve(async (req) => {
@@ -47,9 +48,14 @@ Deno.serve(async (req) => {
       throw new Error('Only admins can invite users');
     }
 
-    const { email, fullName, role, isResend }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend, temporaryPassword }: InviteUserRequest = await req.json();
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
+
+    // Validate temporary password if provided
+    if (temporaryPassword && temporaryPassword.length < 6) {
+      throw new Error('Temporary password must be at least 6 characters');
+    }
 
     // Get the origin from the request to use as redirect URL
     const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/');
@@ -131,15 +137,23 @@ Deno.serve(async (req) => {
     } else if (existingUser && !isResend) {
       throw new Error('User with this email already exists. Use resend invite instead.');
     } else {
-      // Create new user
-      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+      // Create new user with temporary password if provided
+      const createUserOptions: any = {
         email,
-        email_confirm: false,
+        email_confirm: temporaryPassword ? true : false, // Auto-confirm if using temp password
         user_metadata: {
           full_name: fullName,
           role: role,
+          requires_password_change: temporaryPassword ? true : false,
         },
-      });
+      };
+
+      // Add password if provided
+      if (temporaryPassword) {
+        createUserOptions.password = temporaryPassword;
+      }
+
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser(createUserOptions);
 
       if (createError) {
         console.error('User creation error:', createError);
@@ -166,7 +180,28 @@ Deno.serve(async (req) => {
       console.log('Role assigned successfully');
     }
 
-    // Generate a fresh invite link
+    // If using temporary password, skip email invitation
+    if (temporaryPassword) {
+      console.log('User created with temporary password - skipping email invitation');
+      
+      return new Response(
+        JSON.stringify({
+          success: true,
+          userId: userId,
+          isNewUser,
+          message: isNewUser 
+            ? `User created successfully. Temporary password: ${temporaryPassword}. User must change password on first login.`
+            : 'User updated successfully.',
+          temporaryPassword: temporaryPassword,
+        }),
+        {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 200,
+        }
+      );
+    }
+
+    // Generate a fresh invite link (only if not using temp password)
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.generateLink({
       type: 'invite',
       email,

@@ -15,6 +15,7 @@ const Auth = () => {
   const [isInvite, setIsInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [session, setSession] = useState<Session | null>(null);
+  const [requiresPasswordChange, setRequiresPasswordChange] = useState(false);
   const [settings, setSettings] = useState<{
     company_name: string;
     company_logo_url: string | null;
@@ -40,7 +41,11 @@ const Auth = () => {
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
-        if (session && !isInvite) {
+        // Check if user needs to change password
+        const needsChange = session?.user?.user_metadata?.requires_password_change;
+        setRequiresPasswordChange(needsChange || false);
+        
+        if (session && !isInvite && !needsChange) {
           navigate("/dashboard");
         }
       }
@@ -49,7 +54,10 @@ const Auth = () => {
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session && !isInvite) {
+      const needsChange = session?.user?.user_metadata?.requires_password_change;
+      setRequiresPasswordChange(needsChange || false);
+      
+      if (session && !isInvite && !needsChange) {
         navigate("/dashboard");
       }
     });
@@ -131,8 +139,16 @@ const Auth = () => {
           toast.error(error.message);
         }
       } else if (data.session) {
-        toast.success("Signed in successfully!");
-        navigate("/dashboard");
+        // Check if user needs to change password
+        const needsChange = data.user?.user_metadata?.requires_password_change;
+        if (needsChange) {
+          setRequiresPasswordChange(true);
+          setSession(data.session);
+          toast.success("Welcome! Please change your password to continue.");
+        } else {
+          toast.success("Signed in successfully!");
+          navigate("/dashboard");
+        }
       }
     } catch (error) {
       toast.error("An unexpected error occurred");
@@ -257,10 +273,18 @@ const Auth = () => {
         throw new Error("Failed to update password");
       }
 
-      toast.success("Password created successfully! Welcome aboard!");
+      // Clear the requires_password_change flag
+      await supabase.auth.updateUser({
+        data: {
+          requires_password_change: false,
+        }
+      });
+
+      toast.success("Password updated successfully! Welcome aboard!");
       
       // Small delay then navigate
       setTimeout(() => {
+        setRequiresPasswordChange(false);
         navigate("/dashboard");
       }, 1000);
     } catch (error: any) {
@@ -317,17 +341,19 @@ const Auth = () => {
           </div>
 
           {/* Form */}
-          {isInvite ? (
-            // Password Setup Form for Invited Users
+          {isInvite || requiresPasswordChange ? (
+            // Password Setup Form for Invited Users or Password Change Required
             <form onSubmit={handleSetPassword} className="space-y-4">
               <div className="rounded-lg bg-muted p-4 mb-4">
                 <p className="text-sm text-muted-foreground">
-                  Setting up password for: <span className="font-medium text-foreground">{inviteEmail}</span>
+                  {requiresPasswordChange 
+                    ? "Please change your temporary password to continue"
+                    : `Setting up password for: ${inviteEmail || session?.user?.email}`}
                 </p>
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="invite-password">Create Password</Label>
+                <Label htmlFor="invite-password">{requiresPasswordChange ? "New Password" : "Create Password"}</Label>
                 <div className="relative">
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
