@@ -14,6 +14,7 @@ import QRCode from "qrcode";
 // Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
+import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
 
 interface InspectionTemplate {
@@ -68,6 +69,7 @@ const InspectionDetail = () => {
   const { clientId, siteId, subsectionId, inspectionId } = useParams();
   const navigate = useNavigate();
   const [template, setTemplate] = useState<InspectionTemplate | null>(null);
+  const [templateCategory, setTemplateCategory] = useState<string>("");
   const [inspection, setInspection] = useState<InspectionData | null>(null);
   const [siteData, setSiteData] = useState<any>(null);
   const [subsectionData, setSubsectionData] = useState<any>(null);
@@ -176,6 +178,7 @@ const InspectionDetail = () => {
         if (template && !templateError) {
           templateData = template;
           setTemplateId(inspData.template_id); // Store template ID
+          setTemplateCategory(template.category || ""); // Store template category
         }
       }
 
@@ -939,10 +942,37 @@ const InspectionDetail = () => {
               <Card>
                 <CardHeader>
                   <CardTitle>{section.name}</CardTitle>
+                  {templateCategory === "Progress" && (
+                    <p className="text-sm text-muted-foreground">
+                      Add custom fields and images for this progress report section
+                    </p>
+                  )}
                 </CardHeader>
-                <CardContent>
+                <CardContent className="space-y-4">
                   {Object.entries(section.items || {}).map(([itemKey, item]) =>
                     renderInspectionItem(sectionKey, itemKey, item)
+                  )}
+                  
+                  {templateCategory === "Progress" && (
+                    <div className="mt-6 pt-6 border-t">
+                      <DynamicFieldManager
+                        inspectionId={inspectionId!}
+                        sectionKey={sectionKey}
+                        initialFields={(inspection?.jsonData?.[`${sectionKey}_customFields`] as any) || []}
+                        onFieldsChange={(fields) => {
+                          setInspection(prev => {
+                            if (!prev) return null;
+                            return {
+                              ...prev,
+                              jsonData: {
+                                ...prev.jsonData,
+                                [`${sectionKey}_customFields`]: fields as any
+                              }
+                            };
+                          });
+                        }}
+                      />
+                    </div>
                   )}
                 </CardContent>
               </Card>

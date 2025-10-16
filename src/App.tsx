@@ -20,6 +20,7 @@ import Sites from "./pages/Sites";
 import Inspections from "./pages/Inspections";
 import InspectionDetail from "./pages/InspectionDetail";
 import InspectionTemplates from "./pages/InspectionTemplates";
+import TemplateBuilderPage from "./pages/TemplateBuilderPage";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
 import DataImport from "./pages/DataImport";
@@ -185,6 +186,26 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <InspectionTemplates />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inspection-templates/new"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TemplateBuilderPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inspection-templates/:templateId/edit"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TemplateBuilderPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -58,17 +59,12 @@ const TEMPLATE_CATEGORIES = [
 ] as const;
 
 const InspectionTemplates = () => {
+  const navigate = useNavigate();
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
-  const [editTemplate, setEditTemplate] = useState<InspectionTemplate | null>(null);
-  const [editForm, setEditForm] = useState({
-    name: "",
-    description: "",
-    category: ""
-  });
 
   useEffect(() => {
     fetchTemplates();
@@ -102,40 +98,6 @@ const InspectionTemplates = () => {
       toast.error("Failed to fetch templates");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleEditClick = (template: InspectionTemplate) => {
-    setEditTemplate(template);
-    setEditForm({
-      name: template.name,
-      description: template.description || "",
-      category: template.category
-    });
-  };
-
-  const handleUpdateTemplate = async () => {
-    if (!editTemplate) return;
-
-    try {
-      const { error } = await supabase
-        .from("inspection_templates")
-        .update({
-          name: editForm.name,
-          description: editForm.description,
-          category: editForm.category,
-          updated_at: new Date().toISOString()
-        })
-        .eq("id", editTemplate.id);
-
-      if (error) throw error;
-
-      toast.success("Template updated successfully");
-      setEditTemplate(null);
-      fetchTemplates();
-    } catch (error) {
-      console.error("Error updating template:", error);
-      toast.error("Failed to update template");
     }
   };
 
@@ -413,7 +375,7 @@ const InspectionTemplates = () => {
             {templates.length} reusable templates for common inspection types
           </p>
         </div>
-        <Button>
+        <Button onClick={() => navigate("/inspection-templates/new")}>
           <Plus className="mr-2 h-4 w-4" />
           Create Template
         </Button>
@@ -509,7 +471,7 @@ const InspectionTemplates = () => {
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => handleEditClick(template)}
+                      onClick={() => navigate(`/inspection-templates/${template.id}/edit`)}
                     >
                       <Edit className="h-4 w-4" />
                     </Button>
@@ -861,69 +823,6 @@ const InspectionTemplates = () => {
             }}>
               <Download className="mr-2 h-4 w-4" />
               Download PDF
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-
-      {/* Edit Template Dialog */}
-      <Dialog open={!!editTemplate} onOpenChange={() => setEditTemplate(null)}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Edit Template</DialogTitle>
-            <DialogDescription>
-              Update template information
-            </DialogDescription>
-          </DialogHeader>
-          
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label htmlFor="template-name">Template Name</Label>
-              <Input
-                id="template-name"
-                value={editForm.name}
-                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                placeholder="Enter template name"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="template-description">Description</Label>
-              <Textarea
-                id="template-description"
-                value={editForm.description}
-                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                placeholder="Enter template description"
-                rows={3}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="template-category">Category</Label>
-              <Select
-                value={editForm.category}
-                onValueChange={(value) => setEditForm({ ...editForm, category: value })}
-              >
-                <SelectTrigger id="template-category">
-                  <SelectValue placeholder="Select category" />
-                </SelectTrigger>
-                <SelectContent>
-                  {TEMPLATE_CATEGORIES.slice(1).map((category) => (
-                    <SelectItem key={category.value} value={category.value}>
-                      {category.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          </div>
-
-          <div className="flex justify-end gap-2">
-            <Button variant="outline" onClick={() => setEditTemplate(null)}>
-              Cancel
-            </Button>
-            <Button onClick={handleUpdateTemplate}>
-              Save Changes
             </Button>
           </div>
         </DialogContent>
