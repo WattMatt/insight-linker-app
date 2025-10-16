@@ -204,22 +204,6 @@ const PublicSubsection = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
-      {/* Header with branding */}
-      <header className="bg-white border-b shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <h1 className="text-lg font-semibold">{companySettings?.company_name || 'Watson Mattheus Consulting Electrical Engineers (Pty) Ltd'}</h1>
-            {companySettings?.company_logo_url && (
-              <img 
-                src={companySettings.company_logo_url} 
-                alt="Company Logo" 
-                className="h-10 object-contain" 
-              />
-            )}
-          </div>
-        </div>
-      </header>
-
       {/* Hero section with geometric pattern */}
       <div className="relative bg-gradient-to-r from-slate-700 via-slate-600 to-slate-700 text-white py-12 overflow-hidden">
         <div className="absolute inset-0 opacity-20">
