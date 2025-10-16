@@ -250,23 +250,34 @@ const SubsectionDetail = () => {
         
         // Extract COC number and issue date from validation results
         let cocNumberExtracted = result.cocNumber || result.administrativeDetails?.cocNumber;
-        let cocIssueDateExtracted = result.administrativeDetails?.registrationDate;
+        let cocIssueDateExtracted = result.administrativeDetails?.cocIssueDate || result.cocIssueDate;
         
-        // Try alternative field names
+        // Try alternative field names for issue date
         if (!cocIssueDateExtracted) {
-          cocIssueDateExtracted = result.installationDate || result.testDate || result.evaluationDate;
+          cocIssueDateExtracted = result.administrativeDetails?.registrationDate || result.installationDate || result.testDate || result.evaluationDate;
         }
 
-        // Auto-populate COC fields if extracted
-        if (cocNumberExtracted || cocIssueDateExtracted) {
+        // Validate that issue date is a valid date string (YYYY-MM-DD format)
+        const isValidDate = (dateStr: string) => {
+          if (!dateStr) return false;
+          // Check if it matches YYYY-MM-DD format
+          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
+          // Check if it's a valid date
+          const date = new Date(dateStr);
+          return date instanceof Date && !isNaN(date.getTime());
+        };
+
+        // Auto-populate COC fields if extracted and valid
+        const updateData: any = {};
+        if (cocNumberExtracted && cocNumberExtracted !== 'Not provided on COC') {
+          updateData.coc_number = cocNumberExtracted;
+        }
+        if (cocIssueDateExtracted && isValidDate(cocIssueDateExtracted)) {
+          updateData.coc_issue_date = cocIssueDateExtracted;
+        }
+
+        if (Object.keys(updateData).length > 0) {
           try {
-            const updateData: any = {};
-            if (cocNumberExtracted) {
-              updateData.coc_number = cocNumberExtracted;
-            }
-            if (cocIssueDateExtracted) {
-              updateData.coc_issue_date = cocIssueDateExtracted;
-            }
             
             const { error: updateError } = await supabase
               .from('subsections')
