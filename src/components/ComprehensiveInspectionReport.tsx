@@ -59,47 +59,104 @@ export const ComprehensiveInspectionReport = ({
       const generalInfo = jsonData.generalInfo || {};
 
       // ===== COVER PAGE =====
-      doc.setFillColor(21, 122, 171); // Blue background matching template
+      // White background
+      doc.setFillColor(255, 255, 255);
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
-      doc.setTextColor(255, 255, 255); // White text
+      // Blue bar at top
+      doc.setFillColor(21, 122, 171);
+      doc.rect(0, 0, pageWidth, 20, 'F');
       
-      // Main title at top (larger)
-      doc.setFontSize(32);
+      // Blue bar at bottom
+      doc.setFillColor(21, 122, 171);
+      doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
+      
+      // Logo box (centered at top)
+      const logoBoxWidth = 100;
+      const logoBoxHeight = 50;
+      const logoX = (pageWidth - logoBoxWidth) / 2;
+      const logoY = 40;
+      
+      doc.setDrawColor(180, 180, 180);
+      doc.setLineWidth(0.5);
+      doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
+      
+      doc.setTextColor(180, 180, 180);
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text('COMPANY LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
+      
+      // Main title - black, bold, large
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(28);
       doc.setFont(undefined, 'bold');
       const reportTitle = template?.name || 'Inspection Report';
-      doc.text(reportTitle, pageWidth / 2, 60, { align: 'center' });
+      doc.text(reportTitle, pageWidth / 2, 120, { align: 'center' });
       
-      // Description/subtitle below title (smaller, wrapped)
-      doc.setFontSize(12);
+      // Subtitle box with light gray background
+      const subtitleBoxY = 140;
+      const subtitleBoxHeight = 15;
+      doc.setFillColor(240, 240, 240);
+      doc.rect(30, subtitleBoxY, pageWidth - 60, subtitleBoxHeight, 'F');
+      
+      doc.setTextColor(80, 80, 80);
+      doc.setFontSize(11);
       doc.setFont(undefined, 'normal');
-      const subtitle = template?.description || 'Comprehensive audit template for line shop electrical boards including visual documentation, component verification, and quality assessment';
-      const subtitleLines = doc.splitTextToSize(subtitle, pageWidth - 40);
-      doc.text(subtitleLines, pageWidth / 2, 80, { align: 'center' });
+      const subtitle = template?.description || 'Low Voltage Electrical Board Assessment';
+      doc.text(subtitle, pageWidth / 2, subtitleBoxY + 10, { align: 'center' });
       
-      // Report details in the middle section
-      doc.setFontSize(13);
+      // Report details box
+      const detailsBoxY = 175;
+      const detailsBoxHeight = 60;
+      
+      doc.setDrawColor(150, 150, 150);
+      doc.setLineWidth(0.5);
+      doc.rect(45, detailsBoxY, pageWidth - 90, detailsBoxHeight);
+      
+      // Report details content
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(11);
+      
       const inspector = generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'Preview Inspector';
       const project = generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || siteName;
       const location = generalInfo.location || inspectionData.location || siteName;
       
-      const midY = pageHeight / 2 - 20;
-      doc.text(`Report Date: ${date}`, pageWidth / 2, midY, { align: 'center' });
-      doc.text(`Inspector: ${inspector}`, pageWidth / 2, midY + 15, { align: 'center' });
-      doc.text(`Project: ${project}`, pageWidth / 2, midY + 30, { align: 'center' });
-      doc.text(`Location: ${location}`, pageWidth / 2, midY + 45, { align: 'center' });
+      let detailY = detailsBoxY + 15;
+      doc.setFont(undefined, 'bold');
+      doc.text('Report Date:', 55, detailY);
+      doc.setFont(undefined, 'normal');
+      doc.text(date, 95, detailY);
       
-      // Company name at bottom (larger, bold)
+      detailY += 12;
+      doc.setFont(undefined, 'bold');
+      doc.text('Inspector:', 55, detailY);
+      doc.setFont(undefined, 'normal');
+      doc.text(inspector, 95, detailY);
+      
+      detailY += 12;
+      doc.setFont(undefined, 'bold');
+      doc.text('Project:', 55, detailY);
+      doc.setFont(undefined, 'normal');
+      doc.text(project, 95, detailY);
+      
+      detailY += 12;
+      doc.setFont(undefined, 'bold');
+      doc.text('Location:', 55, detailY);
+      doc.setFont(undefined, 'normal');
+      doc.text(location, 95, detailY);
+      
+      // Company name at bottom (above blue bar)
       const coverPage = template?.cover_page || {};
       const companyName = coverPage.company || 'Watson Mattheus';
-      doc.setFontSize(24);
+      doc.setTextColor(0, 0, 0);
+      doc.setFontSize(18);
       doc.setFont(undefined, 'bold');
-      doc.text(companyName, pageWidth / 2, pageHeight - 60, { align: 'center' });
+      doc.text(companyName, pageWidth / 2, pageHeight - 45, { align: 'center' });
       
       // Tagline below company name
-      doc.setFontSize(13);
+      doc.setFontSize(10);
       doc.setFont(undefined, 'normal');
-      doc.text('Inspection & Compliance Report', pageWidth / 2, pageHeight - 42, { align: 'center' });
+      doc.text('Inspection & Compliance Report', pageWidth / 2, pageHeight - 32, { align: 'center' });
 
       // ===== GENERAL INFORMATION =====
       doc.addPage();
