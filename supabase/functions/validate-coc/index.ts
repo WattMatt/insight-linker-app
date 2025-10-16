@@ -97,12 +97,29 @@ and ignore trivial items that do not affect safety or legal compliance.
 **FAIL Criteria:** High impedance preventing automatic disconnection  
 **Remediation:** Improve earthing system, reduce circuit length, verify supply earth integrity
 
-### 📄 CERTIFICATION & DOCUMENTATION (Clause 22)
+### 📄 CERTIFICATION & DOCUMENTATION
 **Check ID:** DOC-001  
-**Requirement:** COC issued by registered electrician, test results recorded, diagrams provided  
-**PASS Criteria:** Valid registration number, all test results present, signature & date  
+**Requirement:** COC issued by registered electrician, test results recorded  
+**PASS Criteria:** Valid registration number, all test results present, signature  
 **FAIL Criteria:** Unregistered person, missing test data, unsigned document  
-**Remediation:** Obtain COC from competent registered person, complete all test records, provide as-built drawings
+**Remediation:** Obtain COC from competent registered person, complete all test records
+
+### 📅 BUSINESS RULE: CERTIFICATE DATE VALIDATION
+**This is NOT a SANS 10142-1 clause** - it is a regulatory-process check to ensure certificates are properly dated.
+
+**Check ID:** CERT-DATE-001 (for future-dated) or CERT-EXPIRY-001 (for expired)  
+**Business Rules:**
+1. **Reject (Fail)** if certificateDate > today (future-dated certificate)
+   - Clause: "Business Rule"
+   - Category: "Administrative"
+   - Remediation: "Certificate is future-dated and cannot be accepted. Issue date must not be after today's date."
+
+2. **Warn (Fail)** if certificateDate + 12 months < today (expired certificate)
+   - Clause: "Business Rule"
+   - Category: "Administrative"
+   - Remediation: "Certificate has expired (more than 12 months old). A new COC must be issued."
+
+3. **Pass** if certificate date is valid (not future-dated and not expired)
 
 ## 📤 Required JSON Output Format
 
@@ -224,7 +241,8 @@ and ignore trivial items that do not affect safety or legal compliance.
 5. Polarity & continuity (Clause 8.7): POL-001
 6. RCD functional test (Clause 8.8): RCD-001
 7. Earth loop impedance (Clause 8.5): LOOP-001
-8. Valid certification (Clause 22): DOC-001
+8. Valid certification (DOC-001)
+9. Certificate date validation (Business Rule): CERT-DATE-001 / CERT-EXPIRY-001
 
 Now validate the following COC document:`;
 
