@@ -50,15 +50,39 @@ Deno.serve(async (req) => {
 
     console.log('Inviting user:', email, 'with role:', role);
 
-    // Create the user via admin API
-    const tempPassword = crypto.randomUUID() + 'Aa1!';
-    
+    // Get the origin from the request to use as redirect URL
+    const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/');
+    const redirectTo = `${origin}/auth?type=invite`;
+
+    console.log('Redirect URL:', redirectTo);
+
+    // Generate an invite link for the user
+    const { data: inviteData, error: inviteError } = await supabase.auth.admin.generateLink({
+      type: 'invite',
+      email,
+      options: {
+        data: {
+          full_name: fullName,
+          role: role,
+        },
+        redirectTo,
+      },
+    });
+
+    if (inviteError) {
+      console.error('Invite link generation error:', inviteError);
+      throw inviteError;
+    }
+
+    console.log('Invite link generated for:', email);
+
+    // Create the user with the hashed password from the invite
     const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
       email,
-      password: tempPassword,
       email_confirm: false,
       user_metadata: {
         full_name: fullName,
+        role: role,
       },
     });
 
@@ -84,17 +108,19 @@ Deno.serve(async (req) => {
 
     console.log('Role assigned successfully');
 
-    // Send password reset email so they can set their own password
-    const { error: resetError } = await supabase.auth.admin.inviteUserByEmail(email, {
+    // Note: In production, send inviteData.properties.action_link via your email service
+    // For now, we'll rely on Supabase's built-in email
+    const { error: emailError } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: {
         full_name: fullName,
+        role: role,
       },
-      redirectTo: `${req.headers.get('origin')}/auth`,
+      redirectTo,
     });
 
-    if (resetError) {
-      console.warn('Invite email error:', resetError);
-      // Don't fail if email sending fails
+    if (emailError) {
+      console.warn('Invite email error:', emailError);
+      // Continue even if email fails - admin can manually share the link
     }
 
     return new Response(

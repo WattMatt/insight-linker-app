@@ -12,6 +12,8 @@ const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isInvite, setIsInvite] = useState(false);
+  const [inviteEmail, setInviteEmail] = useState("");
   const [session, setSession] = useState<Session | null>(null);
   const [settings, setSettings] = useState<{
     company_name: string;
@@ -20,11 +22,25 @@ const Auth = () => {
   } | null>(null);
 
   useEffect(() => {
+    // Check if this is an invite flow
+    const urlParams = new URLSearchParams(window.location.search);
+    const type = urlParams.get('type');
+    
+    // Check for access token in URL (from invite email)
+    const hashParams = new URLSearchParams(window.location.hash.substring(1));
+    const accessToken = hashParams.get('access_token');
+    
+    if (type === 'invite' && accessToken) {
+      // Handle invite flow
+      handleInviteToken(accessToken);
+      return;
+    }
+
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (_event, session) => {
         setSession(session);
-        if (session) {
+        if (session && !isInvite) {
           navigate("/dashboard");
         }
       }
@@ -33,7 +49,7 @@ const Auth = () => {
     // THEN check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
-      if (session) {
+      if (session && !isInvite) {
         navigate("/dashboard");
       }
     });
@@ -42,7 +58,29 @@ const Auth = () => {
     fetchSettings();
 
     return () => subscription.unsubscribe();
-  }, [navigate]);
+  }, [navigate, isInvite]);
+
+  const handleInviteToken = async (token: string) => {
+    try {
+      // Set the session with the invite token
+      const { data, error } = await supabase.auth.setSession({
+        access_token: token,
+        refresh_token: token,
+      });
+
+      if (error) throw error;
+
+      if (data.user) {
+        setIsInvite(true);
+        setInviteEmail(data.user.email || "");
+        toast.info("Please create your password to complete your account setup");
+      }
+    } catch (error) {
+      console.error("Error handling invite token:", error);
+      toast.error("Invalid or expired invite link. Please request a new invitation.");
+      navigate("/auth");
+    }
+  };
 
   const fetchSettings = async () => {
     try {
@@ -152,6 +190,49 @@ const Auth = () => {
     }
   };
 
+  const handleSetPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    const formData = new FormData(e.currentTarget);
+    const password = formData.get("password") as string;
+    const confirmPassword = formData.get("confirmPassword") as string;
+
+    // Validation
+    if (password.length < 6) {
+      toast.error("Password must be at least 6 characters");
+      setLoading(false);
+      return;
+    }
+
+    if (password !== confirmPassword) {
+      toast.error("Passwords do not match");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Update the user's password
+      const { error } = await supabase.auth.updateUser({
+        password: password,
+      });
+
+      if (error) throw error;
+
+      toast.success("Password set successfully! Redirecting to dashboard...");
+      
+      // Wait a moment then navigate
+      setTimeout(() => {
+        navigate("/dashboard");
+      }, 1500);
+    } catch (error: any) {
+      console.error("Error setting password:", error);
+      toast.error(error.message || "Failed to set password");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="min-h-screen flex">
       {/* Left Side - Login Form */}
@@ -178,15 +259,69 @@ const Auth = () => {
               {settings?.company_name || "Watson Mattheus"}
             </h1>
             <p className="text-muted-foreground">
-              {isSignUp 
-                ? "Create your account to get started" 
-                : "Enter your email below to login to your account"
+              {isInvite
+                ? "Welcome! Create your password to complete setup"
+                : isSignUp 
+                  ? "Create your account to get started" 
+                  : "Enter your email below to login to your account"
               }
             </p>
           </div>
 
           {/* Form */}
-          {!isSignUp ? (
+          {isInvite ? (
+            // Password Setup Form for Invited Users
+            <form onSubmit={handleSetPassword} className="space-y-4">
+              <div className="rounded-lg bg-muted p-4 mb-4">
+                <p className="text-sm text-muted-foreground">
+                  Setting up password for: <span className="font-medium text-foreground">{inviteEmail}</span>
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-password">Create Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="invite-password"
+                    name="password"
+                    type="password"
+                    required
+                    minLength={6}
+                    className="pl-10"
+                    autoComplete="new-password"
+                    placeholder="Minimum 6 characters"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="invite-confirm-password">Confirm Password</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    id="invite-confirm-password"
+                    name="confirmPassword"
+                    type="password"
+                    required
+                    minLength={6}
+                    className="pl-10"
+                    autoComplete="new-password"
+                    placeholder="Re-enter your password"
+                  />
+                </div>
+              </div>
+
+              <Button 
+                type="submit" 
+                className="w-full bg-sky-500 hover:bg-sky-600 text-white" 
+                disabled={loading}
+                size="lg"
+              >
+                {loading ? "Setting password..." : "Set Password & Continue"}
+              </Button>
+            </form>
+          ) : !isSignUp ? (
             <form onSubmit={handleSignIn} className="space-y-4">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
@@ -299,19 +434,21 @@ const Auth = () => {
             </form>
           )}
 
-          {/* Toggle Sign In/Sign Up */}
-          <div className="text-center text-sm">
-            <span className="text-muted-foreground">
-              {isSignUp ? "Already have an account? " : "Don't have an account? "}
-            </span>
-            <button
-              type="button"
-              onClick={() => setIsSignUp(!isSignUp)}
-              className="text-primary hover:underline font-medium"
-            >
-              {isSignUp ? "Sign in" : "Sign up"}
-            </button>
-          </div>
+          {/* Toggle Sign In/Sign Up - Hide when in invite mode */}
+          {!isInvite && (
+            <div className="text-center text-sm">
+              <span className="text-muted-foreground">
+                {isSignUp ? "Already have an account? " : "Don't have an account? "}
+              </span>
+              <button
+                type="button"
+                onClick={() => setIsSignUp(!isSignUp)}
+                className="text-primary hover:underline font-medium"
+              >
+                {isSignUp ? "Sign in" : "Sign up"}
+              </button>
+            </div>
+          )}
         </div>
       </div>
 
