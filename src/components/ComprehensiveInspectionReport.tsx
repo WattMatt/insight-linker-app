@@ -182,7 +182,6 @@ export const ComprehensiveInspectionReport = ({
       }
 
       // ===== IMAGES FROM TEMPLATE SECTIONS =====
-      // First collect images from template-based sections
       if (template && template.sections) {
         const sections = template.sections as any;
         
@@ -202,13 +201,24 @@ export const ComprehensiveInspectionReport = ({
             }
             
             if (allImages.length > 0) {
-              doc.addPage();
-              yPos = 20;
+              // Check if we need a new page for the header
+              if (yPos > pageHeight - 80) {
+                doc.addPage();
+                yPos = 20;
+              }
 
-              doc.setFontSize(18);
+              doc.setFontSize(16);
               doc.setFont(undefined, 'bold');
               doc.text(`${sectionData.name} - ${(item as any).name}`, 20, yPos);
-              yPos += 15;
+              yPos += 10;
+
+              // Layout images in a 2-column grid
+              const imgWidth = 85;
+              const imgHeight = 65;
+              const spacing = 10;
+              const leftMargin = 20;
+              const rightColumnX = leftMargin + imgWidth + spacing;
+              let column = 0;
 
               for (const img of allImages) {
                 try {
@@ -222,27 +232,39 @@ export const ComprehensiveInspectionReport = ({
                       reader.readAsDataURL(blob);
                     });
 
-                    const imgWidth = 80;
-                    const imgHeight = 60;
-
-                    if (yPos + imgHeight > pageHeight - 20) {
+                    // Check if we need a new page
+                    if (yPos + imgHeight + 10 > pageHeight - 20) {
                       doc.addPage();
                       yPos = 20;
+                      column = 0;
                     }
 
-                    doc.addImage(dataUrl, 'JPEG', 20, yPos, imgWidth, imgHeight);
+                    const xPos = column === 0 ? leftMargin : rightColumnX;
+                    doc.addImage(dataUrl, 'JPEG', xPos, yPos, imgWidth, imgHeight);
                     
                     doc.setFontSize(8);
                     doc.setFont(undefined, 'normal');
                     const imgName = typeof img === 'object' ? (img.name || img.fileName || 'Image') : 'Image';
-                    doc.text(imgName, 20, yPos + imgHeight + 5);
-                    
-                    yPos += imgHeight + 15;
+                    const truncatedName = imgName.length > 30 ? imgName.substring(0, 27) + '...' : imgName;
+                    doc.text(truncatedName, xPos, yPos + imgHeight + 4);
+
+                    column++;
+                    if (column >= 2) {
+                      column = 0;
+                      yPos += imgHeight + 12;
+                    }
                   }
                 } catch (error) {
                   console.error('Error embedding image:', error);
                 }
               }
+
+              // If we ended on column 1, advance yPos for next section
+              if (column === 1) {
+                yPos += imgHeight + 12;
+              }
+              
+              yPos += 10; // Extra spacing after each item's images
             }
           }
         }
