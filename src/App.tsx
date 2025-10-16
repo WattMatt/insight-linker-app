@@ -92,6 +92,16 @@ const App = () => (
             }
           />
           <Route
+            path="/clients/:clientId/sites"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Sites />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/clients/:clientId/sites/:siteId"
             element={
               <ProtectedRoute>
