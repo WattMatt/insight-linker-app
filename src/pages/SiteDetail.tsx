@@ -334,19 +334,38 @@ const SiteDetail = () => {
               if (siteDocuments && typeof siteDocuments === 'object') {
                 Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
                   if (categoryDocs && typeof categoryDocs === 'object') {
+                    // Iterate through each entry in the category
                     Object.entries(categoryDocs).forEach(([docKey, docData]: [string, any]) => {
-                      if (docData && typeof docData === 'object' && docData.url) {
-                        fbDocs.push({
-                          name: docData.name || docKey,
-                          url: docData.url,
-                          category: categoryName,
-                          fbKey: docKey
-                        });
+                      if (docData && typeof docData === 'object') {
+                        // Check if this is a direct document (has url property)
+                        if (docData.url && typeof docData.url === 'string') {
+                          fbDocs.push({
+                            name: docData.name || docKey,
+                            url: docData.url,
+                            category: categoryName,
+                            fbKey: docKey
+                          });
+                        }
+                        // Check if this is a "files" nested object containing more documents
+                        else if (docKey === 'files' && typeof docData === 'object') {
+                          Object.entries(docData).forEach(([fileId, fileData]: [string, any]) => {
+                            if (fileData && typeof fileData === 'object' && fileData.url) {
+                              fbDocs.push({
+                                name: fileData.name || fileId,
+                                url: fileData.url,
+                                category: categoryName,
+                                fbKey: fileId
+                              });
+                            }
+                          });
+                        }
                       }
                     });
                   }
                 });
               }
+              
+              console.log(`Found ${fbDocs.length} Firebase documents for site`);
               setFirebaseDocuments(fbDocs);
             }
           }
