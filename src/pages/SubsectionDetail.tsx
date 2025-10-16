@@ -79,6 +79,10 @@ const SubsectionDetail = () => {
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [supabaseDocuments, setSupabaseDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category_id: string, uploaded_at: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
@@ -426,29 +430,63 @@ const SubsectionDetail = () => {
     return supabaseDocuments.filter(doc => doc.category_id === meteringCategory.id);
   };
 
-  const handleDocumentUpload = async (file: File, categoryName: string) => {
-    if (!file || !subsectionId) return;
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim() || !subsectionId) return;
+    
+    try {
+      toast.info("Creating category...");
+      
+      // Get the current max order_index
+      const maxOrder = documentCategories.length > 0 
+        ? Math.max(...documentCategories.map(cat => parseInt(cat.name.split(' ')[0]) || 0))
+        : 0;
+      
+      const { data, error } = await supabase
+        .from('document_categories')
+        .insert({
+          subsection_id: subsectionId,
+          name: newCategoryName.trim(),
+          order_index: maxOrder + 1
+        })
+        .select('id, name')
+        .single();
+      
+      if (error) throw error;
+      
+      toast.success("Category created successfully!");
+      setCreateCategoryOpen(false);
+      setNewCategoryName("");
+      fetchDocumentCategories();
+    } catch (error) {
+      console.error("Error creating category:", error);
+      toast.error("Failed to create category");
+    }
+  };
+
+  const handleDocumentUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile || !uploadCategoryId || !subsectionId) return;
     
     try {
       setUploadingFile(true);
       toast.info("Uploading document...");
 
-      // Find the category ID
-      const category = documentCategories.find(cat => cat.name === categoryName);
+      // Find the category
+      const category = documentCategories.find(cat => cat.id === uploadCategoryId);
       if (!category) {
         toast.error("Document category not found");
         return;
       }
 
       // Upload file to Supabase storage with organized naming
-      const fileExt = file.name.split('.').pop();
       const timestamp = Date.now();
-      const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${subsectionId}/${categoryName}/${timestamp}-${sanitizedFileName}`;
+      const sanitizedFileName = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${subsectionId}/${category.name}/${timestamp}-${sanitizedFileName}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')
-        .upload(fileName, file);
+        .upload(fileName, uploadFile);
 
       if (uploadError) throw uploadError;
 
@@ -466,17 +504,17 @@ const SubsectionDetail = () => {
         .insert({
           subsection_id: subsectionId,
           category_id: category.id,
-          file_name: file.name,
+          file_name: uploadFile.name,
           file_url: urlData.publicUrl,
-          file_size: file.size,
+          file_size: uploadFile.size,
           uploaded_by: user?.id
         });
 
       if (insertError) throw insertError;
 
       toast.success("Document uploaded successfully!");
-      // Refresh data to show new document
-      fetchSubsectionData();
+      setUploadCategoryId(null);
+      setUploadFile(null);
       fetchSupabaseDocuments();
     } catch (error) {
       console.error("Error uploading document:", error);
@@ -1217,19 +1255,24 @@ const SubsectionDetail = () => {
           {/* Supabase Documents */}
           <Card>
             <CardHeader>
-              <CardTitle>Uploaded Documents</CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle>Uploaded Documents</CardTitle>
+                <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Category
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              {supabaseDocuments.length === 0 ? (
+              {documentCategories.length === 0 ? (
                 <div className="text-center py-12 text-muted-foreground">
                   <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
-                  <p>No documents uploaded yet</p>
+                  <p>No document categories yet. Create one to get started.</p>
                 </div>
               ) : (
                 <Accordion type="multiple" className="w-full">
                   {documentCategories.map((category) => {
                     const categoryDocs = supabaseDocuments.filter(doc => doc.category_id === category.id);
-                    if (categoryDocs.length === 0) return null;
                     
                     return (
                       <AccordionItem key={category.id} value={category.id}>
@@ -1244,38 +1287,51 @@ const SubsectionDetail = () => {
                         </AccordionTrigger>
                         <AccordionContent>
                           <div className="space-y-2 pl-7 pt-2">
-                            {categoryDocs.map((doc) => (
-                              <div
-                                key={doc.id}
-                                className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
-                              >
-                                <div className="flex items-center gap-3 flex-1">
-                                  <div className="w-2 h-2 rounded-full bg-primary" />
-                                  <div className="flex-1">
-                                    <p className="text-sm font-medium">{doc.file_name}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                      {new Date(doc.uploaded_at).toLocaleDateString()}
-                                    </p>
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => setUploadCategoryId(category.id)}
+                              className="mb-3"
+                            >
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload to {category.name}
+                            </Button>
+                            {categoryDocs.length === 0 ? (
+                              <p className="text-sm text-muted-foreground py-4">No documents in this category yet.</p>
+                            ) : (
+                              categoryDocs.map((doc) => (
+                                <div
+                                  key={doc.id}
+                                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium">{doc.file_name}</p>
+                                      <p className="text-xs text-muted-foreground">
+                                        {new Date(doc.uploaded_at).toLocaleDateString()}
+                                      </p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => window.open(doc.file_url, '_blank')}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setDeleteDocumentId(doc.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
                                   </div>
                                 </div>
-                                <div className="flex items-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => window.open(doc.file_url, '_blank')}
-                                  >
-                                    <Download className="h-4 w-4" />
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="ghost"
-                                    onClick={() => setDeleteDocumentId(doc.id)}
-                                  >
-                                    <Trash2 className="h-4 w-4 text-destructive" />
-                                  </Button>
-                                </div>
-                              </div>
-                            ))}
+                              ))
+                            )}
                           </div>
                         </AccordionContent>
                       </AccordionItem>
@@ -1366,6 +1422,82 @@ const SubsectionDetail = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* Create Category Dialog */}
+          <Dialog open={createCategoryOpen} onOpenChange={setCreateCategoryOpen}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Create Document Category</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleCreateCategory}>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="category-name">Category Name *</Label>
+                    <Input
+                      id="category-name"
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      placeholder="e.g., 08 Test Reports"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setCreateCategoryOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={!newCategoryName.trim()}>
+                    Create Category
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
+
+          {/* Upload Document Dialog */}
+          <Dialog open={uploadCategoryId !== null} onOpenChange={(open) => {
+            if (!open) {
+              setUploadCategoryId(null);
+              setUploadFile(null);
+            }
+          }}>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Upload Document</DialogTitle>
+              </DialogHeader>
+              <form onSubmit={handleDocumentUpload}>
+                <div className="space-y-4 py-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="document-file">Document File *</Label>
+                    <Input
+                      id="document-file"
+                      type="file"
+                      onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
+                      required={!uploadFile}
+                    />
+                    {uploadFile && (
+                      <p className="text-sm text-muted-foreground">
+                        Selected: {uploadFile.name}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => {
+                    setUploadCategoryId(null);
+                    setUploadFile(null);
+                  }}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" disabled={!uploadFile || uploadingFile}>
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadingFile ? "Uploading..." : "Upload"}
+                  </Button>
+                </div>
+              </form>
+            </DialogContent>
+          </Dialog>
         </TabsContent>
 
         {/* COC Docs & Metering Data Tab */}
@@ -1735,7 +1867,13 @@ const SubsectionDetail = () => {
                       disabled={uploadingFile}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleDocumentUpload(file, '01 COC');
+                        if (file) {
+                          const cocCategory = documentCategories.find(cat => cat.name === '01 COC');
+                          if (cocCategory) {
+                            setUploadCategoryId(cocCategory.id);
+                            setUploadFile(file);
+                          }
+                        }
                       }}
                     />
                   </label>
@@ -1865,7 +2003,13 @@ const SubsectionDetail = () => {
                       disabled={uploadingFile}
                       onChange={(e) => {
                         const file = e.target.files?.[0];
-                        if (file) handleDocumentUpload(file, '04 Metering');
+                        if (file) {
+                          const meteringCategory = documentCategories.find(cat => cat.name === '04 Metering');
+                          if (meteringCategory) {
+                            setUploadCategoryId(meteringCategory.id);
+                            setUploadFile(file);
+                          }
+                        }
                       }}
                     />
                   </label>
