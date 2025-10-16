@@ -2656,7 +2656,7 @@ const SubsectionDetail = () => {
                 </TabsContent>
                 <TabsContent value="chat" className="mt-4">
                   <ValidationChat
-                    validationId={selectedValidation.document_id}
+                    validationId={selectedValidation.id}
                     subsectionId={subsectionId || ''}
                     documentId={selectedValidation.document_id}
                     validationData={selectedValidation.report_data}
