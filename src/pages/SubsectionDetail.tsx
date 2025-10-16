@@ -312,10 +312,10 @@ const SubsectionDetail = () => {
           }
         }
         
-        if (result.status === 'Pass') {
+        if (result.overallStatus === 'Pass' || result.status === 'Pass') {
           toast.success('✅ COC validation passed!' + (cocNumberExtracted ? ` COC #${cocNumberExtracted} extracted.` : ''));
-        } else if (result.status === 'Fail') {
-          toast.error(`❌ COC validation failed: ${result.violations?.length || 0} violations found`);
+        } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
+          toast.error(`❌ COC validation failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found`);
         } else {
           toast.warning(`⚠️ COC validation incomplete`);
         }
