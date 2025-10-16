@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
-import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
+import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1682,10 +1682,14 @@ const SiteDetail = () => {
               // Group subsections by category
               const groupedSubsections = subsections.reduce((acc, sub) => {
                 const category = sub.category || 'Uncategorized';
-                if (!acc[category]) {
-                  acc[category] = [];
+                // Get the full category config to use the proper label
+                const categoryConfig = getCategoryConfig(category);
+                const displayCategory = categoryConfig.label;
+                
+                if (!acc[displayCategory]) {
+                  acc[displayCategory] = [];
                 }
-                acc[category].push(sub);
+                acc[displayCategory].push(sub);
                 return acc;
               }, {} as Record<string, Subsection[]>);
 

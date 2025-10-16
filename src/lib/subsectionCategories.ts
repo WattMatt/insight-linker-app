@@ -90,7 +90,16 @@ export const SUBSECTION_CATEGORIES: SubsectionCategory[] = [
 ];
 
 export const getCategoryConfig = (category: string): SubsectionCategory => {
-  return SUBSECTION_CATEGORIES.find(c => c.value === category) || SUBSECTION_CATEGORIES[0];
+  // First try exact match by value
+  const exactMatch = SUBSECTION_CATEGORIES.find(c => c.value === category);
+  if (exactMatch) return exactMatch;
+  
+  // Then try matching by abbreviation (e.g., "LS" -> "Line Shop")
+  const abbrMatch = SUBSECTION_CATEGORIES.find(c => c.abbreviation === category);
+  if (abbrMatch) return abbrMatch;
+  
+  // Default to first category if no match
+  return SUBSECTION_CATEGORIES[0];
 };
 
 export const getCategoryIcon = (category: string): LucideIcon => {
