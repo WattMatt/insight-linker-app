@@ -169,6 +169,11 @@ export const ComprehensiveInspectionReport = ({
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
 
+            // Only show items that have images - skip items without images
+            if (allImages.length === 0) {
+              continue;
+            }
+
             // Photo dimensions
             const imgWidth = 100;
             const imgHeight = 75;
@@ -192,10 +197,8 @@ export const ComprehensiveInspectionReport = ({
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
             yPos += 10;
 
-            // Display photo or placeholder
-            if (allImages.length > 0) {
-              // Use the first image
-              const img = allImages[0];
+            // Display photos (we only reach here if images exist)
+            for (const img of allImages) {
               try {
                 const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
                 if (typeof imgUrl === 'string') {
@@ -207,6 +210,13 @@ export const ComprehensiveInspectionReport = ({
                     reader.readAsDataURL(blob);
                   });
 
+                  // Check if we need a new page for this image
+                  if (yPos + imgHeight + 15 > pageHeight - 20) {
+                    doc.addPage();
+                    pageNumber++;
+                    yPos = 20;
+                  }
+
                   // Draw photo with border
                   doc.setDrawColor(200, 200, 200);
                   doc.setLineWidth(0.5);
@@ -216,34 +226,8 @@ export const ComprehensiveInspectionReport = ({
                 }
               } catch (error) {
                 console.error('Error embedding image:', error);
-                // Draw placeholder on error
-                doc.setDrawColor(220, 220, 220);
-                doc.setFillColor(245, 245, 245);
-                doc.setLineWidth(0.5);
-                doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
-                
-                doc.setFontSize(9);
-                doc.setFont(undefined, 'normal');
-                doc.setTextColor(130, 130, 130);
-                doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 2, { align: 'center' });
-                doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
-                doc.setTextColor(0, 0, 0);
-                yPos += imgHeight + 5;
+                // Skip failed images silently
               }
-            } else {
-              // Draw placeholder box
-              doc.setDrawColor(220, 220, 220);
-              doc.setFillColor(245, 245, 245);
-              doc.setLineWidth(0.5);
-              doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
-              
-              doc.setFontSize(9);
-              doc.setFont(undefined, 'normal');
-              doc.setTextColor(130, 130, 130);
-              doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 2, { align: 'center' });
-              doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
-              doc.setTextColor(0, 0, 0);
-              yPos += imgHeight + 5;
             }
 
             // Display notes if available
