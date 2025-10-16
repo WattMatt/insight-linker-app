@@ -133,7 +133,7 @@ export const ComprehensiveInspectionReport = ({
       // ===== TEMPLATE-BASED SECTIONS WITH VISUAL LAYOUT =====
       if (template && template.sections) {
         const sections = template.sections as any;
-        let pageNumber = 1; // Start from page 1 (after general info page)
+        let pageNumber = 1;
         
         for (const [sectionKey, section] of Object.entries(sections)) {
           const sectionData = section as any;
@@ -169,20 +169,17 @@ export const ComprehensiveInspectionReport = ({
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
 
-            // Only show items that have images - skip items without images
-            if (allImages.length === 0) {
-              continue;
-            }
-
             // Photo dimensions
             const imgWidth = 100;
             const imgHeight = 75;
             const imgX = 30;
             
-            // Calculate space needed
+            // Calculate space needed - always account for item header
             const itemHeaderHeight = 12;
+            const hasImages = allImages.length > 0;
+            const imagesSectionHeight = hasImages ? (imgHeight * allImages.length) + (5 * allImages.length) : 0;
             const notesHeight = itemData.notes ? 20 : 0;
-            const totalItemHeight = itemHeaderHeight + imgHeight + notesHeight + 15;
+            const totalItemHeight = itemHeaderHeight + imagesSectionHeight + notesHeight + 15;
 
             // Check if we need a new page
             if (yPos + totalItemHeight > pageHeight - 25) {
@@ -191,44 +188,47 @@ export const ComprehensiveInspectionReport = ({
               yPos = 25;
             }
 
-            // Item number and name as heading
+            // ALWAYS show item number and name
             doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
             yPos += 10;
 
-            // Display photos (we only reach here if images exist)
-            for (const img of allImages) {
-              try {
-                const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
-                if (typeof imgUrl === 'string') {
-                  const response = await fetch(imgUrl);
-                  const blob = await response.blob();
-                  const dataUrl = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(blob);
-                  });
+            // Only show photos if they exist (NO placeholder if no images)
+            if (hasImages) {
+              for (const img of allImages) {
+                try {
+                  const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
+                  if (typeof imgUrl === 'string') {
+                    const response = await fetch(imgUrl);
+                    const blob = await response.blob();
+                    const dataUrl = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.readAsDataURL(blob);
+                    });
 
-                  // Check if we need a new page for this image
-                  if (yPos + imgHeight + 15 > pageHeight - 20) {
-                    doc.addPage();
-                    pageNumber++;
-                    yPos = 20;
+                    // Check if we need a new page for this image
+                    if (yPos + imgHeight + 15 > pageHeight - 20) {
+                      doc.addPage();
+                      pageNumber++;
+                      yPos = 20;
+                    }
+
+                    // Draw photo with border
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.5);
+                    doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
+                    doc.rect(imgX, yPos, imgWidth, imgHeight);
+                    yPos += imgHeight + 5;
                   }
-
-                  // Draw photo with border
-                  doc.setDrawColor(200, 200, 200);
-                  doc.setLineWidth(0.5);
-                  doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                  doc.rect(imgX, yPos, imgWidth, imgHeight);
-                  yPos += imgHeight + 5;
+                } catch (error) {
+                  console.error('Error embedding image:', error);
+                  // Skip failed images silently
                 }
-              } catch (error) {
-                console.error('Error embedding image:', error);
-                // Skip failed images silently
               }
             }
+            // If no images, we just skip the photo section entirely (no placeholder)
 
             // Display notes if available
             if (itemData.notes) {
