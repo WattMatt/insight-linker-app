@@ -170,6 +170,7 @@ const Users = () => {
           email: userData.email,
           fullName: userData.fullName,
           role: userData.role,
+          isResend: false,
         },
       });
 
@@ -178,8 +179,8 @@ const Users = () => {
       
       return data;
     },
-    onSuccess: () => {
-      toast.success("Invitation sent! User will receive an email to set their password.");
+    onSuccess: (data) => {
+      toast.success(data.message || "Invitation sent successfully!");
       setOpen(false);
       setEmail("");
       setFullName("");
@@ -188,6 +189,32 @@ const Users = () => {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to send invitation");
+    },
+  });
+
+  // Resend invite mutation for existing users
+  const resendInviteMutation = useMutation({
+    mutationFn: async (user: UserProfile) => {
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: {
+          email: user.email,
+          fullName: user.full_name || '',
+          role: user.role || 'User',
+          isResend: true,
+        },
+      });
+
+      if (error) throw error;
+      if (!data.success) throw new Error(data.error || 'Failed to resend invitation');
+      
+      return data;
+    },
+    onSuccess: (data) => {
+      toast.success(data.message || "Invitation resent successfully!");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to resend invitation");
     },
   });
 
@@ -395,7 +422,7 @@ const Users = () => {
             <DialogHeader>
               <DialogTitle>Invite New User</DialogTitle>
               <DialogDescription>
-                Send an invitation email to a new user. They'll receive an email to set up their account.
+                Send an invitation email to a new user. They'll receive an email with a secure link to create their password and access the system.
               </DialogDescription>
             </DialogHeader>
             <form onSubmit={handleInvite}>
@@ -572,6 +599,13 @@ const Users = () => {
                         <DropdownMenuItem onClick={() => handleEditUser(user)}>
                           <Edit className="mr-2 h-4 w-4" />
                           Edit User
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => resendInviteMutation.mutate(user)}
+                          disabled={resendInviteMutation.isPending}
+                        >
+                          <Mail className="mr-2 h-4 w-4" />
+                          Resend Invite
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>

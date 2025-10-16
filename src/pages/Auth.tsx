@@ -62,23 +62,38 @@ const Auth = () => {
 
   const handleInviteToken = async (token: string) => {
     try {
+      setLoading(true);
+      
       // Set the session with the invite token
       const { data, error } = await supabase.auth.setSession({
         access_token: token,
         refresh_token: token,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Session error:", error);
+        throw new Error("Invalid or expired invite link");
+      }
 
-      if (data.user) {
+      if (data.session && data.user) {
+        setSession(data.session);
         setIsInvite(true);
         setInviteEmail(data.user.email || "");
-        toast.info("Please create your password to complete your account setup");
+        toast.success("Welcome! Please create your password below.");
+      } else {
+        throw new Error("No session data received");
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error handling invite token:", error);
-      toast.error("Invalid or expired invite link. Please request a new invitation.");
-      navigate("/auth");
+      toast.error(
+        error.message || "Invalid or expired invite link. Please contact your administrator for a new invitation.",
+        { duration: 6000 }
+      );
+      // Clear URL params and redirect
+      window.history.replaceState({}, document.title, "/auth");
+      setIsInvite(false);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -199,7 +214,7 @@ const Auth = () => {
     const confirmPassword = formData.get("confirmPassword") as string;
 
     // Validation
-    if (password.length < 6) {
+    if (!password || password.length < 6) {
       toast.error("Password must be at least 6 characters");
       setLoading(false);
       return;
@@ -211,23 +226,56 @@ const Auth = () => {
       return;
     }
 
+    // Password strength check
+    const hasNumber = /\d/.test(password);
+    const hasLetter = /[a-zA-Z]/.test(password);
+    
+    if (!hasNumber || !hasLetter) {
+      toast.error("Password must contain both letters and numbers");
+      setLoading(false);
+      return;
+    }
+
     try {
+      // Verify we still have a valid session
+      const { data: sessionData } = await supabase.auth.getSession();
+      if (!sessionData.session) {
+        throw new Error("Session expired. Please request a new invite link.");
+      }
+
       // Update the user's password
-      const { error } = await supabase.auth.updateUser({
+      const { data, error } = await supabase.auth.updateUser({
         password: password,
       });
 
-      if (error) throw error;
+      if (error) {
+        console.error("Password update error:", error);
+        throw error;
+      }
 
-      toast.success("Password set successfully! Redirecting to dashboard...");
+      if (!data.user) {
+        throw new Error("Failed to update password");
+      }
+
+      toast.success("Password created successfully! Welcome aboard!");
       
-      // Wait a moment then navigate
+      // Small delay then navigate
       setTimeout(() => {
         navigate("/dashboard");
-      }, 1500);
+      }, 1000);
     } catch (error: any) {
       console.error("Error setting password:", error);
-      toast.error(error.message || "Failed to set password");
+      
+      if (error.message?.includes("expired") || error.message?.includes("Session")) {
+        toast.error(
+          "Your invite link has expired. Please contact your administrator for a new invitation.",
+          { duration: 6000 }
+        );
+        setIsInvite(false);
+        window.history.replaceState({}, document.title, "/auth");
+      } else {
+        toast.error(error.message || "Failed to set password. Please try again.");
+      }
     } finally {
       setLoading(false);
     }
@@ -293,6 +341,9 @@ const Auth = () => {
                     placeholder="Minimum 6 characters"
                   />
                 </div>
+                <p className="text-xs text-muted-foreground">
+                  Password must be at least 6 characters and contain both letters and numbers
+                </p>
               </div>
 
               <div className="space-y-2">

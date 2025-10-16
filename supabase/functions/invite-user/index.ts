@@ -9,6 +9,7 @@ interface InviteUserRequest {
   email: string;
   fullName: string;
   role: string;
+  isResend?: boolean;
 }
 
 Deno.serve(async (req) => {
@@ -32,7 +33,7 @@ Deno.serve(async (req) => {
     const { data: { user }, error: authError } = await supabase.auth.getUser(token);
     
     if (authError || !user) {
-      throw new Error('Unauthorized');
+      throw new Error('Unauthorized - please log in again');
     }
 
     // Check if requesting user has Admin role
@@ -46,9 +47,9 @@ Deno.serve(async (req) => {
       throw new Error('Only admins can invite users');
     }
 
-    const { email, fullName, role }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend }: InviteUserRequest = await req.json();
 
-    console.log('Inviting user:', email, 'with role:', role);
+    console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
 
     // Get the origin from the request to use as redirect URL
     const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/');
@@ -56,7 +57,89 @@ Deno.serve(async (req) => {
 
     console.log('Redirect URL:', redirectTo);
 
-    // Generate an invite link for the user
+    // Check if user already exists
+    const { data: existingUsers } = await supabase.auth.admin.listUsers();
+    const existingUser = existingUsers?.users.find(u => u.email === email);
+
+    let userId: string;
+    let isNewUser = false;
+
+    if (existingUser && isResend) {
+      // User exists, resending invite
+      userId = existingUser.id;
+      console.log('User already exists, resending invite:', userId);
+      
+      // Update user metadata if needed
+      const { error: updateError } = await supabase.auth.admin.updateUserById(
+        userId,
+        {
+          user_metadata: {
+            full_name: fullName,
+            role: role,
+          },
+        }
+      );
+
+      if (updateError) {
+        console.warn('Failed to update user metadata:', updateError);
+      }
+
+      // Update role if changed
+      const { data: existingRole } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
+
+      if (existingRole && existingRole.role !== role) {
+        await supabase
+          .from('user_roles')
+          .update({ role })
+          .eq('user_id', userId);
+      } else if (!existingRole) {
+        await supabase
+          .from('user_roles')
+          .insert({ user_id: userId, role });
+      }
+    } else if (existingUser && !isResend) {
+      throw new Error('User with this email already exists. Use resend invite instead.');
+    } else {
+      // Create new user
+      const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
+        email,
+        email_confirm: false,
+        user_metadata: {
+          full_name: fullName,
+          role: role,
+        },
+      });
+
+      if (createError) {
+        console.error('User creation error:', createError);
+        throw new Error(`Failed to create user: ${createError.message}`);
+      }
+
+      userId = newUser.user.id;
+      isNewUser = true;
+      console.log('New user created:', userId);
+
+      // Assign role
+      const { error: roleError } = await supabase
+        .from('user_roles')
+        .insert({
+          user_id: userId,
+          role: role,
+        });
+
+      if (roleError) {
+        console.error('Role assignment error:', roleError);
+        throw new Error(`Failed to assign role: ${roleError.message}`);
+      }
+
+      console.log('Role assigned successfully');
+    }
+
+    // Generate a fresh invite link
     const { data: inviteData, error: inviteError } = await supabase.auth.admin.generateLink({
       type: 'invite',
       email,
@@ -71,45 +154,12 @@ Deno.serve(async (req) => {
 
     if (inviteError) {
       console.error('Invite link generation error:', inviteError);
-      throw inviteError;
+      throw new Error(`Failed to generate invite link: ${inviteError.message}`);
     }
 
-    console.log('Invite link generated for:', email);
+    console.log('Fresh invite link generated');
 
-    // Create the user with the hashed password from the invite
-    const { data: newUser, error: createError } = await supabase.auth.admin.createUser({
-      email,
-      email_confirm: false,
-      user_metadata: {
-        full_name: fullName,
-        role: role,
-      },
-    });
-
-    if (createError) {
-      console.error('User creation error:', createError);
-      throw createError;
-    }
-
-    console.log('User created:', newUser.user.id);
-
-    // Assign role using service role (bypasses RLS)
-    const { error: roleError } = await supabase
-      .from('user_roles')
-      .insert({
-        user_id: newUser.user.id,
-        role: role,
-      });
-
-    if (roleError) {
-      console.error('Role assignment error:', roleError);
-      throw roleError;
-    }
-
-    console.log('Role assigned successfully');
-
-    // Note: In production, send inviteData.properties.action_link via your email service
-    // For now, we'll rely on Supabase's built-in email
+    // Send invite email via Supabase
     const { error: emailError } = await supabase.auth.admin.inviteUserByEmail(email, {
       data: {
         full_name: fullName,
@@ -120,13 +170,17 @@ Deno.serve(async (req) => {
 
     if (emailError) {
       console.warn('Invite email error:', emailError);
-      // Continue even if email fails - admin can manually share the link
+      // Don't throw - we can still return success
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        userId: newUser.user.id,
+        userId: userId,
+        isNewUser,
+        message: isResend 
+          ? 'Invitation resent successfully. User will receive a new email with password setup link.'
+          : 'Invitation sent successfully. User will receive an email with password setup link.',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -138,7 +192,7 @@ Deno.serve(async (req) => {
     return new Response(
       JSON.stringify({
         success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
+        error: error instanceof Error ? error.message : 'Unknown error occurred',
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
