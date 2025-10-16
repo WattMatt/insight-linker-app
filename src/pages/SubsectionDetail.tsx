@@ -81,6 +81,7 @@ const SubsectionDetail = () => {
   const [snags, setSnags] = useState<any[]>([]);
   const [openSnagsCount, setOpenSnagsCount] = useState(0);
   const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
+  const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
@@ -199,6 +200,46 @@ const SubsectionDetail = () => {
       setCocValidations(validationsMap);
     } catch (error) {
       console.error("Error fetching COC validations:", error);
+    }
+  };
+
+  const handleManualValidation = async (documentId: string, documentUrl: string) => {
+    try {
+      setValidatingDocId(documentId);
+      toast.info("Starting AI validation...");
+
+      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
+        body: {
+          documentId: documentId,
+          documentUrl: documentUrl,
+          subsectionId: subsectionId
+        }
+      });
+
+      if (validationError) {
+        console.error('Validation error:', validationError);
+        toast.error('Validation failed: ' + (validationError.message || 'Unknown error'));
+        return;
+      }
+
+      if (validationData?.validation) {
+        const result = validationData.validation;
+        if (result.status === 'Pass') {
+          toast.success('✅ COC validation passed!');
+        } else if (result.status === 'Fail') {
+          toast.error(`❌ COC validation failed: ${result.violations?.length || 0} violations found`);
+        } else {
+          toast.warning(`⚠️ COC validation incomplete`);
+        }
+        
+        // Refresh validations to show updated results
+        await fetchCocValidations();
+      }
+    } catch (error) {
+      console.error('Error during manual validation:', error);
+      toast.error('Failed to validate document');
+    } finally {
+      setValidatingDocId(null);
     }
   };
 
@@ -1754,6 +1795,19 @@ const SubsectionDetail = () => {
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => handleManualValidation(doc.id, doc.file_url)}
+                                disabled={validatingDocId === doc.id}
+                                title="Validate COC against SANS 10142-1"
+                              >
+                                {validatingDocId === doc.id ? (
+                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  'Validate'
+                                )}
+                              </Button>
                               <Button
                                 size="sm"
                                 variant="ghost"
