@@ -39,25 +39,11 @@ interface SiteData {
   clientInfo?: string;
 }
 
-interface DocumentCategory {
-  name: string;
-  files: DocumentFile[];
-  status?: string;
-}
-
-interface DocumentFile {
-  name: string;
-  url: string;
-  uploadedAt?: string;
-  status?: string;
-}
-
 const SubsectionDetail = () => {
   const { clientId, siteId, subsectionId } = useParams();
   const navigate = useNavigate();
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
-  const [documents, setDocuments] = useState<DocumentCategory[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
@@ -72,8 +58,6 @@ const SubsectionDetail = () => {
   const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
-  const [migratingDocs, setMigratingDocs] = useState<Set<string>>(new Set());
-  const [migratedDocs, setMigratedDocs] = useState<Set<string>>(new Set());
   const [uploadingFile, setUploadingFile] = useState(false);
   const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
@@ -288,9 +272,6 @@ const SubsectionDetail = () => {
       // Fetch site info for header
       const siteInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}`);
       setSiteData(siteInfo);
-      
-      // Parse documents
-      parseDocuments(data);
     } catch (error) {
       console.error("Error fetching subsection data:", error);
       toast.error("Failed to load subsection data");
@@ -355,55 +336,10 @@ const SubsectionDetail = () => {
     }
   };
 
-  const parseDocuments = (data: SubsectionData) => {
-    const filesData = data.files || {};
-    const categories: DocumentCategory[] = [];
-
-    console.log('Parsing subsection documents:', filesData);
-
-    Object.entries(filesData).forEach(([categoryKey, categoryData]: [string, any]) => {
-      if (typeof categoryData === 'object' && categoryData !== null) {
-        const files: DocumentFile[] = [];
-        
-        Object.entries(categoryData).forEach(([fileKey, fileData]: [string, any]) => {
-          if (typeof fileData === 'object' && fileData !== null) {
-            if (fileData.url || fileData.name || fileData.downloadURL) {
-              files.push({
-                name: fileData.name || fileKey,
-                url: fileData.url || fileData.downloadURL || '',
-                uploadedAt: fileData.uploadedAt || fileData.timestamp,
-                status: fileData.status || 'No Update: Detail'
-              });
-            }
-          } else if (typeof fileData === 'string') {
-            files.push({
-              name: fileKey,
-              url: fileData,
-              status: 'No Update: Detail'
-            });
-          }
-        });
-
-        if (files.length > 0) {
-          categories.push({
-            name: categoryKey.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()),
-            files,
-            status: categoryData.status || 'No Update: Detail'
-          });
-        }
-      }
-    });
-
-    console.log('Parsed document categories:', categories);
-    setDocuments(categories);
-  };
-
   // Helper function to find COC documents
   const getCocDocuments = () => {
-    return documents.filter(cat => 
-      cat.name.toLowerCase().includes('coc') || 
-      cat.name.toLowerCase().includes('certificate')
-    ).flatMap(cat => cat.files);
+    // Only return Supabase COC documents
+    return getSupabaseCocDocuments();
   };
 
   // Helper function to get Supabase COC documents
@@ -417,10 +353,8 @@ const SubsectionDetail = () => {
 
   // Helper function to find metering documents
   const getMeteringDocuments = () => {
-    return documents.filter(cat => 
-      cat.name.toLowerCase().includes('meter') || 
-      cat.name.toLowerCase().includes('metering')
-    ).flatMap(cat => cat.files);
+    // Only return Supabase metering documents
+    return getSupabaseMeteringDocuments();
   };
 
   // Helper function to get Supabase metering documents
@@ -794,118 +728,6 @@ const SubsectionDetail = () => {
     toast.success(`Opening ${fileName}`);
   };
 
-  const handleMigrateDocument = async (firebaseUrl: string, fileName: string, categoryName: string) => {
-    const docKey = `${categoryName}-${fileName}`;
-    
-    if (migratingDocs.has(docKey)) {
-      return; // Already migrating
-    }
-
-    setMigratingDocs(prev => new Set(prev).add(docKey));
-    
-    try {
-      // Check if document already exists in Supabase
-      const { data: existingDoc, error: checkError } = await supabase
-        .from('subsection_documents')
-        .select('id')
-        .eq('subsection_id', subsectionId)
-        .eq('file_name', fileName)
-        .maybeSingle();
-
-      if (checkError) throw checkError;
-
-      if (existingDoc) {
-        setMigratedDocs(prev => new Set(prev).add(docKey));
-        toast.info(`${fileName} is already migrated`);
-        setMigratingDocs(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(docKey);
-          return newSet;
-        });
-        return;
-      }
-
-      // Get or create document category
-      let categoryId: string;
-      const { data: existingCategory } = await supabase
-        .from('document_categories')
-        .select('id')
-        .eq('subsection_id', subsectionId)
-        .eq('name', categoryName)
-        .maybeSingle();
-
-      if (existingCategory) {
-        categoryId = existingCategory.id;
-      } else {
-        const { data: newCategory, error: categoryError } = await supabase
-          .from('document_categories')
-          .insert({ subsection_id: subsectionId, name: categoryName })
-          .select('id')
-          .single();
-
-        if (categoryError) throw categoryError;
-        categoryId = newCategory.id;
-      }
-
-      // Migrate file using edge function
-      const { data: migrationResult, error: migrationError } = await supabase.functions.invoke('migrate-storage', {
-        body: {
-          firebaseStorageUrl: firebaseUrl,
-          targetBucket: 'documents',
-          targetPath: `subsections/${subsectionId}/${fileName}`
-        }
-      });
-
-      if (migrationError) {
-        console.error('Migration error:', migrationError);
-        throw new Error(migrationError.message || 'Migration failed');
-      }
-
-      // Check if migration was successful
-      if (!migrationResult || !migrationResult.success) {
-        throw new Error(migrationResult?.error || 'Migration returned unsuccessful response');
-      }
-
-      // Create subsection_documents record
-      const { error: insertError } = await supabase
-        .from('subsection_documents')
-        .insert({
-          subsection_id: subsectionId,
-          category_id: categoryId,
-          file_name: fileName,
-          file_url: migrationResult.publicUrl
-        });
-
-      if (insertError) throw insertError;
-
-      setMigratedDocs(prev => new Set(prev).add(docKey));
-      toast.success(`${fileName} migrated successfully`);
-      
-      // Refresh the data
-      await fetchSubsectionData();
-      
-    } catch (error: any) {
-      console.error('Error migrating document:', error);
-      
-      // Provide user-friendly error messages
-      let errorMessage = error?.message || 'Unknown error';
-      
-      if (errorMessage.includes('expired') || errorMessage.includes('not found')) {
-        errorMessage = `Cannot access file in Firebase Storage. The download link may have expired. Please re-download the file from Firebase Storage directly.`;
-      }
-      
-      toast.error(`Failed to migrate ${fileName}: ${errorMessage}`, {
-        duration: 6000,
-      });
-    } finally {
-      setMigratingDocs(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(docKey);
-        return newSet;
-      });
-    }
-  };
-
   const handleCreateInspection = async () => {
     if (!newInspectionDate) {
       toast.error("Please select an inspection date");
@@ -1264,7 +1086,7 @@ const SubsectionDetail = () => {
             </CardHeader>
             <CardContent>
               <p className="text-sm text-muted-foreground">
-                {documents.reduce((sum, cat) => sum + cat.files.length, 0)} file(s) found for this subsection.
+                {supabaseDocuments.length} file(s) found for this subsection.
               </p>
             </CardContent>
           </Card>
@@ -1476,13 +1298,13 @@ const SubsectionDetail = () => {
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
-          {/* Supabase Documents */}
+          {/* Documents */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Uploaded Documents (Supabase)</CardTitle>
-                  <CardDescription>Documents uploaded for this subsection</CardDescription>
+                  <CardTitle>Documents</CardTitle>
+                  <CardDescription>Manage documents for this subsection</CardDescription>
                 </div>
                 <div className="flex gap-2">
                   <Button 
@@ -1592,106 +1414,6 @@ const SubsectionDetail = () => {
             </CardContent>
           </Card>
 
-          {/* Firebase Documents (Legacy) */}
-          {documents.length > 0 && (
-            <Card className="border-amber-500/50">
-              <CardHeader>
-                <div>
-                  <CardTitle className="flex items-center gap-2">
-                    Firebase Documents (Legacy)
-                    <Badge variant="secondary">Migration Available</Badge>
-                  </CardTitle>
-                  <CardDescription>
-                    These documents exist in Firebase and can be migrated to Supabase
-                  </CardDescription>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <Accordion type="multiple" className="w-full">
-                  {documents.map((category, idx) => {
-                    const categoryDocKey = (docName: string) => `${category.name}-${docName}`;
-                    const isMigrated = (docName: string) => {
-                      const docKey = categoryDocKey(docName);
-                      return migratedDocs.has(docKey) || supabaseDocuments.some(d => d.file_name === docName);
-                    };
-                    
-                    return (
-                      <AccordionItem key={idx} value={`category-${idx}`}>
-                        <AccordionTrigger className="hover:no-underline">
-                          <div className="flex items-center justify-between w-full pr-4">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-4 w-4 text-amber-500" />
-                              <span className="font-medium">{category.name}</span>
-                            </div>
-                            <Badge variant="outline" className="bg-amber-500/10">
-                              {category.files.length} files
-                            </Badge>
-                          </div>
-                        </AccordionTrigger>
-                        <AccordionContent>
-                          <div className="space-y-2 pl-7 pt-2">
-                            <p className="text-sm text-muted-foreground mb-3">{category.status}</p>
-                            {category.files.map((file, fileIdx) => {
-                              const docKey = categoryDocKey(file.name);
-                              const isAlreadyMigrated = isMigrated(file.name);
-                              const isMigrating = migratingDocs.has(docKey);
-                              
-                              return (
-                                <div
-                                  key={fileIdx}
-                                  className={`flex items-center justify-between p-3 rounded-lg border transition-colors ${
-                                    isAlreadyMigrated ? 'bg-green-500/10' : 'hover:bg-accent'
-                                  }`}
-                                >
-                                  <div className="flex items-center gap-3 flex-1">
-                                    <div className={`w-2 h-2 rounded-full ${
-                                      isAlreadyMigrated ? 'bg-green-500' : 'bg-amber-500'
-                                    }`} />
-                                    <div className="flex-1">
-                                      <div className="flex items-center gap-2">
-                                        <p className="text-sm font-medium">{file.name}</p>
-                                        {isAlreadyMigrated && (
-                                          <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30">
-                                            Migrated
-                                          </Badge>
-                                        )}
-                                      </div>
-                                      {file.uploadedAt && (
-                                        <p className="text-xs text-muted-foreground">
-                                          {new Date(file.uploadedAt).toLocaleDateString()}
-                                        </p>
-                                      )}
-                                    </div>
-                                  </div>
-                                  <div className="flex items-center gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="ghost"
-                                      onClick={() => handleDownloadDocument(file.url, file.name)}
-                                    >
-                                      <Download className="h-4 w-4" />
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => handleMigrateDocument(file.url, file.name, category.name)}
-                                      disabled={isMigrating || isAlreadyMigrated}
-                                    >
-                                      {isAlreadyMigrated ? 'Already Migrated' : isMigrating ? 'Migrating...' : 'Migrate'}
-                                    </Button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        </AccordionContent>
-                      </AccordionItem>
-                    );
-                  })}
-                </Accordion>
-              </CardContent>
-            </Card>
-          )}
 
           <AlertDialog open={deleteDocumentId !== null} onOpenChange={() => setDeleteDocumentId(null)}>
             <AlertDialogContent>
@@ -1953,14 +1675,14 @@ const SubsectionDetail = () => {
                             <div className="flex items-center gap-3">
                               <FileText className="h-5 w-5 text-muted-foreground" />
                               <div>
-                                <p className="font-medium">{doc.name}</p>
-                                <Badge variant="secondary" className="text-xs">Legacy</Badge>
+                                <p className="font-medium">{doc.file_name}</p>
+                                <Badge variant="secondary" className="text-xs">Supabase</Badge>
                               </div>
                             </div>
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleDownloadDocument(doc.url, doc.name)}
+                              onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
                             >
                               <Download className="h-4 w-4" />
                             </Button>
@@ -1976,8 +1698,10 @@ const SubsectionDetail = () => {
                             <div className="flex items-center gap-3">
                               <FileText className="h-5 w-5 text-muted-foreground" />
                               <div>
-                                <p className="font-medium">{doc.name}</p>
-                                <p className="text-sm text-muted-foreground">Size: 1.19 MB</p>
+                                <p className="font-medium">{doc.file_name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {new Date(doc.uploaded_at).toLocaleDateString()}
+                                </p>
                               </div>
                             </div>
                             <Button
@@ -2282,13 +2006,13 @@ const SubsectionDetail = () => {
                           >
                             <div className="flex items-center gap-3">
                               <FileText className="h-4 w-4 text-muted-foreground" />
-                              <span className="text-sm font-medium">{doc.name}</span>
-                              <Badge variant="secondary" className="text-xs">Legacy</Badge>
+                              <span className="text-sm font-medium">{doc.file_name}</span>
+                              <Badge variant="secondary" className="text-xs">Supabase</Badge>
                             </div>
                             <Button
                               size="sm"
                               variant="ghost"
-                              onClick={() => handleDownloadDocument(doc.url, doc.name)}
+                              onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
                             >
                               <Download className="h-4 w-4" />
                             </Button>
