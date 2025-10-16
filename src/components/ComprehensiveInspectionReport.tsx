@@ -47,6 +47,12 @@ export const ComprehensiveInspectionReport = ({
         'General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'
       ];
 
+      const date = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
+
       // ===== COVER PAGE =====
       doc.setFillColor(41, 128, 185);
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
@@ -54,23 +60,32 @@ export const ComprehensiveInspectionReport = ({
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(32);
       doc.setFont(undefined, 'bold');
-      doc.text('Inspection Report', pageWidth / 2, 80, { align: 'center' });
+      
+      // Use template name if available
+      const reportTitle = template?.name || 'Inspection Report';
+      doc.text(reportTitle, pageWidth / 2, 70, { align: 'center' });
+      
+      // Use template cover page data if available
+      const coverPage = template?.cover_page || {};
       
       doc.setFontSize(18);
       doc.setFont(undefined, 'normal');
-      doc.text(subsectionName, pageWidth / 2, 100, { align: 'center' });
-      doc.text(siteName, pageWidth / 2, 115, { align: 'center' });
+      doc.text(subsectionName, pageWidth / 2, 95, { align: 'center' });
+      doc.text(siteName, pageWidth / 2, 110, { align: 'center' });
       
       doc.setFontSize(14);
-      doc.text('Watson Mattheus', pageWidth / 2, 135, { align: 'center' });
+      const companyName = coverPage.company || 'Watson Mattheus';
+      doc.text(companyName, pageWidth / 2, 130, { align: 'center' });
+      
+      // Add template description if available
+      if (template?.description) {
+        doc.setFontSize(11);
+        const splitDescription = doc.splitTextToSize(template.description, pageWidth - 60);
+        doc.text(splitDescription, pageWidth / 2, 145, { align: 'center' });
+      }
       
       doc.setFontSize(12);
-      const date = new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
-      doc.text(`Generated: ${date}`, pageWidth / 2, 155, { align: 'center' });
+      doc.text(`Generated: ${date}`, pageWidth / 2, pageHeight - 40, { align: 'center' });
 
       // ===== GENERAL INFORMATION =====
       doc.addPage();
