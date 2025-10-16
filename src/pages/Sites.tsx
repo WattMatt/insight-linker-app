@@ -8,8 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Plus, Trash2, Building2, MapPin } from "lucide-react";
+import { Plus, Trash2, Building2, MapPin, MoreVertical } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
 
 interface Site {
@@ -17,6 +17,7 @@ interface Site {
   name: string;
   address: string | null;
   site_type: string | null;
+  site_image_url: string | null;
   client_id: string;
   clients: {
     name: string;
@@ -277,36 +278,70 @@ const Sites = () => {
               )}
             </div>
           ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Site Name</TableHead>
-                  <TableHead>Client</TableHead>
-                  <TableHead>Type</TableHead>
-                  <TableHead>Address</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {sites.map((site) => (
-                  <TableRow key={site.id}>
-                    <TableCell className="font-medium">{site.name}</TableCell>
-                    <TableCell>{site.clients?.name}</TableCell>
-                    <TableCell>{site.site_type || "—"}</TableCell>
-                    <TableCell>{site.address || "—"}</TableCell>
-                    <TableCell className="text-right">
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleDelete(site.id)}
-                      >
-                        <Trash2 className="h-4 w-4 text-destructive" />
-                      </Button>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {sites.map((site) => (
+                <Card 
+                  key={site.id} 
+                  className="group relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 hover:border-primary"
+                  onClick={() => navigate(`/clients/${site.client_id}/sites/${site.id}`)}
+                >
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3 flex-1 min-w-0">
+                        {site.site_image_url ? (
+                          <img 
+                            src={site.site_image_url} 
+                            alt={site.name}
+                            className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
+                          />
+                        ) : (
+                          <div className="h-12 w-12 rounded-lg bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <Building2 className="h-6 w-6 text-primary" />
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <CardTitle className="text-base truncate">{site.name}</CardTitle>
+                          <p className="text-xs text-muted-foreground truncate">{site.clients?.name}</p>
+                        </div>
+                      </div>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
+                            <MoreVertical className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDelete(site.id);
+                            }}
+                            className="text-destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete Site
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    {site.site_type && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground mb-2">
+                        <Building2 className="h-3 w-3" />
+                        <span>{site.site_type}</span>
+                      </div>
+                    )}
+                    {site.address && (
+                      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                        <MapPin className="h-3 w-3" />
+                        <span className="truncate">{site.address}</span>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           )}
         </CardContent>
       </Card>
