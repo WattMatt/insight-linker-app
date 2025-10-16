@@ -63,86 +63,77 @@ export const ComprehensiveInspectionReport = ({
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
       doc.setTextColor(255, 255, 255);
-      doc.setFontSize(28);
-      doc.setFont(undefined, 'bold');
       
-      // Use template name if available
+      // Main title
+      doc.setFontSize(24);
+      doc.setFont(undefined, 'bold');
       const reportTitle = template?.name || 'Inspection Report';
-      doc.text(reportTitle, pageWidth / 2, 60, { align: 'center' });
+      doc.text(reportTitle, pageWidth / 2, 50, { align: 'center' });
       
-      doc.setFontSize(22);
-      doc.setFont(undefined, 'bold');
-      doc.text(subsectionName, pageWidth / 2, 85, { align: 'center' });
-      
-      doc.setFontSize(14);
+      // Subtitle
+      doc.setFontSize(16);
       doc.setFont(undefined, 'normal');
-      doc.text(`Report Date: ${date}`, pageWidth / 2, 105, { align: 'center' });
+      const coverPage = template?.cover_page || {};
+      const subtitle = template?.description || 'Inspection & Compliance Report';
+      doc.text(subtitle, pageWidth / 2, 70, { align: 'center' });
       
-      const inspector = generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'Inspector';
+      // Report details
+      doc.setFontSize(12);
+      const inspector = generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'Preview Inspector';
       const project = generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || siteName;
       const location = generalInfo.location || inspectionData.location || siteName;
       
-      doc.text(`Inspector: ${inspector}`, pageWidth / 2, 120, { align: 'center' });
-      doc.text(`Project: ${project}`, pageWidth / 2, 135, { align: 'center' });
-      doc.text(`Location: ${location}`, pageWidth / 2, 150, { align: 'center' });
+      doc.text(`Report Date: ${date}`, pageWidth / 2, 100, { align: 'center' });
+      doc.text(`Inspector: ${inspector}`, pageWidth / 2, 112, { align: 'center' });
+      doc.text(`Project: ${project}`, pageWidth / 2, 124, { align: 'center' });
+      doc.text(`Location: ${location}`, pageWidth / 2, 136, { align: 'center' });
       
-      // Use template cover page data if available
-      const coverPage = template?.cover_page || {};
+      // Company name at bottom
       const companyName = coverPage.company || 'Watson Mattheus';
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text(companyName, pageWidth / 2, pageHeight - 60, { align: 'center' });
       
-      doc.setFontSize(12);
-      doc.text(companyName, pageWidth / 2, 175, { align: 'center' });
-      
-      // Add template description if available
-      if (template?.description) {
-        doc.setFontSize(10);
-        const splitDescription = doc.splitTextToSize(template.description, pageWidth - 60);
-        doc.text(splitDescription, pageWidth / 2, 195, { align: 'center' });
-      }
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'normal');
+      doc.text('Inspection & Compliance Report', pageWidth / 2, pageHeight - 45, { align: 'center' });
 
       // ===== GENERAL INFORMATION =====
       doc.addPage();
       doc.setTextColor(0, 0, 0);
-      doc.setFontSize(24);
+      doc.setFontSize(20);
       doc.setFont(undefined, 'bold');
-      doc.text('General Information', 20, 20);
+      doc.text('General Information', pageWidth / 2, 25, { align: 'center' });
 
-      let yPos = 35;
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
+      let yPos = 45;
+      doc.setFontSize(11);
+      doc.setFont(undefined, 'bold');
 
-      const generalInfoData = [
-        ['Project Name', generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'N/A'],
-        ['Shop Number', generalInfo.shopNumber || inspectionData.shopNumber || inspectionData.shop_number || 'N/A'],
-        ['Shop Name', generalInfo.shopName || inspectionData.shopName || inspectionData.shop_name || 'N/A'],
-        ['Inspector Name', generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'N/A'],
-        ['Inspection Date', generalInfo.date || inspectionData.date || inspectionData.inspection_date || 'N/A'],
-        ['Client Representative', generalInfo.clientRep || inspectionData.clientRep || inspectionData.client_rep || 'N/A'],
-        ['Consultant', generalInfo.consultant || inspectionData.consultant || 'N/A'],
-        ['Contractor', generalInfo.contractor || inspectionData.contractor || 'N/A'],
-        ['Testing Party', generalInfo.testingParty || inspectionData.testingParty || inspectionData.testing_party || 'N/A'],
-        ['Location', generalInfo.location || inspectionData.location || 'N/A'],
+      // General info fields with capital labels
+      const generalInfoFields = [
+        ['PROJECT NAME:', generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'Preview Project'],
+        ['INSPECTOR NAME:', generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'Preview Inspector'],
+        ['INSPECTION DATE:', generalInfo.date || inspectionData.date || inspectionData.inspection_date || date],
+        ['CLIENT REPRESENTATIVE:', generalInfo.clientRep || inspectionData.clientRep || inspectionData.client_rep || 'N/A'],
+        ['CONSULTANT NAME:', generalInfo.consultant || inspectionData.consultant || 'N/A'],
+        ['CONTRACTOR NAME:', generalInfo.contractor || inspectionData.contractor || 'N/A'],
+        ['LOCATION:', generalInfo.location || inspectionData.location || siteName],
       ];
 
-      autoTable(doc, {
-        startY: yPos,
-        head: [],
-        body: generalInfoData,
-        theme: 'striped',
-        styles: { fontSize: 10, cellPadding: 3 },
-        columnStyles: {
-          0: { fontStyle: 'bold', cellWidth: 60 },
-          1: { cellWidth: 120 }
-        },
-        margin: { left: 20, right: 20 }
-      });
+      for (const [label, value] of generalInfoFields) {
+        doc.setFont(undefined, 'bold');
+        doc.text(label, 25, yPos);
+        doc.setFont(undefined, 'normal');
+        doc.text(value, 80, yPos);
+        yPos += 10;
+      }
 
-      yPos = (doc as any).lastAutoTable.finalY + 15;
+      yPos += 10;
 
       // ===== TEMPLATE-BASED SECTIONS WITH VISUAL LAYOUT =====
       if (template && template.sections) {
         const sections = template.sections as any;
-        let pageCounter = 2; // Start from page 2 (after cover and general info)
+        let pageNumber = 1; // Start from page 1 (after general info page)
         
         for (const [sectionKey, section] of Object.entries(sections)) {
           const sectionData = section as any;
@@ -152,19 +143,21 @@ export const ComprehensiveInspectionReport = ({
 
           // Start new page for each section
           doc.addPage();
-          yPos = 30;
+          yPos = 25;
 
-          // Section header - centered and styled
-          doc.setFontSize(16);
+          // Section header - ALL CAPS at top
+          doc.setFontSize(14);
           doc.setFont(undefined, 'bold');
           doc.setTextColor(0, 0, 0);
           const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
           doc.text(sectionTitle, pageWidth / 2, yPos, { align: 'center' });
-          yPos += 20;
+          yPos += 18;
 
           let itemNumber = 1;
+          const itemEntries = Object.entries(items);
           
-          for (const [itemKey, item] of Object.entries(items)) {
+          for (let i = 0; i < itemEntries.length; i++) {
+            const [itemKey, item] = itemEntries[i];
             const itemInfo = item as any;
             const itemData = jsonData[sectionKey]?.[itemKey] || {};
             const photos = itemData.photos || [];
@@ -176,31 +169,30 @@ export const ComprehensiveInspectionReport = ({
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
 
-            // Calculate space needed for this item
-            const photoHeight = 100;
-            const itemHeaderHeight = 15;
-            const notesHeight = itemData.notes ? 25 : 0;
-            const totalItemHeight = itemHeaderHeight + photoHeight + notesHeight + 20;
+            // Photo dimensions
+            const imgWidth = 100;
+            const imgHeight = 75;
+            const imgX = 30;
+            
+            // Calculate space needed
+            const itemHeaderHeight = 12;
+            const notesHeight = itemData.notes ? 20 : 0;
+            const totalItemHeight = itemHeaderHeight + imgHeight + notesHeight + 15;
 
             // Check if we need a new page
-            if (yPos + totalItemHeight > pageHeight - 30) {
+            if (yPos + totalItemHeight > pageHeight - 25) {
               doc.addPage();
-              yPos = 30;
-              pageCounter++;
+              pageNumber++;
+              yPos = 25;
             }
 
-            // Item number and name
-            doc.setFontSize(12);
+            // Item number and name as heading
+            doc.setFontSize(11);
             doc.setFont(undefined, 'bold');
-            doc.setTextColor(0, 0, 0);
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
-            yPos += 12;
+            yPos += 10;
 
             // Display photo or placeholder
-            const imgWidth = 120;
-            const imgHeight = 90;
-            const imgX = 30;
-
             if (allImages.length > 0) {
               // Use the first image
               const img = allImages[0];
@@ -216,73 +208,78 @@ export const ComprehensiveInspectionReport = ({
                   });
 
                   // Draw photo with border
-                  doc.setDrawColor(180, 180, 180);
+                  doc.setDrawColor(200, 200, 200);
                   doc.setLineWidth(0.5);
                   doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
                   doc.rect(imgX, yPos, imgWidth, imgHeight);
-                  yPos += imgHeight + 8;
+                  yPos += imgHeight + 5;
                 }
               } catch (error) {
                 console.error('Error embedding image:', error);
                 // Draw placeholder on error
-                doc.setDrawColor(200, 200, 200);
-                doc.setFillColor(250, 250, 250);
+                doc.setDrawColor(220, 220, 220);
+                doc.setFillColor(245, 245, 245);
                 doc.setLineWidth(0.5);
                 doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
                 
-                doc.setFontSize(10);
+                doc.setFontSize(9);
                 doc.setFont(undefined, 'normal');
-                doc.setTextColor(150, 150, 150);
-                doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 3, { align: 'center' });
+                doc.setTextColor(130, 130, 130);
+                doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 2, { align: 'center' });
                 doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
                 doc.setTextColor(0, 0, 0);
-                yPos += imgHeight + 8;
+                yPos += imgHeight + 5;
               }
             } else {
               // Draw placeholder box
-              doc.setDrawColor(200, 200, 200);
-              doc.setFillColor(250, 250, 250);
+              doc.setDrawColor(220, 220, 220);
+              doc.setFillColor(245, 245, 245);
               doc.setLineWidth(0.5);
               doc.rect(imgX, yPos, imgWidth, imgHeight, 'FD');
               
-              doc.setFontSize(10);
+              doc.setFontSize(9);
               doc.setFont(undefined, 'normal');
-              doc.setTextColor(150, 150, 150);
-              doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 3, { align: 'center' });
+              doc.setTextColor(130, 130, 130);
+              doc.text('Photo', imgX + imgWidth / 2, yPos + imgHeight / 2 - 2, { align: 'center' });
               doc.text('Placeholder', imgX + imgWidth / 2, yPos + imgHeight / 2 + 3, { align: 'center' });
               doc.setTextColor(0, 0, 0);
-              yPos += imgHeight + 8;
+              yPos += imgHeight + 5;
             }
 
             // Display notes if available
             if (itemData.notes) {
-              doc.setFontSize(9);
+              doc.setFontSize(8);
               doc.setFont(undefined, 'normal');
               doc.text('Notes:', imgX, yPos);
-              yPos += 5;
+              yPos += 4;
               
-              const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
+              const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 50);
               doc.text(notesLines, imgX, yPos);
-              yPos += (notesLines.length * 4) + 5;
+              yPos += (notesLines.length * 3.5) + 3;
             }
 
             // Add spacing between items
-            yPos += 15;
+            yPos += 10;
             itemNumber++;
           }
           
-          pageCounter++;
+          pageNumber++;
         }
       }
 
       // ===== FOOTER =====
       const totalPages = doc.getNumberOfPages();
+      let footerPageNum = 0;
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
         doc.setFontSize(9);
         doc.setTextColor(100, 100, 100);
+        doc.setFont(undefined, 'normal');
+        
+        // Skip cover page for footer
         if (i > 1) {
-          const footerText = `${reportTitle} - Page ${i - 1}`;
+          footerPageNum++;
+          const footerText = `${reportTitle} - Page ${footerPageNum}`;
           doc.text(footerText, pageWidth / 2, pageHeight - 10, { align: 'center' });
         }
       }
