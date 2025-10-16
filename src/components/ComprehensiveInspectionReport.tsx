@@ -143,15 +143,20 @@ export const ComprehensiveInspectionReport = ({
 
           // Start new page for each section
           doc.addPage();
-          yPos = 25;
+          yPos = 20;
 
-          // Section header - ALL CAPS at top
+          // Section header - Blue background bar with white text
+          doc.setFillColor(21, 122, 171); // Blue color
+          doc.rect(0, yPos, pageWidth, 15, 'F');
           doc.setFontSize(14);
           doc.setFont(undefined, 'bold');
-          doc.setTextColor(0, 0, 0);
+          doc.setTextColor(255, 255, 255); // White text
           const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
-          doc.text(sectionTitle, pageWidth / 2, yPos, { align: 'center' });
-          yPos += 20;
+          doc.text(sectionTitle, pageWidth / 2, yPos + 10, { align: 'center' });
+          yPos += 25;
+
+          // Reset text color for items
+          doc.setTextColor(0, 0, 0);
 
           let itemNumber = 1;
           const itemEntries = Object.entries(items);
@@ -172,35 +177,35 @@ export const ComprehensiveInspectionReport = ({
             const hasImages = allImages.length > 0;
             const hasNotes = !!itemData.notes;
             
-            // Calculate space needed for this item
-            const itemHeaderHeight = 15;
-            const photoHeight = hasImages ? 75 : 0; // Standard photo height or 0
-            const photoSpacing = hasImages ? 8 : 0;
-            const notesHeight = hasNotes ? 25 : 0;
-            const itemSpacing = 20; // Space between items
-            const totalItemHeight = itemHeaderHeight + photoHeight + photoSpacing + notesHeight + itemSpacing;
+            // Calculate space needed for this item box
+            const itemBoxHeight = hasNotes ? 95 : 75; // Taller if notes exist
+            const itemMargin = 10;
 
             // Check if we need a new page
-            if (yPos + totalItemHeight > pageHeight - 30) {
+            if (yPos + itemBoxHeight + itemMargin > pageHeight - 20) {
               doc.addPage();
+              yPos = 20;
               pageNumber++;
-              yPos = 30;
             }
 
-            // ALWAYS show item number and name
-            doc.setFontSize(12);
-            doc.setFont(undefined, 'bold');
-            doc.setTextColor(0, 0, 0);
-            doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
-            yPos += itemHeaderHeight;
+            // Draw item container box
+            doc.setDrawColor(180, 180, 180);
+            doc.setLineWidth(0.5);
+            doc.rect(20, yPos, pageWidth - 40, itemBoxHeight);
 
-            // Only show photo if it exists
+            // Item title inside the box (top left)
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 25, yPos + 8);
+
+            // Photo area (left side of box)
+            const photoX = 25;
+            const photoY = yPos + 15;
+            const photoWidth = 65;
+            const photoHeight = 50;
+
             if (hasImages) {
-              const imgWidth = 100;
-              const imgHeight = 75;
-              const imgX = 30;
-              
-              // Use only the first image to match template layout
+              // Show actual image
               const img = allImages[0];
               try {
                 const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
@@ -214,33 +219,52 @@ export const ComprehensiveInspectionReport = ({
                   });
 
                   // Draw photo with border
-                  doc.setDrawColor(220, 220, 220);
+                  doc.setDrawColor(200, 200, 200);
                   doc.setLineWidth(0.5);
-                  doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                  doc.rect(imgX, yPos, imgWidth, imgHeight);
-                  yPos += imgHeight + photoSpacing;
+                  doc.addImage(dataUrl, 'JPEG', photoX, photoY, photoWidth, photoHeight);
+                  doc.rect(photoX, photoY, photoWidth, photoHeight);
                 }
               } catch (error) {
                 console.error('Error embedding image:', error);
-                // Skip to next item if image fails
-                yPos += photoSpacing;
+                // Draw placeholder on error
+                doc.setDrawColor(200, 200, 200);
+                doc.setFillColor(250, 250, 250);
+                doc.rect(photoX, photoY, photoWidth, photoHeight, 'FD');
+                doc.setFontSize(8);
+                doc.setFont(undefined, 'normal');
+                doc.setTextColor(180, 180, 180);
+                doc.text('Photo', photoX + photoWidth / 2, photoY + photoHeight / 2 - 2, { align: 'center' });
+                doc.text('Placeholder', photoX + photoWidth / 2, photoY + photoHeight / 2 + 2, { align: 'center' });
+                doc.setTextColor(0, 0, 0);
               }
+            } else {
+              // Draw placeholder box with "Photo Placeholder" text
+              doc.setDrawColor(200, 200, 200);
+              doc.setFillColor(250, 250, 250);
+              doc.setLineWidth(0.5);
+              doc.rect(photoX, photoY, photoWidth, photoHeight, 'FD');
+              
+              doc.setFontSize(8);
+              doc.setFont(undefined, 'normal');
+              doc.setTextColor(180, 180, 180);
+              doc.text('Photo', photoX + photoWidth / 2, photoY + photoHeight / 2 - 2, { align: 'center' });
+              doc.text('Placeholder', photoX + photoWidth / 2, photoY + photoHeight / 2 + 2, { align: 'center' });
+              doc.setTextColor(0, 0, 0);
             }
 
-            // Display notes if available
+            // Display notes if available (to the right of photo or below)
             if (hasNotes) {
               doc.setFontSize(9);
-              doc.setFont(undefined, 'normal');
-              doc.text('Notes:', 30, yPos);
-              yPos += 5;
+              doc.setFont(undefined, 'bold');
+              doc.text('Notes:', 25, photoY + photoHeight + 8);
               
+              doc.setFont(undefined, 'normal');
               const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
-              doc.text(notesLines, 30, yPos);
-              yPos += (notesLines.length * 4);
+              doc.text(notesLines, 25, photoY + photoHeight + 14);
             }
 
-            // Add spacing between items
-            yPos += itemSpacing;
+            // Move to next item
+            yPos += itemBoxHeight + itemMargin;
             itemNumber++;
           }
           
