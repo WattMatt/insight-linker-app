@@ -289,9 +289,9 @@ const Sites = () => {
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
-                        {(site.client_logo_url || site.site_image_url) ? (
+                        {site.site_image_url ? (
                           <img 
-                            src={site.client_logo_url || site.site_image_url || ''} 
+                            src={site.site_image_url} 
                             alt={site.name}
                             className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
                           />
