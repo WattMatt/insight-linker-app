@@ -15,7 +15,9 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
+import { format } from "date-fns";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 
 interface Site {
@@ -117,11 +119,16 @@ const SiteDetail = () => {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
+  const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
+  const [newInspectionDate, setNewInspectionDate] = useState("");
 
   useEffect(() => {
     fetchSiteData();
     fetchSiteDocuments();
     fetchDocumentCategories();
+    fetchTemplates();
   }, [siteId]);
 
   const fetchSiteDocuments = async () => {
@@ -136,6 +143,20 @@ const SiteDetail = () => {
       setSiteDocuments(data || []);
     } catch (error) {
       console.error("Error fetching site documents:", error);
+    }
+  };
+
+  const fetchTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('inspection_templates')
+        .select('id, name, category')
+        .order('name');
+      
+      if (error) throw error;
+      setAvailableTemplates(data || []);
+    } catch (error) {
+      console.error("Error fetching templates:", error);
     }
   };
 
@@ -691,6 +712,62 @@ const SiteDetail = () => {
     }
   };
 
+  const handleCreateInspection = async () => {
+    if (!newInspectionDate) {
+      toast.error("Please select an inspection date");
+      return;
+    }
+
+    if (!selectedTemplateId) {
+      toast.error("Please select an inspection template");
+      return;
+    }
+
+    try {
+      // Get template details
+      const template = availableTemplates.find(t => t.id === selectedTemplateId);
+      
+      // Special handling for Site Drawing and Progress inspections
+      let inspectionTitle = template?.name || 'New Inspection';
+      if (template?.category === 'Site Drawing' || template?.category === 'Progress') {
+        // Format: {Site Name} - {Template Type} - {Date}
+        const formattedDate = format(new Date(newInspectionDate), 'yyyy-MM-dd');
+        inspectionTitle = `${site?.name || 'Site'} - ${template.category} - ${formattedDate}`;
+      }
+      
+      // Generate a unique firebase-style ID for backwards compatibility
+      const firebaseId = `-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 9)}`;
+      
+      // Create inspection in Supabase - site level (no subsection_id)
+      const { data: newInspection, error } = await supabase
+        .from('inspections')
+        .insert({
+          site_id: siteId,
+          subsection_id: null, // Site-level inspection
+          template_id: selectedTemplateId,
+          firebase_id: firebaseId,
+          title: inspectionTitle,
+          inspection_date: newInspectionDate,
+          status: 'Pending',
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      toast.success("Inspection created successfully");
+      setIsCreateInspectionOpen(false);
+      setSelectedTemplateId("");
+      setNewInspectionDate("");
+      
+      // Navigate to the new inspection
+      navigate(`/inspections/${newInspection.id}`);
+    } catch (error) {
+      console.error("Error creating inspection:", error);
+      toast.error("Failed to create inspection");
+    }
+  };
+
   const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
     if (!site) return;
 
@@ -967,6 +1044,61 @@ const SiteDetail = () => {
               </CardContent>
             </Card>
           </div>
+
+          {/* Site-Level Inspections Card */}
+          <Card>
+            <CardHeader className="flex flex-row items-center justify-between">
+              <div>
+                <CardTitle>Site Inspections</CardTitle>
+                <CardDescription>
+                  Site-wide inspections (Site Drawings, Progress Reports, etc.)
+                </CardDescription>
+              </div>
+              <Button onClick={() => setIsCreateInspectionOpen(true)}>
+                <Plus className="h-4 w-4 mr-2" />
+                Create Inspection
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {inspections.filter(i => !i.subsection_id).length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No site-level inspections yet</p>
+                  <p className="text-sm mt-2">Create a Site Drawing or Progress Report for the entire site</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {inspections
+                    .filter(i => !i.subsection_id)
+                    .slice(0, 5)
+                    .map((inspection) => (
+                      <div
+                        key={inspection.id}
+                        className="flex items-center justify-between p-3 border rounded-lg hover:bg-muted/50 cursor-pointer"
+                        onClick={() => navigate(`/inspections/${inspection.id}`)}
+                      >
+                        <div>
+                          <p className="font-medium">{inspection.json_data?.title || 'Untitled Inspection'}</p>
+                          <p className="text-sm text-muted-foreground">
+                            {inspection.inspection_date ? format(new Date(inspection.inspection_date), 'PPP') : 'No date'}
+                          </p>
+                        </div>
+                        <Badge>{inspection.json_data?.status || 'Pending'}</Badge>
+                      </div>
+                    ))}
+                  {inspections.filter(i => !i.subsection_id).length > 5 && (
+                    <Button
+                      variant="ghost"
+                      className="w-full"
+                      onClick={() => navigate(`/inspections?site=${siteId}`)}
+                    >
+                      View all {inspections.filter(i => !i.subsection_id).length} inspections
+                    </Button>
+                  )}
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </TabsContent>
 
         <TabsContent value="images" className="space-y-4">
@@ -1679,6 +1811,59 @@ const SiteDetail = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Create Inspection Dialog */}
+      <Dialog open={isCreateInspectionOpen} onOpenChange={setIsCreateInspectionOpen}>
+        <DialogContent className="bg-popover">
+          <DialogHeader>
+            <DialogTitle>Create Site Inspection</DialogTitle>
+            <DialogDescription>
+              Create a site-wide inspection like Site Drawing or Progress Report
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="templateSelect">Inspection Template</Label>
+              <Select value={selectedTemplateId} onValueChange={setSelectedTemplateId}>
+                <SelectTrigger id="templateSelect" className="bg-background">
+                  <SelectValue placeholder="Select a template" />
+                </SelectTrigger>
+                <SelectContent className="bg-popover z-50">
+                  {availableTemplates.map(template => (
+                    <SelectItem key={template.id} value={template.id}>
+                      <div>
+                        <p className="font-medium">{template.name}</p>
+                        <p className="text-xs text-muted-foreground">{template.category}</p>
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="inspectionDate">Inspection Date</Label>
+              <Input
+                id="inspectionDate"
+                type="date"
+                value={newInspectionDate}
+                onChange={(e) => setNewInspectionDate(e.target.value)}
+              />
+            </div>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => {
+              setIsCreateInspectionOpen(false);
+              setSelectedTemplateId("");
+              setNewInspectionDate("");
+            }}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreateInspection}>
+              Create Inspection
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
