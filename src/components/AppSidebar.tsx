@@ -38,6 +38,7 @@ const menuItems = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus },
+  { title: "Data Import", url: "/data-import", icon: CloudUpload },
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   
