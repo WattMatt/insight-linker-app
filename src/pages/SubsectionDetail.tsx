@@ -85,6 +85,7 @@ const SubsectionDetail = () => {
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [fixingTemplates, setFixingTemplates] = useState(false);
+  const [fixingCategories, setFixingCategories] = useState(false);
 
   useEffect(() => {
     if (subsectionId) {
@@ -593,6 +594,86 @@ const SubsectionDetail = () => {
     } catch (error) {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
+    }
+  };
+
+  const handleFixCategories = async () => {
+    if (!subsectionId) return;
+
+    try {
+      setFixingCategories(true);
+      toast.info("Fixing document categories...");
+
+      // Get all subsection documents with null category_id but with a category name
+      const { data: documentsToFix, error: fetchError } = await supabase
+        .from('subsection_documents')
+        .select('id, category_id, file_name')
+        .eq('subsection_id', subsectionId)
+        .is('category_id', null);
+
+      if (fetchError) throw fetchError;
+
+      if (!documentsToFix || documentsToFix.length === 0) {
+        toast.info("No documents need category fixing");
+        return;
+      }
+
+      // Get all categories for this subsection
+      const { data: categories, error: categoriesError } = await supabase
+        .from('document_categories')
+        .select('id, name')
+        .eq('subsection_id', subsectionId);
+
+      if (categoriesError) throw categoriesError;
+
+      // Try to match documents to categories based on file name patterns
+      for (const doc of documentsToFix) {
+        // Try to find matching category based on common patterns in file name
+        let matchedCategory = null;
+
+        // Check for COC-related documents
+        if (doc.file_name.toLowerCase().includes('coc') || 
+            doc.file_name.toLowerCase().includes('certificate')) {
+          matchedCategory = categories?.find(c => c.name.toLowerCase().includes('coc'));
+        }
+        // Check for drawing-related documents
+        else if (doc.file_name.toLowerCase().includes('drawing') || 
+                 doc.file_name.toLowerCase().includes('layout')) {
+          matchedCategory = categories?.find(c => 
+            c.name.toLowerCase().includes('drawing') || 
+            c.name.toLowerCase().includes('layout')
+          );
+        }
+        // Check for manual/warranty documents
+        else if (doc.file_name.toLowerCase().includes('manual') || 
+                 doc.file_name.toLowerCase().includes('warrant')) {
+          matchedCategory = categories?.find(c => 
+            c.name.toLowerCase().includes('manual') || 
+            c.name.toLowerCase().includes('warrant')
+          );
+        }
+
+        // If we found a matching category, update the document
+        if (matchedCategory) {
+          const { error: updateError } = await supabase
+            .from('subsection_documents')
+            .update({ category_id: matchedCategory.id })
+            .eq('id', doc.id);
+
+          if (updateError) {
+            console.error(`Error updating document ${doc.id}:`, updateError);
+          }
+        }
+      }
+
+      toast.success(`Fixed categories for ${documentsToFix.length} documents!`);
+      await fetchDocumentCategories();
+      await fetchSupabaseDocuments();
+    } catch (error) {
+      console.error("Error fixing categories:", error);
+      toast.error("Failed to fix categories");
+    } finally {
+      setFixingCategories(false);
     }
   };
 
@@ -1381,11 +1462,25 @@ const SubsectionDetail = () => {
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle>Uploaded Documents</CardTitle>
-                <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Category
-                </Button>
+                <div>
+                  <CardTitle>Uploaded Documents (Supabase)</CardTitle>
+                  <CardDescription>Documents uploaded for this subsection</CardDescription>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleFixCategories} 
+                    size="sm" 
+                    variant="outline"
+                    disabled={fixingCategories}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {fixingCategories ? 'Fixing...' : 'Fix Categories'}
+                  </Button>
+                  <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Category
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
