@@ -98,11 +98,11 @@ export function AppSidebar() {
   };
 
   return (
-    <Sidebar collapsible="icon">
-      <SidebarHeader className="border-b border-sidebar-border p-4">
+    <Sidebar collapsible="icon" className="border-r">
+      <SidebarHeader className="border-b border-sidebar-border p-4 min-h-[4rem]">
         <div className="flex items-center gap-3">
           {settings?.company_logo_url ? (
-            <div className="w-12 h-12 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0">
+            <div className="w-10 h-10 md:w-12 md:h-12 rounded-lg overflow-hidden bg-primary/10 flex items-center justify-center flex-shrink-0">
               <img 
                 src={settings.company_logo_url} 
                 alt="Company Logo"
@@ -111,11 +111,11 @@ export function AppSidebar() {
             </div>
           ) : (
             <div className="p-2 bg-primary/10 rounded-lg flex-shrink-0">
-              <Zap className="h-6 w-6 text-primary" />
+              <Zap className="h-5 w-5 md:h-6 md:w-6 text-primary" />
             </div>
           )}
           {!collapsed && (
-            <span className="text-sm font-semibold text-sidebar-foreground">
+            <span className="text-sm md:text-base font-semibold text-sidebar-foreground">
               {settings?.company_name || "SiteWise"}
             </span>
           )}
@@ -124,12 +124,12 @@ export function AppSidebar() {
 
       <SidebarContent>
         <SidebarGroup>
-          <SidebarGroupLabel>Navigation</SidebarGroupLabel>
+          <SidebarGroupLabel className="px-4 py-2 text-xs md:text-sm">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {menuItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild>
+                  <SidebarMenuButton asChild className="h-12 md:h-10">
                     <NavLink
                       to={item.url}
                       className={({ isActive }) =>
@@ -138,8 +138,8 @@ export function AppSidebar() {
                           : "hover:bg-sidebar-accent/50"
                       }
                     >
-                      <item.icon className="h-4 w-4" />
-                      {!collapsed && <span>{item.title}</span>}
+                      <item.icon className="h-5 w-5 md:h-4 md:w-4" />
+                      {!collapsed && <span className="text-base md:text-sm">{item.title}</span>}
                     </NavLink>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -149,12 +149,12 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
 
-      <SidebarFooter className="border-t border-sidebar-border p-4">
+      <SidebarFooter className="border-t border-sidebar-border p-3 md:p-4">
         <div className="space-y-2">
           {/* User Profile Section */}
           {currentUser && (
-            <div className={`flex items-center gap-3 p-2 rounded-lg bg-sidebar-accent/50 ${collapsed ? 'justify-center' : ''}`}>
-              <Avatar className="h-8 w-8 flex-shrink-0">
+            <div className={`flex items-center gap-3 p-2 md:p-3 rounded-lg bg-sidebar-accent/50 ${collapsed ? 'justify-center' : ''}`}>
+              <Avatar className="h-9 w-9 md:h-8 md:w-8 flex-shrink-0">
                 <AvatarImage src={currentUser.avatar_url || undefined} alt={currentUser.full_name || "User"} />
                 <AvatarFallback className="bg-primary text-primary-foreground text-xs">
                   {getInitials(currentUser.full_name)}
@@ -162,7 +162,7 @@ export function AppSidebar() {
               </Avatar>
               {!collapsed && (
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-sidebar-foreground truncate">
+                  <p className="text-sm md:text-sm font-medium text-sidebar-foreground truncate">
                     {currentUser.full_name || "User"}
                   </p>
                   <p className="text-xs text-muted-foreground truncate">
@@ -176,9 +176,9 @@ export function AppSidebar() {
           {/* Logout Button */}
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={handleLogout}>
-                <LogOut className="h-4 w-4" />
-                {!collapsed && <span>Logout</span>}
+              <SidebarMenuButton onClick={handleLogout} className="h-12 md:h-10">
+                <LogOut className="h-5 w-5 md:h-4 md:w-4" />
+                {!collapsed && <span className="text-base md:text-sm">Logout</span>}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
