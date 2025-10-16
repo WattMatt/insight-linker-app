@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
+import { useParams, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -27,8 +29,11 @@ interface Client {
 }
 
 const Sites = () => {
+  const { clientId } = useParams();
+  const navigate = useNavigate();
   const [sites, setSites] = useState<Site[]>([]);
   const [clients, setClients] = useState<Client[]>([]);
+  const [currentClient, setCurrentClient] = useState<Client | null>(null);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -40,12 +45,19 @@ const Sites = () => {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [clientId]);
 
   const fetchData = async () => {
     try {
+      let sitesQuery = supabase.from("sites").select("*, clients(name)").order("name", { ascending: true });
+      
+      // Filter by clientId if present in URL
+      if (clientId) {
+        sitesQuery = sitesQuery.eq("client_id", clientId);
+      }
+
       const [sitesRes, clientsRes] = await Promise.all([
-        supabase.from("sites").select("*, clients(name)").order("name", { ascending: true }),
+        sitesQuery,
         supabase.from("clients").select("id, name").order("name"),
       ]);
 
@@ -54,6 +66,17 @@ const Sites = () => {
 
       setSites(sitesRes.data || []);
       setClients(clientsRes.data || []);
+
+      // Set current client if filtering by clientId
+      if (clientId && clientsRes.data) {
+        const client = clientsRes.data.find(c => c.id === clientId);
+        setCurrentClient(client || null);
+      }
+
+      // Pre-fill client_id in form if viewing client-specific sites
+      if (clientId) {
+        setFormData(prev => ({ ...prev, client_id: clientId }));
+      }
     } catch (error) {
       console.error("Error fetching data:", error);
       toast.error("Failed to fetch data");
@@ -115,11 +138,24 @@ const Sites = () => {
 
   return (
     <div className="space-y-6">
+      {clientId && currentClient && (
+        <Breadcrumbs
+          items={[
+            { label: "Clients", href: "/clients" },
+            { label: currentClient.name, href: `/clients/${clientId}` },
+            { label: "Sites" },
+          ]}
+        />
+      )}
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Sites</h1>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {currentClient ? `${currentClient.name} - Sites` : "Sites"}
+          </h1>
           <p className="text-muted-foreground mt-2">
-            Manage inspection sites and locations
+            {currentClient 
+              ? `Manage sites for ${currentClient.name}` 
+              : "Manage inspection sites and locations"}
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
