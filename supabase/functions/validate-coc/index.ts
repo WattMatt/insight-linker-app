@@ -159,10 +159,24 @@ serve(async (req) => {
       throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
     }
 
-    // For now, we'll work with text-based analysis
-    // In production, you'd want to add PDF parsing here
-    const docText = await fileData.text();
-    const truncatedText = docText.substring(0, 8000); // Limit context size
+    // Check if this is a PDF file
+    const fileName = storagePath.split('/').pop() || '';
+    const isPDF = fileName.toLowerCase().endsWith('.pdf');
+    
+    let documentText = '';
+    
+    if (isPDF) {
+      // For PDF files, we'll need to indicate it's a PDF and let AI know
+      // In production, you'd use a PDF parsing library here
+      documentText = `[PDF Document: ${fileName}]\n\nNote: This is a PDF Certificate of Compliance document. Please analyze this as a COC document and extract all relevant information for validation against SANS 10142-1 standards.`;
+      console.log('Processing PDF file:', fileName);
+    } else {
+      // For text-based files, extract text directly
+      documentText = await fileData.text();
+      console.log('Processing text file:', fileName);
+    }
+    
+    const truncatedText = documentText.substring(0, 8000); // Limit context size
 
     console.log('Document fetched, calling AI for validation...');
 
@@ -182,7 +196,7 @@ serve(async (req) => {
           },
           { 
             role: 'user', 
-            content: `Document content:\n\n${truncatedText}\n\nPlease validate this COC document and return ONLY the JSON validation result.`
+            content: `Document content:\n\n${truncatedText}\n\nPlease validate this COC document and return ONLY the JSON validation result. If this is a PDF that cannot be read, return status "Error" with appropriate message in criticalFailures.`
           }
         ],
         temperature: 0.3, // Lower temperature for more consistent validation
