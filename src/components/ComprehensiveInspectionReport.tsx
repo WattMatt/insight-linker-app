@@ -42,10 +42,12 @@ export const ComprehensiveInspectionReport = ({
         template = templateData;
       }
 
-      // Image categories to check
-      const imageCategories = [
-        'General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'
-      ];
+      // If no template, show error
+      if (!template) {
+        toast.error("Cannot generate report without a template");
+        setGenerating(false);
+        return;
+      }
 
       const date = new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 
@@ -179,119 +181,6 @@ export const ComprehensiveInspectionReport = ({
         }
       }
 
-      // ===== ADDITIONAL DATA =====
-      const electrical = jsonData.electrical || {};
-      const observations = jsonData.observations || [];
-      const relayStatus = jsonData.relayStatus || {};
-
-      // Electrical Details
-      if (Object.keys(electrical).length > 0) {
-        if (yPos > pageHeight - 60) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.text('Electrical Details', 20, yPos);
-        yPos += 10;
-
-        // Flatten electrical data
-        const electricalData: any[] = [];
-        const flattenObject = (obj: any, prefix = '') => {
-          for (const [key, value] of Object.entries(obj)) {
-            if (value && typeof value === 'object' && !Array.isArray(value)) {
-              flattenObject(value, prefix + key + ' - ');
-            } else {
-              electricalData.push([
-                prefix + key.replace(/([A-Z])/g, ' $1').trim(),
-                String(value || 'N/A')
-              ]);
-            }
-          }
-        };
-        flattenObject(electrical);
-
-        if (electricalData.length > 0) {
-          autoTable(doc, {
-            startY: yPos,
-            head: [],
-            body: electricalData,
-            theme: 'striped',
-            styles: { fontSize: 9, cellPadding: 3 },
-            columnStyles: {
-              0: { fontStyle: 'bold', cellWidth: 80 },
-              1: { cellWidth: 100 }
-            },
-            margin: { left: 20, right: 20 }
-          });
-          yPos = (doc as any).lastAutoTable.finalY + 15;
-        }
-      }
-
-      // Observations
-      if (Array.isArray(observations) && observations.length > 0) {
-        if (yPos > pageHeight - 60) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.text('Observations', 20, yPos);
-        yPos += 10;
-
-        const observationData = observations.map((obs: any, index: number) => [
-          `${index + 1}`,
-          obs.description || obs.text || obs,
-          obs.severity || 'N/A',
-          obs.status || 'Open'
-        ]);
-
-        autoTable(doc, {
-          startY: yPos,
-          head: [['#', 'Description', 'Severity', 'Status']],
-          body: observationData,
-          theme: 'grid',
-          headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-          styles: { fontSize: 9, cellPadding: 3 },
-          margin: { left: 20, right: 20 }
-        });
-
-        yPos = (doc as any).lastAutoTable.finalY + 15;
-      }
-
-      // Relay Status
-      if (Object.keys(relayStatus).length > 0) {
-        if (yPos > pageHeight - 60) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(18);
-        doc.setFont(undefined, 'bold');
-        doc.text('Relay Status', 20, yPos);
-        yPos += 10;
-
-        const relayData = Object.entries(relayStatus).map(([key, value]) => [
-          key.replace(/([A-Z])/g, ' $1').trim(),
-          String(value)
-        ]);
-
-        autoTable(doc, {
-          startY: yPos,
-          head: [],
-          body: relayData,
-          theme: 'striped',
-          styles: { fontSize: 9, cellPadding: 3 },
-          columnStyles: {
-            0: { fontStyle: 'bold', cellWidth: 80 },
-            1: { cellWidth: 100 }
-          },
-          margin: { left: 20, right: 20 }
-        });
-      }
-
       // ===== IMAGES FROM TEMPLATE SECTIONS =====
       // First collect images from template-based sections
       if (template && template.sections) {
@@ -354,58 +243,6 @@ export const ComprehensiveInspectionReport = ({
                   console.error('Error embedding image:', error);
                 }
               }
-            }
-          }
-        }
-      }
-
-      // ===== IMAGES =====
-      for (const category of imageCategories) {
-        const images = jsonData[`images${category}`] || {};
-        const imageArray = Object.values(images).filter((img: any) => img && img.url);
-
-        if (imageArray.length > 0) {
-          doc.addPage();
-          yPos = 20;
-
-          doc.setFontSize(18);
-          doc.setFont(undefined, 'bold');
-          doc.text(`${category} Images`, 20, yPos);
-          yPos += 15;
-
-          for (const img of imageArray as any[]) {
-            try {
-              // Try to load and embed image
-              const imgUrl = img.url || img.path || img;
-              if (typeof imgUrl === 'string') {
-                const response = await fetch(imgUrl);
-                const blob = await response.blob();
-                const dataUrl = await new Promise<string>((resolve) => {
-                  const reader = new FileReader();
-                  reader.onloadend = () => resolve(reader.result as string);
-                  reader.readAsDataURL(blob);
-                });
-
-                const imgWidth = 80;
-                const imgHeight = 60;
-
-                if (yPos + imgHeight > pageHeight - 20) {
-                  doc.addPage();
-                  yPos = 20;
-                }
-
-                doc.addImage(dataUrl, 'JPEG', 20, yPos, imgWidth, imgHeight);
-                
-                // Add image name/caption
-                doc.setFontSize(8);
-                doc.setFont(undefined, 'normal');
-                doc.text(img.name || img.fileName || 'Image', 20, yPos + imgHeight + 5);
-                
-                yPos += imgHeight + 15;
-              }
-            } catch (error) {
-              console.error('Error embedding image:', error);
-              // Skip image if loading fails
             }
           }
         }
