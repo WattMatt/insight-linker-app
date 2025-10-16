@@ -129,7 +129,7 @@ export const ComprehensiveInspectionReport = ({
 
       yPos = (doc as any).lastAutoTable.finalY + 15;
 
-      // ===== TEMPLATE-BASED SECTIONS =====
+      // ===== TEMPLATE-BASED SECTIONS WITH VISUAL LAYOUT =====
       if (template && template.sections) {
         const sections = template.sections as any;
         
@@ -137,59 +137,27 @@ export const ComprehensiveInspectionReport = ({
           const sectionData = section as any;
           const items = sectionData.items || {};
           
-          // Check if there's data for this section
-          const hasData = jsonData[sectionKey] && Object.keys(jsonData[sectionKey]).length > 0;
-          
-          if (Object.keys(items).length === 0 && !hasData) continue;
+          if (Object.keys(items).length === 0) continue;
 
-          if (yPos > pageHeight - 60) {
-            doc.addPage();
-            yPos = 20;
-          }
+          // Start new page for each section
+          doc.addPage();
+          yPos = 20;
 
-          doc.setFontSize(18);
+          // Section header
+          doc.setFontSize(20);
           doc.setFont(undefined, 'bold');
-          doc.text(sectionData.name || sectionKey, 20, yPos);
-          yPos += 10;
+          doc.setTextColor(41, 128, 185);
+          const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
+          doc.text(sectionTitle, pageWidth / 2, yPos, { align: 'center' });
+          yPos += 15;
 
-          const tableData: any[] = [];
+          // Reset text color
+          doc.setTextColor(0, 0, 0);
+
+          let itemNumber = 1;
           
           for (const [itemKey, item] of Object.entries(items)) {
             const itemInfo = item as any;
-            const itemData = jsonData[sectionKey]?.[itemKey] || {};
-            
-            tableData.push([
-              itemInfo.name || itemKey,
-              itemData.status || 'N/A',
-              itemData.notes || ''
-            ]);
-          }
-
-          if (tableData.length > 0) {
-            autoTable(doc, {
-              startY: yPos,
-              head: [['Item', 'Status', 'Notes']],
-              body: tableData,
-              theme: 'grid',
-              headStyles: { fillColor: [41, 128, 185], textColor: 255 },
-              styles: { fontSize: 9, cellPadding: 3 },
-              margin: { left: 20, right: 20 }
-            });
-
-            yPos = (doc as any).lastAutoTable.finalY + 15;
-          }
-        }
-      }
-
-      // ===== IMAGES FROM TEMPLATE SECTIONS =====
-      if (template && template.sections) {
-        const sections = template.sections as any;
-        
-        for (const [sectionKey, section] of Object.entries(sections)) {
-          const sectionData = section as any;
-          const items = sectionData.items || {};
-          
-          for (const [itemKey, item] of Object.entries(items)) {
             const itemData = jsonData[sectionKey]?.[itemKey] || {};
             const photos = itemData.photos || [];
             const images = itemData.images || {};
@@ -199,26 +167,24 @@ export const ComprehensiveInspectionReport = ({
             if (typeof images === 'object') {
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
-            
+
+            // Check if we need a new page (need space for item header + at least one photo)
+            if (yPos > pageHeight - 100) {
+              doc.addPage();
+              yPos = 20;
+            }
+
+            // Item number and name
+            doc.setFontSize(14);
+            doc.setFont(undefined, 'bold');
+            doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
+            yPos += 10;
+
+            // Display photos if available
             if (allImages.length > 0) {
-              // Check if we need a new page for the header
-              if (yPos > pageHeight - 80) {
-                doc.addPage();
-                yPos = 20;
-              }
-
-              doc.setFontSize(16);
-              doc.setFont(undefined, 'bold');
-              doc.text(`${sectionData.name} - ${(item as any).name}`, 20, yPos);
-              yPos += 10;
-
-              // Layout images in a 2-column grid
-              const imgWidth = 85;
-              const imgHeight = 65;
-              const spacing = 10;
-              const leftMargin = 20;
-              const rightColumnX = leftMargin + imgWidth + spacing;
-              let column = 0;
+              const imgWidth = 80;
+              const imgHeight = 60;
+              const leftMargin = 30;
 
               for (const img of allImages) {
                 try {
@@ -232,40 +198,69 @@ export const ComprehensiveInspectionReport = ({
                       reader.readAsDataURL(blob);
                     });
 
-                    // Check if we need a new page
-                    if (yPos + imgHeight + 10 > pageHeight - 20) {
+                    // Check if we need a new page for this image
+                    if (yPos + imgHeight + 15 > pageHeight - 20) {
                       doc.addPage();
                       yPos = 20;
-                      column = 0;
                     }
 
-                    const xPos = column === 0 ? leftMargin : rightColumnX;
-                    doc.addImage(dataUrl, 'JPEG', xPos, yPos, imgWidth, imgHeight);
-                    
-                    doc.setFontSize(8);
-                    doc.setFont(undefined, 'normal');
-                    const imgName = typeof img === 'object' ? (img.name || img.fileName || 'Image') : 'Image';
-                    const truncatedName = imgName.length > 30 ? imgName.substring(0, 27) + '...' : imgName;
-                    doc.text(truncatedName, xPos, yPos + imgHeight + 4);
-
-                    column++;
-                    if (column >= 2) {
-                      column = 0;
-                      yPos += imgHeight + 12;
-                    }
+                    // Draw photo
+                    doc.addImage(dataUrl, 'JPEG', leftMargin, yPos, imgWidth, imgHeight);
+                    yPos += imgHeight + 5;
                   }
                 } catch (error) {
                   console.error('Error embedding image:', error);
+                  // Draw placeholder box if image fails
+                  doc.setDrawColor(200, 200, 200);
+                  doc.setFillColor(245, 245, 245);
+                  doc.rect(leftMargin, yPos, imgWidth, imgHeight, 'FD');
+                  doc.setFontSize(10);
+                  doc.setFont(undefined, 'italic');
+                  doc.setTextColor(128, 128, 128);
+                  doc.text('Photo', leftMargin + imgWidth / 2, yPos + imgHeight / 2, { align: 'center' });
+                  doc.text('Placeholder', leftMargin + imgWidth / 2, yPos + imgHeight / 2 + 5, { align: 'center' });
+                  doc.setTextColor(0, 0, 0);
+                  yPos += imgHeight + 5;
                 }
               }
-
-              // If we ended on column 1, advance yPos for next section
-              if (column === 1) {
-                yPos += imgHeight + 12;
+            } else {
+              // Draw placeholder box if no images
+              const imgWidth = 80;
+              const imgHeight = 60;
+              const leftMargin = 30;
+              
+              if (yPos + imgHeight + 15 > pageHeight - 20) {
+                doc.addPage();
+                yPos = 20;
               }
               
-              yPos += 10; // Extra spacing after each item's images
+              doc.setDrawColor(200, 200, 200);
+              doc.setFillColor(245, 245, 245);
+              doc.rect(leftMargin, yPos, imgWidth, imgHeight, 'FD');
+              doc.setFontSize(10);
+              doc.setFont(undefined, 'italic');
+              doc.setTextColor(128, 128, 128);
+              doc.text('Photo', leftMargin + imgWidth / 2, yPos + imgHeight / 2, { align: 'center' });
+              doc.text('Placeholder', leftMargin + imgWidth / 2, yPos + imgHeight / 2 + 5, { align: 'center' });
+              doc.setTextColor(0, 0, 0);
+              yPos += imgHeight + 5;
             }
+
+            // Display notes if available
+            if (itemData.notes) {
+              doc.setFontSize(10);
+              doc.setFont(undefined, 'normal');
+              doc.text('Notes:', 30, yPos);
+              yPos += 5;
+              
+              const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
+              doc.text(notesLines, 30, yPos);
+              yPos += (notesLines.length * 5) + 5;
+            }
+
+            // Add spacing between items
+            yPos += 10;
+            itemNumber++;
           }
         }
       }
