@@ -151,7 +151,7 @@ export const ComprehensiveInspectionReport = ({
           doc.setTextColor(0, 0, 0);
           const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
           doc.text(sectionTitle, pageWidth / 2, yPos, { align: 'center' });
-          yPos += 18;
+          yPos += 20;
 
           let itemNumber = 1;
           const itemEntries = Object.entries(items);
@@ -169,81 +169,78 @@ export const ComprehensiveInspectionReport = ({
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
 
-            // Photo dimensions
-            const imgWidth = 100;
-            const imgHeight = 75;
-            const imgX = 30;
-            
-            // Calculate space needed - always account for item header
-            const itemHeaderHeight = 12;
             const hasImages = allImages.length > 0;
-            const imagesSectionHeight = hasImages ? (imgHeight * allImages.length) + (5 * allImages.length) : 0;
-            const notesHeight = itemData.notes ? 20 : 0;
-            const totalItemHeight = itemHeaderHeight + imagesSectionHeight + notesHeight + 15;
+            const hasNotes = !!itemData.notes;
+            
+            // Calculate space needed for this item
+            const itemHeaderHeight = 15;
+            const photoHeight = hasImages ? 75 : 0; // Standard photo height or 0
+            const photoSpacing = hasImages ? 8 : 0;
+            const notesHeight = hasNotes ? 25 : 0;
+            const itemSpacing = 20; // Space between items
+            const totalItemHeight = itemHeaderHeight + photoHeight + photoSpacing + notesHeight + itemSpacing;
 
             // Check if we need a new page
-            if (yPos + totalItemHeight > pageHeight - 25) {
+            if (yPos + totalItemHeight > pageHeight - 30) {
               doc.addPage();
               pageNumber++;
-              yPos = 25;
+              yPos = 30;
             }
 
             // ALWAYS show item number and name
-            doc.setFontSize(11);
+            doc.setFontSize(12);
             doc.setFont(undefined, 'bold');
+            doc.setTextColor(0, 0, 0);
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 20, yPos);
-            yPos += 10;
+            yPos += itemHeaderHeight;
 
-            // Only show photos if they exist (NO placeholder if no images)
+            // Only show photo if it exists
             if (hasImages) {
-              for (const img of allImages) {
-                try {
-                  const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
-                  if (typeof imgUrl === 'string') {
-                    const response = await fetch(imgUrl);
-                    const blob = await response.blob();
-                    const dataUrl = await new Promise<string>((resolve) => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => resolve(reader.result as string);
-                      reader.readAsDataURL(blob);
-                    });
+              const imgWidth = 100;
+              const imgHeight = 75;
+              const imgX = 30;
+              
+              // Use only the first image to match template layout
+              const img = allImages[0];
+              try {
+                const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
+                if (typeof imgUrl === 'string') {
+                  const response = await fetch(imgUrl);
+                  const blob = await response.blob();
+                  const dataUrl = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                  });
 
-                    // Check if we need a new page for this image
-                    if (yPos + imgHeight + 15 > pageHeight - 20) {
-                      doc.addPage();
-                      pageNumber++;
-                      yPos = 20;
-                    }
-
-                    // Draw photo with border
-                    doc.setDrawColor(200, 200, 200);
-                    doc.setLineWidth(0.5);
-                    doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                    doc.rect(imgX, yPos, imgWidth, imgHeight);
-                    yPos += imgHeight + 5;
-                  }
-                } catch (error) {
-                  console.error('Error embedding image:', error);
-                  // Skip failed images silently
+                  // Draw photo with border
+                  doc.setDrawColor(220, 220, 220);
+                  doc.setLineWidth(0.5);
+                  doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
+                  doc.rect(imgX, yPos, imgWidth, imgHeight);
+                  yPos += imgHeight + photoSpacing;
                 }
+              } catch (error) {
+                console.error('Error embedding image:', error);
+                // Skip to next item if image fails
+                yPos += photoSpacing;
               }
             }
-            // If no images, we just skip the photo section entirely (no placeholder)
 
             // Display notes if available
-            if (itemData.notes) {
-              doc.setFontSize(8);
+            if (hasNotes) {
+              doc.setFontSize(9);
               doc.setFont(undefined, 'normal');
-              doc.text('Notes:', imgX, yPos);
-              yPos += 4;
+              doc.text('Notes:', 30, yPos);
+              yPos += 5;
               
-              const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 50);
-              doc.text(notesLines, imgX, yPos);
-              yPos += (notesLines.length * 3.5) + 3;
+              const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
+              doc.text(notesLines, 30, yPos);
+              yPos += (notesLines.length * 4);
             }
 
             // Add spacing between items
-            yPos += 10;
+            yPos += itemSpacing;
             itemNumber++;
           }
           
