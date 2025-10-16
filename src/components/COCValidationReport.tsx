@@ -14,6 +14,17 @@ interface ValidationReport {
   overallStatus: string;
   installationSummary?: string;
   overallAssessment?: string;
+  checks?: Array<{
+    checkId: string;
+    clause: string;
+    description: string;
+    result: string;
+    measuredValue: string;
+    limit: string;
+    remediation: string;
+    category: string;
+    timestamp: string;
+  }>;
   criticalFailures?: Array<{
     category: string;
     clause: string;
@@ -393,6 +404,117 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
                 <p className="text-muted-foreground">{report.summary}</p>
               </div>
             )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Detailed Verification Checks - Current vs Required */}
+      {report.checks && report.checks.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Detailed Verification Results</CardTitle>
+            <p className="text-sm text-muted-foreground mt-2">
+              Comparison of measured values against SANS 10142-1 requirements
+            </p>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {/* Failed Checks First */}
+              {report.checks.filter(check => check.result === 'Fail').length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-red-600 mb-3">❌ Failed Checks</h4>
+                  <div className="space-y-3">
+                    {report.checks
+                      .filter(check => check.result === 'Fail')
+                      .map((check, idx) => (
+                        <Alert key={idx} variant="destructive" className="border-red-300">
+                          <AlertDescription>
+                            <div className="space-y-2">
+                              <div className="flex items-start justify-between gap-4">
+                                <div className="flex-1">
+                                  <p className="font-semibold text-sm">
+                                    Clause {check.clause}: {check.description}
+                                  </p>
+                                  <Badge variant="outline" className="mt-1 text-xs">
+                                    {check.category}
+                                  </Badge>
+                                </div>
+                              </div>
+                              
+                              <div className="bg-white/50 dark:bg-black/50 rounded-md p-3 space-y-2">
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                  <div>
+                                    <span className="text-xs font-semibold uppercase text-red-700 dark:text-red-400">
+                                      Current Value:
+                                    </span>
+                                    <p className="text-sm mt-1 font-mono">{check.measuredValue}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-xs font-semibold uppercase text-green-700 dark:text-green-400">
+                                      Required:
+                                    </span>
+                                    <p className="text-sm mt-1 font-mono">{check.limit}</p>
+                                  </div>
+                                </div>
+                              </div>
+
+                              {check.remediation && check.remediation !== 'N/A' && (
+                                <div className="pt-2 border-t border-red-200">
+                                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">
+                                    Remediation Required:
+                                  </p>
+                                  <p className="text-sm">{check.remediation}</p>
+                                </div>
+                              )}
+                            </div>
+                          </AlertDescription>
+                        </Alert>
+                      ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Passed Checks */}
+              {report.checks.filter(check => check.result === 'Pass').length > 0 && (
+                <div>
+                  <h4 className="font-semibold text-green-600 mb-3">✅ Passed Checks</h4>
+                  <div className="space-y-2">
+                    {report.checks
+                      .filter(check => check.result === 'Pass')
+                      .map((check, idx) => (
+                        <div key={idx} className="border border-green-200 rounded-md p-3 bg-green-50/50 dark:bg-green-950/20">
+                          <div className="flex items-start justify-between gap-4">
+                            <div className="flex-1">
+                              <p className="font-semibold text-sm">
+                                Clause {check.clause}: {check.description}
+                              </p>
+                              <Badge variant="outline" className="mt-1 text-xs bg-white dark:bg-black">
+                                {check.category}
+                              </Badge>
+                            </div>
+                            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 pt-2 border-t border-green-200">
+                            <div>
+                              <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                Measured:
+                              </span>
+                              <p className="text-sm mt-1 font-mono">{check.measuredValue}</p>
+                            </div>
+                            <div>
+                              <span className="text-xs font-semibold uppercase text-muted-foreground">
+                                Required:
+                              </span>
+                              <p className="text-sm mt-1 font-mono">{check.limit}</p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                  </div>
+                </div>
+              )}
+            </div>
           </CardContent>
         </Card>
       )}
