@@ -106,70 +106,15 @@ export const ComprehensiveInspectionReport = ({
       doc.setFillColor(21, 122, 171);
       doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
       
-      // Logo box (centered at top)
-      const logoBoxWidth = 100;
-      const logoBoxHeight = 50;
-      const logoX = (pageWidth - logoBoxWidth) / 2;
-      const logoY = 40;
-      
-      // Try to load and display site logo
-      if (siteLogoUrl) {
-        try {
-          const response = await fetch(siteLogoUrl);
-          const blob = await response.blob();
-          const logoDataUrl = await new Promise<string>((resolve) => {
-            const reader = new FileReader();
-            reader.onloadend = () => resolve(reader.result as string);
-            reader.readAsDataURL(blob);
-          });
-          
-          // Add logo image with border
-          doc.setDrawColor(180, 180, 180);
-          doc.setLineWidth(0.5);
-          doc.addImage(logoDataUrl, 'JPEG', logoX, logoY, logoBoxWidth, logoBoxHeight);
-          doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
-        } catch (error) {
-          console.error('Error loading site logo:', error);
-          // Fallback to placeholder
-          doc.setDrawColor(180, 180, 180);
-          doc.setLineWidth(0.5);
-          doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
-          doc.setTextColor(180, 180, 180);
-          doc.setFontSize(10);
-          doc.setFont(undefined, 'normal');
-          doc.text('SITE LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
-        }
-      } else {
-        // No logo provided, show placeholder
-        doc.setDrawColor(180, 180, 180);
-        doc.setLineWidth(0.5);
-        doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
-        doc.setTextColor(180, 180, 180);
-        doc.setFontSize(10);
-        doc.setFont(undefined, 'normal');
-        doc.text('SITE LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
-      }
-      
-      // Main title - black, bold, large
+      // Main title - black, bold, large (Site Name + Subsection Name)
       doc.setTextColor(0, 0, 0);
       doc.setFontSize(28);
       doc.setFont(undefined, 'bold');
-      const reportTitle = template?.name || 'Inspection Report';
-      doc.text(reportTitle, pageWidth / 2, 120, { align: 'center' });
-      
-      // Subtitle box with light gray background - using subsection name
-      const subtitleBoxY = 140;
-      const subtitleBoxHeight = 15;
-      doc.setFillColor(240, 240, 240);
-      doc.rect(30, subtitleBoxY, pageWidth - 60, subtitleBoxHeight, 'F');
-      
-      doc.setTextColor(80, 80, 80);
-      doc.setFontSize(11);
-      doc.setFont(undefined, 'normal');
-      doc.text(subsectionName, pageWidth / 2, subtitleBoxY + 10, { align: 'center' });
+      const reportTitle = `${siteName} - ${subsectionName}`;
+      doc.text(reportTitle, pageWidth / 2, 80, { align: 'center' });
       
       // Report details box
-      const detailsBoxY = 175;
+      const detailsBoxY = 110;
       const detailsBoxHeight = 60;
       
       doc.setDrawColor(150, 150, 150);
