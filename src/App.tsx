@@ -106,7 +106,7 @@ const App = () => (
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <SiteOverview />
+                  <SiteDetail />
                 </DashboardLayout>
               </ProtectedRoute>
             }
