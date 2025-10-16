@@ -80,6 +80,7 @@ const SubsectionDetail = () => {
   });
   const [snags, setSnags] = useState<any[]>([]);
   const [openSnagsCount, setOpenSnagsCount] = useState(0);
+  const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
 
   useEffect(() => {
     if (subsectionId) {
@@ -89,6 +90,7 @@ const SubsectionDetail = () => {
       fetchDocumentCategories();
       fetchSupabaseDocuments();
       fetchSnags();
+      fetchCocValidations();
     }
   }, [subsectionId]);
 
@@ -175,6 +177,28 @@ const SubsectionDetail = () => {
       setOpenSnagsCount(allSnags.filter(s => s.status === 'Open').length);
     } catch (error) {
       console.error("Error fetching snags:", error);
+    }
+  };
+
+  const fetchCocValidations = async () => {
+    if (!subsectionId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('coc_validations')
+        .select('*')
+        .eq('subsection_id', subsectionId);
+      
+      if (error) throw error;
+      
+      // Create a map of document_id -> validation result
+      const validationsMap: Record<string, any> = {};
+      data?.forEach(validation => {
+        validationsMap[validation.document_id] = validation;
+      });
+      setCocValidations(validationsMap);
+    } catch (error) {
+      console.error("Error fetching COC validations:", error);
     }
   };
 
@@ -1687,13 +1711,46 @@ const SubsectionDetail = () => {
                       {supabaseCocDocs.map((doc) => (
                         <div key={doc.id} className="border rounded-lg p-4">
                           <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-3 flex-1">
                               <FileText className="h-5 w-5 text-muted-foreground" />
-                              <div>
-                                <p className="font-medium">{doc.file_name}</p>
+                              <div className="flex-1">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <p className="font-medium">{doc.file_name}</p>
+                                  {cocValidations[doc.id] && (
+                                    <Badge 
+                                      variant={
+                                        cocValidations[doc.id].status === 'Pass' ? 'default' : 
+                                        cocValidations[doc.id].status === 'Fail' ? 'destructive' : 
+                                        'secondary'
+                                      }
+                                      className="text-xs"
+                                    >
+                                      {cocValidations[doc.id].status === 'Pass' && '✅ '}
+                                      {cocValidations[doc.id].status === 'Fail' && '❌ '}
+                                      {cocValidations[doc.id].status}
+                                    </Badge>
+                                  )}
+                                </div>
                                 <p className="text-sm text-muted-foreground">
                                   {new Date(doc.uploaded_at).toLocaleDateString()}
                                 </p>
+                                {cocValidations[doc.id]?.violations && cocValidations[doc.id].violations.length > 0 && (
+                                  <details className="mt-2 text-sm">
+                                    <summary className="text-destructive cursor-pointer font-medium">
+                                      {cocValidations[doc.id].violations.length} SANS 10142-1 violation(s)
+                                    </summary>
+                                    <ul className="mt-2 ml-4 space-y-2">
+                                      {cocValidations[doc.id].violations.map((v: any, i: number) => (
+                                        <li key={i} className="text-muted-foreground border-l-2 border-destructive pl-3">
+                                          <strong className="text-foreground">Clause {v.clause}:</strong> {v.description}
+                                          {v.evidence && (
+                                            <div className="text-xs mt-1 italic">Evidence: {v.evidence}</div>
+                                          )}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </details>
+                                )}
                               </div>
                             </div>
                             <div className="flex items-center gap-2">
@@ -2061,7 +2118,7 @@ const SubsectionDetail = () => {
 
                               const { data: { user } } = await supabase.auth.getUser();
 
-                              const { error: insertError } = await supabase
+                              const { error: insertError, data: newDoc } = await supabase
                                 .from('subsection_documents')
                                 .insert({
                                   subsection_id: subsectionId,
@@ -2070,11 +2127,43 @@ const SubsectionDetail = () => {
                                   file_url: urlData.publicUrl,
                                   file_size: file.size,
                                   uploaded_by: user?.id
-                                });
+                                })
+                                .select('id')
+                                .single();
 
                               if (insertError) throw insertError;
 
                               toast.success("COC document uploaded successfully!");
+                              
+                              // Trigger AI validation
+                              if (newDoc) {
+                                toast.info("Starting AI validation...");
+                                const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
+                                  body: {
+                                    documentId: newDoc.id,
+                                    documentUrl: urlData.publicUrl,
+                                    subsectionId: subsectionId
+                                  }
+                                });
+
+                                if (validationError) {
+                                  console.error('Validation error:', validationError);
+                                  toast.error('COC uploaded but validation failed');
+                                } else if (validationData?.validation) {
+                                  const result = validationData.validation;
+                                  if (result.status === 'Pass') {
+                                    toast.success('✅ COC validation passed!');
+                                  } else if (result.status === 'Fail') {
+                                    toast.error(`❌ COC validation failed: ${result.violations?.length || 0} violations found`);
+                                  } else {
+                                    toast.warning(`⚠️ COC validation incomplete`);
+                                  }
+                                  
+                                  // Refresh validations
+                                  fetchCocValidations();
+                                }
+                              }
+
                               setUploadCategoryId(null);
                               setUploadFile(null);
                               fetchSupabaseDocuments();

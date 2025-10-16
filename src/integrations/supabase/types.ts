@@ -125,6 +125,54 @@ export type Database = {
         }
         Relationships: []
       }
+      coc_validations: {
+        Row: {
+          created_at: string
+          document_id: string
+          id: string
+          status: string
+          subsection_id: string
+          validated_at: string
+          validated_by: string | null
+          violations: Json | null
+        }
+        Insert: {
+          created_at?: string
+          document_id: string
+          id?: string
+          status: string
+          subsection_id: string
+          validated_at?: string
+          validated_by?: string | null
+          violations?: Json | null
+        }
+        Update: {
+          created_at?: string
+          document_id?: string
+          id?: string
+          status?: string
+          subsection_id?: string
+          validated_at?: string
+          validated_by?: string | null
+          violations?: Json | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_validations_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: true
+            referencedRelation: "subsection_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_validations_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       document_categories: {
         Row: {
           created_at: string
