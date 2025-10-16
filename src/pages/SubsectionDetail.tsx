@@ -70,6 +70,18 @@ const SubsectionDetail = () => {
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
   const [fixingTemplates, setFixingTemplates] = useState(false);
   const [fixingCategories, setFixingCategories] = useState(false);
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
+  const [editFormData, setEditFormData] = useState({
+    name: "",
+    tenant_name: "",
+    category: "",
+    coc_number: "",
+    coc_type: "",
+    coc_issue_date: "",
+    meter_serial_number: "",
+    ct_ratio: "",
+    is_coc_required: true
+  });
 
   useEffect(() => {
     if (subsectionId) {
@@ -287,6 +299,71 @@ const SubsectionDetail = () => {
       toast.error("Failed to load subsection data");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleOpenEditDialog = async () => {
+    if (!subsection) return;
+    
+    // Fetch the current subsection data from Supabase
+    const { data, error } = await supabase
+      .from('subsections')
+      .select('*')
+      .eq('id', subsectionId)
+      .single();
+    
+    if (error || !data) {
+      toast.error("Failed to load subsection details");
+      return;
+    }
+    
+    // Populate the form with current values
+    setEditFormData({
+      name: data.name || "",
+      tenant_name: data.tenant_name || "",
+      category: data.category || "",
+      coc_number: data.coc_number || "",
+      coc_type: data.coc_type || "",
+      coc_issue_date: data.coc_issue_date || "",
+      meter_serial_number: data.meter_serial_number || "",
+      ct_ratio: data.ct_ratio || "",
+      is_coc_required: data.is_coc_required ?? true
+    });
+    
+    setIsEditDialogOpen(true);
+  };
+
+  const handleSaveEdit = async () => {
+    try {
+      setSaving(true);
+      
+      const { error } = await supabase
+        .from('subsections')
+        .update({
+          name: editFormData.name,
+          tenant_name: editFormData.tenant_name,
+          category: editFormData.category,
+          coc_number: editFormData.coc_number,
+          coc_type: editFormData.coc_type,
+          coc_issue_date: editFormData.coc_issue_date || null,
+          meter_serial_number: editFormData.meter_serial_number,
+          ct_ratio: editFormData.ct_ratio,
+          is_coc_required: editFormData.is_coc_required
+        })
+        .eq('id', subsectionId);
+      
+      if (error) throw error;
+      
+      toast.success("Subsection updated successfully");
+      setIsEditDialogOpen(false);
+      
+      // Refresh the data
+      await fetchSubsectionData();
+    } catch (error) {
+      console.error("Error updating subsection:", error);
+      toast.error("Failed to update subsection");
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -972,7 +1049,7 @@ const SubsectionDetail = () => {
         </div>
         <div className="flex gap-2">
           <Button variant="outline">Export Reports</Button>
-          <Button variant="outline">
+          <Button variant="outline" onClick={handleOpenEditDialog}>
             <Edit className="mr-2 h-4 w-4" />
             Edit
           </Button>
@@ -2118,6 +2195,143 @@ const SubsectionDetail = () => {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {/* Edit Subsection Dialog */}
+      <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>Edit Subsection</DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-name">Subsection Name*</Label>
+                <Input
+                  id="edit-name"
+                  value={editFormData.name}
+                  onChange={(e) => setEditFormData({...editFormData, name: e.target.value})}
+                  placeholder="e.g., Shop 1A"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-tenant">Tenant Name</Label>
+                <Input
+                  id="edit-tenant"
+                  value={editFormData.tenant_name}
+                  onChange={(e) => setEditFormData({...editFormData, tenant_name: e.target.value})}
+                  placeholder="e.g., ABC Corporation"
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="edit-category">Category</Label>
+                <Input
+                  id="edit-category"
+                  value={editFormData.category}
+                  onChange={(e) => setEditFormData({...editFormData, category: e.target.value})}
+                  placeholder="e.g., Electrical"
+                />
+              </div>
+              
+              <div className="space-y-2">
+                <Label htmlFor="edit-coc-required">COC Required</Label>
+                <Select 
+                  value={editFormData.is_coc_required ? "yes" : "no"}
+                  onValueChange={(value) => setEditFormData({...editFormData, is_coc_required: value === "yes"})}
+                >
+                  <SelectTrigger id="edit-coc-required">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="yes">Yes</SelectItem>
+                    <SelectItem value="no">No</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-medium mb-3">Certificate of Compliance (COC)</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-coc-number">COC Number</Label>
+                  <Input
+                    id="edit-coc-number"
+                    value={editFormData.coc_number}
+                    onChange={(e) => setEditFormData({...editFormData, coc_number: e.target.value})}
+                    placeholder="e.g., COC-2024-001"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-coc-type">COC Type</Label>
+                  <Input
+                    id="edit-coc-type"
+                    value={editFormData.coc_type}
+                    onChange={(e) => setEditFormData({...editFormData, coc_type: e.target.value})}
+                    placeholder="e.g., Electrical"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-coc-date">COC Issue Date</Label>
+                  <Input
+                    id="edit-coc-date"
+                    type="date"
+                    value={editFormData.coc_issue_date}
+                    onChange={(e) => setEditFormData({...editFormData, coc_issue_date: e.target.value})}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="border-t pt-4 mt-4">
+              <h4 className="font-medium mb-3">Metering Information</h4>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="edit-meter-serial">Meter Serial Number</Label>
+                  <Input
+                    id="edit-meter-serial"
+                    value={editFormData.meter_serial_number}
+                    onChange={(e) => setEditFormData({...editFormData, meter_serial_number: e.target.value})}
+                    placeholder="e.g., MTR-123456"
+                  />
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="edit-ct-ratio">CT Ratio</Label>
+                  <Input
+                    id="edit-ct-ratio"
+                    value={editFormData.ct_ratio}
+                    onChange={(e) => setEditFormData({...editFormData, ct_ratio: e.target.value})}
+                    placeholder="e.g., 100:5"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setIsEditDialogOpen(false)}
+              disabled={saving}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={handleSaveEdit}
+              disabled={saving || !editFormData.name}
+            >
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
