@@ -915,13 +915,49 @@ const SubsectionDetail = () => {
     }
   };
 
-  const handleDownloadDocument = (url: string, fileName: string) => {
+  const handleDownloadDocument = async (url: string, fileName: string) => {
     if (!url) {
       toast.error("Document URL not available");
       return;
     }
-    window.open(url, '_blank');
-    toast.success(`Opening ${fileName}`);
+
+    try {
+      // Extract the file path from the storage URL
+      let filePath = '';
+      
+      if (url.includes('/storage/v1/object/public/documents/')) {
+        filePath = url.split('/storage/v1/object/public/documents/')[1];
+      } else if (url.includes('/storage/v1/object/sign/documents/')) {
+        filePath = url.split('/storage/v1/object/sign/documents/')[1].split('?')[0];
+      } else if (url.includes('documents/')) {
+        filePath = url.split('documents/')[1].split('?')[0];
+      }
+
+      if (!filePath) {
+        console.error("Could not extract file path from URL:", url);
+        toast.error("Invalid document URL format");
+        return;
+      }
+
+      // Create a signed URL for the private document (valid for 1 hour)
+      const { data: signedData, error: signError } = await supabase
+        .storage
+        .from('documents')
+        .createSignedUrl(decodeURIComponent(filePath), 3600);
+
+      if (signError || !signedData) {
+        console.error("Error creating signed URL:", signError);
+        toast.error("Failed to access document");
+        return;
+      }
+
+      // Open the document in a new tab
+      window.open(signedData.signedUrl, '_blank');
+      toast.success(`Opening ${fileName}`);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+      toast.error("Failed to download document");
+    }
   };
 
   const handleCreateInspection = async () => {
