@@ -12,6 +12,7 @@ interface ComprehensiveInspectionReportProps {
   subsectionName: string;
   templateId?: string | null;
   subsectionId?: string;
+  siteLogoUrl?: string | null;
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -20,6 +21,7 @@ export const ComprehensiveInspectionReport = ({
   subsectionName,
   templateId,
   subsectionId,
+  siteLogoUrl,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -110,14 +112,43 @@ export const ComprehensiveInspectionReport = ({
       const logoX = (pageWidth - logoBoxWidth) / 2;
       const logoY = 40;
       
-      doc.setDrawColor(180, 180, 180);
-      doc.setLineWidth(0.5);
-      doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
-      
-      doc.setTextColor(180, 180, 180);
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
-      doc.text('COMPANY LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
+      // Try to load and display site logo
+      if (siteLogoUrl) {
+        try {
+          const response = await fetch(siteLogoUrl);
+          const blob = await response.blob();
+          const logoDataUrl = await new Promise<string>((resolve) => {
+            const reader = new FileReader();
+            reader.onloadend = () => resolve(reader.result as string);
+            reader.readAsDataURL(blob);
+          });
+          
+          // Add logo image with border
+          doc.setDrawColor(180, 180, 180);
+          doc.setLineWidth(0.5);
+          doc.addImage(logoDataUrl, 'JPEG', logoX, logoY, logoBoxWidth, logoBoxHeight);
+          doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
+        } catch (error) {
+          console.error('Error loading site logo:', error);
+          // Fallback to placeholder
+          doc.setDrawColor(180, 180, 180);
+          doc.setLineWidth(0.5);
+          doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
+          doc.setTextColor(180, 180, 180);
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'normal');
+          doc.text('SITE LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
+        }
+      } else {
+        // No logo provided, show placeholder
+        doc.setDrawColor(180, 180, 180);
+        doc.setLineWidth(0.5);
+        doc.rect(logoX, logoY, logoBoxWidth, logoBoxHeight);
+        doc.setTextColor(180, 180, 180);
+        doc.setFontSize(10);
+        doc.setFont(undefined, 'normal');
+        doc.text('SITE LOGO', pageWidth / 2, logoY + logoBoxHeight / 2, { align: 'center' });
+      }
       
       // Main title - black, bold, large
       doc.setTextColor(0, 0, 0);
@@ -126,7 +157,7 @@ export const ComprehensiveInspectionReport = ({
       const reportTitle = template?.name || 'Inspection Report';
       doc.text(reportTitle, pageWidth / 2, 120, { align: 'center' });
       
-      // Subtitle box with light gray background
+      // Subtitle box with light gray background - using subsection name
       const subtitleBoxY = 140;
       const subtitleBoxHeight = 15;
       doc.setFillColor(240, 240, 240);
@@ -135,8 +166,7 @@ export const ComprehensiveInspectionReport = ({
       doc.setTextColor(80, 80, 80);
       doc.setFontSize(11);
       doc.setFont(undefined, 'normal');
-      const subtitle = template?.description || 'Low Voltage Electrical Board Assessment';
-      doc.text(subtitle, pageWidth / 2, subtitleBoxY + 10, { align: 'center' });
+      doc.text(subsectionName, pageWidth / 2, subtitleBoxY + 10, { align: 'center' });
       
       // Report details box
       const detailsBoxY = 175;
