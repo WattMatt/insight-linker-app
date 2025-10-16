@@ -5,6 +5,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
@@ -41,10 +42,22 @@ interface InspectionTemplate {
 
 const ITEMS_PER_PAGE = 9;
 
+// Predefined template categories
+const TEMPLATE_CATEGORIES = [
+  { value: "all", label: "All Templates" },
+  { value: "General", label: "General" },
+  { value: "Medium Voltage", label: "Medium Voltage" },
+  { value: "Low Voltage", label: "Low Voltage" },
+  { value: "Generator", label: "Generator" },
+  { value: "Solar", label: "Solar" },
+  { value: "Progress", label: "Progress" },
+] as const;
+
 const InspectionTemplates = () => {
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [selectedCategory, setSelectedCategory] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
 
   useEffect(() => {
@@ -316,19 +329,21 @@ const InspectionTemplates = () => {
     }
   };
 
-  const groupedTemplates = templates.reduce((acc, template) => {
-    if (!acc[template.category]) {
-      acc[template.category] = [];
-    }
-    acc[template.category].push(template);
-    return acc;
-  }, {} as Record<string, InspectionTemplate[]>);
+  // Filter templates by selected category
+  const filteredTemplates = selectedCategory === "all" 
+    ? templates 
+    : templates.filter(template => template.category === selectedCategory);
 
   // Pagination
-  const totalPages = Math.ceil(templates.length / ITEMS_PER_PAGE);
+  const totalPages = Math.ceil(filteredTemplates.length / ITEMS_PER_PAGE);
   const startIndex = (currentPage - 1) * ITEMS_PER_PAGE;
   const endIndex = startIndex + ITEMS_PER_PAGE;
-  const currentTemplates = templates.slice(startIndex, endIndex);
+  const currentTemplates = filteredTemplates.slice(startIndex, endIndex);
+
+  // Reset to page 1 when category changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [selectedCategory]);
 
   const goToPage = (page: number) => {
     setCurrentPage(Math.max(1, Math.min(page, totalPages)));
@@ -360,22 +375,41 @@ const InspectionTemplates = () => {
         </Button>
       </div>
 
-      {templates.length === 0 ? (
-        <Card>
-          <CardContent className="pt-12 pb-12 text-center">
-            <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-            <h3 className="text-lg font-semibold mb-2">No templates yet</h3>
-            <p className="text-muted-foreground mb-4">
-              Create your first inspection template to streamline your workflow
-            </p>
-            <Button>
-              <Plus className="mr-2 h-4 w-4" />
-              Create First Template
-            </Button>
-          </CardContent>
-        </Card>
-      ) : (
-        <>
+      <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-7">
+          {TEMPLATE_CATEGORIES.map((category) => (
+            <TabsTrigger key={category.value} value={category.value}>
+              {category.label}
+            </TabsTrigger>
+          ))}
+        </TabsList>
+
+        {TEMPLATE_CATEGORIES.map((category) => (
+          <TabsContent key={category.value} value={category.value} className="space-y-4">
+            {currentTemplates.length === 0 ? (
+              <Card>
+                <CardContent className="pt-12 pb-12 text-center">
+                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <h3 className="text-lg font-semibold mb-2">
+                    {templates.length === 0 
+                      ? "No templates yet" 
+                      : `No ${category.label} templates`}
+                  </h3>
+                  <p className="text-muted-foreground mb-4">
+                    {templates.length === 0 
+                      ? "Create your first inspection template to streamline your workflow"
+                      : `No templates found in the ${category.label} category`}
+                  </p>
+                  {templates.length === 0 && (
+                    <Button>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Create First Template
+                    </Button>
+                  )}
+                </CardContent>
+              </Card>
+            ) : (
+              <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {currentTemplates.map((template) => (
               <Card key={template.id} className="hover:shadow-lg transition-shadow">
@@ -479,10 +513,13 @@ const InspectionTemplates = () => {
           )}
 
           <div className="text-center text-sm text-muted-foreground">
-            Showing {startIndex + 1}-{Math.min(endIndex, templates.length)} of {templates.length} templates
+            Showing {startIndex + 1}-{Math.min(endIndex, filteredTemplates.length)} of {filteredTemplates.length} templates
           </div>
-        </>
-      )}
+            </>
+            )}
+          </TabsContent>
+        ))}
+      </Tabs>
 
       {/* Template Preview Dialog - WYSIWYG PDF Preview */}
       <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
