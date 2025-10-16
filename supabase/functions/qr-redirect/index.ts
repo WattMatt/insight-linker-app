@@ -31,13 +31,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Get the app origin from Referer header or construct from environment
-    const referer = req.headers.get('referer');
-    let appOrigin = 'https://7b7a829f-6566-4e31-a58f-428ee0cc1c75.lovableproject.com';
-    if (referer) {
-      const refererUrl = new URL(referer);
-      appOrigin = refererUrl.origin;
-    }
+    // Use the actual deployed project URL
+    const appOrigin = 'https://7b7a829f-6566-4e31-a58f-428ee0cc1c75.lovableproject.com';
     console.log('App origin:', appOrigin);
 
     // Check if it's a UUID (new Supabase format)
