@@ -296,7 +296,9 @@ const InspectionDetail = () => {
             sites (
               id,
               name,
-              address
+              address,
+              site_image_url,
+              client_logo_url
             ),
             subsections (
               id,
@@ -316,7 +318,9 @@ const InspectionDetail = () => {
             sites (
               id,
               name,
-              address
+              address,
+              site_image_url,
+              client_logo_url
             ),
             subsections (
               id,
@@ -375,7 +379,9 @@ const InspectionDetail = () => {
       if (inspData.sites) {
         setSiteData({ 
           siteName: inspData.sites.name, 
-          physicalAddress: inspData.sites.address 
+          physicalAddress: inspData.sites.address,
+          siteImageUrl: inspData.sites.site_image_url,
+          clientLogoUrl: inspData.sites.client_logo_url
         });
       }
       
@@ -1171,6 +1177,8 @@ const InspectionDetail = () => {
             siteName={siteData?.siteName || 'Unknown Site'}
             subsectionName={subsectionData?.name || 'Unknown Subsection'}
             templateId={templateId}
+            subsectionId={subsectionId}
+            siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
           />
           <Button 
             variant="outline" 
