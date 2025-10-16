@@ -6,7 +6,11 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -59,6 +63,12 @@ const InspectionTemplates = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
+  const [editTemplate, setEditTemplate] = useState<InspectionTemplate | null>(null);
+  const [editForm, setEditForm] = useState({
+    name: "",
+    description: "",
+    category: ""
+  });
 
   useEffect(() => {
     fetchTemplates();
@@ -92,6 +102,40 @@ const InspectionTemplates = () => {
       toast.error("Failed to fetch templates");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEditClick = (template: InspectionTemplate) => {
+    setEditTemplate(template);
+    setEditForm({
+      name: template.name,
+      description: template.description || "",
+      category: template.category
+    });
+  };
+
+  const handleUpdateTemplate = async () => {
+    if (!editTemplate) return;
+
+    try {
+      const { error } = await supabase
+        .from("inspection_templates")
+        .update({
+          name: editForm.name,
+          description: editForm.description,
+          category: editForm.category,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", editTemplate.id);
+
+      if (error) throw error;
+
+      toast.success("Template updated successfully");
+      setEditTemplate(null);
+      fetchTemplates();
+    } catch (error) {
+      console.error("Error updating template:", error);
+      toast.error("Failed to update template");
     }
   };
 
@@ -460,7 +504,14 @@ const InspectionTemplates = () => {
                       onClick={() => setPreviewTemplate(template)}
                     >
                       <Eye className="mr-2 h-4 w-4" />
-                      View Details
+                      View
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleEditClick(template)}
+                    >
+                      <Edit className="h-4 w-4" />
                     </Button>
                     <Button
                       variant="default"
@@ -810,6 +861,69 @@ const InspectionTemplates = () => {
             }}>
               <Download className="mr-2 h-4 w-4" />
               Download PDF
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Template Dialog */}
+      <Dialog open={!!editTemplate} onOpenChange={() => setEditTemplate(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Edit Template</DialogTitle>
+            <DialogDescription>
+              Update template information
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="template-name">Template Name</Label>
+              <Input
+                id="template-name"
+                value={editForm.name}
+                onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                placeholder="Enter template name"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="template-description">Description</Label>
+              <Textarea
+                id="template-description"
+                value={editForm.description}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Enter template description"
+                rows={3}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="template-category">Category</Label>
+              <Select
+                value={editForm.category}
+                onValueChange={(value) => setEditForm({ ...editForm, category: value })}
+              >
+                <SelectTrigger id="template-category">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {TEMPLATE_CATEGORIES.slice(1).map((category) => (
+                    <SelectItem key={category.value} value={category.value}>
+                      {category.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditTemplate(null)}>
+              Cancel
+            </Button>
+            <Button onClick={handleUpdateTemplate}>
+              Save Changes
             </Button>
           </div>
         </DialogContent>
