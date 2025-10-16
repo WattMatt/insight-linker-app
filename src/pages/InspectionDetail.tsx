@@ -14,6 +14,7 @@ import QRCode from "qrcode";
 // Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
+import { Badge } from "@/components/ui/badge";
 
 interface InspectionTemplate {
   name: string;
@@ -490,6 +491,12 @@ const InspectionDetail = () => {
   };
 
   const handleDeleteImage = async (sectionKey: string, itemKey: string, photoUrl: string, index: number) => {
+    // Only allow deletion of Supabase images
+    if (!photoUrl.includes('supabase.co/storage')) {
+      toast.error("Firebase images cannot be deleted. Please migrate to Supabase first.");
+      return;
+    }
+
     try {
       // Extract file path from URL
       const urlParts = photoUrl.split('/inspection-photos/');
@@ -773,6 +780,7 @@ const InspectionDetail = () => {
                 <div className="grid grid-cols-2 gap-2">
                   {photos.map((photo: string, index: number) => {
                     const isFirebaseUrl = photo.includes('firebasestorage.googleapis.com');
+                    const isSupabaseImage = photo.includes('supabase.co/storage');
                     const migrateKey = `${sectionKey}-${itemKey}-${index}`;
                     const isMigrating = migratingImages.has(migrateKey);
                     
@@ -783,15 +791,21 @@ const InspectionDetail = () => {
                           alt={`Photo ${index + 1}`}
                           className="w-full h-32 object-cover rounded border"
                         />
-                        {/* Firebase migration button hidden from UI */}
-                        <Button
-                          size="icon"
-                          variant="destructive"
-                          className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </Button>
+                        {isFirebaseUrl && (
+                          <Badge variant="secondary" className="absolute top-1 left-1 text-xs">
+                            Legacy
+                          </Badge>
+                        )}
+                        {isSupabaseImage && (
+                          <Button
+                            size="icon"
+                            variant="destructive"
+                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
                       </div>
                     );
                   })}

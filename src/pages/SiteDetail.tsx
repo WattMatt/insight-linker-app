@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2 } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
@@ -25,6 +25,8 @@ interface Site {
   consultant_name: string | null;
   consultant_company: string | null;
   consultant_contact: string | null;
+  site_image_url: string | null;
+  client_logo_url: string | null;
   clients: {
     id: string;
     name: string;
@@ -87,6 +89,8 @@ const SiteDetail = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
 
   useEffect(() => {
     fetchSiteData();
@@ -110,7 +114,7 @@ const SiteDetail = () => {
 
   const fetchSiteData = async () => {
     try {
-      const [siteRes, subsectionsRes, inspectionsRes, docsRes] = await Promise.all([
+  const [siteRes, subsectionsRes, inspectionsRes, docsRes] = await Promise.all([
         supabase
           .from("sites")
           .select("*, clients(id, name)")
@@ -361,6 +365,98 @@ const SiteDetail = () => {
     }
   };
 
+  const handleImageUpload = async (file: File, imageType: 'site_image' | 'client_logo') => {
+    if (!file || !siteId) return;
+    
+    try {
+      setUploadingImage(imageType);
+      toast.info("Uploading image...");
+
+      // Upload file to Supabase storage
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${siteId}/${imageType}-${Date.now()}.${fileExt}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('site-images')
+        .upload(fileName, file);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('site-images')
+        .getPublicUrl(uploadData.path);
+
+      // Update site record
+      const updateColumn = imageType === 'site_image' ? 'site_image_url' : 'client_logo_url';
+      const { error: updateError } = await supabase
+        .from('sites')
+        .update({ [updateColumn]: urlData.publicUrl })
+        .eq('id', siteId);
+
+      if (updateError) throw updateError;
+
+      toast.success("Image uploaded successfully!");
+      fetchSiteData();
+    } catch (error) {
+      console.error("Error uploading image:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      setUploadingImage(null);
+    }
+  };
+
+  const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
+    if (!site) return;
+
+    const imageUrl = imageType === 'site_image' ? site.site_image_url : site.client_logo_url;
+    
+    if (!imageUrl) {
+      toast.error("No image to delete");
+      return;
+    }
+
+    // Only allow deletion of Supabase images
+    if (!imageUrl.includes('supabase.co/storage')) {
+      toast.error("Firebase images cannot be deleted. Please upload a new image to Supabase first.");
+      return;
+    }
+
+    try {
+      // Extract file path from URL and delete from storage
+      const url = new URL(imageUrl);
+      const pathParts = url.pathname.split('/');
+      const bucketIndex = pathParts.indexOf('site-images');
+      if (bucketIndex !== -1) {
+        const filePath = pathParts.slice(bucketIndex + 1).join('/');
+        
+        const { error: storageError } = await supabase.storage
+          .from('site-images')
+          .remove([filePath]);
+
+        if (storageError) {
+          console.error("Error deleting image from storage:", storageError);
+        }
+      }
+
+      // Update site record to remove URL
+      const updateColumn = imageType === 'site_image' ? 'site_image_url' : 'client_logo_url';
+      const { error: updateError } = await supabase
+        .from('sites')
+        .update({ [updateColumn]: null })
+        .eq('id', site.id);
+
+      if (updateError) throw updateError;
+
+      toast.success("Image deleted successfully");
+      fetchSiteData();
+      setDeleteImageType(null);
+    } catch (error) {
+      console.error("Error deleting image:", error);
+      toast.error("Failed to delete image");
+    }
+  };
+
   const CircularProgress = ({ value, color }: { value: number; color: string }) => (
     <div className="relative inline-flex items-center justify-center w-32 h-32">
       <svg className="transform -rotate-90 w-32 h-32">
@@ -480,8 +576,9 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-6">
           <TabsTrigger value="overview">Overview</TabsTrigger>
+          <TabsTrigger value="images">Images</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="subsections">Subsections/Tenants</TabsTrigger>
           <TabsTrigger value="qr-analytics">QR Analytics</TabsTrigger>
@@ -585,6 +682,144 @@ const SiteDetail = () => {
               </CardContent>
             </Card>
           </div>
+        </TabsContent>
+
+        <TabsContent value="images" className="space-y-4">
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Images</CardTitle>
+              <CardDescription>Manage site logo and main image</CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              {/* Site Main Image */}
+              <div>
+                <h3 className="text-sm font-medium mb-3">Site Main Image</h3>
+                {site.site_image_url ? (
+                  <div className="relative group w-fit">
+                    <img
+                      src={site.site_image_url}
+                      alt="Site main image"
+                      className="w-64 h-48 object-cover rounded border"
+                    />
+                    {site.site_image_url.includes('firebasestorage.googleapis.com') && (
+                      <Badge variant="secondary" className="absolute top-2 left-2">
+                        Legacy
+                      </Badge>
+                    )}
+                    {site.site_image_url.includes('supabase.co/storage') && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setDeleteImageType('site_image')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-64 h-48 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
+                    No image
+                  </div>
+                )}
+                <div className="mt-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="site-image-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageUpload(file, 'site_image');
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('site-image-upload')?.click()}
+                    disabled={uploadingImage === 'site_image'}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadingImage === 'site_image' ? 'Uploading...' : 'Upload New Image'}
+                  </Button>
+                </div>
+              </div>
+
+              {/* Client Logo */}
+              <div>
+                <h3 className="text-sm font-medium mb-3">Client Logo</h3>
+                {site.client_logo_url ? (
+                  <div className="relative group w-fit">
+                    <img
+                      src={site.client_logo_url}
+                      alt="Client logo"
+                      className="w-48 h-32 object-contain rounded border p-2"
+                    />
+                    {site.client_logo_url.includes('firebasestorage.googleapis.com') && (
+                      <Badge variant="secondary" className="absolute top-2 left-2">
+                        Legacy
+                      </Badge>
+                    )}
+                    {site.client_logo_url.includes('supabase.co/storage') && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setDeleteImageType('client_logo')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
+                  </div>
+                ) : (
+                  <div className="w-48 h-32 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
+                    No logo
+                  </div>
+                )}
+                <div className="mt-3">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    id="client-logo-upload"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) handleImageUpload(file, 'client_logo');
+                    }}
+                  />
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => document.getElementById('client-logo-upload')?.click()}
+                    disabled={uploadingImage === 'client_logo'}
+                  >
+                    <Upload className="h-4 w-4 mr-2" />
+                    {uploadingImage === 'client_logo' ? 'Uploading...' : 'Upload New Logo'}
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          <AlertDialog open={deleteImageType !== null} onOpenChange={() => setDeleteImageType(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Image</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this {deleteImageType === 'site_image' ? 'site image' : 'client logo'}? This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => deleteImageType && handleDeleteImage(deleteImageType)}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
