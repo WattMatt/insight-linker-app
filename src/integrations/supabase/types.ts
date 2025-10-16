@@ -130,6 +130,7 @@ export type Database = {
           created_at: string
           document_id: string
           id: string
+          report_data: Json | null
           status: string
           subsection_id: string
           validated_at: string
@@ -140,6 +141,7 @@ export type Database = {
           created_at?: string
           document_id: string
           id?: string
+          report_data?: Json | null
           status: string
           subsection_id: string
           validated_at?: string
@@ -150,6 +152,7 @@ export type Database = {
           created_at?: string
           document_id?: string
           id?: string
+          report_data?: Json | null
           status?: string
           subsection_id?: string
           validated_at?: string

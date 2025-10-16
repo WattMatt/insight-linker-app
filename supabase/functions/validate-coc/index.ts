@@ -10,7 +10,7 @@ const corsHeaders = {
 const VALIDATION_PROMPT = `# 🧠 AI Validation Prompt: SANS 10142-1 Compliance Rule Set for Electrical COCs
 
 ## 🎯 Objective
-You are an AI system responsible for validating Electrical Certificates of Compliance (COCs) against the South African National Standard SANS 10142-1. Your task is to apply clause-specific compliance rules to structured COC data and return a detailed validation report indicating pass/fail status, clause violations, and supporting evidence.
+You are an AI system responsible for validating Electrical Certificates of Compliance (COCs) against the South African National Standard SANS 10142-1. Your task is to apply clause-specific compliance rules to structured COC data and return a comprehensive evaluation report.
 
 ## 🧩 SANS 10142-1 Rule Set
 
@@ -24,12 +24,12 @@ You are an AI system responsible for validating Electrical Certificates of Compl
 7. **Equipment Selection**: Voltage rating, IP rating, compatibility
 8. **Wiring Systems**: Cable type, routing, mechanical protection
 9. **Earthing**: TN-S/TT/TN-C-S systems, bonding mandatory
-10. **Circuit Design**: Load calculation, fault current, voltage drop
+10. **Circuit Design**: Load calculation, fault current, voltage drop (max 253V, +10% of 230V)
 
 ### Clauses 11-20 (Protection & Safety)
 11. **Switchgear**: Rated current, breaking capacity, isolation
 12. **Overcurrent Protection**: MCB/Fuse coordination required
-13. **Fault Current**: Earth leakage/RCD/RCBO < 300ms response
+13. **Fault Current**: Earth leakage/RCD/RCBO < 300ms response, instrument test mandatory
 14. **Overvoltage**: Surge arrestor/SPD at DB and generator
 15. **Isolation**: Functional, emergency, maintenance switching
 16. **Terminations**: Ferrules, lugs, crimping with visual + tug test
@@ -51,32 +51,58 @@ You are an AI system responsible for validating Electrical Certificates of Compl
 30. **Remote Monitoring**: Modbus/MQTT with encrypted transmission
 31. **Battery Storage**: DC sizing, ventilation, short-circuit protection, isolation
 
-## 📤 Expected Input Format
-You will receive COC document text extracted from uploaded files. Analyze the content for compliance.
-
 ## 📄 Required Output Format
 Return ONLY a valid JSON object with this exact structure:
 
 \`\`\`json
 {
-  "status": "Pass" | "Fail" | "Incomplete",
-  "violations": [
+  "cocNumber": "extracted COC number",
+  "cocType": "ECA/ECSA/Other",
+  "evaluationDate": "YYYY-MM-DD",
+  "overallStatus": "Pass" | "Fail" | "Incomplete",
+  "installationSummary": "Brief description of the installation including voltage, phases, protection devices, circuits covered",
+  "overallAssessment": "Detailed explanation of the overall status and primary reasons for pass/fail",
+  "criticalFailures": [
     {
-      "clause": "clause_number",
-      "description": "what rule was violated",
-      "evidence": "specific text or measurement from document"
+      "category": "Technical" | "Administrative" | "Safety",
+      "clause": "clause number or section",
+      "description": "What rule was violated",
+      "reason": "Detailed explanation with specific values and limits"
     }
   ],
-  "summary": "brief overall assessment"
+  "administrativeDetails": {
+    "physicalAddress": "extracted address",
+    "erfNumber": "extracted erf/lot number",
+    "registeredPerson": "electrician name",
+    "idNumber": "ID number",
+    "registrationNumber": "registration number",
+    "registrationType": "type of registration",
+    "registrationDate": "date of registration"
+  },
+  "technicalEvaluation": [
+    {
+      "section": "Section name",
+      "clause": "Clause number",
+      "requirement": "What is required",
+      "finding": "What was found in the document",
+      "status": "Pass" | "Fail" | "Not Applicable",
+      "notes": "Additional observations"
+    }
+  ],
+  "recommendations": [
+    "List of recommendations for improvement or remediation"
+  ]
 }
 \`\`\`
 
 ## ✅ Validation Rules
-- All critical clauses must pass for status "Pass"
-- Missing information = "Incomplete" status
+- Extract all administrative details from the COC document
+- Verify voltage limits: max 253V (+10% of 230V) under load
+- Earth leakage instrument test is mandatory (not just push-button test)
+- All critical safety clauses must pass for overall "Pass" status
+- Missing mandatory information = "Incomplete" status
 - Any safety violation = "Fail" status
 - Include specific evidence from document for each violation
-- Be strict but fair in interpretation
 
 Now validate the following COC document:`;
 
@@ -211,16 +237,17 @@ serve(async (req) => {
 
     console.log('Parsed validation result:', JSON.stringify(validationResult));
 
-    // Store validation result in database
+    // Store validation result in database with full report details
     const { error: dbError } = await supabase
       .from('coc_validations')
       .upsert({
         document_id: documentId,
         subsection_id: subsectionId,
-        status: validationResult.status,
-        violations: validationResult.violations || [],
+        status: validationResult.overallStatus || validationResult.status,
+        violations: validationResult.criticalFailures || validationResult.violations || [],
         validated_by: userId,
-        validated_at: new Date().toISOString()
+        validated_at: new Date().toISOString(),
+        report_data: validationResult // Store full report for later retrieval
       }, {
         onConflict: 'document_id'
       });

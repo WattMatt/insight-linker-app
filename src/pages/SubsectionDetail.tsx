@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye } from "lucide-react";
 import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
@@ -18,6 +18,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { COCValidationReport } from "@/components/COCValidationReport";
 
 interface SubsectionData {
   name: string;
@@ -82,6 +83,8 @@ const SubsectionDetail = () => {
   const [openSnagsCount, setOpenSnagsCount] = useState(0);
   const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
   const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
+  const [selectedValidation, setSelectedValidation] = useState<any>(null);
+  const [validationReportOpen, setValidationReportOpen] = useState(false);
 
   useEffect(() => {
     if (subsectionId) {
@@ -1779,18 +1782,32 @@ const SubsectionDetail = () => {
                                 <div className="flex items-center gap-2 mb-1">
                                   <p className="font-medium">{doc.file_name}</p>
                                   {cocValidations[doc.id] && (
-                                    <Badge 
-                                      variant={
-                                        cocValidations[doc.id].status === 'Pass' ? 'default' : 
-                                        cocValidations[doc.id].status === 'Fail' ? 'destructive' : 
-                                        'secondary'
-                                      }
-                                      className="text-xs"
-                                    >
-                                      {cocValidations[doc.id].status === 'Pass' && '✅ '}
-                                      {cocValidations[doc.id].status === 'Fail' && '❌ '}
-                                      {cocValidations[doc.id].status}
-                                    </Badge>
+                                    <div className="flex items-center gap-2">
+                                      <Badge 
+                                        variant={
+                                          cocValidations[doc.id].status === 'Pass' ? 'default' : 
+                                          cocValidations[doc.id].status === 'Fail' ? 'destructive' : 
+                                          'secondary'
+                                        }
+                                        className="text-xs"
+                                      >
+                                        {cocValidations[doc.id].status === 'Pass' && '✅ '}
+                                        {cocValidations[doc.id].status === 'Fail' && '❌ '}
+                                        {cocValidations[doc.id].status}
+                                      </Badge>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => {
+                                          setSelectedValidation(cocValidations[doc.id]);
+                                          setValidationReportOpen(true);
+                                        }}
+                                        title="View full validation report"
+                                        className="h-6 w-6 p-0"
+                                      >
+                                        <Eye className="h-3 w-3" />
+                                      </Button>
+                                    </div>
                                   )}
                                 </div>
                                 <p className="text-sm text-muted-foreground">
@@ -2617,6 +2634,18 @@ const SubsectionDetail = () => {
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Validation Report Dialog */}
+      <Dialog open={validationReportOpen} onOpenChange={setValidationReportOpen}>
+        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>COC Validation Report</DialogTitle>
+          </DialogHeader>
+          {selectedValidation && (
+            <COCValidationReport validation={selectedValidation} />
+          )}
         </DialogContent>
       </Dialog>
     </div>
