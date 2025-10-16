@@ -95,6 +95,7 @@ and ignore trivial items that do not affect safety or legal compliance.
   "cocNumber": "string",
   "cocType": "ECA | ECSA | Other",
   "evaluationDate": "YYYY-MM-DD",
+  "cocIssueDate": "YYYY-MM-DD",
   "overallStatus": "Pass | Fail | Incomplete",
   "installationSummary": "string",
   "overallAssessment": "string",
@@ -126,7 +127,8 @@ and ignore trivial items that do not affect safety or legal compliance.
     "idNumber": "string",
     "registrationNumber": "string",
     "registrationType": "string",
-    "registrationDate": "YYYY-MM-DD"
+    "registrationDate": "YYYY-MM-DD",
+    "cocIssueDate": "YYYY-MM-DD"
   },
   "technicalEvaluation": [
     {
@@ -172,12 +174,19 @@ and ignore trivial items that do not affect safety or legal compliance.
    - **FAIL:** Any safety violation or critical check failure
    - **INCOMPLETE:** Missing mandatory test data or certification details
 
-3. **Ignore Non-Critical Items:**
+3. **Administrative Data Extraction:**
+   - **CRITICAL:** Extract COC number from document header/footer
+   - **CRITICAL:** Extract COC issue date (look for "Issue Date", "Date Issued", "Certificate Date", "Test Date")
+   - Extract registered person details
+   - Extract physical address and erf number
+   - Extract all dates in YYYY-MM-DD format
+
+4. **Ignore Non-Critical Items:**
    - Do not flag aesthetic issues
    - Do not enforce optional clauses unless relevant
    - Focus on safety, legal compliance, and technical adequacy
 
-4. **Remediation Guidance:**
+5. **Remediation Guidance:**
    - Provide specific, actionable steps for each failure
    - Reference clause requirements
    - Suggest corrective actions (replace, repair, re-test, verify)

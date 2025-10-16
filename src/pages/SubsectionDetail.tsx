@@ -247,16 +247,63 @@ const SubsectionDetail = () => {
 
       if (validationData?.validation) {
         const result = validationData.validation;
+        
+        // Extract COC number and issue date from validation results
+        let cocNumberExtracted = result.cocNumber || result.administrativeDetails?.cocNumber;
+        let cocIssueDateExtracted = result.administrativeDetails?.registrationDate;
+        
+        // Try alternative field names
+        if (!cocIssueDateExtracted) {
+          cocIssueDateExtracted = result.installationDate || result.testDate || result.evaluationDate;
+        }
+
+        // Auto-populate COC fields if extracted
+        if (cocNumberExtracted || cocIssueDateExtracted) {
+          try {
+            const updateData: any = {};
+            if (cocNumberExtracted) {
+              updateData.coc_number = cocNumberExtracted;
+            }
+            if (cocIssueDateExtracted) {
+              updateData.coc_issue_date = cocIssueDateExtracted;
+            }
+            
+            const { error: updateError } = await supabase
+              .from('subsections')
+              .update(updateData)
+              .eq('id', subsectionId);
+            
+            if (updateError) {
+              console.error('Error auto-updating COC fields:', updateError);
+            } else {
+              console.log('Auto-populated COC fields:', updateData);
+              // Update local state
+              if (subsection) {
+                setSubsection({
+                  ...subsection,
+                  cocNumber: cocNumberExtracted || subsection.cocNumber,
+                  cocIssueDate: cocIssueDateExtracted || subsection.cocIssueDate
+                });
+              }
+            }
+          } catch (error) {
+            console.error('Error during auto-population:', error);
+          }
+        }
+        
         if (result.status === 'Pass') {
-          toast.success('✅ COC validation passed!');
+          toast.success('✅ COC validation passed!' + (cocNumberExtracted ? ` COC #${cocNumberExtracted} extracted.` : ''));
         } else if (result.status === 'Fail') {
           toast.error(`❌ COC validation failed: ${result.violations?.length || 0} violations found`);
         } else {
           toast.warning(`⚠️ COC validation incomplete`);
         }
         
-        // Refresh validations to show updated results
-        await fetchCocValidations();
+        // Refresh validations and subsection data to show updated results
+        await Promise.all([
+          fetchCocValidations(),
+          fetchSubsectionData()
+        ]);
       } else {
         toast.error('No validation result returned');
       }
