@@ -93,7 +93,7 @@ const ClientDetail = () => {
           source: 'supabase',
           subsections: site.subsections || [],
           inspections: site.inspections || [],
-        }));
+        })).sort((a, b) => a.name.localeCompare(b.name));
         setSites(processedSites);
         setIsFirebaseClient(false);
       } else {
@@ -177,7 +177,7 @@ const ClientDetail = () => {
         };
       });
 
-      setSites(transformedSites);
+      setSites(transformedSites.sort((a, b) => a.name.localeCompare(b.name)));
     } catch (error) {
       console.error("Error fetching Firebase data:", error);
       toast.error("Failed to fetch Firebase data");
