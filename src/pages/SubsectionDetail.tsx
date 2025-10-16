@@ -928,6 +928,8 @@ const SubsectionDetail = () => {
 
       if (fetchError) throw fetchError;
 
+      console.log('Inspections without template_id:', inspections);
+
       if (!inspections || inspections.length === 0) {
         toast.info("No inspections need template linking");
         return;
@@ -944,6 +946,8 @@ const SubsectionDetail = () => {
           template.name.toLowerCase().includes(inspection.status?.toLowerCase() || '')
         );
 
+        console.log(`Inspection "${inspection.title}" with status "${inspection.status}" matched to:`, matchingTemplate?.name);
+
         if (matchingTemplate) {
           const { error: updateError } = await supabase
             .from('inspections')
@@ -952,13 +956,16 @@ const SubsectionDetail = () => {
 
           if (!updateError) {
             linkedCount++;
+            console.log(`Successfully linked inspection ${inspection.id} to template ${matchingTemplate.name}`);
+          } else {
+            console.error('Update error:', updateError);
           }
         }
       }
 
       if (linkedCount > 0) {
         toast.success(`Successfully linked ${linkedCount} inspection${linkedCount > 1 ? 's' : ''} to templates`);
-        fetchSubsectionData();
+        await fetchSubsectionData();
       } else {
         toast.info("No matching templates found for inspections");
       }
@@ -1307,8 +1314,8 @@ const SubsectionDetail = () => {
                         <div>
                           <p className="font-medium">
                             {(() => {
-                              // Find template name by template_id
-                              const template = availableTemplates.find(t => t.id === inspection.template_id);
+                              // Find template name by templateId (camelCase from merged data)
+                              const template = availableTemplates.find(t => t.id === inspection.templateId);
                               return template?.name || inspection.title || inspection.type || 'Inspection';
                             })()}
                           </p>
