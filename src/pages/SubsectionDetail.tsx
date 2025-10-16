@@ -258,7 +258,7 @@ const SubsectionDetail = () => {
         }
 
         // Validate that issue date is a valid date string (YYYY-MM-DD format)
-        const isValidDate = (dateStr: string) => {
+        const isValidDate = (dateStr: string | null | undefined) => {
           if (!dateStr) return false;
           // Check if it matches YYYY-MM-DD format
           if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
@@ -267,12 +267,22 @@ const SubsectionDetail = () => {
           return date instanceof Date && !isNaN(date.getTime());
         };
 
+        // Validate that COC number is valid (not null, not a placeholder)
+        const isValidCocNumber = (cocNum: string | null | undefined) => {
+          if (!cocNum) return false;
+          // Reject placeholder values
+          if (cocNum.toLowerCase().includes('not provided') || 
+              cocNum.toLowerCase().includes('not found') ||
+              cocNum.toLowerCase().includes('n/a')) return false;
+          return cocNum.trim().length > 0;
+        };
+
         // Auto-populate COC fields if extracted and valid
         const updateData: any = {};
-        if (cocNumberExtracted && cocNumberExtracted !== 'Not provided on COC') {
+        if (isValidCocNumber(cocNumberExtracted)) {
           updateData.coc_number = cocNumberExtracted;
         }
-        if (cocIssueDateExtracted && isValidDate(cocIssueDateExtracted)) {
+        if (isValidDate(cocIssueDateExtracted)) {
           updateData.coc_issue_date = cocIssueDateExtracted;
         }
 
