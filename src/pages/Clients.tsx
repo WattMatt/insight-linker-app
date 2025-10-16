@@ -81,18 +81,19 @@ const Clients = () => {
   const fetchSupabaseClients = async (): Promise<Client[]> => {
     const { data, error } = await supabase
       .from("clients")
-      .select("*, sites(id)")
-      .order("name", { ascending: true, nullsFirst: false });
+      .select("*, sites(id)");
 
     if (error) {
       console.error("Error fetching Supabase clients:", error);
       return [];
     }
     
-    // Ensure case-insensitive alphabetical sorting
-    const sortedData = (data || []).sort((a, b) => 
-      a.name.toLowerCase().localeCompare(b.name.toLowerCase())
-    );
+    // Client-side case-insensitive alphabetical sorting
+    const sortedData = (data || []).sort((a, b) => {
+      const nameA = (a.name || '').toLowerCase().trim();
+      const nameB = (b.name || '').toLowerCase().trim();
+      return nameA.localeCompare(nameB);
+    });
     
     // Map and count sites for each client
     return sortedData.map(client => ({
