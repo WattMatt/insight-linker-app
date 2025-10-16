@@ -5,6 +5,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 
 interface SiteSummaryReportProps {
   siteId: string;
@@ -229,22 +230,13 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         return acc;
       }, {} as Record<string, { total: number; compliant: number }>);
       
-      // Abbreviate category names
-      const categoryAbbreviations: Record<string, string> = {
-        'Commercial Activity': 'CA',
-        'Electrical Equipment': 'EE',
-        'Line Shop': 'LS',
-        'Lightning Protection': 'LP',
-        'Generator': 'GEN',
-        'Transformer': 'TRANS'
-      };
-      
+      // Abbreviate category names using our utility
       const categories = Object.keys(categoryGroups).slice(0, 3);
       categories.forEach((cat, idx) => {
         const data = categoryGroups[cat];
         const percentage = Math.round((data.compliant / data.total) * 100) || 0;
         const xPos = startX + (cardWidth + cardSpacing) * idx;
-        const abbrev = categoryAbbreviations[cat] || cat.substring(0, 3).toUpperCase();
+        const abbrev = getCategoryAbbreviation(cat);
         drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant} of ${data.total} compliant`, 220, 53, 69);
       });
       

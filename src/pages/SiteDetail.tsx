@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
+import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1706,7 +1707,24 @@ const SiteDetail = () => {
                           <TableCell className="font-medium">{sub.name}</TableCell>
                           <TableCell>{sub.tenant_name || "—"}</TableCell>
                           <TableCell>
-                            <Badge variant="secondary">{sub.category || "—"}</Badge>
+                            {sub.category ? (
+                              <div className="flex items-center gap-2">
+                                {(() => {
+                                  const CategoryIcon = getCategoryIcon(sub.category);
+                                  const colors = getCategoryColor(sub.category);
+                                  return (
+                                    <>
+                                      <div className={`h-6 w-6 flex items-center justify-center ${colors.bg} ${colors.text} rounded`}>
+                                        <CategoryIcon className="h-4 w-4" />
+                                      </div>
+                                      <span className="text-sm">{sub.category}</span>
+                                    </>
+                                  );
+                                })()}
+                              </div>
+                            ) : (
+                              <span>—</span>
+                            )}
                           </TableCell>
                           <TableCell>
                             <Badge

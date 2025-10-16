@@ -5,7 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Building2, Database, FileText, ClipboardCheck, Download } from "lucide-react";
+import { ArrowLeft, MapPin, Building2, Database, FileText, ClipboardCheck } from "lucide-react";
+import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { toast } from "sonner";
 
 // Data structures
@@ -273,9 +274,18 @@ const ClientDetail = () => {
                                   {subsection.description && (
                                     <p className="text-sm text-muted-foreground mt-1">{subsection.description}</p>
                                   )}
-                                  {subsection.category && (
-                                    <Badge variant="secondary" className="mt-2">{subsection.category}</Badge>
-                                  )}
+                                  {subsection.category && (() => {
+                                    const CategoryIcon = getCategoryIcon(subsection.category);
+                                    const colors = getCategoryColor(subsection.category);
+                                    return (
+                                      <div className="flex items-center gap-2 mt-2">
+                                        <div className={`h-5 w-5 flex items-center justify-center ${colors.bg} ${colors.text} rounded`}>
+                                          <CategoryIcon className="h-3 w-3" />
+                                        </div>
+                                        <span className="text-xs">{subsection.category}</span>
+                                      </div>
+                                    );
+                                  })()}
                                 </div>
                                 {subsection.documents && subsection.documents.length > 0 && (
                                   <Badge variant="outline" className="ml-2">

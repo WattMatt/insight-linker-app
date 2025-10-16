@@ -7,7 +7,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Building2, Zap, Sun, Activity, Users } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw } from "lucide-react";
+import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -1026,11 +1027,15 @@ const SubsectionDetail = () => {
           </Button>
           <div>
             <div className="flex items-center gap-3">
-              <div className={`w-10 h-10 rounded flex items-center justify-center text-white font-bold ${
-                subsection.category === 'HS' ? 'bg-red-500' : 'bg-blue-500'
-              }`}>
-                {subsection.category?.substring(0, 2) || "EE"}
-              </div>
+              {subsection.category && (() => {
+                const CategoryIcon = getCategoryIcon(subsection.category);
+                const colors = getCategoryColor(subsection.category);
+                return (
+                  <div className={`w-10 h-10 rounded flex items-center justify-center ${colors.bg} ${colors.text}`}>
+                    <CategoryIcon className="h-6 w-6" />
+                  </div>
+                );
+              })()}
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">
                   {subsection.name} - {siteData.siteName}
@@ -2206,95 +2211,28 @@ const SubsectionDetail = () => {
             <div className="space-y-3">
               <Label className="text-base font-medium">Subsection Category *</Label>
               <div className="grid grid-cols-2 gap-3">
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Line Shop"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Line Shop"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-blue-100 text-blue-600 rounded">
-                    <Building2 className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Line Shop</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Electrical Equipment"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Electrical Equipment"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-red-100 text-red-600 rounded">
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Electrical Equipment</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Solar"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Solar"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-yellow-100 text-yellow-600 rounded">
-                    <Sun className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Solar</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Metering"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Metering"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-green-100 text-green-600 rounded">
-                    <Activity className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Metering</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Lightning Protection"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Lightning Protection"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-purple-100 text-purple-600 rounded">
-                    <Zap className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Lightning Protection</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setEditFormData({...editFormData, category: "Common Area"})}
-                  className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
-                    editFormData.category === "Common Area"
-                      ? "border-primary bg-primary/5"
-                      : "border-border hover:border-primary/50"
-                  }`}
-                >
-                  <div className="h-6 w-6 flex items-center justify-center bg-gray-100 text-gray-600 rounded">
-                    <Users className="h-4 w-4" />
-                  </div>
-                  <span className="font-medium">Common Area</span>
-                </button>
+                {SUBSECTION_CATEGORIES.map((category) => {
+                  const CategoryIcon = category.icon;
+                  const isSelected = editFormData.category === category.value;
+                  
+                  return (
+                    <button
+                      key={category.value}
+                      type="button"
+                      onClick={() => setEditFormData({...editFormData, category: category.value})}
+                      className={`flex items-center gap-3 p-4 rounded-lg border-2 transition-all ${
+                        isSelected
+                          ? `${category.color.border} ${category.color.bg}`
+                          : "border-border hover:border-primary/50"
+                      }`}
+                    >
+                      <div className={`h-8 w-8 flex items-center justify-center ${category.color.bg} ${category.color.text} rounded`}>
+                        <CategoryIcon className="h-5 w-5" />
+                      </div>
+                      <span className="font-medium text-sm">{category.label}</span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
