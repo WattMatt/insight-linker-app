@@ -624,14 +624,14 @@ const InspectionTemplates = () => {
                                   </p>
                                 </div>
                                 <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                     <div className="text-gray-400 text-center">
                                       <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 1}</div>
                                       <div className="text-[8px]">Image Placeholder</div>
                                       <div className="text-[8px] text-gray-400">1024x768</div>
                                     </div>
                                   </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                     <div className="text-gray-400 text-center">
                                       <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 2}</div>
                                       <div className="text-[8px]">Image Placeholder</div>
@@ -661,7 +661,7 @@ const InspectionTemplates = () => {
                                     {Math.floor(Math.random() * 100) + 50} units
                                   </span>
                                 </div>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                   <div className="text-gray-400 text-center">
                                     <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx + 1}</div>
                                     <div className="text-[8px]">Image Placeholder</div>
@@ -680,19 +680,19 @@ const InspectionTemplates = () => {
                                   </p>
                                 </div>
                                 <div className="mt-3 grid grid-cols-3 gap-2">
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                     <div className="text-gray-400 text-center">
                                       <div className="text-[9px] font-semibold mb-1">PHOTO A</div>
                                       <div className="text-[7px]">Placeholder</div>
                                     </div>
                                   </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                     <div className="text-gray-400 text-center">
                                       <div className="text-[9px] font-semibold mb-1">PHOTO B</div>
                                       <div className="text-[7px]">Placeholder</div>
                                     </div>
                                   </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 aspect-video flex flex-col items-center justify-center rounded">
+                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
                                     <div className="text-gray-400 text-center">
                                       <div className="text-[9px] font-semibold mb-1">PHOTO C</div>
                                       <div className="text-[7px]">Placeholder</div>
@@ -705,7 +705,7 @@ const InspectionTemplates = () => {
                             {item.type === 'image' && (
                               <div className="space-y-2">
                                 <p className="text-xs font-semibold text-gray-700">Photo Documentation:</p>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-full aspect-video flex flex-col items-center justify-center rounded">
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-full h-32 flex flex-col items-center justify-center rounded">
                                   <div className="text-gray-400 text-center">
                                     <div className="text-sm font-semibold mb-2">PHOTO {itemIdx + 1}</div>
                                     <div className="text-xs">Image Placeholder</div>
