@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -90,7 +91,7 @@ const SiteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState("overview");
-  const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string}>>([]);
+  const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string, category_id: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
@@ -111,24 +112,136 @@ const SiteDetail = () => {
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [uploadCategory, setUploadCategory] = useState('');
+  const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
+  const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
+  const [newCategoryName, setNewCategoryName] = useState("");
+  const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSiteData();
     fetchSiteDocuments();
+    fetchDocumentCategories();
   }, [siteId]);
 
   const fetchSiteDocuments = async () => {
     try {
       const { data, error } = await supabase
         .from('site_documents')
-        .select('id, file_name, file_url, category')
+        .select('id, file_name, file_url, category, category_id')
         .eq('site_id', siteId)
-        .order('created_at', { ascending: false });
+        .order('created_at', { ascending: false});
       
       if (error) throw error;
       setSiteDocuments(data || []);
     } catch (error) {
       console.error("Error fetching site documents:", error);
+    }
+  };
+
+  const fetchDocumentCategories = async () => {
+    if (!siteId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('site_document_categories')
+        .select('id, name')
+        .eq('site_id', siteId)
+        .order('order_index');
+      
+      if (error) throw error;
+      
+      // If no categories exist, create default ones
+      if (!data || data.length === 0) {
+        const defaultCategories = [
+          { name: '01 COC', order_index: 1 },
+          { name: '02 Manuals', order_index: 2 },
+          { name: '03 Line Diagram', order_index: 3 },
+          { name: '04 Metering', order_index: 4 },
+          { name: '05 Thermal Reports', order_index: 5 },
+          { name: '06 Other', order_index: 6 }
+        ];
+        
+        const { data: newCategories, error: insertError } = await supabase
+          .from('site_document_categories')
+          .insert(
+            defaultCategories.map(cat => ({
+              site_id: siteId,
+              ...cat
+            }))
+          )
+          .select('id, name');
+        
+        if (!insertError && newCategories) {
+          setDocumentCategories(newCategories);
+        }
+      } else {
+        setDocumentCategories(data);
+      }
+    } catch (error) {
+      console.error("Error fetching document categories:", error);
+    }
+  };
+
+  const handleCreateCategory = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newCategoryName.trim() || !siteId) return;
+    
+    try {
+      toast.info("Creating category...");
+      
+      // Get the current max order_index
+      const maxOrder = documentCategories.length > 0 
+        ? Math.max(...documentCategories.map(cat => parseInt(cat.name.split(' ')[0]) || 0))
+        : 0;
+      
+      const { data, error } = await supabase
+        .from('site_document_categories')
+        .insert({
+          site_id: siteId,
+          name: newCategoryName.trim(),
+          order_index: maxOrder + 1
+        })
+        .select('id, name')
+        .single();
+      
+      if (error) throw error;
+      
+      toast.success("Category created successfully!");
+      setCreateCategoryOpen(false);
+      setNewCategoryName("");
+      fetchDocumentCategories();
+    } catch (error) {
+      console.error("Error creating category:", error);
+      toast.error("Failed to create category");
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    try {
+      // First delete all documents in this category
+      const { error: docsError } = await supabase
+        .from('site_documents')
+        .delete()
+        .eq('category_id', categoryId);
+
+      if (docsError) throw docsError;
+
+      // Then delete the category
+      const { error: categoryError } = await supabase
+        .from('site_document_categories')
+        .delete()
+        .eq('id', categoryId);
+
+      if (categoryError) throw categoryError;
+
+      toast.success(`${categoryName} deleted successfully`);
+      setDeleteCategoryId(null);
+      fetchDocumentCategories();
+      fetchSiteDocuments();
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      toast.error("Failed to delete category");
     }
   };
 
@@ -527,14 +640,22 @@ const SiteDetail = () => {
 
   const handleUploadDocument = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!uploadFile || !uploadCategory.trim() || !siteId) return;
+    if (!uploadFile || !uploadCategoryId || !siteId) return;
 
     try {
       toast.info("Uploading document...");
 
-      // Upload to Supabase storage
-      const fileExt = uploadFile.name.split('.').pop();
-      const fileName = `${siteId}/${Date.now()}-${uploadFile.name}`;
+      // Find the category
+      const category = documentCategories.find(cat => cat.id === uploadCategoryId);
+      if (!category) {
+        toast.error("Document category not found");
+        return;
+      }
+
+      // Upload file to Supabase storage with organized naming
+      const timestamp = Date.now();
+      const sanitizedFileName = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+      const fileName = `${siteId}/${category.name}/${timestamp}-${sanitizedFileName}`;
       
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')
@@ -552,17 +673,17 @@ const SiteDetail = () => {
         .from('site_documents')
         .insert({
           site_id: siteId,
+          category_id: uploadCategoryId,
           file_name: uploadFile.name,
           file_url: urlData.publicUrl,
-          category: uploadCategory.trim(),
+          category: category.name,
         });
 
       if (insertError) throw insertError;
 
       toast.success("Document uploaded successfully!");
-      setUploadDialogOpen(false);
+      setUploadCategoryId(null);
       setUploadFile(null);
-      setUploadCategory('');
       fetchSiteDocuments();
     } catch (error) {
       console.error("Error uploading document:", error);
@@ -1031,60 +1152,96 @@ const SiteDetail = () => {
                   <CardTitle>Site Documents</CardTitle>
                   <CardDescription>Documents uploaded for this site</CardDescription>
                 </div>
-                <Button onClick={() => setUploadDialogOpen(true)}>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Upload Document
+                <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
+                  <Plus className="h-4 w-4 mr-2" />
+                  Create Category
                 </Button>
               </div>
             </CardHeader>
             <CardContent>
-              {siteDocuments.length === 0 ? (
-                <div className="text-center py-8">
-                  <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-                  <h3 className="text-lg font-semibold mb-2">No documents yet</h3>
-                  <p className="text-muted-foreground text-sm">Upload documents to get started</p>
+              {documentCategories.length === 0 ? (
+                <div className="text-center py-12 text-muted-foreground">
+                  <FileText className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No document categories yet. Create one to get started.</p>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  {/* Group documents by category */}
-                  {Array.from(new Set(siteDocuments.map(d => d.category))).map((category) => {
-                    const categoryDocs = siteDocuments.filter(d => d.category === category);
+                <Accordion type="multiple" className="w-full">
+                  {documentCategories.map((category) => {
+                    const categoryDocs = siteDocuments.filter(doc => doc.category_id === category.id);
+                    
                     return (
-                      <div key={category} className="border rounded-lg p-4">
-                        <div className="flex items-center justify-between mb-3">
-                          <div className="flex items-center gap-3">
-                            <FileText className="h-5 w-5 text-muted-foreground" />
-                            <span className="font-medium">{category}</span>
-                          </div>
-                          <Badge variant="secondary">{categoryDocs.length}</Badge>
-                        </div>
-                        <div className="space-y-2 pl-8">
-                          {categoryDocs.map((doc) => (
-                            <div key={doc.id} className="flex items-center justify-between p-2 rounded hover:bg-accent">
-                              <span className="text-sm">{doc.file_name}</span>
-                              <div className="flex items-center gap-2">
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => window.open(doc.file_url, '_blank')}
-                                >
-                                  <Download className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => setDeleteDocumentId(doc.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
+                      <AccordionItem key={category.id} value={category.id}>
+                        <AccordionTrigger className="hover:no-underline">
+                          <div className="flex items-center justify-between w-full pr-4">
+                            <div className="flex items-center gap-3">
+                              <FileText className="h-4 w-4 text-muted-foreground" />
+                              <span className="font-medium">{category.name}</span>
                             </div>
-                          ))}
-                        </div>
-                      </div>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{categoryDocs.length}</Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteCategoryId(category.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent>
+                          <div className="space-y-2 pl-7 pt-2">
+                            <Button 
+                              size="sm" 
+                              variant="outline" 
+                              onClick={() => setUploadCategoryId(category.id)}
+                              className="mb-3"
+                            >
+                              <Upload className="h-4 w-4 mr-2" />
+                              Upload to {category.name}
+                            </Button>
+                            {categoryDocs.length === 0 ? (
+                              <p className="text-sm text-muted-foreground py-4">No documents in this category yet.</p>
+                            ) : (
+                              categoryDocs.map((doc) => (
+                                <div
+                                  key={doc.id}
+                                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                                >
+                                  <div className="flex items-center gap-3 flex-1">
+                                    <div className="w-2 h-2 rounded-full bg-primary" />
+                                    <div className="flex-1">
+                                      <p className="text-sm font-medium">{doc.file_name}</p>
+                                    </div>
+                                  </div>
+                                  <div className="flex items-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => window.open(doc.file_url, '_blank')}
+                                    >
+                                      <Download className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={() => setDeleteDocumentId(doc.id)}
+                                    >
+                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ))
+                            )}
+                          </div>
+                        </AccordionContent>
+                      </AccordionItem>
                     );
                   })}
-                </div>
+                </Accordion>
               )}
             </CardContent>
           </Card>
@@ -1450,34 +1607,57 @@ const SiteDetail = () => {
         </DialogContent>
       </Dialog>
 
+      {/* Create Category Dialog */}
+      <Dialog open={createCategoryOpen} onOpenChange={setCreateCategoryOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Create Document Category</DialogTitle>
+          </DialogHeader>
+          <form onSubmit={handleCreateCategory}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="category-name">Category Name *</Label>
+                <Input
+                  id="category-name"
+                  value={newCategoryName}
+                  onChange={(e) => setNewCategoryName(e.target.value)}
+                  placeholder="e.g., 08 Test Reports"
+                  required
+                />
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setCreateCategoryOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!newCategoryName.trim()}>
+                Create Category
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Upload Document Dialog */}
-      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+      <Dialog open={uploadCategoryId !== null} onOpenChange={(open) => {
+        if (!open) {
+          setUploadCategoryId(null);
+          setUploadFile(null);
+        }
+      }}>
         <DialogContent>
           <DialogHeader>
             <DialogTitle>Upload Document</DialogTitle>
-            <DialogDescription>
-              Upload a new document for this site
-            </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleUploadDocument}>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
-                <Label htmlFor="category">Category *</Label>
+                <Label htmlFor="document-file">Document File *</Label>
                 <Input
-                  id="category"
-                  value={uploadCategory}
-                  onChange={(e) => setUploadCategory(e.target.value)}
-                  placeholder="e.g., Site Plans, Reports, Certificates"
-                  required
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="file">Document File *</Label>
-                <Input
-                  id="file"
+                  id="document-file"
                   type="file"
                   onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
-                  required
+                  required={!uploadFile}
                 />
                 {uploadFile && (
                   <p className="text-sm text-muted-foreground">
@@ -1487,10 +1667,13 @@ const SiteDetail = () => {
               </div>
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setUploadDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => {
+                setUploadCategoryId(null);
+                setUploadFile(null);
+              }}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={!uploadFile || !uploadCategory.trim()}>
+              <Button type="submit" disabled={!uploadFile}>
                 <Upload className="h-4 w-4 mr-2" />
                 Upload
               </Button>
@@ -1498,6 +1681,30 @@ const SiteDetail = () => {
           </form>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Category Dialog */}
+      <AlertDialog open={deleteCategoryId !== null} onOpenChange={() => setDeleteCategoryId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Category</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this category? All documents in this category will also be deleted. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                const category = documentCategories.find(c => c.id === deleteCategoryId);
+                if (category) handleDeleteCategory(deleteCategoryId!, category.name);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };

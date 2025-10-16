@@ -533,9 +533,42 @@ export type Database = {
         }
         Relationships: []
       }
+      site_document_categories: {
+        Row: {
+          created_at: string
+          id: string
+          name: string
+          order_index: number
+          site_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          name: string
+          order_index?: number
+          site_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          name?: string
+          order_index?: number
+          site_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_document_categories_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_documents: {
         Row: {
           category: string
+          category_id: string | null
           created_at: string
           file_count: number | null
           file_name: string
@@ -546,6 +579,7 @@ export type Database = {
         }
         Insert: {
           category: string
+          category_id?: string | null
           created_at?: string
           file_count?: number | null
           file_name: string
@@ -556,6 +590,7 @@ export type Database = {
         }
         Update: {
           category?: string
+          category_id?: string | null
           created_at?: string
           file_count?: number | null
           file_name?: string
@@ -565,6 +600,13 @@ export type Database = {
           updated_at?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "site_documents_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "site_document_categories"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "site_documents_site_id_fkey"
             columns: ["site_id"]
