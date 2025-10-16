@@ -21,6 +21,7 @@ export type Database = {
           details: string | null
           id: string
           user_email: string
+          user_id: string | null
         }
         Insert: {
           action: string
@@ -28,6 +29,7 @@ export type Database = {
           details?: string | null
           id?: string
           user_email: string
+          user_id?: string | null
         }
         Update: {
           action?: string
@@ -35,6 +37,7 @@ export type Database = {
           details?: string | null
           id?: string
           user_email?: string
+          user_id?: string | null
         }
         Relationships: []
       }
