@@ -480,10 +480,43 @@ const SiteDetail = () => {
         return;
       }
 
-      // Insert site document record
+      // Find or create matching category
+      let categoryId: string | null = null;
+      
+      // Try to find existing category that matches Firebase category name
+      const { data: existingCategory } = await supabase
+        .from('site_document_categories')
+        .select('id, name')
+        .eq('site_id', site.id)
+        .eq('name', doc.category)
+        .maybeSingle();
+
+      if (existingCategory) {
+        categoryId = existingCategory.id;
+      } else {
+        // Create new category if it doesn't exist
+        const { data: newCategory, error: categoryError } = await supabase
+          .from('site_document_categories')
+          .insert({
+            site_id: site.id,
+            name: doc.category,
+            order_index: documentCategories.length + 1
+          })
+          .select('id')
+          .single();
+
+        if (categoryError) throw categoryError;
+        categoryId = newCategory.id;
+        
+        // Refresh categories list
+        await fetchDocumentCategories();
+      }
+
+      // Insert site document record with category_id
       const { error: insertError } = await supabase.from('site_documents').insert([{
         site_id: site.id,
         category: doc.category,
+        category_id: categoryId,
         file_name: doc.name,
         file_url: doc.url,
       }]);
