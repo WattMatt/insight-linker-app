@@ -906,6 +906,22 @@ const SubsectionDetail = () => {
 
   const handleUpdateInspectionStatus = async (inspectionId: string, newStatus: string) => {
     try {
+      // If trying to mark as Completed, check if quality_rating is set
+      if (newStatus === 'Completed') {
+        const { data: inspection, error: fetchError } = await supabase
+          .from('inspections')
+          .select('quality_rating')
+          .eq('firebase_id', inspectionId)
+          .single();
+        
+        if (fetchError) throw fetchError;
+        
+        if (!inspection?.quality_rating) {
+          toast.error("Cannot mark inspection as complete without setting a quality rating (1-5). Please edit the inspection and set the quality rating in the General Info tab.");
+          return;
+        }
+      }
+      
       // Update using firebase_id (since inspectionId from the list is the firebase_id)
       const { error } = await supabase
         .from('inspections')
@@ -1035,7 +1051,8 @@ const SubsectionDetail = () => {
   const inspectionArray = Object.entries(inspections);
   const hasSnags = openSnagsCount > 0;
   const cocExpired = subsection.isCocRequired && subsection.cocValidationStatus !== 'Approved';
-  const isNotCompliant = hasSnags || cocExpired;
+  const hasIncompleteInspections = inspectionArray.some(([_, insp]) => insp.status !== 'Completed');
+  const isNotCompliant = hasSnags || cocExpired || hasIncompleteInspections;
 
   return (
     <div className="space-y-6">
@@ -1098,10 +1115,11 @@ const SubsectionDetail = () => {
               <AlertDescription>
                 <strong>Compliance Status: Fail</strong>
                 <br />
-                This status is determined by open snags and COC validation. The following issues were found:
+                This status is determined by open snags, COC validation, and inspection completion status. The following issues were found:
                 <ul className="list-disc list-inside mt-2">
                   {cocExpired && <li>Certificate of Compliance is missing or not approved.</li>}
                   {hasSnags && <li>{openSnagsCount} open snag{openSnagsCount !== 1 ? 's' : ''} requiring attention</li>}
+                  {hasIncompleteInspections && <li>Not all inspections have been marked as completed.</li>}
                 </ul>
               </AlertDescription>
             </Alert>

@@ -762,6 +762,12 @@ const InspectionDetail = () => {
   const handleSave = async () => {
     if (!inspection) return;
 
+    // Validate that if status is Complete, quality_rating must be set
+    if (inspection.type === 'Completed' && !inspection.quality_rating) {
+      toast.error("Cannot mark inspection as complete without setting a quality rating (1-5)");
+      return;
+    }
+
     try {
       setSaving(true);
 
@@ -897,7 +903,32 @@ const InspectionDetail = () => {
               <SelectItem value="5">5 - Excellent</SelectItem>
             </SelectContent>
           </Select>
-          <p className="text-xs text-muted-foreground mt-1">Rate the overall quality of this inspection from 1 (lowest) to 5 (highest)</p>
+          <p className="text-xs text-muted-foreground mt-1">Rate the overall quality of this inspection from 1 (lowest) to 5 (highest). Required to mark inspection as complete.</p>
+        </div>
+        <div>
+          <Label>Inspection Status</Label>
+          <Select
+            value={inspection?.type || 'Pending'}
+            onValueChange={(value) => {
+              // Validate quality rating if trying to mark as Complete
+              if (value === 'Completed' && !inspection?.quality_rating) {
+                toast.error("Please set a quality rating (1-5) before marking the inspection as complete");
+                return;
+              }
+              handleFieldChange('type', value);
+            }}
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select status" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="Pending">Pending</SelectItem>
+              <SelectItem value="In Progress">In Progress</SelectItem>
+              <SelectItem value="Completed">Completed</SelectItem>
+              <SelectItem value="Failed">Failed</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-muted-foreground mt-1">Cannot be marked as complete without setting a quality rating above.</p>
         </div>
         <div>
           <Label>QR Code</Label>
