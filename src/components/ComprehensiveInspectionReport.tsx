@@ -425,7 +425,7 @@ export const ComprehensiveInspectionReport = ({
   return (
     <Button onClick={generateReport} disabled={generating} variant="default">
       <FileText className="mr-2 h-4 w-4" />
-      {generating ? "Generating Report..." : "Generate Comprehensive Report"}
+      {generating ? "Generating PDF..." : "Generate PDF"}
     </Button>
   );
 };
