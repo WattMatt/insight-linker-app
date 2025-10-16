@@ -299,7 +299,28 @@ const SiteDetail = () => {
       setSite(siteRes.data);
       const subs = subsectionsRes.data || [];
       const insp = inspectionsRes.data || [];
-      setSubsections(subs);
+      
+      // Sort subsections numerically (handles "Shop 1", "Shop 2", "Shop 10" correctly)
+      const sortedSubs = subs.sort((a, b) => {
+        // Extract numbers from names using regex
+        const extractNumber = (str: string) => {
+          const match = str.match(/(\d+)/);
+          return match ? parseInt(match[1], 10) : 0;
+        };
+        
+        const numA = extractNumber(a.name);
+        const numB = extractNumber(b.name);
+        
+        // If both have numbers, compare numerically
+        if (numA !== 0 && numB !== 0) {
+          return numA - numB;
+        }
+        
+        // Fallback to alphabetical if no numbers found
+        return a.name.localeCompare(b.name);
+      });
+      
+      setSubsections(sortedSubs);
       setInspections(insp);
       
       // Aggregate documents by category
