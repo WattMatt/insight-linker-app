@@ -143,7 +143,7 @@ const Clients = () => {
       const { error } = await supabase.from("clients").insert([
         {
           ...formData,
-          logo_url,
+          logo_url: logo_url ? `${logo_url}?t=${Date.now()}` : null,
           created_by: user?.id,
         },
       ]);
@@ -178,14 +178,14 @@ const Clients = () => {
               .from('client-logos')
               .remove([oldPath]);
             
-            // Update URL
+            // Update URL with cache-busting
             const { data: { publicUrl: newPublicUrl } } = supabase.storage
               .from('client-logos')
               .getPublicUrl(newPath);
             
             await supabase
               .from("clients")
-              .update({ logo_url: newPublicUrl })
+              .update({ logo_url: `${newPublicUrl}?t=${Date.now()}` })
               .eq("id", insertedClient.data.id);
           }
         }
@@ -274,7 +274,7 @@ const Clients = () => {
         .from("clients")
         .update({
           ...formData,
-          logo_url,
+          logo_url: logo_url ? `${logo_url}?t=${Date.now()}` : editingClient.logo_url,
         })
         .eq("id", editingClient.id);
 
@@ -421,6 +421,7 @@ const Clients = () => {
                 <div className="w-32 h-20 flex items-center justify-center bg-muted rounded-lg">
                   {client.logo_url ? (
                     <img
+                      key={client.logo_url}
                       src={client.logo_url}
                       alt={client.name}
                       className="max-w-full max-h-full object-contain p-2"
@@ -637,6 +638,7 @@ const Clients = () => {
                       <div className="relative group w-fit">
                         <div className="border rounded-lg p-2 w-32 h-20 flex items-center justify-center bg-muted">
                           <img
+                            key={editingClient.logo_url}
                             src={editingClient.logo_url}
                             alt="Client logo"
                             className="max-w-full max-h-full object-contain"

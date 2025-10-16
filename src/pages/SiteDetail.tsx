@@ -389,11 +389,11 @@ const SiteDetail = () => {
         .from('site-images')
         .getPublicUrl(uploadData.path);
 
-      // Update site record
+      // Update site record with cache-busting
       const updateColumn = imageType === 'site_image' ? 'site_image_url' : 'client_logo_url';
       const { error: updateError } = await supabase
         .from('sites')
-        .update({ [updateColumn]: urlData.publicUrl })
+        .update({ [updateColumn]: `${urlData.publicUrl}?t=${Date.now()}` })
         .eq('id', siteId);
 
       if (updateError) throw updateError;
@@ -699,6 +699,7 @@ const SiteDetail = () => {
                 {site.site_image_url ? (
                   <div className="relative group w-fit">
                     <img
+                      key={site.site_image_url}
                       src={site.site_image_url}
                       alt="Site main image"
                       className="w-64 h-48 object-cover rounded border"
@@ -753,6 +754,7 @@ const SiteDetail = () => {
                 {site.client_logo_url ? (
                   <div className="relative group w-fit">
                     <img
+                      key={site.client_logo_url}
                       src={site.client_logo_url}
                       alt="Client logo"
                       className="w-48 h-32 object-contain rounded border p-2"
