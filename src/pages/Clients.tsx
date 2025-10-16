@@ -6,9 +6,21 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
-import { Plus, MoreVertical, Upload, Building2 } from "lucide-react";
+import { Plus, MoreVertical, Upload, Building2, Trash2, Pencil } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Badge } from "@/components/ui/badge";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { z } from "zod";
+
+const clientSchema = z.object({
+  name: z.string().trim().min(1, "Client name is required").max(100, "Name must be less than 100 characters"),
+  contact_person: z.string().trim().max(100, "Contact person must be less than 100 characters").optional(),
+  email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters").optional().or(z.literal("")),
+  phone: z.string().trim().max(20, "Phone must be less than 20 characters").optional(),
+  company_name: z.string().trim().max(200, "Company name must be less than 200 characters").optional(),
+  primary_contact_email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters").optional().or(z.literal("")),
+});
 
 interface Client {
   id: string;
@@ -31,8 +43,11 @@ const Clients = () => {
   const [clients, setClients] = useState<Client[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [deleteLogoConfirm, setDeleteLogoConfirm] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     contact_person: "",
@@ -41,6 +56,7 @@ const Clients = () => {
     company_name: "",
     primary_contact_email: "",
   });
+  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetchAllClients();
@@ -83,8 +99,23 @@ const Clients = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
+    // Validate form data
+    const validation = clientSchema.safeParse(formData);
+    if (!validation.success) {
+      const errors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0].toString()] = err.message;
+        }
+      });
+      setFormErrors(errors);
+      toast.error("Please fix the validation errors");
+      return;
+    }
+
     try {
       setUploading(true);
+      setFormErrors({});
       const { data: { user } } = await supabase.auth.getUser();
       
       let logo_url = null;
@@ -137,6 +168,141 @@ const Clients = () => {
       toast.error("Failed to add client");
     } finally {
       setUploading(false);
+    }
+  };
+
+  const handleEdit = (client: Client) => {
+    setEditingClient(client);
+    setFormData({
+      name: client.name || "",
+      contact_person: client.contact_person || "",
+      email: client.email || "",
+      phone: client.phone || "",
+      company_name: client.company_name || "",
+      primary_contact_email: client.primary_contact_email || "",
+    });
+    setLogoFile(null);
+    setFormErrors({});
+    setEditDialogOpen(true);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingClient) return;
+
+    // Validate form data
+    const validation = clientSchema.safeParse(formData);
+    if (!validation.success) {
+      const errors: Record<string, string> = {};
+      validation.error.errors.forEach((err) => {
+        if (err.path[0]) {
+          errors[err.path[0].toString()] = err.message;
+        }
+      });
+      setFormErrors(errors);
+      toast.error("Please fix the validation errors");
+      return;
+    }
+
+    try {
+      setUploading(true);
+      setFormErrors({});
+      
+      let logo_url = editingClient.logo_url;
+
+      // Upload new logo if provided
+      if (logoFile) {
+        const fileExt = logoFile.name.split('.').pop();
+        const fileName = `${Date.now()}.${fileExt}`;
+        const filePath = `${fileName}`;
+
+        const { error: uploadError } = await supabase.storage
+          .from('client-logos')
+          .upload(filePath, logoFile, {
+            upsert: true
+          });
+
+        if (uploadError) throw uploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from('client-logos')
+          .getPublicUrl(filePath);
+
+        logo_url = publicUrl;
+      }
+      
+      const { error } = await supabase
+        .from("clients")
+        .update({
+          ...formData,
+          logo_url,
+        })
+        .eq("id", editingClient.id);
+
+      if (error) throw error;
+
+      toast.success("Client updated successfully");
+      setEditDialogOpen(false);
+      setEditingClient(null);
+      setFormData({ 
+        name: "", 
+        contact_person: "", 
+        email: "", 
+        phone: "",
+        company_name: "",
+        primary_contact_email: ""
+      });
+      setLogoFile(null);
+      fetchAllClients();
+    } catch (error) {
+      console.error("Error updating client:", error);
+      toast.error("Failed to update client");
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!editingClient?.logo_url) return;
+
+    // Only allow deletion of Supabase images
+    if (!editingClient.logo_url.includes('supabase.co/storage')) {
+      toast.error("Firebase logos cannot be deleted. Please upload a new logo to Supabase first.");
+      return;
+    }
+
+    try {
+      // Extract file path from URL and delete from storage
+      const url = new URL(editingClient.logo_url);
+      const pathParts = url.pathname.split('/');
+      const bucketIndex = pathParts.indexOf('client-logos');
+      if (bucketIndex !== -1) {
+        const filePath = pathParts.slice(bucketIndex + 1).join('/');
+        
+        const { error: storageError } = await supabase.storage
+          .from('client-logos')
+          .remove([filePath]);
+
+        if (storageError) {
+          console.error("Error deleting logo from storage:", storageError);
+        }
+      }
+
+      // Update client record to remove logo URL
+      const { error: updateError } = await supabase
+        .from('clients')
+        .update({ logo_url: null })
+        .eq('id', editingClient.id);
+
+      if (updateError) throw updateError;
+
+      toast.success("Logo deleted successfully");
+      setEditingClient({ ...editingClient, logo_url: null });
+      setDeleteLogoConfirm(false);
+      fetchAllClients();
+    } catch (error) {
+      console.error("Error deleting logo:", error);
+      toast.error("Failed to delete logo");
     }
   };
 
@@ -197,10 +363,15 @@ const Clients = () => {
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => handleEdit(client)}>
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Edit Client
+                    </DropdownMenuItem>
                     <DropdownMenuItem
                       className="text-destructive"
                       onClick={() => handleDelete(client.id)}
                     >
+                      <Trash2 className="h-4 w-4 mr-2" />
                       Delete Client
                     </DropdownMenuItem>
                   </DropdownMenuContent>
@@ -266,6 +437,9 @@ const Clients = () => {
                       placeholder="e.g., Fortress Fund"
                       required
                     />
+                    {formErrors.name && (
+                      <p className="text-sm text-destructive">{formErrors.name}</p>
+                    )}
                   </div>
                 </div>
 
@@ -299,6 +473,9 @@ const Clients = () => {
                         onChange={(e) => setFormData({ ...formData, primary_contact_email: e.target.value })}
                         placeholder="e.g., ernst@wmeng.co.za"
                       />
+                      {formErrors.primary_contact_email && (
+                        <p className="text-sm text-destructive">{formErrors.primary_contact_email}</p>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -347,6 +524,166 @@ const Clients = () => {
             </form>
           </DialogContent>
         </Dialog>
+
+        {/* Edit Client Dialog */}
+        <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Edit Client</DialogTitle>
+              <DialogDescription>
+                Update the client details and logo.
+              </DialogDescription>
+            </DialogHeader>
+            <form onSubmit={handleUpdate}>
+              <div className="space-y-6 py-4">
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Client Details</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-name">Client Name *</Label>
+                    <Input
+                      id="edit-name"
+                      value={formData.name}
+                      onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                      placeholder="e.g., Fortress Fund"
+                      required
+                    />
+                    {formErrors.name && (
+                      <p className="text-sm text-destructive">{formErrors.name}</p>
+                    )}
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Development Manager / Consultant Details</h3>
+                  <div className="space-y-2">
+                    <Label htmlFor="edit-company_name">Company Name</Label>
+                    <Input
+                      id="edit-company_name"
+                      value={formData.company_name}
+                      onChange={(e) => setFormData({ ...formData, company_name: e.target.value })}
+                      placeholder="e.g., Watson Mattheus Consulting Electrical Engineers"
+                    />
+                  </div>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-contact_person">Primary Contact Name</Label>
+                      <Input
+                        id="edit-contact_person"
+                        value={formData.contact_person}
+                        onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                        placeholder="e.g., Ernst De Beer"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="edit-primary_contact_email">Primary Contact Email</Label>
+                      <Input
+                        id="edit-primary_contact_email"
+                        type="email"
+                        value={formData.primary_contact_email}
+                        onChange={(e) => setFormData({ ...formData, primary_contact_email: e.target.value })}
+                        placeholder="e.g., ernst@wmeng.co.za"
+                      />
+                      {formErrors.primary_contact_email && (
+                        <p className="text-sm text-destructive">{formErrors.primary_contact_email}</p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="space-y-4">
+                  <h3 className="font-semibold">Branding</h3>
+                  {editingClient?.logo_url && (
+                    <div className="space-y-3">
+                      <Label>Current Logo</Label>
+                      <div className="relative group w-fit">
+                        <div className="border rounded-lg p-2 w-32 h-20 flex items-center justify-center bg-muted">
+                          <img
+                            src={editingClient.logo_url}
+                            alt="Client logo"
+                            className="max-w-full max-h-full object-contain"
+                          />
+                        </div>
+                        {editingClient.logo_url.includes('firebasestorage.googleapis.com') && (
+                          <Badge variant="secondary" className="absolute top-2 left-2">
+                            Legacy
+                          </Badge>
+                        )}
+                        {editingClient.logo_url.includes('supabase.co/storage') && (
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="destructive"
+                            className="absolute -top-2 -right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setDeleteLogoConfirm(true)}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                  <div className="space-y-2">
+                    <Label>Upload New Logo</Label>
+                    <div className="flex items-center gap-4">
+                      {logoFile && (
+                        <div className="border rounded-lg p-2 w-20 h-20 flex items-center justify-center">
+                          <span className="text-xs text-muted-foreground text-center">New</span>
+                        </div>
+                      )}
+                      <Button
+                        type="button"
+                        variant="outline"
+                        onClick={() => document.getElementById('edit-logo-upload')?.click()}
+                      >
+                        <Upload className="mr-2 h-4 w-4" />
+                        Choose File
+                      </Button>
+                      <input
+                        id="edit-logo-upload"
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                      />
+                      <span className="text-sm text-muted-foreground">
+                        {logoFile ? logoFile.name : "No file chosen"}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setEditDialogOpen(false)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={uploading}>
+                  {uploading ? "Updating..." : "Update Client"}
+                </Button>
+              </DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+
+        {/* Delete Logo Confirmation */}
+        <AlertDialog open={deleteLogoConfirm} onOpenChange={setDeleteLogoConfirm}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete Logo</AlertDialogTitle>
+              <AlertDialogDescription>
+                Are you sure you want to delete this logo? This action cannot be undone.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction 
+                onClick={handleDeleteLogo}
+                className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
       </div>
     </div>
   );
