@@ -966,6 +966,161 @@ export type Database = {
         }
         Relationships: []
       }
+      validation_conversations: {
+        Row: {
+          created_at: string | null
+          created_by: string | null
+          document_id: string
+          id: string
+          status: string | null
+          subsection_id: string
+          title: string | null
+          updated_at: string | null
+          validation_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          created_by?: string | null
+          document_id: string
+          id?: string
+          status?: string | null
+          subsection_id: string
+          title?: string | null
+          updated_at?: string | null
+          validation_id: string
+        }
+        Update: {
+          created_at?: string | null
+          created_by?: string | null
+          document_id?: string
+          id?: string
+          status?: string | null
+          subsection_id?: string
+          title?: string | null
+          updated_at?: string | null
+          validation_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_conversations_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "validation_conversations_validation_id_fkey"
+            columns: ["validation_id"]
+            isOneToOne: false
+            referencedRelation: "coc_validations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      validation_feedback: {
+        Row: {
+          conversation_id: string | null
+          created_at: string | null
+          created_by: string | null
+          description: string
+          feedback_type: string
+          id: string
+          implementation_notes: string | null
+          original_finding: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+          suggested_improvement: string | null
+          title: string
+          validation_id: string | null
+        }
+        Insert: {
+          conversation_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description: string
+          feedback_type: string
+          id?: string
+          implementation_notes?: string | null
+          original_finding?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          suggested_improvement?: string | null
+          title: string
+          validation_id?: string | null
+        }
+        Update: {
+          conversation_id?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          description?: string
+          feedback_type?: string
+          id?: string
+          implementation_notes?: string | null
+          original_finding?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+          suggested_improvement?: string | null
+          title?: string
+          validation_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_feedback_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "validation_conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "validation_feedback_validation_id_fkey"
+            columns: ["validation_id"]
+            isOneToOne: false
+            referencedRelation: "coc_validations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      validation_messages: {
+        Row: {
+          content: string
+          conversation_id: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          metadata: Json | null
+          role: string
+        }
+        Insert: {
+          content: string
+          conversation_id: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          metadata?: Json | null
+          role: string
+        }
+        Update: {
+          content?: string
+          conversation_id?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          metadata?: Json | null
+          role?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "validation_messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "validation_conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

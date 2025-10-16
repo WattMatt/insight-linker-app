@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { COCValidationReport } from "@/components/COCValidationReport";
+import { ValidationChat } from "@/components/ValidationChat";
 
 interface SubsectionData {
   name: string;
@@ -2639,12 +2640,30 @@ const SubsectionDetail = () => {
 
       {/* Validation Report Dialog */}
       <Dialog open={validationReportOpen} onOpenChange={setValidationReportOpen}>
-        <DialogContent className="max-w-6xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
           <DialogHeader>
-            <DialogTitle>COC Validation Report</DialogTitle>
+            <DialogTitle>COC Validation Report & Discussion</DialogTitle>
           </DialogHeader>
           {selectedValidation && (
-            <COCValidationReport validation={selectedValidation} />
+            <div className="flex-1 overflow-y-auto">
+              <Tabs defaultValue="report" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="report">Validation Report</TabsTrigger>
+                  <TabsTrigger value="chat">Ask Questions</TabsTrigger>
+                </TabsList>
+                <TabsContent value="report" className="mt-4">
+                  <COCValidationReport validation={selectedValidation} />
+                </TabsContent>
+                <TabsContent value="chat" className="mt-4">
+                  <ValidationChat
+                    validationId={selectedValidation.document_id}
+                    subsectionId={subsectionId || ''}
+                    documentId={selectedValidation.document_id}
+                    validationData={selectedValidation.report_data}
+                  />
+                </TabsContent>
+              </Tabs>
+            </div>
           )}
         </DialogContent>
       </Dialog>

@@ -27,6 +27,7 @@ import DataImport from "./pages/DataImport";
 
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
+import ValidationFeedback from "./pages/ValidationFeedback";
 
 const queryClient = new QueryClient();
 
@@ -247,6 +248,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Settings />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/validation-feedback"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ValidationFeedback />
                 </DashboardLayout>
               </ProtectedRoute>
             }

@@ -10,7 +10,8 @@ import {
   CloudUpload,
   FileText,
   Settings as SettingsIcon,
-  User as UserIcon
+  User as UserIcon,
+  MessageSquarePlus
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +37,7 @@ const menuItems = [
   { title: "Calendar", url: "/calendar", icon: CalendarDays },
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
+  { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus },
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   
