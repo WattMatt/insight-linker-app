@@ -31,8 +31,8 @@ serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    // Use the actual deployed project URL
-    const appOrigin = 'https://7b7a829f-6566-4e31-a58f-428ee0cc1c75.lovableproject.com';
+    // Use the custom domain
+    const appOrigin = 'https://watsonmattheus.com';
     console.log('App origin:', appOrigin);
 
     // Check if it's a UUID (new Supabase format)
