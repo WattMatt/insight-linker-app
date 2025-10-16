@@ -1605,7 +1605,27 @@ const SubsectionDetail = () => {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={() => window.open(doc.file_url, '_blank')}
+                                      onClick={async () => {
+                                        try {
+                                          // Extract the path from the full URL
+                                          const url = new URL(doc.file_url);
+                                          const pathParts = url.pathname.split('/storage/v1/object/public/documents/');
+                                          const filePath = pathParts[1];
+                                          
+                                          // Generate a signed URL for the private bucket
+                                          const { data, error } = await supabase.storage
+                                            .from('documents')
+                                            .createSignedUrl(filePath, 60); // 60 second expiry
+                                          
+                                          if (error) throw error;
+                                          if (data?.signedUrl) {
+                                            window.open(data.signedUrl, '_blank');
+                                          }
+                                        } catch (error) {
+                                          console.error('Error downloading document:', error);
+                                          toast.error('Failed to download document');
+                                        }
+                                      }}
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
@@ -1850,7 +1870,27 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => window.open(doc.file_url, '_blank')}
+                                onClick={async () => {
+                                  try {
+                                    // Extract the path from the full URL
+                                    const url = new URL(doc.file_url);
+                                    const pathParts = url.pathname.split('/storage/v1/object/public/documents/');
+                                    const filePath = pathParts[1];
+                                    
+                                    // Generate a signed URL for the private bucket
+                                    const { data, error } = await supabase.storage
+                                      .from('documents')
+                                      .createSignedUrl(filePath, 60); // 60 second expiry
+                                    
+                                    if (error) throw error;
+                                    if (data?.signedUrl) {
+                                      window.open(data.signedUrl, '_blank');
+                                    }
+                                  } catch (error) {
+                                    console.error('Error downloading document:', error);
+                                    toast.error('Failed to download document');
+                                  }
+                                }}
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
@@ -2337,7 +2377,27 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="ghost"
-                                onClick={() => window.open(doc.file_url, '_blank')}
+                                onClick={async () => {
+                                  try {
+                                    // Extract the path from the full URL
+                                    const url = new URL(doc.file_url);
+                                    const pathParts = url.pathname.split('/storage/v1/object/public/documents/');
+                                    const filePath = pathParts[1];
+                                    
+                                    // Generate a signed URL for the private bucket
+                                    const { data, error } = await supabase.storage
+                                      .from('documents')
+                                      .createSignedUrl(filePath, 60); // 60 second expiry
+                                    
+                                    if (error) throw error;
+                                    if (data?.signedUrl) {
+                                      window.open(data.signedUrl, '_blank');
+                                    }
+                                  } catch (error) {
+                                    console.error('Error downloading document:', error);
+                                    toast.error('Failed to download document');
+                                  }
+                                }}
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
