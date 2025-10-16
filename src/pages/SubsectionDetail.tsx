@@ -1237,10 +1237,14 @@ const SubsectionDetail = () => {
                           navigate(`${basePath}/inspections/${id}`);
                         }}
                       >
-                         <FileText className="h-5 w-5 text-muted-foreground" />
+                        <FileText className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">
-                            {inspection.title || inspection.type || 'Inspection'}
+                            {(() => {
+                              // Find template name by template_id
+                              const template = availableTemplates.find(t => t.id === inspection.template_id);
+                              return template?.name || inspection.title || inspection.type || 'Inspection';
+                            })()}
                           </p>
                           <p className="text-sm text-muted-foreground">
                             {inspection.date ? format(new Date(inspection.date), "dd MMMM yyyy") : "No date"}
