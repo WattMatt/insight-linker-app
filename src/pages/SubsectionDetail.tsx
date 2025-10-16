@@ -83,6 +83,7 @@ const SubsectionDetail = () => {
   const [newCategoryName, setNewCategoryName] = useState("");
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
 
   useEffect(() => {
     if (subsectionId) {
@@ -460,6 +461,34 @@ const SubsectionDetail = () => {
     } catch (error) {
       console.error("Error creating category:", error);
       toast.error("Failed to create category");
+    }
+  };
+
+  const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
+    try {
+      // First delete all documents in this category
+      const { error: docsError } = await supabase
+        .from('subsection_documents')
+        .delete()
+        .eq('category_id', categoryId);
+
+      if (docsError) throw docsError;
+
+      // Then delete the category
+      const { error: categoryError } = await supabase
+        .from('document_categories')
+        .delete()
+        .eq('id', categoryId);
+
+      if (categoryError) throw categoryError;
+
+      toast.success(`${categoryName} deleted successfully`);
+      setDeleteCategoryId(null);
+      fetchDocumentCategories();
+      fetchSupabaseDocuments();
+    } catch (error) {
+      console.error("Error deleting category:", error);
+      toast.error("Failed to delete category");
     }
   };
 
@@ -1281,7 +1310,19 @@ const SubsectionDetail = () => {
                               <FileText className="h-4 w-4 text-muted-foreground" />
                               <span className="font-medium">{category.name}</span>
                             </div>
-                            <Badge variant="outline">{categoryDocs.length}</Badge>
+                            <div className="flex items-center gap-2">
+                              <Badge variant="outline">{categoryDocs.length}</Badge>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeleteCategoryId(category.id);
+                                }}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
+                            </div>
                           </div>
                         </AccordionTrigger>
                         <AccordionContent>
@@ -1497,6 +1538,30 @@ const SubsectionDetail = () => {
               </form>
             </DialogContent>
           </Dialog>
+
+          {/* Delete Category Dialog */}
+          <AlertDialog open={deleteCategoryId !== null} onOpenChange={() => setDeleteCategoryId(null)}>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete Category</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Are you sure you want to delete this category? All documents in this category will also be deleted. This action cannot be undone.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction 
+                  onClick={() => {
+                    const category = documentCategories.find(c => c.id === deleteCategoryId);
+                    if (category) handleDeleteCategory(deleteCategoryId!, category.name);
+                  }}
+                  className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                >
+                  Delete
+                </AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         </TabsContent>
 
         {/* COC Docs & Metering Data Tab */}
