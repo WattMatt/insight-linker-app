@@ -67,7 +67,8 @@ Deno.serve(async (req) => {
     if (existingUser && isResend) {
       // User exists, resending invite
       userId = existingUser.id;
-      console.log('User already exists, resending invite:', userId);
+      const isConfirmed = existingUser.email_confirmed_at !== null;
+      console.log('User already exists:', userId, 'Email confirmed:', isConfirmed);
       
       // Update user metadata if needed
       const { error: updateError } = await supabase.auth.admin.updateUserById(
@@ -100,6 +101,32 @@ Deno.serve(async (req) => {
         await supabase
           .from('user_roles')
           .insert({ user_id: userId, role });
+      }
+
+      // If user is already confirmed, send password recovery instead of invite
+      if (isConfirmed) {
+        console.log('User is confirmed, sending password recovery email');
+        const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email, {
+          redirectTo,
+        });
+
+        if (recoveryError) {
+          console.error('Password recovery error:', recoveryError);
+          throw new Error(`Failed to send password reset: ${recoveryError.message}`);
+        }
+
+        return new Response(
+          JSON.stringify({
+            success: true,
+            userId: userId,
+            isNewUser: false,
+            message: 'Password reset email sent successfully. User will receive an email to set a new password.',
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        );
       }
     } else if (existingUser && !isResend) {
       throw new Error('User with this email already exists. Use resend invite instead.');
