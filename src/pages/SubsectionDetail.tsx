@@ -205,16 +205,11 @@ const SubsectionDetail = () => {
 
       if (subsectionError || !supabaseSubsection) {
         console.error("Error fetching subsection from Supabase:", subsectionError);
-        toast.error("Subsection not found in database");
+        toast.error("Subsection not found");
         return;
       }
 
-      // Extract firebase IDs and store the client ID
-      const firebaseClientId = supabaseSubsection.sites.clients.firebase_id;
-      const firebaseSiteId = supabaseSubsection.sites.firebase_id;
-      const firebaseSubsectionId = supabaseSubsection.firebase_id;
       const supabaseClientId = supabaseSubsection.sites.clients.id;
-      
       setActualClientId(supabaseClientId);
       
       // Store linked template if available
@@ -222,18 +217,18 @@ const SubsectionDetail = () => {
         setLinkedTemplate(supabaseSubsection.inspection_templates as any);
       }
 
-      console.log('Firebase IDs:', { firebaseClientId, firebaseSiteId, firebaseSubsectionId });
+      // Fetch the full subsection data with details
+      const { data: fullSubsection, error: fullError } = await supabase
+        .from('subsections')
+        .select('*')
+        .eq('id', subsectionId)
+        .single();
 
-      // Fetch subsection data from Firebase
-      const data = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}/subsections/${firebaseSubsectionId}`);
-      
-      if (!data) {
-        toast.error("Subsection data not found in Firebase");
+      if (fullError || !fullSubsection) {
+        toast.error("Failed to load subsection details");
         return;
       }
 
-      console.log('Subsection data:', data);
-      
       // Fetch inspections from Supabase
       const { data: inspectionsData, error: inspectionsError } = await supabase
         .from('inspections')
@@ -245,11 +240,8 @@ const SubsectionDetail = () => {
         console.error("Error fetching inspections:", inspectionsError);
       }
 
-      // Merge Firebase inspections with Supabase inspections
-      const firebaseInspections = data.inspections || {};
-      const inspectionsObj: Record<string, any> = { ...firebaseInspections };
-      
-      // Add Supabase inspections (they will override Firebase ones with same firebase_id)
+      // Convert inspections to object format
+      const inspectionsObj: Record<string, any> = {};
       inspectionsData?.forEach(inspection => {
         const key = inspection.firebase_id || inspection.id;
         inspectionsObj[key] = {
@@ -261,17 +253,35 @@ const SubsectionDetail = () => {
         };
       });
 
-      // Set subsection with merged inspections
+      // Set subsection data
       setSubsection({
-        ...data,
+        name: fullSubsection.name,
+        tenantName: fullSubsection.tenant_name,
+        category: fullSubsection.category || '',
+        cocNumber: fullSubsection.coc_number,
+        cocIssueDate: fullSubsection.coc_issue_date,
+        cocType: fullSubsection.coc_type,
+        meterSerialNumber: fullSubsection.meter_serial_number,
+        ctRatio: fullSubsection.ct_ratio,
+        isCocRequired: fullSubsection.is_coc_required ?? true,
         inspections: inspectionsObj
       });
-      setCocType(data.cocType || '');
-      setCocValidationStatus(data.cocValidationStatus || '');
+      setCocType(fullSubsection.coc_type || '');
+      setCocValidationStatus(fullSubsection.coc_status || '');
       
       // Fetch site info for header
-      const siteInfo = await readFirebaseData(`/clients/${firebaseClientId}/${firebaseSiteId}`);
-      setSiteData(siteInfo);
+      const { data: siteInfo } = await supabase
+        .from('sites')
+        .select('name, address, clients(name)')
+        .eq('id', supabaseSubsection.site_id)
+        .single();
+      
+      if (siteInfo) {
+        setSiteData({
+          siteName: siteInfo.name,
+          clientInfo: siteInfo.clients?.name || ''
+        });
+      }
     } catch (error) {
       console.error("Error fetching subsection data:", error);
       toast.error("Failed to load subsection data");

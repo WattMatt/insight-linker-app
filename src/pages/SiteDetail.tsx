@@ -337,19 +337,11 @@ const SiteDetail = () => {
       
       setDocuments(aggregated);
 
-      // Fetch Firebase documents if site has firebase_id
-      if (siteRes.data.firebase_id && siteRes.data.clients) {
+      // Firebase document fetching removed - only using Supabase now
+      if (false) {
         try {
-          // First, get the client's firebase_id
-          const { data: clientData } = await supabase
-            .from('clients')
-            .select('firebase_id')
-            .eq('id', siteRes.data.client_id)
-            .maybeSingle();
-          
-          if (clientData?.firebase_id) {
-            // Sites are nested under clients in Firebase: clients/{clientFirebaseId}/{siteFirebaseId}
-            const fbSiteData = await readFirebaseData(`clients/${clientData.firebase_id}/${siteRes.data.firebase_id}`);
+          if (false) {
+            const fbSiteData = null;
             if (fbSiteData) {
               const fbDocs: FirebaseDocument[] = [];
               const siteDocuments = fbSiteData.siteDocuments || fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;

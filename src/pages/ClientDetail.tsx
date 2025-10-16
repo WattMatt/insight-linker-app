@@ -81,24 +81,23 @@ const ClientDetail = () => {
         .eq("id", clientId)
         .maybeSingle();
 
-      if (supabaseClient) {
-        // It's a Supabase client
-        setClient({ ...supabaseClient, source: 'supabase' });
-        
-        // Process sites with nested data
-        const processedSites = (supabaseClient.sites || []).map((site: any) => ({
-          ...site,
-          source: 'supabase',
-          subsections: site.subsections || [],
-          inspections: site.inspections || [],
-        })).sort((a, b) => a.name.localeCompare(b.name));
-        setSites(processedSites);
-        setIsFirebaseClient(false);
-      } else {
-        // Check if it's a Firebase client ID
-        setIsFirebaseClient(true);
-        await fetchFirebaseClientData(clientId);
+      if (!supabaseClient) {
+        toast.error("Client not found");
+        return;
       }
+
+      // It's a Supabase client
+      setClient({ ...supabaseClient, source: 'supabase' });
+      
+      // Process sites with nested data
+      const processedSites = (supabaseClient.sites || []).map((site: any) => ({
+        ...site,
+        source: 'supabase',
+        subsections: site.subsections || [],
+        inspections: site.inspections || [],
+      })).sort((a, b) => a.name.localeCompare(b.name));
+      setSites(processedSites);
+      setIsFirebaseClient(false);
     } catch (error) {
       console.error("Error fetching client data:", error);
       toast.error("Failed to fetch client data");
@@ -107,118 +106,6 @@ const ClientDetail = () => {
     }
   };
 
-  const fetchFirebaseClientData = async (firebaseClientId: string) => {
-    try {
-      const data = await readFirebaseData(`/clients/${firebaseClientId}`);
-      if (!data) {
-        toast.error("Client not found in Firebase");
-        return;
-      }
-
-      setFirebaseData(data);
-      
-      // Transform Firebase client data
-      setClient({
-        id: firebaseClientId,
-        name: data.name || data.clientName || data.Name || firebaseClientId,
-        contact_person: data.contactPerson || data.contact_person || null,
-        email: data.email || data.Email || null,
-        phone: data.phone || data.Phone || null,
-        company_name: data.companyName || data.company_name || null,
-        logo_url: data.logoUrl || data.logo_url || null,
-        source: 'firebase',
-        firebaseId: firebaseClientId,
-      });
-
-      // Transform Firebase sites
-      const firebaseSites = data.sites || data.Sites || {};
-      const transformedSites: Site[] = Object.entries(firebaseSites).map(([siteId, siteData]: [string, any]) => {
-        // Transform subsections
-        const subsections = siteData.subsections || siteData.Subsections || {};
-        const transformedSubsections = Object.entries(subsections).map(([subId, subData]: [string, any]) => {
-          // Transform documents
-          const documents = subData.documents || subData.Documents || {};
-          const transformedDocuments = Object.entries(documents).map(([docId, docData]: [string, any]) => ({
-            id: docId,
-            file_name: docData.fileName || docData.file_name || docData.name || 'Unnamed Document',
-            file_url: docData.fileUrl || docData.file_url || docData.url || '',
-            category: docData.category || docData.Category || 'General',
-          }));
-
-          return {
-            id: subId,
-            name: subData.name || subData.subsectionName || subData.Name || 'Unnamed Subsection',
-            description: subData.description || subData.Description || null,
-            category: subData.category || subData.Category || null,
-            documents: transformedDocuments,
-          };
-        });
-
-        // Transform inspections
-        const inspections = siteData.inspections || siteData.Inspections || {};
-        const transformedInspections = Object.entries(inspections).map(([inspId, inspData]: [string, any]) => ({
-          id: inspId,
-          title: inspData.title || inspData.Title || 'Unnamed Inspection',
-          status: inspData.status || inspData.Status || 'Pending',
-          priority: inspData.priority || inspData.Priority || 'Medium',
-          inspection_date: inspData.inspectionDate || inspData.inspection_date || null,
-        }));
-
-        return {
-          id: siteId,
-          name: siteData.name || siteData.siteName || siteData.Name || 'Unnamed Site',
-          address: siteData.address || siteData.Address || null,
-          site_type: siteData.siteType || siteData.site_type || siteData.type || null,
-          source: 'firebase' as const,
-          subsections: transformedSubsections,
-          inspections: transformedInspections,
-        };
-      });
-
-      setSites(transformedSites.sort((a, b) => a.name.localeCompare(b.name)));
-    } catch (error) {
-      console.error("Error fetching Firebase data:", error);
-      toast.error("Failed to fetch Firebase data");
-    }
-  };
-
-  const handleMigrateClient = async () => {
-    if (!client?.firebaseId || !firebaseData) {
-      toast.error("Cannot migrate: Missing Firebase data");
-      return;
-    }
-
-    setMigrating(true);
-    const toastId = toast.loading(`Migrating ${client.name}...`);
-
-    try {
-      const result = await migrateClientToSupabase(
-        client.firebaseId,
-        firebaseData,
-        (message) => {
-          toast.loading(message, { id: toastId });
-        }
-      );
-
-      if (result.success) {
-        toast.success(
-          `Successfully migrated ${client.name}! Sites: ${result.sitesCount}, Subsections: ${result.subsectionsCount}, Inspections: ${result.inspectionsCount}, Documents: ${result.documentsCount}`,
-          { id: toastId, duration: 5000 }
-        );
-        // Navigate to the new Supabase client
-        if (result.clientId) {
-          navigate(`/clients/${result.clientId}`);
-        }
-      } else {
-        toast.error(`Failed to migrate: ${result.error}`, { id: toastId });
-      }
-    } catch (error) {
-      console.error("Migration error:", error);
-      toast.error("Migration failed", { id: toastId });
-    } finally {
-      setMigrating(false);
-    }
-  };
 
   if (loading) {
     return (
@@ -270,12 +157,6 @@ const ClientDetail = () => {
             </p>
           </div>
         </div>
-        {isFirebaseClient && (
-          <Button onClick={handleMigrateClient} disabled={migrating}>
-            <Download className="h-4 w-4 mr-2" />
-            {migrating ? 'Migrating...' : 'Migrate to Supabase'}
-          </Button>
-        )}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

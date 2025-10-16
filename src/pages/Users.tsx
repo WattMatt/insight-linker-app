@@ -142,12 +142,15 @@ const Users = () => {
   // Send invite to pending user
   const sendInviteMutation = useMutation({
     mutationFn: async (invite: PendingInvite) => {
-      const { sendUserInvite } = await import("@/lib/migration");
-      const result = await sendUserInvite(invite.email, invite.full_name || '');
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to send invite');
+      const { data, error } = await supabase.functions.invoke('invite-user', {
+        body: { email: invite.email, fullName: invite.full_name || '' }
+      });
+      
+      if (error) throw error;
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to send invite');
       }
-      return result;
+      return data;
     },
     onSuccess: () => {
       toast.success("Invitation sent successfully!");
