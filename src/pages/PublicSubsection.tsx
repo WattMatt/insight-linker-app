@@ -364,21 +364,19 @@ const PublicSubsection = () => {
 
       {/* Footer */}
       <footer className="bg-white border-t mt-12 py-6">
-        <div className="container mx-auto px-4 text-center">
-          <p className="text-xs text-muted-foreground flex items-center justify-center gap-2">
-            {companySettings?.company_logo_url ? (
+        <div className="container mx-auto px-4">
+          <div className="flex flex-col items-center gap-3">
+            {companySettings?.company_logo_url && (
               <img 
                 src={companySettings.company_logo_url} 
-                alt="Company Logo" 
-                className="h-6 object-contain"
+                alt={companySettings.company_name || "Company Logo"}
+                className="h-12 w-auto object-contain"
               />
-            ) : (
-              <span className="inline-flex items-center justify-center w-6 h-6 bg-blue-600 text-white rounded text-xs font-bold">
-                WM
-              </span>
             )}
-            Powered by {companySettings?.company_name || 'Watson Mattheus Consulting Electrical Engineers (Pty) Ltd'}
-          </p>
+            <p className="text-xs text-muted-foreground text-center">
+              Powered by {companySettings?.company_name || 'Watson Mattheus Consulting Electrical Engineers (Pty) Ltd'}
+            </p>
+          </div>
         </div>
       </footer>
     </div>
