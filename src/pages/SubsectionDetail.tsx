@@ -819,9 +819,29 @@ const SubsectionDetail = () => {
     }
 
     try {
-      // Get template name
+      // Get template details
       const template = availableTemplates.find(t => t.id === templateToUse) || linkedTemplate;
-      const inspectionTitle = template?.name || 'New Inspection';
+      
+      // Special handling for Site Drawing and Progress inspections
+      let inspectionTitle = template?.name || 'New Inspection';
+      if (template?.category === 'Site Drawing' || template?.category === 'Progress') {
+        // Get site name from siteData or fetch it
+        let siteName = siteData?.siteName || subsection?.name || 'Site';
+        
+        // If we don't have site name, fetch it
+        if (!siteData?.siteName && siteId) {
+          const { data: siteInfo } = await supabase
+            .from('sites')
+            .select('name')
+            .eq('id', siteId)
+            .single();
+          if (siteInfo) siteName = siteInfo.name;
+        }
+        
+        // Format: {Site Name} - {Template Type} - {Date}
+        const formattedDate = format(new Date(newInspectionDate), 'yyyy-MM-dd');
+        inspectionTitle = `${siteName} - ${template.category} - ${formattedDate}`;
+      }
       
       // Generate a unique firebase-style ID for backwards compatibility
       const firebaseId = `-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 9)}`;
