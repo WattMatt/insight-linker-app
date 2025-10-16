@@ -856,7 +856,15 @@ const SubsectionDetail = () => {
         }
       });
 
-      if (migrationError) throw migrationError;
+      if (migrationError) {
+        console.error('Migration error:', migrationError);
+        throw new Error(migrationError.message || 'Migration failed');
+      }
+
+      // Check if migration was successful
+      if (!migrationResult || !migrationResult.success) {
+        throw new Error(migrationResult?.error || 'Migration returned unsuccessful response');
+      }
 
       // Create subsection_documents record
       const { error: insertError } = await supabase
@@ -876,9 +884,19 @@ const SubsectionDetail = () => {
       // Refresh the data
       await fetchSubsectionData();
       
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error migrating document:', error);
-      toast.error(`Failed to migrate ${fileName}: ${error.message}`);
+      
+      // Provide user-friendly error messages
+      let errorMessage = error?.message || 'Unknown error';
+      
+      if (errorMessage.includes('expired') || errorMessage.includes('not found')) {
+        errorMessage = `Cannot access file in Firebase Storage. The download link may have expired. Please re-download the file from Firebase Storage directly.`;
+      }
+      
+      toast.error(`Failed to migrate ${fileName}: ${errorMessage}`, {
+        duration: 6000,
+      });
     } finally {
       setMigratingDocs(prev => {
         const newSet = new Set(prev);

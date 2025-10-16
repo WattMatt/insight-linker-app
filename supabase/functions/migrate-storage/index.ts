@@ -25,7 +25,18 @@ serve(async (req) => {
     const fileResponse = await fetch(firebaseStorageUrl);
     
     if (!fileResponse.ok) {
-      throw new Error(`Failed to fetch file from Firebase: ${fileResponse.statusText}`);
+      // Provide detailed error information
+      const errorDetail = fileResponse.status === 404 
+        ? 'File not found - the Firebase Storage URL may have expired or the file no longer exists'
+        : `Firebase Storage returned ${fileResponse.status}: ${fileResponse.statusText}`;
+      
+      console.error('Firebase fetch failed:', {
+        status: fileResponse.status,
+        statusText: fileResponse.statusText,
+        url: firebaseStorageUrl
+      });
+      
+      throw new Error(errorDetail);
     }
 
     const fileBlob = await fileResponse.blob();
