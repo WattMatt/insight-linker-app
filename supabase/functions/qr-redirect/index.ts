@@ -14,9 +14,10 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const path = url.searchParams.get('path') || url.pathname.replace('/qr-redirect', '');
+    const path = url.searchParams.get('path') || url.pathname.replace('/qr-redirect/', '').replace('/qr-redirect', '');
 
     console.log('QR Redirect received path:', path);
+    console.log('Full URL:', req.url);
 
     if (!path || path === '/') {
       return new Response('Missing path parameter', { 
@@ -29,6 +30,15 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
+
+    // Get the app origin from Referer header or construct from environment
+    const referer = req.headers.get('referer');
+    let appOrigin = 'https://7b7a829f-6566-4e31-a58f-428ee0cc1c75.lovableproject.com';
+    if (referer) {
+      const refererUrl = new URL(referer);
+      appOrigin = refererUrl.origin;
+    }
+    console.log('App origin:', appOrigin);
 
     // Check if it's a UUID (new Supabase format)
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -52,7 +62,8 @@ serve(async (req) => {
       }
 
       // Redirect to public subsection page
-      const redirectUrl = `${supabaseUrl.replace('oltzgidkjxwsukvkomof.supabase.co', 'lovable.app')}/public/subsections/${subsectionId}`;
+      const redirectUrl = `${appOrigin}/public/subsections/${subsectionId}`;
+      console.log('Redirecting to:', redirectUrl);
       return new Response(null, {
         status: 302,
         headers: {
@@ -77,7 +88,8 @@ serve(async (req) => {
 
     if (subsectionByFirebaseId && !fbError) {
       console.log('Found subsection by firebase_id:', subsectionByFirebaseId.id);
-      const redirectUrl = `${supabaseUrl.replace('oltzgidkjxwsukvkomof.supabase.co', 'lovable.app')}/public/subsections/${subsectionByFirebaseId.id}`;
+      const redirectUrl = `${appOrigin}/public/subsections/${subsectionByFirebaseId.id}`;
+      console.log('Redirecting to:', redirectUrl);
       return new Response(null, {
         status: 302,
         headers: {
@@ -118,7 +130,8 @@ serve(async (req) => {
 
       if (matchedSubsection) {
         console.log('Found subsection by name match:', matchedSubsection.id);
-        const redirectUrl = `${supabaseUrl.replace('oltzgidkjxwsukvkomof.supabase.co', 'lovable.app')}/public/subsections/${matchedSubsection.id}`;
+        const redirectUrl = `${appOrigin}/public/subsections/${matchedSubsection.id}`;
+        console.log('Redirecting to:', redirectUrl);
         return new Response(null, {
           status: 302,
           headers: {
