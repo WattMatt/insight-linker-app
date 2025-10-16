@@ -329,7 +329,7 @@ const SiteDetail = () => {
             const fbSiteData = await readFirebaseData(`clients/${clientData.firebase_id}/${siteRes.data.firebase_id}`);
             if (fbSiteData) {
               const fbDocs: FirebaseDocument[] = [];
-              const siteDocuments = fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
+              const siteDocuments = fbSiteData.siteDocuments || fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
               
               if (siteDocuments && typeof siteDocuments === 'object') {
                 Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
@@ -1276,12 +1276,84 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
+          {/* Firebase Documents - Legacy */}
+          {firebaseDocuments.length > 0 && (
+            <Card className="border-amber-500/50">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2">
+                      Firebase Documents (Legacy)
+                      <Badge variant="secondary">Migration Required</Badge>
+                    </CardTitle>
+                    <CardDescription>
+                      These documents exist in Firebase and need to be migrated to Supabase
+                    </CardDescription>
+                  </div>
+                </div>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-3">
+                  {Object.entries(
+                    firebaseDocuments.reduce((acc, doc) => {
+                      if (!acc[doc.category]) acc[doc.category] = [];
+                      acc[doc.category].push(doc);
+                      return acc;
+                    }, {} as Record<string, FirebaseDocument[]>)
+                  ).map(([category, docs]) => (
+                    <div key={category} className="border rounded-lg p-4">
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="font-medium flex items-center gap-2">
+                          <FileText className="h-4 w-4 text-amber-500" />
+                          {category}
+                        </h4>
+                        <Badge variant="outline" className="bg-amber-500/10">
+                          {docs.length} files
+                        </Badge>
+                      </div>
+                      <div className="space-y-2">
+                        {docs.map((doc) => (
+                          <div
+                            key={doc.fbKey}
+                            className="flex items-center justify-between p-2 rounded bg-muted/50"
+                          >
+                            <div className="flex items-center gap-2 flex-1">
+                              <div className="w-2 h-2 rounded-full bg-amber-500" />
+                              <span className="text-sm">{doc.name}</span>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => window.open(doc.url, '_blank')}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => migrateDocument(doc)}
+                                disabled={migrating === doc.fbKey}
+                              >
+                                {migrating === doc.fbKey ? 'Migrating...' : 'Migrate'}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          )}
+
           {/* Site Documents */}
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
                 <div>
-                  <CardTitle>Site Documents</CardTitle>
+                  <CardTitle>Site Documents (Supabase)</CardTitle>
                   <CardDescription>Documents uploaded for this site</CardDescription>
                 </div>
                 <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
