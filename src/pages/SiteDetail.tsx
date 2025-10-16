@@ -108,6 +108,9 @@ const SiteDetail = () => {
     consultant_company: '',
     consultant_contact: '',
   });
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadCategory, setUploadCategory] = useState('');
 
   useEffect(() => {
     fetchSiteData();
@@ -521,6 +524,51 @@ const SiteDetail = () => {
     }
   };
 
+
+  const handleUploadDocument = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!uploadFile || !uploadCategory.trim() || !siteId) return;
+
+    try {
+      toast.info("Uploading document...");
+
+      // Upload to Supabase storage
+      const fileExt = uploadFile.name.split('.').pop();
+      const fileName = `${siteId}/${Date.now()}-${uploadFile.name}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, uploadFile);
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(uploadData.path);
+
+      // Insert document record
+      const { error: insertError } = await supabase
+        .from('site_documents')
+        .insert({
+          site_id: siteId,
+          file_name: uploadFile.name,
+          file_url: urlData.publicUrl,
+          category: uploadCategory.trim(),
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success("Document uploaded successfully!");
+      setUploadDialogOpen(false);
+      setUploadFile(null);
+      setUploadCategory('');
+      fetchSiteDocuments();
+    } catch (error) {
+      console.error("Error uploading document:", error);
+      toast.error("Failed to upload document");
+    }
+  };
 
   const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
     if (!site) return;
@@ -978,8 +1026,16 @@ const SiteDetail = () => {
           {/* Site Documents */}
           <Card>
             <CardHeader>
-              <CardTitle>Site Documents</CardTitle>
-              <CardDescription>Documents uploaded for this site</CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>Site Documents</CardTitle>
+                  <CardDescription>Documents uploaded for this site</CardDescription>
+                </div>
+                <Button onClick={() => setUploadDialogOpen(true)}>
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload Document
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
               {siteDocuments.length === 0 ? (
@@ -1388,6 +1444,55 @@ const SiteDetail = () => {
               </Button>
               <Button type="submit">
                 Save Changes
+              </Button>
+            </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Upload Document Dialog */}
+      <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Upload Document</DialogTitle>
+            <DialogDescription>
+              Upload a new document for this site
+            </DialogDescription>
+          </DialogHeader>
+          <form onSubmit={handleUploadDocument}>
+            <div className="space-y-4 py-4">
+              <div className="space-y-2">
+                <Label htmlFor="category">Category *</Label>
+                <Input
+                  id="category"
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                  placeholder="e.g., Site Plans, Reports, Certificates"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="file">Document File *</Label>
+                <Input
+                  id="file"
+                  type="file"
+                  onChange={(e) => setUploadFile(e.target.files?.[0] || null)}
+                  required
+                />
+                {uploadFile && (
+                  <p className="text-sm text-muted-foreground">
+                    Selected: {uploadFile.name}
+                  </p>
+                )}
+              </div>
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setUploadDialogOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={!uploadFile || !uploadCategory.trim()}>
+                <Upload className="h-4 w-4 mr-2" />
+                Upload
               </Button>
             </DialogFooter>
           </form>
