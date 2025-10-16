@@ -45,7 +45,7 @@ const Sites = () => {
   const fetchData = async () => {
     try {
       const [sitesRes, clientsRes] = await Promise.all([
-        supabase.from("sites").select("*, clients(name)").order("created_at", { ascending: false }),
+        supabase.from("sites").select("*, clients(name)").order("name", { ascending: true }),
         supabase.from("clients").select("id, name").order("name"),
       ]);
 

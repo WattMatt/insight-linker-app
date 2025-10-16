@@ -48,10 +48,12 @@ const ClientSites = () => {
       if (supabaseClient) {
         // It's a Supabase client
         setClientName(supabaseClient.name);
-        const supabaseSites = (supabaseClient.sites || []).map((site: any) => ({
-          ...site,
-          source: 'supabase' as const,
-        }));
+        const supabaseSites = (supabaseClient.sites || [])
+          .map((site: any) => ({
+            ...site,
+            source: 'supabase' as const,
+          }))
+          .sort((a, b) => a.name.localeCompare(b.name));
         setSites(supabaseSites);
         setIsFirebaseClient(false);
       } else {
@@ -124,6 +126,8 @@ const ClientSites = () => {
       }
 
       console.log('Transformed sites:', transformedSites);
+      // Sort alphabetically by name
+      transformedSites.sort((a, b) => a.name.localeCompare(b.name));
       setSites(transformedSites);
     } catch (error) {
       console.error("Error fetching Firebase sites:", error);
