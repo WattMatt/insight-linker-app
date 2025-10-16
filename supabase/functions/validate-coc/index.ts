@@ -117,16 +117,25 @@ serve(async (req) => {
 
     console.log('Starting COC validation for document:', documentId);
 
-    // Download the document
-    console.log('Fetching document from:', documentUrl);
-    const docResponse = await fetch(documentUrl);
-    if (!docResponse.ok) {
-      throw new Error(`Failed to download document: ${docResponse.statusText}`);
+    // Extract the storage path from the URL
+    const urlParts = documentUrl.split('/storage/v1/object/public/documents/')[1];
+    const storagePath = decodeURIComponent(urlParts);
+    
+    console.log('Downloading document from storage:', storagePath);
+    
+    // Download the document using Supabase client (works with private buckets)
+    const { data: fileData, error: downloadError } = await supabase.storage
+      .from('documents')
+      .download(storagePath);
+    
+    if (downloadError || !fileData) {
+      console.error('Storage download error:', downloadError);
+      throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
     }
 
     // For now, we'll work with text-based analysis
     // In production, you'd want to add PDF parsing here
-    const docText = await docResponse.text();
+    const docText = await fileData.text();
     const truncatedText = docText.substring(0, 8000); // Limit context size
 
     console.log('Document fetched, calling AI for validation...');
