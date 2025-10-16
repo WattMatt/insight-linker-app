@@ -38,7 +38,7 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
-  // Firebase Sync hidden from menu but route still accessible for backend operations
+  
 ];
 
 export function AppSidebar() {

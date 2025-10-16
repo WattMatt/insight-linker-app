@@ -42,7 +42,7 @@ export const ComprehensiveInspectionReport = ({
         template = templateData;
       }
 
-      // Image categories to check (Firebase format)
+      // Image categories to check
       const imageCategories = [
         'General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'
       ];
@@ -164,7 +164,7 @@ export const ComprehensiveInspectionReport = ({
         }
       }
 
-      // ===== ADDITIONAL DATA (for Firebase legacy format) =====
+      // ===== ADDITIONAL DATA =====
       const electrical = jsonData.electrical || {};
       const observations = jsonData.observations || [];
       const relayStatus = jsonData.relayStatus || {};
@@ -344,7 +344,7 @@ export const ComprehensiveInspectionReport = ({
         }
       }
 
-      // ===== IMAGES FROM FIREBASE LEGACY FORMAT =====
+      // ===== IMAGES =====
       for (const category of imageCategories) {
         const images = jsonData[`images${category}`] || {};
         const imageArray = Object.values(images).filter((img: any) => img && img.url);

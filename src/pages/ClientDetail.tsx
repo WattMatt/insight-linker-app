@@ -7,8 +7,6 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ArrowLeft, MapPin, Building2, Database, FileText, ClipboardCheck, Download } from "lucide-react";
 import { toast } from "sonner";
-import { readFirebaseData } from "@/lib/firebase";
-import { migrateClientToSupabase } from "@/lib/migration";
 
 // Data structures
 interface Client {

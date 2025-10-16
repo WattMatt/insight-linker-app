@@ -4,8 +4,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Building2, Users, ClipboardCheck, Activity, CheckCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
-import { readFirebaseData } from "@/lib/firebase";
-import { fetchFirebaseClients } from "@/lib/migration";
 
 interface DashboardStats {
   totalClients: number;

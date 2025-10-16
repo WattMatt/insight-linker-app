@@ -11,8 +11,8 @@ import Auth from "./pages/Auth";
 import Dashboard from "./pages/Dashboard";
 import Clients from "./pages/Clients";
 import ClientDetail from "./pages/ClientDetail";
-import ClientSites from "./pages/ClientSites";
-import SiteOverview from "./pages/SiteOverview";
+
+
 import SiteDetail from "./pages/SiteDetail";
 import SubsectionDetail from "./pages/SubsectionDetail";
 import PublicSubsection from "./pages/PublicSubsection";
@@ -24,7 +24,7 @@ import TemplateBuilderPage from "./pages/TemplateBuilderPage";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
 import DataImport from "./pages/DataImport";
-import FirebaseSync from "./pages/FirebaseSync";
+
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 
@@ -87,16 +87,6 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <ClientDetail />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/clients/:clientId/sites"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ClientSites />
                 </DashboardLayout>
               </ProtectedRoute>
             }
@@ -237,16 +227,6 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <DataImport />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/firebase-sync"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <FirebaseSync />
                 </DashboardLayout>
               </ProtectedRoute>
             }
