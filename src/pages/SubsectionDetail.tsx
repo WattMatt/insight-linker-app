@@ -208,6 +208,17 @@ const SubsectionDetail = () => {
       setValidatingDocId(documentId);
       toast.info("Starting AI validation...");
 
+      // Get the current session to ensure we have valid auth
+      const { data: { session } } = await supabase.auth.getSession();
+      
+      if (!session) {
+        toast.error('Please log in to validate documents');
+        setValidatingDocId(null);
+        return;
+      }
+
+      console.log('Calling validate-coc function with:', { documentId, subsectionId });
+
       const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
         body: {
           documentId: documentId,
@@ -216,9 +227,17 @@ const SubsectionDetail = () => {
         }
       });
 
+      console.log('Function response:', { data: validationData, error: validationError });
+
       if (validationError) {
         console.error('Validation error:', validationError);
-        toast.error('Validation failed: ' + (validationError.message || 'Unknown error'));
+        toast.error(`Validation failed: ${validationError.message || 'Unknown error'}`);
+        return;
+      }
+
+      if (validationData?.error) {
+        console.error('Function returned error:', validationData.error);
+        toast.error(`Validation error: ${validationData.error}`);
         return;
       }
 
@@ -234,10 +253,12 @@ const SubsectionDetail = () => {
         
         // Refresh validations to show updated results
         await fetchCocValidations();
+      } else {
+        toast.error('No validation result returned');
       }
     } catch (error) {
       console.error('Error during manual validation:', error);
-      toast.error('Failed to validate document');
+      toast.error(`Failed to validate: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setValidatingDocId(null);
     }
