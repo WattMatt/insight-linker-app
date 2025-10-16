@@ -149,6 +149,12 @@ export const ComprehensiveInspectionReport = ({
       doc.setFillColor(21, 122, 171);
       doc.rect(0, 0, pageWidth, 20, 'F');
       
+      // Add site name and subsection name to top blue band
+      doc.setTextColor(255, 255, 255); // White text
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'bold');
+      doc.text(`${siteName} - ${subsectionName}`, pageWidth / 2, 13, { align: 'center' });
+      
       // Blue bar at bottom
       doc.setFillColor(21, 122, 171);
       doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
