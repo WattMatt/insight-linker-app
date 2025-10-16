@@ -2032,13 +2032,59 @@ const SubsectionDetail = () => {
                       className="hidden"
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                       disabled={uploadingFile}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
                           const cocCategory = documentCategories.find(cat => cat.name === '01 COC');
                           if (cocCategory) {
                             setUploadCategoryId(cocCategory.id);
                             setUploadFile(file);
+                            
+                            // Auto-trigger upload
+                            try {
+                              setUploadingFile(true);
+                              toast.info("Uploading COC document...");
+
+                              const timestamp = Date.now();
+                              const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                              const fileName = `${subsectionId}/${cocCategory.name}/${timestamp}-${sanitizedFileName}`;
+                              
+                              const { data: uploadData, error: uploadError } = await supabase.storage
+                                .from('documents')
+                                .upload(fileName, file);
+
+                              if (uploadError) throw uploadError;
+
+                              const { data: urlData } = supabase.storage
+                                .from('documents')
+                                .getPublicUrl(uploadData.path);
+
+                              const { data: { user } } = await supabase.auth.getUser();
+
+                              const { error: insertError } = await supabase
+                                .from('subsection_documents')
+                                .insert({
+                                  subsection_id: subsectionId,
+                                  category_id: cocCategory.id,
+                                  file_name: file.name,
+                                  file_url: urlData.publicUrl,
+                                  file_size: file.size,
+                                  uploaded_by: user?.id
+                                });
+
+                              if (insertError) throw insertError;
+
+                              toast.success("COC document uploaded successfully!");
+                              setUploadCategoryId(null);
+                              setUploadFile(null);
+                              fetchSupabaseDocuments();
+                              e.target.value = ''; // Reset input
+                            } catch (error) {
+                              console.error("Error uploading COC document:", error);
+                              toast.error("Failed to upload COC document");
+                            } finally {
+                              setUploadingFile(false);
+                            }
                           }
                         }
                       }}
@@ -2168,13 +2214,59 @@ const SubsectionDetail = () => {
                       className="hidden"
                       accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                       disabled={uploadingFile}
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
                           const meteringCategory = documentCategories.find(cat => cat.name === '04 Metering');
                           if (meteringCategory) {
                             setUploadCategoryId(meteringCategory.id);
                             setUploadFile(file);
+                            
+                            // Auto-trigger upload
+                            try {
+                              setUploadingFile(true);
+                              toast.info("Uploading metering document...");
+
+                              const timestamp = Date.now();
+                              const sanitizedFileName = file.name.replace(/[^a-zA-Z0-9.-]/g, '_');
+                              const fileName = `${subsectionId}/${meteringCategory.name}/${timestamp}-${sanitizedFileName}`;
+                              
+                              const { data: uploadData, error: uploadError } = await supabase.storage
+                                .from('documents')
+                                .upload(fileName, file);
+
+                              if (uploadError) throw uploadError;
+
+                              const { data: urlData } = supabase.storage
+                                .from('documents')
+                                .getPublicUrl(uploadData.path);
+
+                              const { data: { user } } = await supabase.auth.getUser();
+
+                              const { error: insertError } = await supabase
+                                .from('subsection_documents')
+                                .insert({
+                                  subsection_id: subsectionId,
+                                  category_id: meteringCategory.id,
+                                  file_name: file.name,
+                                  file_url: urlData.publicUrl,
+                                  file_size: file.size,
+                                  uploaded_by: user?.id
+                                });
+
+                              if (insertError) throw insertError;
+
+                              toast.success("Metering document uploaded successfully!");
+                              setUploadCategoryId(null);
+                              setUploadFile(null);
+                              fetchSupabaseDocuments();
+                              e.target.value = ''; // Reset input
+                            } catch (error) {
+                              console.error("Error uploading metering document:", error);
+                              toast.error("Failed to upload metering document");
+                            } finally {
+                              setUploadingFile(false);
+                            }
                           }
                         }
                       }}
