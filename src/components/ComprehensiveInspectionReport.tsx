@@ -13,7 +13,6 @@ interface ComprehensiveInspectionReportProps {
   templateId?: string | null;
   subsectionId?: string;
   siteLogoUrl?: string | null;
-  companyLogoUrl?: string | null;
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -23,7 +22,6 @@ export const ComprehensiveInspectionReport = ({
   templateId,
   subsectionId,
   siteLogoUrl,
-  companyLogoUrl,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -64,6 +62,20 @@ export const ComprehensiveInspectionReport = ({
       // Extract general info once for reuse
       const generalInfo = jsonData.generalInfo || {};
 
+      // Fetch company logo from settings for QR code
+      let companyLogoForQR: string | null = null;
+      try {
+        const { data: settingsData } = await supabase
+          .from('settings')
+          .select('company_logo_url')
+          .limit(1)
+          .maybeSingle();
+        
+        companyLogoForQR = settingsData?.company_logo_url || null;
+      } catch (error) {
+        console.error('Error fetching company logo:', error);
+      }
+
       // Fetch subsection QR code if available with logo overlay
       let qrCodeDataUrl: string | null = null;
       const subId = subsectionId || inspectionData.subsection_id;
@@ -94,7 +106,7 @@ export const ComprehensiveInspectionReport = ({
             });
             
             // If we have a company logo, overlay it in the center
-            if (companyLogoUrl) {
+            if (companyLogoForQR) {
               const ctx = canvas.getContext('2d');
               if (ctx) {
                 const img = new Image();
@@ -128,7 +140,7 @@ export const ComprehensiveInspectionReport = ({
                     resolve();
                   };
                   
-                  img.src = companyLogoUrl;
+                  img.src = companyLogoForQR;
                 });
               }
             }
