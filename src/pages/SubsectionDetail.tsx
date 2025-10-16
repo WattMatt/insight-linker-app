@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -84,6 +84,7 @@ const SubsectionDetail = () => {
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [fixingTemplates, setFixingTemplates] = useState(false);
 
   useEffect(() => {
     if (subsectionId) {
@@ -915,6 +916,60 @@ const SubsectionDetail = () => {
     }
   };
 
+  const handleFixTemplateLinks = async () => {
+    setFixingTemplates(true);
+    try {
+      // Get all inspections for this subsection that don't have a template_id
+      const { data: inspections, error: fetchError } = await supabase
+        .from('inspections')
+        .select('id, status, title')
+        .eq('subsection_id', subsectionId)
+        .is('template_id', null);
+
+      if (fetchError) throw fetchError;
+
+      if (!inspections || inspections.length === 0) {
+        toast.info("No inspections need template linking");
+        return;
+      }
+
+      let linkedCount = 0;
+
+      // For each inspection without a template_id, try to match it to a template
+      for (const inspection of inspections) {
+        // Try to match based on status field (which often contains the template name/category)
+        const matchingTemplate = availableTemplates.find(template => 
+          inspection.status?.toLowerCase().includes(template.name.toLowerCase()) ||
+          inspection.status?.toLowerCase().includes(template.category.toLowerCase()) ||
+          template.name.toLowerCase().includes(inspection.status?.toLowerCase() || '')
+        );
+
+        if (matchingTemplate) {
+          const { error: updateError } = await supabase
+            .from('inspections')
+            .update({ template_id: matchingTemplate.id })
+            .eq('id', inspection.id);
+
+          if (!updateError) {
+            linkedCount++;
+          }
+        }
+      }
+
+      if (linkedCount > 0) {
+        toast.success(`Successfully linked ${linkedCount} inspection${linkedCount > 1 ? 's' : ''} to templates`);
+        fetchSubsectionData();
+      } else {
+        toast.info("No matching templates found for inspections");
+      }
+    } catch (error) {
+      console.error("Error fixing template links:", error);
+      toast.error("Failed to fix template links");
+    } finally {
+      setFixingTemplates(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -1149,14 +1204,24 @@ const SubsectionDetail = () => {
           <Card>
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle>Inspections</CardTitle>
-              <Dialog open={isCreateInspectionOpen} onOpenChange={setIsCreateInspectionOpen}>
-                <DialogTrigger asChild>
-                  <Button size="sm">
-                    <Plus className="h-4 w-4 mr-2" />
-                    New Inspection
-                  </Button>
-                </DialogTrigger>
-                <DialogContent className="max-w-md">
+              <div className="flex gap-2">
+                <Button 
+                  size="sm" 
+                  variant="outline"
+                  onClick={handleFixTemplateLinks}
+                  disabled={fixingTemplates}
+                >
+                  <RefreshCw className={`h-4 w-4 mr-2 ${fixingTemplates ? 'animate-spin' : ''}`} />
+                  {fixingTemplates ? 'Fixing...' : 'Fix Template Links'}
+                </Button>
+                <Dialog open={isCreateInspectionOpen} onOpenChange={setIsCreateInspectionOpen}>
+                  <DialogTrigger asChild>
+                    <Button size="sm">
+                      <Plus className="h-4 w-4 mr-2" />
+                      New Inspection
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="max-w-md">
                   <DialogHeader>
                     <DialogTitle>Create New Inspection</DialogTitle>
                   </DialogHeader>
@@ -1214,6 +1279,7 @@ const SubsectionDetail = () => {
                   </div>
                 </DialogContent>
               </Dialog>
+              </div>
             </CardHeader>
             <CardContent>
               {inspectionArray.length === 0 ? (
