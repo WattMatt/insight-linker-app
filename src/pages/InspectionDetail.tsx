@@ -917,11 +917,13 @@ const InspectionDetail = () => {
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
           <TabsTrigger value="general">General Info</TabsTrigger>
-          {Object.entries(template.sections || {}).map(([key, section]) => (
-            <TabsTrigger key={key} value={key}>
-              {section.name}
-            </TabsTrigger>
-          ))}
+          {Object.entries(template.sections || {})
+            .filter(([key]) => key !== 'generalInfo') // Skip if template has its own generalInfo section
+            .map(([key, section]) => (
+              <TabsTrigger key={key} value={key}>
+                {section.name}
+              </TabsTrigger>
+            ))}
           <TabsTrigger value="snag-list">Snag List</TabsTrigger>
         </TabsList>
 
