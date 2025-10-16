@@ -180,8 +180,18 @@ export const ComprehensiveInspectionReport = ({
             const hasImages = allImages.length > 0;
             const hasNotes = !!itemData.notes;
             
+            // Photo dimensions
+            const photoWidth = 65;
+            const photoHeight = 50;
+            const photoSpacing = 5;
+            
+            // Calculate how many images and layout
+            const imagesPerRow = 2;
+            const imageRows = hasImages ? Math.ceil(allImages.length / imagesPerRow) : 1;
+            const totalImageHeight = hasImages ? (imageRows * photoHeight) + ((imageRows - 1) * photoSpacing) : photoHeight;
+            
             // Calculate space needed for this item box
-            const itemBoxHeight = hasNotes ? 95 : 75; // Taller if notes exist
+            const itemBoxHeight = 15 + totalImageHeight + (hasNotes ? 25 : 0) + 15;
             const itemMargin = 10;
 
             // Check if we need a new page
@@ -201,44 +211,59 @@ export const ComprehensiveInspectionReport = ({
             doc.setFont(undefined, 'bold');
             doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 25, yPos + 8);
 
-            // Photo area (left side of box)
-            const photoX = 25;
-            const photoY = yPos + 15;
-            const photoWidth = 65;
-            const photoHeight = 50;
+            // Photo area - starting position
+            let photoX = 25;
+            let photoY = yPos + 15;
 
             if (hasImages) {
-              // Show actual image
-              const img = allImages[0];
-              try {
-                const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
-                if (typeof imgUrl === 'string') {
-                  const response = await fetch(imgUrl);
-                  const blob = await response.blob();
-                  const dataUrl = await new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onloadend = () => resolve(reader.result as string);
-                    reader.readAsDataURL(blob);
-                  });
+              // Display all images in a grid
+              let imgIndex = 0;
+              for (const img of allImages) {
+                try {
+                  const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
+                  if (typeof imgUrl === 'string') {
+                    const response = await fetch(imgUrl);
+                    const blob = await response.blob();
+                    const dataUrl = await new Promise<string>((resolve) => {
+                      const reader = new FileReader();
+                      reader.onloadend = () => resolve(reader.result as string);
+                      reader.readAsDataURL(blob);
+                    });
 
-                  // Draw photo with border
+                    // Calculate position in grid
+                    const col = imgIndex % imagesPerRow;
+                    const row = Math.floor(imgIndex / imagesPerRow);
+                    const currentX = photoX + (col * (photoWidth + photoSpacing));
+                    const currentY = photoY + (row * (photoHeight + photoSpacing));
+
+                    // Draw photo with border
+                    doc.setDrawColor(200, 200, 200);
+                    doc.setLineWidth(0.5);
+                    doc.addImage(dataUrl, 'JPEG', currentX, currentY, photoWidth, photoHeight);
+                    doc.rect(currentX, currentY, photoWidth, photoHeight);
+                    
+                    imgIndex++;
+                  }
+                } catch (error) {
+                  console.error('Error embedding image:', error);
+                  // Draw placeholder on error
+                  const col = imgIndex % imagesPerRow;
+                  const row = Math.floor(imgIndex / imagesPerRow);
+                  const currentX = photoX + (col * (photoWidth + photoSpacing));
+                  const currentY = photoY + (row * (photoHeight + photoSpacing));
+                  
                   doc.setDrawColor(200, 200, 200);
-                  doc.setLineWidth(0.5);
-                  doc.addImage(dataUrl, 'JPEG', photoX, photoY, photoWidth, photoHeight);
-                  doc.rect(photoX, photoY, photoWidth, photoHeight);
+                  doc.setFillColor(250, 250, 250);
+                  doc.rect(currentX, currentY, photoWidth, photoHeight, 'FD');
+                  doc.setFontSize(8);
+                  doc.setFont(undefined, 'normal');
+                  doc.setTextColor(180, 180, 180);
+                  doc.text('Photo', currentX + photoWidth / 2, currentY + photoHeight / 2 - 2, { align: 'center' });
+                  doc.text('Error', currentX + photoWidth / 2, currentY + photoHeight / 2 + 2, { align: 'center' });
+                  doc.setTextColor(0, 0, 0);
+                  
+                  imgIndex++;
                 }
-              } catch (error) {
-                console.error('Error embedding image:', error);
-                // Draw placeholder on error
-                doc.setDrawColor(200, 200, 200);
-                doc.setFillColor(250, 250, 250);
-                doc.rect(photoX, photoY, photoWidth, photoHeight, 'FD');
-                doc.setFontSize(8);
-                doc.setFont(undefined, 'normal');
-                doc.setTextColor(180, 180, 180);
-                doc.text('Photo', photoX + photoWidth / 2, photoY + photoHeight / 2 - 2, { align: 'center' });
-                doc.text('Placeholder', photoX + photoWidth / 2, photoY + photoHeight / 2 + 2, { align: 'center' });
-                doc.setTextColor(0, 0, 0);
               }
             } else {
               // Draw placeholder box with "Photo Placeholder" text
@@ -255,15 +280,16 @@ export const ComprehensiveInspectionReport = ({
               doc.setTextColor(0, 0, 0);
             }
 
-            // Display notes if available (to the right of photo or below)
+            // Display notes if available (below all photos)
             if (hasNotes) {
+              const notesY = photoY + totalImageHeight + 8;
               doc.setFontSize(9);
               doc.setFont(undefined, 'bold');
-              doc.text('Notes:', 25, photoY + photoHeight + 8);
+              doc.text('Notes:', 25, notesY);
               
               doc.setFont(undefined, 'normal');
               const notesLines = doc.splitTextToSize(itemData.notes, pageWidth - 60);
-              doc.text(notesLines, 25, photoY + photoHeight + 14);
+              doc.text(notesLines, 25, notesY + 6);
             }
 
             // Move to next item
