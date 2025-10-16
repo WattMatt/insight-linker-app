@@ -98,6 +98,7 @@ const SiteDetail = () => {
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
+  const [fixingCategories, setFixingCategories] = useState(false);
   const [imagePreview, setImagePreview] = useState<{site_image?: string, client_logo?: string}>({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [siteImageFile, setSiteImageFile] = useState<File | null>(null);
@@ -577,6 +578,86 @@ const SiteDetail = () => {
     } catch (error) {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
+    }
+  };
+
+  const handleFixCategories = async () => {
+    if (!site) return;
+
+    try {
+      setFixingCategories(true);
+      toast.info("Fixing document categories...");
+
+      // Get all site documents with null category_id but with a category name
+      const { data: documentsToFix, error: fetchError } = await supabase
+        .from('site_documents')
+        .select('id, category, category_id')
+        .eq('site_id', site.id)
+        .is('category_id', null)
+        .not('category', 'is', null);
+
+      if (fetchError) throw fetchError;
+
+      if (!documentsToFix || documentsToFix.length === 0) {
+        toast.success("All documents already have correct categories!");
+        return;
+      }
+
+      // Group by unique category names
+      const uniqueCategories = [...new Set(documentsToFix.map(doc => doc.category))];
+      let fixedCount = 0;
+
+      for (const categoryName of uniqueCategories) {
+        let categoryId: string | null = null;
+
+        // Try to find existing category
+        const { data: existingCategory } = await supabase
+          .from('site_document_categories')
+          .select('id')
+          .eq('site_id', site.id)
+          .eq('name', categoryName)
+          .maybeSingle();
+
+        if (existingCategory) {
+          categoryId = existingCategory.id;
+        } else {
+          // Create new category
+          const { data: newCategory, error: categoryError } = await supabase
+            .from('site_document_categories')
+            .insert({
+              site_id: site.id,
+              name: categoryName,
+              order_index: documentCategories.length + fixedCount + 1
+            })
+            .select('id')
+            .single();
+
+          if (categoryError) throw categoryError;
+          categoryId = newCategory.id;
+          fixedCount++;
+        }
+
+        // Update all documents with this category name
+        const docsToUpdate = documentsToFix
+          .filter(doc => doc.category === categoryName)
+          .map(doc => doc.id);
+
+        const { error: updateError } = await supabase
+          .from('site_documents')
+          .update({ category_id: categoryId })
+          .in('id', docsToUpdate);
+
+        if (updateError) throw updateError;
+      }
+
+      toast.success(`Fixed categories for ${documentsToFix.length} documents!`);
+      await fetchDocumentCategories();
+      await fetchSiteDocuments();
+    } catch (error) {
+      console.error("Error fixing categories:", error);
+      toast.error("Failed to fix categories");
+    } finally {
+      setFixingCategories(false);
     }
   };
 
@@ -1426,10 +1507,21 @@ const SiteDetail = () => {
                   <CardTitle>Site Documents (Supabase)</CardTitle>
                   <CardDescription>Documents uploaded for this site</CardDescription>
                 </div>
-                <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
-                  <Plus className="h-4 w-4 mr-2" />
-                  Create Category
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    onClick={handleFixCategories} 
+                    size="sm" 
+                    variant="outline"
+                    disabled={fixingCategories}
+                  >
+                    <FileText className="h-4 w-4 mr-2" />
+                    {fixingCategories ? 'Fixing...' : 'Fix Categories'}
+                  </Button>
+                  <Button onClick={() => setCreateCategoryOpen(true)} size="sm">
+                    <Plus className="h-4 w-4 mr-2" />
+                    Create Category
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
