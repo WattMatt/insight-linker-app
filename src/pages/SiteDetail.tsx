@@ -1667,124 +1667,143 @@ const SiteDetail = () => {
             </Button>
           </div>
 
-          <Card>
-            <CardContent className="p-0">
-              {subsections.length === 0 ? (
+          {subsections.length === 0 ? (
+            <Card>
+              <CardContent className="p-0">
                 <div className="text-center py-12">
                   <Layers className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
                   <h3 className="text-lg font-semibold mb-2">No subsections yet</h3>
                   <p className="text-muted-foreground">Create your first subsection</p>
                 </div>
-              ) : (
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Name</TableHead>
-                      <TableHead>Tenant</TableHead>
-                      <TableHead>Category</TableHead>
-                      <TableHead>Status</TableHead>
-                      <TableHead>CoC</TableHead>
-                      <TableHead>Metering</TableHead>
-                      <TableHead>Last Inspected</TableHead>
-                      <TableHead>Open Snags</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {subsections.map((sub) => {
-                      const lastInspected = getLastInspectionDate(sub.id);
-                      const openSnags = getOpenSnags(sub.id);
-                      const isCompliant = calculateCompliance(sub);
-                      
-                      return (
-                        <TableRow
-                          key={sub.id}
-                          className="cursor-pointer hover:bg-muted/50"
-                          onClick={() => {
-                            const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
-                            navigate(`${basePath}/subsections/${sub.id}`);
-                          }}
-                        >
-                          <TableCell className="font-medium">{sub.name}</TableCell>
-                          <TableCell>{sub.tenant_name || "—"}</TableCell>
-                          <TableCell>
-                            {sub.category ? (
-                              <div className="flex items-center gap-2">
-                                {(() => {
-                                  const CategoryIcon = getCategoryIcon(sub.category);
-                                  const colors = getCategoryColor(sub.category);
-                                  return (
-                                    <>
-                                      <div className={`h-6 w-6 flex items-center justify-center ${colors.bg} ${colors.text} rounded`}>
-                                        <CategoryIcon className="h-4 w-4" />
-                                      </div>
-                                      <span className="text-sm">{sub.category}</span>
-                                    </>
-                                  );
-                                })()}
-                              </div>
-                            ) : (
-                              <span>—</span>
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                isCompliant
-                                  ? "bg-green-500/10 text-green-500"
-                                  : "bg-red-500/10 text-red-500"
-                              }
-                            >
-                              {isCompliant ? "Pass" : "Fail"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                sub.coc_status === "Approved"
-                                  ? "bg-green-500/10 text-green-500"
-                                  : sub.is_coc_required
-                                  ? "bg-red-500/10 text-red-500"
-                                  : "bg-gray-500/10 text-gray-500"
-                              }
-                            >
-                              {sub.is_coc_required ? sub.coc_status : "N/A"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>
-                            <Badge
-                              variant="outline"
-                              className={
-                                sub.metering_status === "Installed"
-                                  ? "bg-green-500/10 text-green-500"
-                                  : sub.is_coc_required
-                                  ? "bg-red-500/10 text-red-500"
-                                  : "bg-gray-500/10 text-gray-500"
-                              }
-                            >
-                              {sub.is_coc_required ? sub.metering_status : "N/A"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell className="text-sm text-muted-foreground">
-                            {lastInspected ? new Date(lastInspected).toLocaleDateString() : "Never"}
-                          </TableCell>
-                          <TableCell>
-                            <Badge 
-                              variant="outline"
-                              className={openSnags > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
-                            >
-                              {openSnags}
-                            </Badge>
-                          </TableCell>
-                        </TableRow>
-                      );
-                    })}
-                  </TableBody>
-                </Table>
-              )}
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            (() => {
+              // Group subsections by category
+              const groupedSubsections = subsections.reduce((acc, sub) => {
+                const category = sub.category || 'Uncategorized';
+                if (!acc[category]) {
+                  acc[category] = [];
+                }
+                acc[category].push(sub);
+                return acc;
+              }, {} as Record<string, Subsection[]>);
+
+              return (
+                <Accordion type="multiple" defaultValue={Object.keys(groupedSubsections)} className="space-y-4">
+                  {Object.entries(groupedSubsections).map(([category, categorySubsections]) => {
+                    const CategoryIcon = getCategoryIcon(category);
+                    const colors = getCategoryColor(category);
+                    
+                    return (
+                      <AccordionItem key={category} value={category} className="border rounded-lg">
+                        <AccordionTrigger className="px-6 py-4 hover:no-underline">
+                          <div className="flex items-center gap-3">
+                            <div className={`h-10 w-10 flex items-center justify-center ${colors.bg} ${colors.text} rounded-lg`}>
+                              <CategoryIcon className="h-5 w-5" />
+                            </div>
+                            <div className="text-left">
+                              <h4 className="font-semibold text-base">{category}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {categorySubsections.length} {categorySubsections.length === 1 ? 'subsection' : 'subsections'}
+                              </p>
+                            </div>
+                          </div>
+                        </AccordionTrigger>
+                        <AccordionContent className="px-0 pb-0">
+                          <Table>
+                            <TableHeader>
+                              <TableRow>
+                                <TableHead>Name</TableHead>
+                                <TableHead>Tenant</TableHead>
+                                <TableHead>Status</TableHead>
+                                <TableHead>CoC</TableHead>
+                                <TableHead>Metering</TableHead>
+                                <TableHead>Last Inspected</TableHead>
+                                <TableHead>Open Snags</TableHead>
+                              </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                              {categorySubsections.map((sub) => {
+                                const lastInspected = getLastInspectionDate(sub.id);
+                                const openSnags = getOpenSnags(sub.id);
+                                const isCompliant = calculateCompliance(sub);
+                                
+                                return (
+                                  <TableRow
+                                    key={sub.id}
+                                    className="cursor-pointer hover:bg-muted/50"
+                                    onClick={() => {
+                                      const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+                                      navigate(`${basePath}/subsections/${sub.id}`);
+                                    }}
+                                  >
+                                    <TableCell className="font-medium">{sub.name}</TableCell>
+                                    <TableCell>{sub.tenant_name || "—"}</TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant="outline"
+                                        className={
+                                          isCompliant
+                                            ? "bg-green-500/10 text-green-500"
+                                            : "bg-red-500/10 text-red-500"
+                                        }
+                                      >
+                                        {isCompliant ? "Pass" : "Fail"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant="outline"
+                                        className={
+                                          sub.coc_status === "Approved"
+                                            ? "bg-green-500/10 text-green-500"
+                                            : sub.is_coc_required
+                                            ? "bg-red-500/10 text-red-500"
+                                            : "bg-gray-500/10 text-gray-500"
+                                        }
+                                      >
+                                        {sub.is_coc_required ? sub.coc_status : "N/A"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge
+                                        variant="outline"
+                                        className={
+                                          sub.metering_status === "Installed"
+                                            ? "bg-green-500/10 text-green-500"
+                                            : sub.is_coc_required
+                                            ? "bg-red-500/10 text-red-500"
+                                            : "bg-gray-500/10 text-gray-500"
+                                        }
+                                      >
+                                        {sub.is_coc_required ? sub.metering_status : "N/A"}
+                                      </Badge>
+                                    </TableCell>
+                                    <TableCell className="text-sm text-muted-foreground">
+                                      {lastInspected ? new Date(lastInspected).toLocaleDateString() : "Never"}
+                                    </TableCell>
+                                    <TableCell>
+                                      <Badge 
+                                        variant="outline"
+                                        className={openSnags > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
+                                      >
+                                        {openSnags}
+                                      </Badge>
+                                    </TableCell>
+                                  </TableRow>
+                                );
+                              })}
+                            </TableBody>
+                          </Table>
+                        </AccordionContent>
+                      </AccordionItem>
+                    );
+                  })}
+                </Accordion>
+              );
+            })()
+          )}
         </TabsContent>
 
         <TabsContent value="qr-analytics" className="space-y-4">
