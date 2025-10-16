@@ -77,18 +77,27 @@ Deno.serve(async (req) => {
       console.log('User already exists:', userId, 'Email confirmed:', isConfirmed);
       
       // Update user metadata if needed
+      const updateData: any = {
+        user_metadata: {
+          full_name: fullName,
+          role: role,
+          requires_password_change: temporaryPassword ? true : false,
+        },
+      };
+
+      // If temporary password is provided, update it
+      if (temporaryPassword) {
+        updateData.password = temporaryPassword;
+        updateData.email_confirm = true; // Auto-confirm when setting temp password
+      }
+
       const { error: updateError } = await supabase.auth.admin.updateUserById(
         userId,
-        {
-          user_metadata: {
-            full_name: fullName,
-            role: role,
-          },
-        }
+        updateData
       );
 
       if (updateError) {
-        console.warn('Failed to update user metadata:', updateError);
+        console.warn('Failed to update user:', updateError);
       }
 
       // Update role if changed
@@ -107,6 +116,25 @@ Deno.serve(async (req) => {
         await supabase
           .from('user_roles')
           .insert({ user_id: userId, role });
+      }
+
+      // If using temporary password, skip email invitation
+      if (temporaryPassword) {
+        console.log('User updated with temporary password - skipping email');
+        
+        return new Response(
+          JSON.stringify({
+            success: true,
+            userId: userId,
+            isNewUser: false,
+            message: `Password reset successfully. Temporary password: ${temporaryPassword}. User must change password on first login.`,
+            temporaryPassword: temporaryPassword,
+          }),
+          {
+            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+            status: 200,
+          }
+        );
       }
 
       // If user is already confirmed, send password recovery instead of invite

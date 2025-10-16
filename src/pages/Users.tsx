@@ -93,6 +93,9 @@ const Users = () => {
   });
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string>("");
+  const [resendOpen, setResendOpen] = useState(false);
+  const [resendUser, setResendUser] = useState<UserProfile | null>(null);
+  const [resendTempPassword, setResendTempPassword] = useState("");
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -204,13 +207,14 @@ const Users = () => {
 
   // Resend invite mutation for existing users
   const resendInviteMutation = useMutation({
-    mutationFn: async (user: UserProfile) => {
+    mutationFn: async ({ user, temporaryPassword }: { user: UserProfile; temporaryPassword?: string }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: user.email,
           fullName: user.full_name || '',
           role: user.role || 'User',
           isResend: true,
+          temporaryPassword,
         },
       });
 
@@ -220,7 +224,17 @@ const Users = () => {
       return data;
     },
     onSuccess: (data) => {
-      toast.success(data.message || "Invitation resent successfully!");
+      if (data.temporaryPassword) {
+        toast.success(
+          `Password reset! Temporary password: ${data.temporaryPassword}`,
+          { duration: 10000 }
+        );
+      } else {
+        toast.success(data.message || "Invitation resent successfully!");
+      }
+      setResendOpen(false);
+      setResendUser(null);
+      setResendTempPassword("");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
     onError: (error: any) => {
@@ -630,11 +644,13 @@ const Users = () => {
                           Edit User
                         </DropdownMenuItem>
                         <DropdownMenuItem 
-                          onClick={() => resendInviteMutation.mutate(user)}
-                          disabled={resendInviteMutation.isPending}
+                          onClick={() => {
+                            setResendUser(user);
+                            setResendOpen(true);
+                          }}
                         >
                           <Mail className="mr-2 h-4 w-4" />
-                          Resend Invite
+                          Reset Password
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
@@ -872,6 +888,59 @@ const Users = () => {
               disabled={updateRoleMutation.isPending || updateStatusMutation.isPending || updateProfileMutation.isPending}
             >
               {(updateRoleMutation.isPending || updateStatusMutation.isPending || updateProfileMutation.isPending) ? "Saving..." : "Save Changes"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Reset Password Dialog */}
+      <Dialog open={resendOpen} onOpenChange={setResendOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Reset User Password</DialogTitle>
+            <DialogDescription>
+              Set a temporary password for {resendUser?.full_name || resendUser?.email}, or leave blank to send an email invitation.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="resendTempPassword">Temporary Password (Optional)</Label>
+              <Input
+                id="resendTempPassword"
+                type="text"
+                placeholder="Leave blank to send email invite"
+                value={resendTempPassword}
+                onChange={(e) => setResendTempPassword(e.target.value)}
+                minLength={6}
+              />
+              <p className="text-xs text-muted-foreground">
+                If set, user can login immediately and will be required to change password on first login.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setResendOpen(false);
+                setResendTempPassword("");
+                setResendUser(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (resendUser) {
+                  resendInviteMutation.mutate({
+                    user: resendUser,
+                    temporaryPassword: resendTempPassword || undefined
+                  });
+                }
+              }}
+              disabled={resendInviteMutation.isPending}
+            >
+              {resendInviteMutation.isPending ? "Processing..." : "Reset Password"}
             </Button>
           </DialogFooter>
         </DialogContent>
