@@ -97,9 +97,7 @@ const SiteDetail = () => {
   const [imagePreview, setImagePreview] = useState<{site_image?: string, client_logo?: string}>({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [siteImageFile, setSiteImageFile] = useState<File | null>(null);
-  const [clientLogoFile, setClientLogoFile] = useState<File | null>(null);
   const [siteImagePreview, setSiteImagePreview] = useState<string | null>(null);
-  const [clientLogoPreview, setClientLogoPreview] = useState<string | null>(null);
   const [editFormData, setEditFormData] = useState({
     name: '',
     address: '',
@@ -440,9 +438,7 @@ const SiteDetail = () => {
       consultant_contact: site.consultant_contact || '',
     });
     setSiteImageFile(null);
-    setClientLogoFile(null);
     setSiteImagePreview(null);
-    setClientLogoPreview(null);
     setEditDialogOpen(true);
   };
 
@@ -452,7 +448,6 @@ const SiteDetail = () => {
 
     try {
       let site_image_url = site.site_image_url;
-      let client_logo_url = site.client_logo_url;
 
       // Upload new site image if provided
       if (siteImageFile) {
@@ -472,30 +467,11 @@ const SiteDetail = () => {
         site_image_url = `${urlData.publicUrl}?t=${Date.now()}`;
       }
 
-      // Upload new client logo if provided
-      if (clientLogoFile) {
-        const fileExt = clientLogoFile.name.split('.').pop();
-        const fileName = `${site.id}/client-logo.${fileExt}`;
-        
-        const { data: uploadData, error: uploadError } = await supabase.storage
-          .from('site-images')
-          .upload(fileName, clientLogoFile, { upsert: true });
-
-        if (uploadError) throw uploadError;
-
-        const { data: urlData } = supabase.storage
-          .from('site-images')
-          .getPublicUrl(uploadData.path);
-
-        client_logo_url = `${urlData.publicUrl}?t=${Date.now()}`;
-      }
-
       const { error } = await supabase
         .from('sites')
         .update({
           ...editFormData,
           site_image_url,
-          client_logo_url,
         })
         .eq('id', site.id);
 
@@ -504,9 +480,7 @@ const SiteDetail = () => {
       toast.success("Site updated successfully");
       setEditDialogOpen(false);
       setSiteImageFile(null);
-      setClientLogoFile(null);
       setSiteImagePreview(null);
-      setClientLogoPreview(null);
       fetchSiteData();
     } catch (error) {
       console.error("Error updating site:", error);
@@ -547,38 +521,6 @@ const SiteDetail = () => {
     }
   };
 
-  const handleDeleteClientLogo = async () => {
-    if (!site?.client_logo_url) return;
-
-    // Only allow deletion of Supabase images
-    if (!site.client_logo_url.includes('supabase.co/storage')) {
-      toast.error("Firebase images cannot be deleted. Please upload a new image to Supabase first.");
-      return;
-    }
-
-    try {
-      const url = new URL(site.client_logo_url);
-      const pathParts = url.pathname.split('/');
-      const bucketIndex = pathParts.indexOf('site-images');
-      if (bucketIndex !== -1) {
-        const filePath = pathParts.slice(bucketIndex + 1).join('/');
-        await supabase.storage.from('site-images').remove([filePath]);
-      }
-
-      const { error } = await supabase
-        .from('sites')
-        .update({ client_logo_url: null })
-        .eq('id', site.id);
-
-      if (error) throw error;
-
-      toast.success("Client logo deleted successfully");
-      fetchSiteData();
-    } catch (error) {
-      console.error("Error deleting client logo:", error);
-      toast.error("Failed to delete client logo");
-    }
-  };
 
   const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
     if (!site) return;
@@ -1368,11 +1310,11 @@ const SiteDetail = () => {
               </div>
 
               <div className="space-y-4">
-                <h3 className="font-semibold">Site Images</h3>
+                <h3 className="font-semibold">Site Image</h3>
                 
-                {/* Site Main Image */}
+                {/* Site Image */}
                 <div className="space-y-2">
-                  <Label>Site Main Image</Label>
+                  <Label>Site Image</Label>
                   {siteImagePreview ? (
                     <div className="mb-2">
                       <img
@@ -1435,75 +1377,6 @@ const SiteDetail = () => {
                     />
                     <span className="text-sm text-muted-foreground">
                       {siteImageFile ? siteImageFile.name : ""}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Client Logo */}
-                <div className="space-y-2">
-                  <Label>Client Logo</Label>
-                  {clientLogoPreview ? (
-                    <div className="mb-2">
-                      <img
-                        src={clientLogoPreview}
-                        alt="Client logo preview"
-                        className="w-48 h-32 object-contain rounded border p-2 bg-muted"
-                      />
-                    </div>
-                  ) : site.client_logo_url && !clientLogoFile ? (
-                    <div className="relative group w-fit mb-2">
-                      <img
-                        src={site.client_logo_url}
-                        alt="Current client logo"
-                        className="w-48 h-32 object-contain rounded border p-2 bg-muted"
-                      />
-                      {site.client_logo_url.includes('firebasestorage.googleapis.com') && (
-                        <Badge variant="secondary" className="absolute top-2 left-2">
-                          Legacy
-                        </Badge>
-                      )}
-                      {site.client_logo_url.includes('supabase.co/storage') && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="mt-2"
-                          onClick={handleDeleteClientLogo}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Logo
-                        </Button>
-                      )}
-                    </div>
-                  ) : null}
-                  <div className="flex items-center gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => document.getElementById('client-logo-upload-edit')?.click()}
-                    >
-                      <Upload className="h-4 w-4 mr-2" />
-                      {site.client_logo_url ? 'Change Logo' : 'Upload Logo'}
-                    </Button>
-                    <input
-                      id="client-logo-upload-edit"
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setClientLogoFile(file);
-                        if (file) {
-                          const preview = URL.createObjectURL(file);
-                          setClientLogoPreview(preview);
-                        } else {
-                          setClientLogoPreview(null);
-                        }
-                      }}
-                    />
-                    <span className="text-sm text-muted-foreground">
-                      {clientLogoFile ? clientLogoFile.name : ""}
                     </span>
                   </div>
                 </div>
