@@ -46,6 +46,7 @@ const Clients = () => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [logoFile, setLogoFile] = useState<File | null>(null);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [editingClient, setEditingClient] = useState<Client | null>(null);
   const [deleteLogoConfirm, setDeleteLogoConfirm] = useState(false);
   const [formData, setFormData] = useState({
@@ -202,6 +203,7 @@ const Clients = () => {
         primary_contact_email: ""
       });
       setLogoFile(null);
+      setLogoPreview(null);
       fetchAllClients();
     } catch (error) {
       console.error("Error adding client:", error);
@@ -222,6 +224,7 @@ const Clients = () => {
       primary_contact_email: client.primary_contact_email || "",
     });
     setLogoFile(null);
+    setLogoPreview(null);
     setFormErrors({});
     setEditDialogOpen(true);
   };
@@ -292,6 +295,7 @@ const Clients = () => {
         primary_contact_email: ""
       });
       setLogoFile(null);
+      setLogoPreview(null);
       fetchAllClients();
     } catch (error) {
       console.error("Error updating client:", error);
@@ -525,12 +529,16 @@ const Clients = () => {
                   <p className="text-sm text-muted-foreground">Upload a logo for the client</p>
                   <div className="space-y-2">
                     <Label>Client Logo</Label>
+                    {logoPreview && (
+                      <div className="mb-2">
+                        <img
+                          src={logoPreview}
+                          alt="Logo preview"
+                          className="w-32 h-24 object-contain border rounded p-2 bg-muted"
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center gap-4">
-                      {logoFile && (
-                        <div className="border rounded-lg p-2 w-20 h-20 flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground text-center">Preview</span>
-                        </div>
-                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -544,7 +552,16 @@ const Clients = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setLogoFile(file);
+                          if (file) {
+                            const preview = URL.createObjectURL(file);
+                            setLogoPreview(preview);
+                          } else {
+                            setLogoPreview(null);
+                          }
+                        }}
                       />
                       <span className="text-sm text-muted-foreground">
                         {logoFile ? logoFile.name : "No file chosen"}
@@ -665,12 +682,16 @@ const Clients = () => {
                   )}
                   <div className="space-y-2">
                     <Label>Upload New Logo</Label>
+                    {logoPreview && (
+                      <div className="mb-2">
+                        <img
+                          src={logoPreview}
+                          alt="Logo preview"
+                          className="w-32 h-24 object-contain border rounded p-2 bg-muted"
+                        />
+                      </div>
+                    )}
                     <div className="flex items-center gap-4">
-                      {logoFile && (
-                        <div className="border rounded-lg p-2 w-20 h-20 flex items-center justify-center">
-                          <span className="text-xs text-muted-foreground text-center">New</span>
-                        </div>
-                      )}
                       <Button
                         type="button"
                         variant="outline"
@@ -684,7 +705,16 @@ const Clients = () => {
                         type="file"
                         accept="image/*"
                         className="hidden"
-                        onChange={(e) => setLogoFile(e.target.files?.[0] || null)}
+                        onChange={(e) => {
+                          const file = e.target.files?.[0] || null;
+                          setLogoFile(file);
+                          if (file) {
+                            const preview = URL.createObjectURL(file);
+                            setLogoPreview(preview);
+                          } else {
+                            setLogoPreview(null);
+                          }
+                        }}
                       />
                       <span className="text-sm text-muted-foreground">
                         {logoFile ? logoFile.name : "No file chosen"}

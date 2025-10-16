@@ -91,6 +91,7 @@ const SiteDetail = () => {
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
+  const [imagePreview, setImagePreview] = useState<{site_image?: string, client_logo?: string}>({});
 
   useEffect(() => {
     fetchSiteData();
@@ -696,7 +697,18 @@ const SiteDetail = () => {
               {/* Site Main Image */}
               <div>
                 <h3 className="text-sm font-medium mb-3">Site Main Image</h3>
-                {site.site_image_url ? (
+                {imagePreview.site_image ? (
+                  <div className="relative group w-fit mb-3">
+                    <img
+                      src={imagePreview.site_image}
+                      alt="Preview"
+                      className="w-64 h-48 object-cover rounded border"
+                    />
+                    <Badge variant="secondary" className="absolute top-2 left-2">
+                      Preview
+                    </Badge>
+                  </div>
+                ) : site.site_image_url ? (
                   <div className="relative group w-fit">
                     <img
                       key={site.site_image_url}
@@ -733,7 +745,13 @@ const SiteDetail = () => {
                     id="site-image-upload"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleImageUpload(file, 'site_image');
+                      if (file) {
+                        const preview = URL.createObjectURL(file);
+                        setImagePreview(prev => ({ ...prev, site_image: preview }));
+                        handleImageUpload(file, 'site_image').finally(() => {
+                          setImagePreview(prev => ({ ...prev, site_image: undefined }));
+                        });
+                      }
                     }}
                   />
                   <Button
@@ -751,7 +769,18 @@ const SiteDetail = () => {
               {/* Client Logo */}
               <div>
                 <h3 className="text-sm font-medium mb-3">Client Logo</h3>
-                {site.client_logo_url ? (
+                {imagePreview.client_logo ? (
+                  <div className="relative group w-fit mb-3">
+                    <img
+                      src={imagePreview.client_logo}
+                      alt="Preview"
+                      className="w-48 h-32 object-contain rounded border p-2"
+                    />
+                    <Badge variant="secondary" className="absolute top-2 left-2">
+                      Preview
+                    </Badge>
+                  </div>
+                ) : site.client_logo_url ? (
                   <div className="relative group w-fit">
                     <img
                       key={site.client_logo_url}
@@ -788,7 +817,13 @@ const SiteDetail = () => {
                     id="client-logo-upload"
                     onChange={(e) => {
                       const file = e.target.files?.[0];
-                      if (file) handleImageUpload(file, 'client_logo');
+                      if (file) {
+                        const preview = URL.createObjectURL(file);
+                        setImagePreview(prev => ({ ...prev, client_logo: preview }));
+                        handleImageUpload(file, 'client_logo').finally(() => {
+                          setImagePreview(prev => ({ ...prev, client_logo: undefined }));
+                        });
+                      }
                     }}
                   />
                   <Button
