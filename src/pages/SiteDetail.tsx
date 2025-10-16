@@ -287,7 +287,7 @@ const SiteDetail = () => {
           .order("inspection_date", { ascending: false }),
         supabase
           .from("site_documents")
-          .select("category, id")
+          .select("category, id, file_url")
           .eq("site_id", siteId),
       ]);
 
