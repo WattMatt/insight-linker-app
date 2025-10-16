@@ -11,3 +11,6 @@ verify_jwt = false
 
 [functions.invite-user]
 verify_jwt = true
+
+[functions.qr-redirect]
+verify_jwt = false
