@@ -786,7 +786,65 @@ const InspectionTemplates = () => {
                             <div className="font-bold text-sm mb-3 text-gray-900">
                               {itemIdx + 1}. {item.name}
                             </div>
-...
+                            
+                            {/* Render field based on type */}
+                            {item.type === 'checklist' && (
+                              <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-gray-700">Status:</span>
+                                  <span className="text-xs text-gray-900 bg-green-50 px-3 py-1 rounded">
+                                    Pass
+                                  </span>
+                                </div>
+                                <div>
+                                  <span className="text-xs text-gray-700">Notes: This is a mock note for preview purposes</span>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {(item.type === 'text' || item.type === 'number') && (
+                              <div className="space-y-1">
+                                <span className="text-xs text-gray-700">Value: Sample {item.type} value</span>
+                              </div>
+                            )}
+                            
+                            {item.type === 'textarea' && (
+                              <div className="space-y-1">
+                                <span className="text-xs font-semibold text-gray-700">Notes:</span>
+                                <p className="text-xs text-gray-700">This is a sample note for preview purposes. Actual field will contain inspector notes and observations.</p>
+                              </div>
+                            )}
+                            
+                            {item.type === 'image' && (
+                              <div className="space-y-2">
+                                <span className="text-xs font-semibold text-gray-700">Photo:</span>
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-32 h-24 flex flex-col items-center justify-center rounded">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-[10px]">Photo</div>
+                                    <div className="text-[10px]">Placeholder</div>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
+                            
+                            {item.type === 'select' && item.options && (
+                              <div className="space-y-1">
+                                <span className="text-xs font-semibold text-gray-700">Selected:</span>
+                                <span className="text-xs text-gray-900 bg-blue-50 px-3 py-1 rounded">
+                                  {item.options[0]}
+                                </span>
+                              </div>
+                            )}
+                            
+                            {item.type === 'checkbox' && (
+                              <div className="flex items-center gap-2">
+                                <div className="w-4 h-4 border-2 border-gray-400 rounded flex items-center justify-center">
+                                  <div className="w-2 h-2 bg-blue-600 rounded-sm"></div>
+                                </div>
+                                <span className="text-xs text-gray-700">Checked</span>
+                              </div>
+                            )}
+                            
                             {/* Fallback for any unhandled field types */}
                             {!['checkbox', 'checklist', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
                               <div className="space-y-2">
