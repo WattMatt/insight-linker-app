@@ -1,18 +1,21 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, MapPin, Eye } from "lucide-react";
+import { Building2, MapPin, Eye, Search } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info } from "lucide-react";
+import { Input } from "@/components/ui/input";
 
 const ClientPortalSites = () => {
   const [searchParams] = useSearchParams();
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
+  const [searchQuery, setSearchQuery] = useState("");
   
   const { data: sites, isLoading } = useQuery({
     queryKey: ["client-sites", clientInfo?.client_id],
@@ -39,6 +42,15 @@ const ClientPortalSites = () => {
     );
   }
 
+  const filteredSites = sites?.filter(site => {
+    const searchLower = searchQuery.toLowerCase();
+    return (
+      site.name.toLowerCase().includes(searchLower) ||
+      site.address?.toLowerCase().includes(searchLower) ||
+      site.site_type?.toLowerCase().includes(searchLower)
+    );
+  });
+
   return (
     <div className="space-y-6">
       {previewClientId && (
@@ -58,19 +70,33 @@ const ClientPortalSites = () => {
         </p>
       </div>
 
-      {sites && sites.length === 0 ? (
+      <div className="relative">
+        <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Search sites by name, address, or type..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
+      {filteredSites && filteredSites.length === 0 ? (
         <Card>
           <CardContent className="flex flex-col items-center justify-center py-12">
             <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-            <p className="text-lg font-medium">No sites found</p>
+            <p className="text-lg font-medium">
+              {searchQuery ? "No sites match your search" : "No sites found"}
+            </p>
             <p className="text-sm text-muted-foreground">
-              There are no sites associated with your account yet.
+              {searchQuery 
+                ? "Try adjusting your search terms" 
+                : "There are no sites associated with your account yet."}
             </p>
           </CardContent>
         </Card>
       ) : (
         <div className="grid gap-6 md:grid-cols-2">
-          {sites?.map((site) => (
+          {filteredSites?.map((site) => (
             <Card key={site.id} className="hover:shadow-lg transition-shadow">
               <CardHeader>
                 <div className="flex items-start justify-between">
