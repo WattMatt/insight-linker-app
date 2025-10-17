@@ -308,10 +308,23 @@ const Auth = () => {
 
       toast.success("Password updated successfully! Welcome aboard!");
       
-      // Small delay then navigate
+      // Check user role and redirect accordingly
+      const { data: roleData } = await supabase
+        .from("user_roles")
+        .select("role")
+        .eq("user_id", data.user.id)
+        .maybeSingle();
+      
+      // Small delay then navigate based on role
       setTimeout(() => {
         setRequiresPasswordChange(false);
-        navigate("/dashboard");
+        if (roleData?.role === "Client") {
+          navigate("/client-portal");
+        } else if (roleData?.role === "Contractor") {
+          navigate("/contractor");
+        } else {
+          navigate("/dashboard");
+        }
       }, 1000);
     } catch (error: any) {
       console.error("Error setting password:", error);
