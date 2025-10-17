@@ -9,6 +9,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Upload, X } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useCamera } from "@/hooks/useCamera";
 
 interface DynamicField {
   id: string;
@@ -36,6 +37,7 @@ export const DynamicFieldManager = ({
   const [newFieldLabel, setNewFieldLabel] = useState("");
   const [newFieldType, setNewFieldType] = useState<DynamicField["type"]>("text");
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
+  const { isNative, selectImages } = useCamera();
 
   const addField = () => {
     if (!newFieldLabel.trim()) {
@@ -157,6 +159,36 @@ export const DynamicFieldManager = ({
     onFieldsChange?.(updatedFields);
   };
 
+  const handleCameraCapture = async (fieldId: string) => {
+    if (!isNative) {
+      document.getElementById(`image-upload-${fieldId}`)?.click();
+      return;
+    }
+
+    setUploadingImages(prev => new Set(prev).add(fieldId));
+
+    try {
+      const files = await selectImages();
+      
+      if (files.length === 0) {
+        toast.info("No images selected");
+        return;
+      }
+
+      for (const file of files) {
+        await handleImageUpload(fieldId, file);
+      }
+    } catch (error) {
+      console.error("Error capturing images:", error);
+      toast.error("Failed to capture images");
+      setUploadingImages(prev => {
+        const next = new Set(prev);
+        next.delete(fieldId);
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="space-y-4">
       <div className="flex justify-between items-center">
@@ -267,7 +299,7 @@ export const DynamicFieldManager = ({
                 <Button
                   variant="outline"
                   size="sm"
-                  onClick={() => document.getElementById(`image-upload-${field.id}`)?.click()}
+                  onClick={() => handleCameraCapture(field.id)}
                   disabled={uploadingImages.has(field.id)}
                 >
                   <Upload className="mr-2 h-4 w-4" />

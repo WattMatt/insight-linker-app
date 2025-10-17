@@ -19,6 +19,7 @@ import { SiteDrawingInspection } from "@/components/SiteDrawingInspection";
 import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { useCamera } from "@/hooks/useCamera";
 
 interface InspectionTemplate {
   name: string;
@@ -86,6 +87,7 @@ const InspectionDetail = () => {
   const [searchParams] = useSearchParams();
   const previewSiteId = searchParams.get("preview");
   const isContractorPortal = !clientId && !siteId && !subsectionId;
+  const { isNative, takePicture, selectImages } = useCamera();
   const [template, setTemplate] = useState<InspectionTemplate | null>(null);
   const [templateCategory, setTemplateCategory] = useState<string>("");
   const [inspection, setInspection] = useState<InspectionData | null>(null);
@@ -833,6 +835,105 @@ const InspectionDetail = () => {
     }
   };
 
+  // Handler for camera button that uses native camera on mobile
+  const handleCameraCapture = async (sectionKey: string, itemKey: string) => {
+    if (!isNative) {
+      // Fall back to file input on web
+      const uploadKey = `${sectionKey}-${itemKey}`;
+      fileInputRefs.current[uploadKey]?.click();
+      return;
+    }
+
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    setUploadingImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      // Allow user to choose between camera and gallery
+      const files = await selectImages();
+      
+      if (files.length === 0) {
+        toast.info("No images selected");
+        return;
+      }
+
+      // Create a FileList-like object
+      const dataTransfer = new DataTransfer();
+      files.forEach(file => dataTransfer.items.add(file));
+      
+      // Use the existing upload logic
+      await handleImageUpload(sectionKey, itemKey, dataTransfer.files);
+    } catch (error) {
+      console.error("Error capturing image:", error);
+      toast.error("Failed to capture image");
+      setUploadingImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadKey);
+        return newSet;
+      });
+    }
+  };
+
+  // Handler for tenant image camera capture
+  const handleTenantCameraCapture = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage') => {
+    if (!isNative) {
+      tenantImageInputRefs.current[`${tenantId}-${field}`]?.click();
+      return;
+    }
+
+    const uploadKey = `${tenantId}-${field}`;
+    setUploadingTenantImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      const files = await selectImages();
+      
+      if (files.length === 0) {
+        toast.info("No images selected");
+        return;
+      }
+
+      const dataTransfer = new DataTransfer();
+      dataTransfer.items.add(files[0]); // Only take first image for tenant
+      
+      await handleTenantImageUpload(tenantId, field, dataTransfer.files);
+    } catch (error) {
+      console.error("Error capturing tenant image:", error);
+      toast.error("Failed to capture image");
+      setUploadingTenantImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadKey);
+        return newSet;
+      });
+    }
+  };
+
+  // Handler for snag photo camera capture
+  const handleSnagCameraCapture = async () => {
+    if (!isNative) {
+      document.getElementById('snag-photo-upload')?.click();
+      return;
+    }
+
+    setUploadingSnagPhotos(true);
+
+    try {
+      const files = await selectImages();
+      
+      if (files.length === 0) {
+        toast.info("No images selected");
+        return;
+      }
+
+      const dataTransfer = new DataTransfer();
+      files.forEach(file => dataTransfer.items.add(file));
+      
+      await handleSnagPhotoUpload(dataTransfer.files);
+    } catch (error) {
+      console.error("Error capturing snag photos:", error);
+      toast.error("Failed to capture photos");
+      setUploadingSnagPhotos(false);
+    }
+  };
+
   const handleMigrateImage = async (sectionKey: string, itemKey: string, firebaseUrl: string, index: number) => {
     const migrateKey = `${sectionKey}-${itemKey}-${index}`;
     setMigratingImages(prev => new Set(prev).add(migrateKey));
@@ -1289,7 +1390,7 @@ const InspectionDetail = () => {
                 type="button"
                 variant="outline"
                 className="w-full"
-                onClick={() => fileInputRefs.current[uploadKey]?.click()}
+                onClick={() => handleCameraCapture(sectionKey, itemKey)}
                 disabled={isUploading}
               >
                 {isUploading ? (
@@ -1623,7 +1724,7 @@ const InspectionDetail = () => {
                                   type="button"
                                   variant="outline"
                                   className="w-full"
-                                  onClick={() => tenantImageInputRefs.current[`${tenant.id}-breakerImage`]?.click()}
+                                  onClick={() => handleTenantCameraCapture(tenant.id, 'breakerImage')}
                                   disabled={uploadingTenantImages.has(`${tenant.id}-breakerImage`)}
                                 >
                                   {uploadingTenantImages.has(`${tenant.id}-breakerImage`) ? (
@@ -1675,7 +1776,7 @@ const InspectionDetail = () => {
                                   type="button"
                                   variant="outline"
                                   className="w-full"
-                                  onClick={() => tenantImageInputRefs.current[`${tenant.id}-ctRatioImage`]?.click()}
+                                  onClick={() => handleTenantCameraCapture(tenant.id, 'ctRatioImage')}
                                   disabled={uploadingTenantImages.has(`${tenant.id}-ctRatioImage`)}
                                 >
                                   {uploadingTenantImages.has(`${tenant.id}-ctRatioImage`) ? (
@@ -2022,7 +2123,7 @@ const InspectionDetail = () => {
                   type="button"
                   variant="outline"
                   className="w-full"
-                  onClick={() => document.getElementById('snag-photo-upload')?.click()}
+                  onClick={() => handleSnagCameraCapture()}
                   disabled={uploadingSnagPhotos}
                 >
                   <Camera className="mr-2 h-4 w-4" />

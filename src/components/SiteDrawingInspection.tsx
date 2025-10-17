@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Upload, Plus, Trash2, Eye, X, MapPin } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { useCamera } from "@/hooks/useCamera";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -48,6 +49,7 @@ export const SiteDrawingInspection = ({
   const [scale, setScale] = useState(1);
   const [uploading, setUploading] = useState(false);
   const pageRef = useRef<HTMLDivElement>(null);
+  const { isNative, selectImages } = useCamera();
 
   useEffect(() => {
     onDataChange?.(pdfUrl, pins);
@@ -158,6 +160,29 @@ export const SiteDrawingInspection = ({
       updatePin(pinId, {
         images: pin.images.filter(img => img.url !== imageUrl)
       });
+    }
+  };
+
+  const handlePinCameraCapture = async (pinId: string) => {
+    if (!isNative) {
+      document.getElementById(`pin-image-${pinId}`)?.click();
+      return;
+    }
+
+    try {
+      const files = await selectImages();
+      
+      if (files.length === 0) {
+        toast.info("No images selected");
+        return;
+      }
+
+      for (const file of files) {
+        await handlePinImageUpload(pinId, file);
+      }
+    } catch (error) {
+      console.error("Error capturing pin images:", error);
+      toast.error("Failed to capture images");
     }
   };
 
@@ -386,7 +411,7 @@ export const SiteDrawingInspection = ({
                 />
                 <Button
                   variant="outline"
-                  onClick={() => document.getElementById(`pin-image-${selectedPin.id}`)?.click()}
+                  onClick={() => handlePinCameraCapture(selectedPin.id)}
                 >
                   <Upload className="mr-2 h-4 w-4" />
                   Upload Images
