@@ -39,6 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { Checkbox } from "@/components/ui/checkbox";
 import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -98,6 +99,9 @@ const Users = () => {
   const [avatarPreview, setAvatarPreview] = useState<string>("");
   const [resendOpen, setResendOpen] = useState(false);
   const [resendUser, setResendUser] = useState<UserProfile | null>(null);
+  const [editSitesOpen, setEditSitesOpen] = useState(false);
+  const [editSitesUser, setEditSitesUser] = useState<UserProfile | null>(null);
+  const [editUserSiteIds, setEditUserSiteIds] = useState<string[]>([]);
   const [resendTempPassword, setResendTempPassword] = useState("");
   const queryClient = useQueryClient();
 
@@ -341,6 +345,38 @@ const Users = () => {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update role");
+    },
+  });
+
+  // Update contractor sites mutation
+  const updateContractorSitesMutation = useMutation({
+    mutationFn: async ({ userId, siteIds }: { userId: string; siteIds: string[] }) => {
+      // Delete existing site assignments
+      const { error: deleteError } = await supabase
+        .from("user_sites")
+        .delete()
+        .eq("user_id", userId);
+      
+      if (deleteError) throw deleteError;
+
+      // Insert new site assignments if any
+      if (siteIds.length > 0) {
+        const { error: insertError } = await supabase
+          .from("user_sites")
+          .insert(siteIds.map(siteId => ({ user_id: userId, site_id: siteId })));
+        
+        if (insertError) throw insertError;
+      }
+    },
+    onSuccess: () => {
+      toast.success("Site assignments updated successfully");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setEditSitesOpen(false);
+      setEditSitesUser(null);
+      setEditUserSiteIds([]);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to update site assignments");
     },
   });
 
@@ -827,6 +863,18 @@ const Users = () => {
                           <Mail className="mr-2 h-4 w-4" />
                           Reset Password
                         </DropdownMenuItem>
+                        {user.role === "Contractor" && (
+                          <DropdownMenuItem 
+                            onClick={() => {
+                              setEditSitesUser(user);
+                              setEditUserSiteIds(user.assignedSites?.map(s => s.site_id) || []);
+                              setEditSitesOpen(true);
+                            }}
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Edit Sites
+                          </DropdownMenuItem>
+                        )}
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -1117,6 +1165,82 @@ const Users = () => {
               disabled={resendInviteMutation.isPending}
             >
               {resendInviteMutation.isPending ? "Processing..." : "Reset Password"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Sites Dialog */}
+      <Dialog open={editSitesOpen} onOpenChange={setEditSitesOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Edit Site Assignments</DialogTitle>
+            <DialogDescription>
+              Manage which sites {editSitesUser?.full_name || editSitesUser?.email} can access
+            </DialogDescription>
+          </DialogHeader>
+          <div className="py-4">
+            <div className="space-y-2">
+              <Label>Select Sites</Label>
+              <div className="border rounded-lg p-4 max-h-96 overflow-y-auto space-y-2">
+                {!sites ? (
+                  <p className="text-sm text-muted-foreground">Loading sites...</p>
+                ) : sites && sites.length > 0 ? (
+                  sites.map((site: any) => (
+                    <div key={site.id} className="flex items-center space-x-2 p-2 hover:bg-muted/50 rounded">
+                      <Checkbox
+                        id={`edit-site-${site.id}`}
+                        checked={editUserSiteIds.includes(site.id)}
+                        onCheckedChange={(checked) => {
+                          if (checked) {
+                            setEditUserSiteIds([...editUserSiteIds, site.id]);
+                          } else {
+                            setEditUserSiteIds(editUserSiteIds.filter(id => id !== site.id));
+                          }
+                        }}
+                      />
+                      <label
+                        htmlFor={`edit-site-${site.id}`}
+                        className="text-sm font-medium leading-none cursor-pointer flex-1"
+                      >
+                        {site.name} {site.address && <span className="text-muted-foreground">- {site.address}</span>}
+                      </label>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-sm text-muted-foreground">No sites available</p>
+                )}
+              </div>
+              {editUserSiteIds.length === 0 && (
+                <p className="text-xs text-destructive">At least one site must be selected</p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => {
+                setEditSitesOpen(false);
+                setEditSitesUser(null);
+                setEditUserSiteIds([]);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button 
+              onClick={() => {
+                if (editSitesUser && editUserSiteIds.length > 0) {
+                  updateContractorSitesMutation.mutate({
+                    userId: editSitesUser.id,
+                    siteIds: editUserSiteIds
+                  });
+                } else {
+                  toast.error("Please select at least one site");
+                }
+              }}
+              disabled={updateContractorSitesMutation.isPending || editUserSiteIds.length === 0}
+            >
+              {updateContractorSitesMutation.isPending ? "Saving..." : "Save Changes"}
             </Button>
           </DialogFooter>
         </DialogContent>
