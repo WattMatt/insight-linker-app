@@ -3,7 +3,7 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, FileText, MapPin, Download, Eye, Info, Search, BarChart3, CheckCircle2, AlertCircle, Clock } from "lucide-react";
+import { Building2, FileText, MapPin, Download, Eye, Info, Search, BarChart3, CheckCircle2, AlertCircle, Clock, LayoutGrid } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 const ClientPortalSiteDetail = () => {
   const { siteId } = useParams();
@@ -18,6 +19,7 @@ const ClientPortalSiteDetail = () => {
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   const [subsectionSearch, setSubsectionSearch] = useState("");
+  const isMobile = useIsMobile();
 
   const { data: site, isLoading: siteLoading } = useQuery({
     queryKey: ["client-site", siteId],
@@ -183,10 +185,19 @@ const ClientPortalSiteDetail = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="flex w-full flex-wrap md:grid md:grid-cols-3 gap-1">
-          <TabsTrigger value="overview" className="flex-1 min-w-[100px]">Overview</TabsTrigger>
-          <TabsTrigger value="subsections" className="flex-1 min-w-[100px]">Subsections</TabsTrigger>
-          <TabsTrigger value="documents" className="flex-1 min-w-[100px]">Documents</TabsTrigger>
+        <TabsList className="grid w-full grid-cols-3">
+          <TabsTrigger value="overview" className="gap-2">
+            <LayoutGrid className="h-4 w-4" />
+            {!isMobile && <span>Overview</span>}
+          </TabsTrigger>
+          <TabsTrigger value="subsections" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            {!isMobile && <span>Subsections</span>}
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileText className="h-4 w-4" />
+            {!isMobile && <span>Documents</span>}
+          </TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
