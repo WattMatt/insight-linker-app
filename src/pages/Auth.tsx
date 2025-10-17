@@ -39,26 +39,52 @@ const Auth = () => {
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
+      async (_event, session) => {
         setSession(session);
         // Check if user needs to change password
         const needsChange = session?.user?.user_metadata?.requires_password_change;
         setRequiresPasswordChange(needsChange || false);
         
         if (session && !isInvite && !needsChange) {
-          navigate("/dashboard");
+          // Redirect based on user role
+          const { data: roleData } = await supabase
+            .from("user_roles")
+            .select("role")
+            .eq("user_id", session.user.id)
+            .maybeSingle();
+          
+          if (roleData?.role === "Client") {
+            navigate("/client-portal");
+          } else if (roleData?.role === "Contractor") {
+            navigate("/contractor");
+          } else {
+            navigate("/dashboard");
+          }
         }
       }
     );
 
     // THEN check for existing session
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       const needsChange = session?.user?.user_metadata?.requires_password_change;
       setRequiresPasswordChange(needsChange || false);
       
       if (session && !isInvite && !needsChange) {
-        navigate("/dashboard");
+        // Redirect based on user role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        if (roleData?.role === "Client") {
+          navigate("/client-portal");
+        } else if (roleData?.role === "Contractor") {
+          navigate("/contractor");
+        } else {
+          navigate("/dashboard");
+        }
       }
     });
 

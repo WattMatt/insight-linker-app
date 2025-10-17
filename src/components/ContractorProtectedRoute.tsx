@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate, useSearchParams, useLocation } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "./ui/skeleton";
@@ -7,6 +7,7 @@ import { Skeleton } from "./ui/skeleton";
 const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const previewSiteId = searchParams.get("preview");
   const { data: userRole, isLoading: roleLoading } = useUserRole();
 
@@ -25,6 +26,7 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
     return () => subscription.unsubscribe();
   }, []);
 
+  // Show loading state while checking auth and role
   if (isAuthenticated === null || roleLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -36,6 +38,7 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
     );
   }
 
+  // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
@@ -45,9 +48,14 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
     return <>{children}</>;
   }
 
-  // Redirect to dashboard if user is not a contractor
+  // Only allow contractor role to access contractor portal
   if (userRole !== "Contractor") {
     return <Navigate to="/dashboard" replace />;
+  }
+
+  // Restrict contractors to only /contractor/* routes
+  if (!location.pathname.startsWith("/contractor")) {
+    return <Navigate to="/contractor" replace />;
   }
 
   return <>{children}</>;

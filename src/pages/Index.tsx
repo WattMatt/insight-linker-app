@@ -9,7 +9,20 @@ const Index = () => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       if (session) {
-        navigate("/dashboard");
+        // Redirect based on user role
+        const { data: roleData } = await supabase
+          .from("user_roles")
+          .select("role")
+          .eq("user_id", session.user.id)
+          .maybeSingle();
+        
+        if (roleData?.role === "Client") {
+          navigate("/client-portal");
+        } else if (roleData?.role === "Contractor") {
+          navigate("/contractor");
+        } else {
+          navigate("/dashboard");
+        }
       } else {
         navigate("/auth");
       }
