@@ -100,10 +100,13 @@ const InspectionDetail = () => {
   const [uploadingSnagPhotos, setUploadingSnagPhotos] = useState(false);
 
   useEffect(() => {
-    if (clientId && siteId && subsectionId && inspectionId) {
+    // Allow loading with just inspectionId (for contractor portal) or with full path
+    if (inspectionId) {
       fetchInspectionData();
       fetchCompanyLogo();
-      fetchSnags();
+      if (subsectionId) {
+        fetchSnags();
+      }
     }
   }, [clientId, siteId, subsectionId, inspectionId]);
 
@@ -126,13 +129,16 @@ const InspectionDetail = () => {
 
   const fetchSnags = async () => {
     if (!subsectionId) return;
-    
+    await fetchSnagsForSubsection(subsectionId);
+  };
+
+  const fetchSnagsForSubsection = async (subId: string) => {
     try {
       setLoadingSnags(true);
       const { data, error } = await supabase
         .from('snags')
         .select('*')
-        .eq('subsection_id', subsectionId)
+        .eq('subsection_id', subId)
         .order('created_at', { ascending: false });
       
       if (error) throw error;
@@ -349,7 +355,13 @@ const InspectionDetail = () => {
       if (inspError || !inspData) {
         console.error("Error fetching inspection:", inspError);
         toast.error("Inspection not found");
-        navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
+        // Navigate based on available parameters
+        if (subsectionId) {
+          navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
+        } else {
+          // For contractor portal without subsectionId
+          navigate('/contractor');
+        }
         return;
       }
 
@@ -400,6 +412,10 @@ const InspectionDetail = () => {
       
       if (inspData.subsections) {
         setSubsectionData({ name: inspData.subsections.name });
+        // Fetch snags for this subsection if not already provided in URL
+        if (!subsectionId && inspData.subsection_id) {
+          fetchSnagsForSubsection(inspData.subsection_id);
+        }
       }
 
       // Set template if available
