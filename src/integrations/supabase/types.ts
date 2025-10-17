@@ -743,10 +743,12 @@ export type Database = {
           created_at: string
           created_by: string | null
           description: string | null
+          estimated_cost: number | null
           id: string
           inspection_id: string | null
           notes: string | null
           photos: Json | null
+          risk_level: string | null
           status: string
           subsection_id: string
           title: string
@@ -756,10 +758,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          estimated_cost?: number | null
           id?: string
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          risk_level?: string | null
           status?: string
           subsection_id: string
           title: string
@@ -769,10 +773,12 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           description?: string | null
+          estimated_cost?: number | null
           id?: string
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          risk_level?: string | null
           status?: string
           subsection_id?: string
           title?: string

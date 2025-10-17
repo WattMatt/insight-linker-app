@@ -93,7 +93,9 @@ const InspectionDetail = () => {
     title: '',
     description: '',
     notes: '',
-    photos: [] as string[]
+    photos: [] as string[],
+    risk_level: '',
+    estimated_cost: ''
   });
   const [uploadingSnagPhotos, setUploadingSnagPhotos] = useState(false);
 
@@ -163,6 +165,8 @@ const InspectionDetail = () => {
         description: newSnag.description,
         notes: newSnag.notes,
         photos: newSnag.photos,
+        risk_level: newSnag.risk_level || null,
+        estimated_cost: newSnag.estimated_cost ? parseFloat(newSnag.estimated_cost) : null,
         status: 'Open',
         created_by: user?.id
       };
@@ -180,7 +184,7 @@ const InspectionDetail = () => {
       
       toast.success("Snag created successfully");
       setSnagDialogOpen(false);
-      setNewSnag({ title: '', description: '', notes: '', photos: [] });
+      setNewSnag({ title: '', description: '', notes: '', photos: [], risk_level: '', estimated_cost: '' });
       fetchSnags();
     } catch (error) {
       console.error("Error creating snag:", error);
@@ -1334,6 +1338,16 @@ const InspectionDetail = () => {
                                   <Badge variant={snag.status === 'Open' ? 'destructive' : 'secondary'}>
                                     {snag.status}
                                   </Badge>
+                                  {snag.risk_level && (
+                                    <Badge variant={
+                                      snag.risk_level === 'Critical' ? 'destructive' :
+                                      snag.risk_level === 'High' ? 'destructive' :
+                                      snag.risk_level === 'Medium' ? 'default' : 
+                                      'secondary'
+                                    }>
+                                      {snag.risk_level} Risk
+                                    </Badge>
+                                  )}
                                 </div>
                                 {snag.description && (
                                   <p className="text-sm text-muted-foreground mb-2">{snag.description}</p>
@@ -1341,6 +1355,11 @@ const InspectionDetail = () => {
                                 {snag.notes && (
                                   <p className="text-sm text-muted-foreground mb-2">
                                     <strong>Notes:</strong> {snag.notes}
+                                  </p>
+                                )}
+                                {snag.estimated_cost && (
+                                  <p className="text-sm text-muted-foreground mb-2">
+                                    <strong>Estimated Cost:</strong> R{parseFloat(snag.estimated_cost).toFixed(2)}
                                   </p>
                                 )}
                                 <p className="text-xs text-muted-foreground">
@@ -1429,6 +1448,37 @@ const InspectionDetail = () => {
                   rows={3}
                 />
               </div>
+              
+              <div className="grid md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label htmlFor="snag-risk">Risk Level</Label>
+                  <Select value={newSnag.risk_level} onValueChange={(value) => setNewSnag({ ...newSnag, risk_level: value })}>
+                    <SelectTrigger id="snag-risk">
+                      <SelectValue placeholder="Select risk level" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Low">Low</SelectItem>
+                      <SelectItem value="Medium">Medium</SelectItem>
+                      <SelectItem value="High">High</SelectItem>
+                      <SelectItem value="Critical">Critical</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                
+                <div className="space-y-2">
+                  <Label htmlFor="snag-cost">Estimated Cost (ZAR)</Label>
+                  <Input
+                    id="snag-cost"
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    value={newSnag.estimated_cost}
+                    onChange={(e) => setNewSnag({ ...newSnag, estimated_cost: e.target.value })}
+                    placeholder="0.00"
+                  />
+                </div>
+              </div>
+              
               <div className="space-y-2">
                 <Label>Photos</Label>
                 {newSnag.photos.length > 0 && (
