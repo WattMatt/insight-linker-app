@@ -91,13 +91,17 @@ const AdminContractorPreview = () => {
                     </p>
                   )}
                 </div>
-                <Button
+                <a 
+                  href={`/contractor?preview=${site.id}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
                   className="w-full"
-                  onClick={() => navigate(`/contractor?preview=${site.id}`)}
                 >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Preview as Contractor
-                </Button>
+                  <Button className="w-full">
+                    <Eye className="h-4 w-4 mr-2" />
+                    Preview as Contractor
+                  </Button>
+                </a>
               </CardContent>
             </Card>
           ))}
