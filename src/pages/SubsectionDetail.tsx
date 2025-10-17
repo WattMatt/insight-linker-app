@@ -28,7 +28,6 @@ interface SubsectionData {
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
-  cocValidationStatus?: string;
   meterSerialNumber?: string;
   ctRatio?: string;
   isCocRequired: boolean;
@@ -51,7 +50,6 @@ const SubsectionDetail = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [cocType, setCocType] = useState<string>("");
-  const [cocValidationStatus, setCocValidationStatus] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
   const [newInspectionDate, setNewInspectionDate] = useState("");
@@ -456,7 +454,6 @@ const SubsectionDetail = () => {
         inspections: inspectionsObj
       });
       setCocType(fullSubsection.coc_type || '');
-      setCocValidationStatus(fullSubsection.coc_status || '');
       
       // Fetch site info for header
       const { data: siteInfo } = await supabase
@@ -574,7 +571,6 @@ const SubsectionDetail = () => {
         .from('subsections')
         .update({
           coc_type: cocType,
-          coc_validation_status: cocValidationStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', supabaseSubsection.id);
@@ -587,8 +583,7 @@ const SubsectionDetail = () => {
       // Update local state
       setSubsection({
         ...subsection,
-        cocType,
-        cocValidationStatus
+        cocType
       });
       
       toast.success("COC details saved successfully");
@@ -1244,9 +1239,8 @@ const SubsectionDetail = () => {
   const inspections = subsection.inspections || {};
   const inspectionArray = Object.entries(inspections);
   const hasSnags = openSnagsCount > 0;
-  const cocExpired = subsection.isCocRequired && subsection.cocValidationStatus !== 'Approved';
   const hasIncompleteInspections = inspectionArray.some(([_, insp]) => insp.status !== 'Completed');
-  const isNotCompliant = hasSnags || cocExpired || hasIncompleteInspections;
+  const isNotCompliant = hasSnags || hasIncompleteInspections;
 
   return (
     <div className="space-y-6">
@@ -1311,7 +1305,6 @@ const SubsectionDetail = () => {
                 <br />
                 This status is determined by open snags, COC validation, and inspection completion status. The following issues were found:
                 <ul className="list-disc list-inside mt-2">
-                  {cocExpired && <li>Certificate of Compliance is missing or not approved.</li>}
                   {hasSnags && <li>{openSnagsCount} open snag{openSnagsCount !== 1 ? 's' : ''} requiring attention</li>}
                   {hasIncompleteInspections && <li>Not all inspections have been marked as completed.</li>}
                 </ul>
@@ -2104,17 +2097,7 @@ const SubsectionDetail = () => {
                             </div>
                           </div>
 
-                          <div className="mt-4">
-                            <Label>Validation Status</Label>
-                            <Input
-                              value={cocValidationStatus}
-                              onChange={(e) => setCocValidationStatus(e.target.value)}
-                              placeholder="Enter validation status"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          <Button 
+                          <Button
                             onClick={handleSaveCocDetails} 
                             disabled={saving}
                             className="mt-4 bg-blue-500 hover:bg-blue-600"
@@ -2229,17 +2212,7 @@ const SubsectionDetail = () => {
                             </div>
                           </div>
 
-                          <div className="mt-4">
-                            <Label>Validation Status</Label>
-                            <Input
-                              value={cocValidationStatus}
-                              onChange={(e) => setCocValidationStatus(e.target.value)}
-                              placeholder="Enter validation status"
-                              className="mt-1"
-                            />
-                          </div>
-
-                          <Button 
+                          <Button
                             onClick={handleSaveCocDetails} 
                             disabled={saving}
                             className="mt-4 bg-blue-500 hover:bg-blue-600"
@@ -2328,17 +2301,7 @@ const SubsectionDetail = () => {
                         </div>
                       </div>
 
-                      <div className="mt-4">
-                        <Label>Validation Status</Label>
-                        <Input
-                          value={cocValidationStatus}
-                          onChange={(e) => setCocValidationStatus(e.target.value)}
-                          placeholder="Enter validation status"
-                          className="mt-1"
-                        />
-                      </div>
-
-                      <Button 
+                      <Button
                         onClick={handleSaveCocDetails} 
                         disabled={saving}
                         className="mt-4 bg-blue-500 hover:bg-blue-600"
