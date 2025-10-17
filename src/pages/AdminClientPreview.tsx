@@ -27,13 +27,21 @@ const AdminClientPreview = () => {
     queryKey: ["client-preview-info", selectedClientId],
     enabled: !!selectedClientId,
     queryFn: async () => {
-      const { data, error } = await supabase
+      const { count: sitesCount } = await supabase
+        .from("sites")
+        .select("*", { count: "exact", head: true })
+        .eq("client_id", selectedClientId);
+
+      const { data: client } = await supabase
         .from("clients")
-        .select("*, sites(count)")
+        .select("*")
         .eq("id", selectedClientId)
         .single();
-      if (error) throw error;
-      return data;
+
+      return {
+        client,
+        sitesCount: sitesCount || 0,
+      };
     },
   });
 
@@ -43,7 +51,7 @@ const AdminClientPreview = () => {
         <div>
           <h1 className="text-3xl font-bold">Client Portal Preview</h1>
           <p className="text-muted-foreground mt-2">
-            Test the client portal experience as an admin
+            Preview the client portal experience as any client
           </p>
         </div>
         <Link to="/users">
@@ -57,8 +65,8 @@ const AdminClientPreview = () => {
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
-          This preview allows you to see the client portal as it appears to clients. 
-          Select a client below to view their data and test the interface before sending invites.
+          As an admin, you can preview the client portal for any client. 
+          Select a client below to see their portal view with real data.
         </AlertDescription>
       </Alert>
 
@@ -88,65 +96,32 @@ const AdminClientPreview = () => {
               <div>
                 <p className="text-sm font-medium">Preview Information:</p>
                 <div className="mt-2 space-y-1 text-sm text-muted-foreground">
-                  <p>• Client: {clientInfo.company_name || clientInfo.name}</p>
+                  <p>• Client: {clientInfo.client.company_name || clientInfo.client.name}</p>
+                  <p>• Sites: {clientInfo.sitesCount}</p>
                   <p>• You will see data filtered for this client only</p>
-                  <p>• All features will be read-only</p>
+                  <p>• All features will be in preview mode</p>
                 </div>
               </div>
 
-              <Alert className="bg-orange-50 border-orange-200">
-                <Info className="h-4 w-4 text-orange-600" />
-                <AlertDescription className="text-orange-800">
-                  <strong>Important:</strong> To preview as a client, you need to:
-                  <ol className="list-decimal list-inside mt-2 space-y-1">
-                    <li>Temporarily assign yourself the "Client" role</li>
-                    <li>Create a user_clients mapping linking your user to this client</li>
-                    <li>Visit the client portal at <code className="bg-white px-1 py-0.5 rounded">/client-portal</code></li>
-                    <li>Remove the role and mapping when done testing</li>
-                  </ol>
+              <Alert className="bg-blue-50 border-blue-200">
+                <Info className="h-4 w-4 text-blue-600" />
+                <AlertDescription className="text-blue-800">
+                  Click the button below to open the client portal in preview mode. 
+                  You'll see exactly what this client sees, including their sites, 
+                  documents, and calendar events.
                 </AlertDescription>
               </Alert>
 
               <div className="flex gap-2">
-                <Button
-                  onClick={async () => {
-                    // Add SQL script to console for manual execution
-                    const userId = (await supabase.auth.getUser()).data.user?.id;
-                    const sqlScript = `
--- TEMPORARY CLIENT PREVIEW SETUP
--- Run this in Supabase SQL Editor, then visit /client-portal
-
-BEGIN;
-
--- 1. Add Client role (if not exists)
-INSERT INTO public.user_roles (user_id, role)
-VALUES ('${userId}', 'Client')
-ON CONFLICT (user_id, role) DO NOTHING;
-
--- 2. Create temporary client mapping
-INSERT INTO public.user_clients (user_id, client_id)
-VALUES ('${userId}', '${selectedClientId}')
-ON CONFLICT (user_id) DO UPDATE SET client_id = '${selectedClientId}';
-
-COMMIT;
-
--- TO REMOVE PREVIEW MODE AFTER TESTING:
--- DELETE FROM public.user_clients WHERE user_id = '${userId}';
--- DELETE FROM public.user_roles WHERE user_id = '${userId}' AND role = 'Client';
-                    `.trim();
-                    
-                    navigator.clipboard.writeText(sqlScript);
-                    alert("SQL script copied to clipboard! Run it in Supabase SQL Editor, then refresh the page and visit /client-portal");
-                  }}
-                  variant="outline"
-                  className="gap-2"
+                <a 
+                  href={`/client-portal?preview=${selectedClientId}`} 
+                  target="_blank" 
+                  rel="noopener noreferrer"
+                  className="flex-1"
                 >
-                  Copy Setup SQL
-                </Button>
-                <a href="/client-portal" target="_blank" rel="noopener noreferrer">
-                  <Button className="gap-2">
+                  <Button className="w-full gap-2">
                     <Eye className="h-4 w-4" />
-                    Open Client Portal
+                    Open Client Portal Preview
                   </Button>
                 </a>
               </div>
@@ -157,16 +132,14 @@ COMMIT;
 
       <Card>
         <CardHeader>
-          <CardTitle>Alternative: Quick Test Account</CardTitle>
+          <CardTitle>How Preview Works</CardTitle>
         </CardHeader>
-        <CardContent>
-          <p className="text-sm text-muted-foreground mb-4">
-            For faster testing, create a dedicated test client user account in the Users page. 
-            You can then log in with that account to test the full client experience.
-          </p>
-          <Link to="/users">
-            <Button variant="outline">Go to User Management</Button>
-          </Link>
+        <CardContent className="space-y-2 text-sm text-muted-foreground">
+          <p>• As an admin, you have special preview access to all client data</p>
+          <p>• The preview parameter identifies which client's view you want to see</p>
+          <p>• All data is filtered automatically based on the selected client</p>
+          <p>• This allows you to test the client experience before sending invites</p>
+          <p>• Regular client users will only see their own client's data</p>
         </CardContent>
       </Card>
     </div>

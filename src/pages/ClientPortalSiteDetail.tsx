@@ -1,15 +1,20 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, FileText, MapPin, Download, Eye } from "lucide-react";
+import { Building2, FileText, MapPin, Download, Eye, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useClientInfo } from "@/hooks/useUserRole";
 
 const ClientPortalSiteDetail = () => {
   const { siteId } = useParams();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo } = useClientInfo(previewClientId || undefined);
 
   const { data: site, isLoading: siteLoading } = useQuery({
     queryKey: ["client-site", siteId],
@@ -89,6 +94,16 @@ const ClientPortalSiteDetail = () => {
 
   return (
     <div className="space-y-6">
+      {previewClientId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>Admin Preview Mode:</strong> Viewing as{" "}
+            {clientInfo?.clients?.company_name || clientInfo?.clients?.name}
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {/* Site Header */}
       <Card>
         <CardHeader>
@@ -118,7 +133,7 @@ const ClientPortalSiteDetail = () => {
                 )}
               </div>
             </div>
-            <Link to="/client-portal/sites">
+            <Link to={`/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`}>
               <Button variant="outline">Back to Sites</Button>
             </Link>
           </div>
@@ -160,7 +175,7 @@ const ClientPortalSiteDetail = () => {
               {subsections.map((subsection) => (
                 <Link 
                   key={subsection.id}
-                  to={`/client-portal/subsections/${subsection.id}`}
+                  to={`/client-portal/subsections/${subsection.id}${previewClientId ? `?preview=${previewClientId}` : ''}`}
                   className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
                 >
                   <div className="flex items-center gap-3">

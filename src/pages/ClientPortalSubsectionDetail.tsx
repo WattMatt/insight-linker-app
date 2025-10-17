@@ -1,14 +1,19 @@
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, ArrowLeft } from "lucide-react";
+import { FileText, Download, ArrowLeft, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { useClientInfo } from "@/hooks/useUserRole";
 
 const ClientPortalSubsectionDetail = () => {
   const { subsectionId } = useParams();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo } = useClientInfo(previewClientId || undefined);
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
     queryKey: ["client-subsection", subsectionId],
@@ -73,6 +78,16 @@ const ClientPortalSubsectionDetail = () => {
 
   return (
     <div className="space-y-6">
+      {previewClientId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>Admin Preview Mode:</strong> Viewing as{" "}
+            {clientInfo?.clients?.company_name || clientInfo?.clients?.name}
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {/* Subsection Header */}
       <Card>
         <CardHeader>
@@ -91,7 +106,7 @@ const ClientPortalSubsectionDetail = () => {
                 </p>
               </div>
             </div>
-            <Link to={`/client-portal/sites/${subsection.site_id}`}>
+            <Link to={`/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`}>
               <Button variant="outline" className="gap-2">
                 <ArrowLeft className="h-4 w-4" />
                 Back to Site

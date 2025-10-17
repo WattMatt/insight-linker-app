@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "./ui/skeleton";
 
 const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
   const { data: userRole, isLoading: roleLoading } = useUserRole();
 
   useEffect(() => {
@@ -38,6 +40,11 @@ const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
+  }
+
+  // Allow admins with preview parameter to access client portal
+  if (userRole === "Admin" && previewClientId) {
+    return <>{children}</>;
   }
 
   // Redirect to dashboard if user is not a client

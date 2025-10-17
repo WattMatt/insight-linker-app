@@ -4,11 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, MapPin, Eye } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 
 const ClientPortalSites = () => {
-  const { data: clientInfo } = useClientInfo();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   
   const { data: sites, isLoading } = useQuery({
     queryKey: ["client-sites", clientInfo?.client_id],
@@ -37,6 +41,16 @@ const ClientPortalSites = () => {
 
   return (
     <div className="space-y-6">
+      {previewClientId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>Admin Preview Mode:</strong> Viewing sites for{" "}
+            {clientInfo?.clients?.company_name || clientInfo?.clients?.name}
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div>
         <h1 className="text-3xl font-bold">Your Sites</h1>
         <p className="text-muted-foreground mt-2">
@@ -89,7 +103,7 @@ const ClientPortalSites = () => {
                   </div>
                 )}
                 
-                <Link to={`/client-portal/sites/${site.id}`}>
+                <Link to={`/client-portal/sites/${site.id}${previewClientId ? `?preview=${previewClientId}` : ''}`}>
                   <Button className="w-full gap-2">
                     <Eye className="h-4 w-4" />
                     View Site Details

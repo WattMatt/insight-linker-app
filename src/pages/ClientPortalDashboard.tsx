@@ -4,9 +4,14 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Building2, FileText, Calendar, CheckCircle } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
+import { useSearchParams } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 
 const ClientPortalDashboard = () => {
-  const { data: clientInfo, isLoading: clientLoading } = useClientInfo();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo, isLoading: clientLoading } = useClientInfo(previewClientId || undefined);
   
   const { data: stats, isLoading: statsLoading } = useQuery({
     queryKey: ["client-dashboard-stats", clientInfo?.client_id],
@@ -73,6 +78,16 @@ const ClientPortalDashboard = () => {
 
   return (
     <div className="space-y-6">
+      {previewClientId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>Admin Preview Mode:</strong> You are viewing this portal as{" "}
+            {client?.company_name || client?.name}. This is exactly what they will see.
+          </AlertDescription>
+        </Alert>
+      )}
+      
       {/* Welcome Header */}
       <Card>
         <CardHeader>

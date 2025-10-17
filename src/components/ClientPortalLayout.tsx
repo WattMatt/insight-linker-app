@@ -1,5 +1,5 @@
 import { Building2, Calendar, Home, LogOut } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
@@ -19,19 +19,22 @@ import {
   SidebarProvider,
   SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { useClientInfo } from "@/hooks/useUserRole";
-
-const menuItems = [
-  { title: "Dashboard", url: "/client-portal", icon: Home },
-  { title: "Sites", url: "/client-portal/sites", icon: Building2 },
-  { title: "Calendar", url: "/client-portal/calendar", icon: Calendar },
-];
+import { useClientInfo, useUserRole } from "@/hooks/useUserRole";
 
 function ClientSidebar() {
   const { state } = useSidebar();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
-  const { data: clientInfo } = useClientInfo();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo } = useClientInfo(previewClientId || undefined);
+  const { data: userRole } = useUserRole();
+  
+  const menuItems = [
+    { title: "Dashboard", url: `/client-portal${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: Home },
+    { title: "Sites", url: `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: Building2 },
+    { title: "Calendar", url: `/client-portal/calendar${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: Calendar },
+  ];
 
   const { data: currentUser } = useQuery({
     queryKey: ["current-user-profile"],
@@ -60,6 +63,13 @@ function ClientSidebar() {
   };
 
   const handleLogout = async () => {
+    // If in preview mode, just navigate back to admin
+    if (userRole === "Admin" && previewClientId) {
+      navigate("/admin-client-preview");
+      toast.success("Exited preview mode");
+      return;
+    }
+    
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast.error("Error signing out");
@@ -151,7 +161,9 @@ function ClientSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton onClick={handleLogout} className="h-12 md:h-10">
                 <LogOut className="h-5 w-5 md:h-4 md:w-4" />
-                {!collapsed && <span className="text-base md:text-sm">Logout</span>}
+                {!collapsed && <span className="text-base md:text-sm">
+                  {userRole === "Admin" && previewClientId ? "Exit Preview" : "Logout"}
+                </span>}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>

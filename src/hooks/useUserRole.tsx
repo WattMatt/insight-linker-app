@@ -22,14 +22,31 @@ export const useUserRole = () => {
   });
 };
 
-export const useClientInfo = () => {
+export const useClientInfo = (previewClientId?: string) => {
+  const { data: userRole } = useUserRole();
+  
   return useQuery({
-    queryKey: ["user-client-info"],
+    queryKey: ["user-client-info", previewClientId],
     queryFn: async () => {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return null;
 
-      // Get the client mapping
+      // If admin is previewing a specific client
+      if (userRole === "Admin" && previewClientId) {
+        const { data: client, error } = await supabase
+          .from("clients")
+          .select("id, name, logo_url, company_name")
+          .eq("id", previewClientId)
+          .single();
+
+        if (error) throw error;
+        return {
+          client_id: client.id,
+          clients: client,
+        };
+      }
+
+      // Normal client user flow
       const { data: mapping, error: mappingError } = await supabase
         .from("user_clients")
         .select("client_id, clients(id, name, logo_url, company_name)")

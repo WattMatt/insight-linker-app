@@ -1,14 +1,18 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Calendar as CalendarIcon, MapPin, Clock } from "lucide-react";
+import { Calendar as CalendarIcon, MapPin, Clock, Info } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
 import { format } from "date-fns";
+import { useSearchParams } from "react-router-dom";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const ClientPortalCalendar = () => {
-  const { data: clientInfo } = useClientInfo();
+  const [searchParams] = useSearchParams();
+  const previewClientId = searchParams.get("preview");
+  const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   
   const { data: inspections, isLoading } = useQuery({
     queryKey: ["client-inspections", clientInfo?.client_id],
@@ -118,6 +122,16 @@ const ClientPortalCalendar = () => {
 
   return (
     <div className="space-y-6">
+      {previewClientId && (
+        <Alert className="bg-blue-50 border-blue-200">
+          <Info className="h-4 w-4 text-blue-600" />
+          <AlertDescription className="text-blue-800">
+            <strong>Admin Preview Mode:</strong> Viewing calendar for{" "}
+            {clientInfo?.clients?.company_name || clientInfo?.clients?.name}
+          </AlertDescription>
+        </Alert>
+      )}
+      
       <div>
         <h1 className="text-3xl font-bold">Inspection Calendar</h1>
         <p className="text-muted-foreground mt-2">
