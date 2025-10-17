@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid } from "lucide-react";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -20,6 +20,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Site {
   id: string;
@@ -1095,12 +1096,30 @@ const SiteDetail = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="grid w-full grid-cols-6">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="images">Images</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
-          <TabsTrigger value="subsections">Subsections/Tenants</TabsTrigger>
-          <TabsTrigger value="qr-analytics">QR Analytics</TabsTrigger>
-          <TabsTrigger value="export">Export Reports</TabsTrigger>
+          <TabsTrigger value="overview" className="gap-2">
+            <LayoutGrid className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="images" className="gap-2">
+            <Image className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Images</span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileText className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Documents</span>
+          </TabsTrigger>
+          <TabsTrigger value="subsections" className="gap-2">
+            <Layers className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Subsections</span>
+          </TabsTrigger>
+          <TabsTrigger value="qr-analytics" className="gap-2">
+            <BarChart3 className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Analytics</span>
+          </TabsTrigger>
+          <TabsTrigger value="export" className="gap-2">
+            <FileDown className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Export</span>
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6">
