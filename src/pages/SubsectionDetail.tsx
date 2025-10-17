@@ -27,6 +27,7 @@ interface SubsectionData {
   category: string;
   cocNumber?: string;
   cocType?: string;
+  cocStatus?: string;
   cocIssueDate?: string;
   meterSerialNumber?: string;
   ctRatio?: string;
@@ -50,6 +51,7 @@ const SubsectionDetail = () => {
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [cocType, setCocType] = useState<string>("");
+  const [cocStatus, setCocStatus] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
   const [newInspectionDate, setNewInspectionDate] = useState("");
@@ -454,6 +456,7 @@ const SubsectionDetail = () => {
         inspections: inspectionsObj
       });
       setCocType(fullSubsection.coc_type || '');
+      setCocStatus(fullSubsection.coc_status || '');
       
       // Fetch site info for header
       const { data: siteInfo } = await supabase
@@ -571,6 +574,7 @@ const SubsectionDetail = () => {
         .from('subsections')
         .update({
           coc_type: cocType,
+          coc_status: cocStatus,
           updated_at: new Date().toISOString()
         })
         .eq('id', supabaseSubsection.id);
@@ -583,7 +587,8 @@ const SubsectionDetail = () => {
       // Update local state
       setSubsection({
         ...subsection,
-        cocType
+        cocType,
+        cocStatus
       });
       
       toast.success("COC details saved successfully");
@@ -2059,15 +2064,54 @@ const SubsectionDetail = () => {
                           </div>
 
                           <div className="mt-4">
-                            <Label>Type</Label>
+                            <Label>COC Type</Label>
                             <div className="flex gap-4 mt-2">
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`cocType-${doc.id}`}
-                                  value="Pass"
-                                  checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                                  value="Initial"
+                                  checked={cocType === 'Initial'}
                                   onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Initial</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${doc.id}`}
+                                  value="Temporary"
+                                  checked={cocType === 'Temporary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Temporary</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${doc.id}`}
+                                  value="Supplementary"
+                                  checked={cocType === 'Supplementary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Supplementary</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>COC Status</Label>
+                            <div className="flex gap-4 mt-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocStatus-${doc.id}`}
+                                  value="Pass"
+                                  checked={cocStatus === 'Pass'}
+                                  onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Pass</span>
@@ -2075,24 +2119,13 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocType-${doc.id}`}
+                                  name={`cocStatus-${doc.id}`}
                                   value="Fail"
-                                  checked={cocType === 'Fail'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={cocStatus === 'Fail'}
+                                  onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Fail</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${doc.id}`}
-                                  value="Pending"
-                                  checked={cocType === 'Pending'}
-                                  onChange={(e) => setCocType(e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Pending</span>
                               </label>
                             </div>
                           </div>
@@ -2174,15 +2207,54 @@ const SubsectionDetail = () => {
                           </div>
 
                           <div className="mt-4">
-                            <Label>Type</Label>
+                            <Label>COC Type</Label>
                             <div className="flex gap-4 mt-2">
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`cocType-${idx}`}
-                                  value="Pass"
-                                  checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                                  value="Initial"
+                                  checked={cocType === 'Initial'}
                                   onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Initial</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${idx}`}
+                                  value="Temporary"
+                                  checked={cocType === 'Temporary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Temporary</span>
+                              </label>
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocType-${idx}`}
+                                  value="Supplementary"
+                                  checked={cocType === 'Supplementary'}
+                                  onChange={(e) => setCocType(e.target.value)}
+                                  className="w-4 h-4 text-primary cursor-pointer"
+                                />
+                                <span className="text-sm">Supplementary</span>
+                              </label>
+                            </div>
+                          </div>
+
+                          <div className="mt-4">
+                            <Label>COC Status</Label>
+                            <div className="flex gap-4 mt-2">
+                              <label className="flex items-center gap-2 cursor-pointer">
+                                <input
+                                  type="radio"
+                                  name={`cocStatus-${idx}`}
+                                  value="Pass"
+                                  checked={cocStatus === 'Pass'}
+                                  onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Pass</span>
@@ -2190,24 +2262,13 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocType-${idx}`}
+                                  name={`cocStatus-${idx}`}
                                   value="Fail"
-                                  checked={cocType === 'Fail'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={cocStatus === 'Fail'}
+                                  onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Fail</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${idx}`}
-                                  value="Pending"
-                                  checked={cocType === 'Pending'}
-                                  onChange={(e) => setCocType(e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Pending</span>
                               </label>
                             </div>
                           </div>
@@ -2263,15 +2324,54 @@ const SubsectionDetail = () => {
                       </div>
 
                       <div className="mt-4">
-                        <Label>Type</Label>
+                        <Label>COC Type</Label>
                         <div className="flex gap-4 mt-2">
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="radio"
                               name="cocType"
-                              value="Pass"
-                              checked={cocType === 'Pass' || cocType === 'Supplementary'}
+                              value="Initial"
+                              checked={cocType === 'Initial'}
                               onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
+                            />
+                            <span className="text-sm">Initial</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocType"
+                              value="Temporary"
+                              checked={cocType === 'Temporary'}
+                              onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
+                            />
+                            <span className="text-sm">Temporary</span>
+                          </label>
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocType"
+                              value="Supplementary"
+                              checked={cocType === 'Supplementary'}
+                              onChange={(e) => setCocType(e.target.value)}
+                              className="w-4 h-4 text-primary cursor-pointer"
+                            />
+                            <span className="text-sm">Supplementary</span>
+                          </label>
+                        </div>
+                      </div>
+
+                      <div className="mt-4">
+                        <Label>COC Status</Label>
+                        <div className="flex gap-4 mt-2">
+                          <label className="flex items-center gap-2 cursor-pointer">
+                            <input
+                              type="radio"
+                              name="cocStatus"
+                              value="Pass"
+                              checked={cocStatus === 'Pass'}
+                              onChange={(e) => setCocStatus(e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Pass</span>
@@ -2279,24 +2379,13 @@ const SubsectionDetail = () => {
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="radio"
-                              name="cocType"
+                              name="cocStatus"
                               value="Fail"
-                              checked={cocType === 'Fail'}
-                              onChange={(e) => setCocType(e.target.value)}
+                              checked={cocStatus === 'Fail'}
+                              onChange={(e) => setCocStatus(e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Fail</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocType"
-                              value="Pending"
-                              checked={cocType === 'Pending'}
-                              onChange={(e) => setCocType(e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">Pending</span>
                           </label>
                         </div>
                       </div>
