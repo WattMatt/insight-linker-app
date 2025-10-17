@@ -11,15 +11,15 @@ import { Link } from "react-router-dom";
 const AdminClientPreview = () => {
   const [selectedClientId, setSelectedClientId] = useState<string>("");
 
-  const { data: clients } = useQuery({
+  const { data: clients, isLoading: clientsLoading, error: clientsError } = useQuery({
     queryKey: ["clients"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
-        .order("name");
+        .order("company_name");
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
@@ -44,6 +44,20 @@ const AdminClientPreview = () => {
       };
     },
   });
+
+  if (clientsLoading) {
+    return <div className="space-y-6">Loading clients...</div>;
+  }
+
+  if (clientsError) {
+    return (
+      <Alert variant="destructive">
+        <AlertDescription>
+          Error loading clients: {clientsError.message}
+        </AlertDescription>
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-6">
