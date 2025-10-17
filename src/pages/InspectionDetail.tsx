@@ -36,6 +36,16 @@ interface InspectionTemplate {
   };
 }
 
+interface Tenant {
+  id: string;
+  shopNumber: string;
+  shopName: string;
+  breakerSize: string;
+  breakerImage: string;
+  ctSizeAndRatio: string;
+  ctRatioImage: string;
+}
+
 interface InspectionData {
   type: string;
   date: string;
@@ -49,6 +59,7 @@ interface InspectionData {
   testingParty?: string;
   location?: string;
   quality_rating?: number;
+  tenants?: Tenant[];
   jsonData?: {
     [sectionKey: string]: {
       [itemKey: string]: {
@@ -101,6 +112,17 @@ const InspectionDetail = () => {
     estimated_cost: ''
   });
   const [uploadingSnagPhotos, setUploadingSnagPhotos] = useState(false);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [tenantDialogOpen, setTenantDialogOpen] = useState(false);
+  const [newTenant, setNewTenant] = useState<Tenant>({
+    id: '',
+    shopNumber: '',
+    shopName: '',
+    breakerSize: '',
+    breakerImage: '',
+    ctSizeAndRatio: '',
+    ctRatioImage: ''
+  });
 
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
@@ -237,6 +259,49 @@ const InspectionDetail = () => {
       console.error("Error deleting snag:", error);
       toast.error("Failed to delete snag");
     }
+  };
+
+  const handleAddTenant = () => {
+    setNewTenant({
+      id: `tenant_${Date.now()}`,
+      shopNumber: '',
+      shopName: '',
+      breakerSize: '',
+      breakerImage: '',
+      ctSizeAndRatio: '',
+      ctRatioImage: ''
+    });
+    setTenantDialogOpen(true);
+  };
+
+  const handleSaveTenant = () => {
+    if (!newTenant.shopNumber.trim() || !newTenant.shopName.trim()) {
+      toast.error("Shop number and name are required");
+      return;
+    }
+
+    if (newTenant.id && tenants.find(t => t.id === newTenant.id)) {
+      // Update existing tenant
+      setTenants(tenants.map(t => t.id === newTenant.id ? newTenant : t));
+      toast.success("Tenant updated successfully");
+    } else {
+      // Add new tenant
+      setTenants([...tenants, { ...newTenant, id: newTenant.id || `tenant_${Date.now()}` }]);
+      toast.success("Tenant added successfully");
+    }
+
+    setTenantDialogOpen(false);
+  };
+
+  const handleEditTenant = (tenant: Tenant) => {
+    setNewTenant(tenant);
+    setTenantDialogOpen(true);
+  };
+
+  const handleDeleteTenant = (tenantId: string) => {
+    if (!confirm("Are you sure you want to delete this tenant?")) return;
+    setTenants(tenants.filter(t => t.id !== tenantId));
+    toast.success("Tenant deleted successfully");
   };
 
   const handleSnagPhotoUpload = async (files: FileList | null) => {
@@ -399,10 +464,12 @@ const InspectionDetail = () => {
         testingParty: inspData.testing_party || '',
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
+        tenants: (inspData.json_data as any)?.tenants || [],
         jsonData: (inspData.json_data as InspectionData['jsonData']) || {}
       };
 
       setInspection(mappedInspection);
+      setTenants((inspData.json_data as any)?.tenants || []);
       
       // Set site and subsection data
       if (inspData.sites) {
@@ -813,6 +880,12 @@ const InspectionDetail = () => {
       // Determine if inspectionId is a UUID or Firebase ID
       const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId || '');
       
+      // Include tenants in json_data
+      const jsonDataWithTenants = {
+        ...inspection.jsonData,
+        tenants: tenants
+      } as any;
+
       // Update inspection - use appropriate column based on ID format
       const { error } = await supabase
         .from('inspections')
@@ -829,7 +902,7 @@ const InspectionDetail = () => {
           location: inspection.location,
           status: inspection.type,
           quality_rating: inspection.quality_rating,
-          json_data: inspection.jsonData,
+          json_data: jsonDataWithTenants,
           updated_at: new Date().toISOString()
         })
         .eq(isUUID ? 'id' : 'firebase_id', inspectionId);
@@ -1261,6 +1334,7 @@ const InspectionDetail = () => {
                 {section.name}
               </TabsTrigger>
             ))}
+          {templateCategory !== "Site Drawing" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
         </TabsList>
 
@@ -1344,6 +1418,103 @@ const InspectionDetail = () => {
                 )}
               </TabsContent>
             ))}
+
+            <TabsContent value="tenants" className="space-y-4">
+              <Card>
+                <CardHeader>
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <CardTitle>Tenant Information</CardTitle>
+                      <p className="text-sm text-muted-foreground">
+                        Manage tenant details for Electrical Main Board (EMB) Inspection
+                      </p>
+                    </div>
+                    <Button onClick={handleAddTenant}>
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Tenant
+                    </Button>
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  {tenants.length === 0 ? (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground mb-4">
+                        No tenants added yet
+                      </p>
+                      <Button onClick={handleAddTenant} variant="outline">
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add First Tenant
+                      </Button>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {tenants.map((tenant) => (
+                        <Card key={tenant.id}>
+                          <CardContent className="pt-6">
+                            <div className="flex justify-between items-start mb-4">
+                              <div>
+                                <h4 className="font-semibold text-lg">{tenant.shopName}</h4>
+                                <p className="text-sm text-muted-foreground">Shop Number: {tenant.shopNumber}</p>
+                              </div>
+                              <div className="flex gap-2">
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  onClick={() => handleEditTenant(tenant)}
+                                >
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => handleDeleteTenant(tenant.id)}
+                                >
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                </Button>
+                              </div>
+                            </div>
+                            
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div>
+                                <Label className="text-xs text-muted-foreground">Breaker Size</Label>
+                                <p className="text-sm font-medium">{tenant.breakerSize || 'Not specified'}</p>
+                              </div>
+                              <div>
+                                <Label className="text-xs text-muted-foreground">CT Size and Ratio</Label>
+                                <p className="text-sm font-medium">{tenant.ctSizeAndRatio || 'Not specified'}</p>
+                              </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-4 mt-4">
+                              {tenant.breakerImage && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">Breaker Image</Label>
+                                  <img
+                                    src={tenant.breakerImage}
+                                    alt="Breaker"
+                                    className="mt-2 w-full h-48 object-cover rounded border"
+                                  />
+                                </div>
+                              )}
+                              {tenant.ctRatioImage && (
+                                <div>
+                                  <Label className="text-xs text-muted-foreground">CT Ratio Image</Label>
+                                  <img
+                                    src={tenant.ctRatioImage}
+                                    alt="CT Ratio"
+                                    className="mt-2 w-full h-48 object-cover rounded border"
+                                  />
+                                </div>
+                              )}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      ))}
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
 
             <TabsContent value="snag-list" className="space-y-4">
               <Card>
@@ -1457,6 +1628,105 @@ const InspectionDetail = () => {
           </>
         )}
       </Tabs>
+
+      {/* Tenant Dialog */}
+      <Dialog open={tenantDialogOpen} onOpenChange={setTenantDialogOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{newTenant.id && tenants.find(t => t.id === newTenant.id) ? 'Edit Tenant' : 'Add New Tenant'}</DialogTitle>
+            <DialogDescription>
+              Enter tenant information for the Electrical Main Board (EMB)
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="shop-number">Shop Number *</Label>
+                <Input
+                  id="shop-number"
+                  value={newTenant.shopNumber}
+                  onChange={(e) => setNewTenant({ ...newTenant, shopNumber: e.target.value })}
+                  placeholder="e.g., Shop 101"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="shop-name">Shop Name *</Label>
+                <Input
+                  id="shop-name"
+                  value={newTenant.shopName}
+                  onChange={(e) => setNewTenant({ ...newTenant, shopName: e.target.value })}
+                  placeholder="e.g., Coffee Shop"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="breaker-size">Breaker Size</Label>
+                <Input
+                  id="breaker-size"
+                  value={newTenant.breakerSize}
+                  onChange={(e) => setNewTenant({ ...newTenant, breakerSize: e.target.value })}
+                  placeholder="e.g., 63A"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="ct-size">CT Size and Ratio</Label>
+                <Input
+                  id="ct-size"
+                  value={newTenant.ctSizeAndRatio}
+                  onChange={(e) => setNewTenant({ ...newTenant, ctSizeAndRatio: e.target.value })}
+                  placeholder="e.g., 100/5A"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="breaker-image">Breaker (Image URL)</Label>
+              <Input
+                id="breaker-image"
+                value={newTenant.breakerImage}
+                onChange={(e) => setNewTenant({ ...newTenant, breakerImage: e.target.value })}
+                placeholder="Paste image URL"
+              />
+              {newTenant.breakerImage && (
+                <img
+                  src={newTenant.breakerImage}
+                  alt="Breaker preview"
+                  className="mt-2 w-full h-48 object-cover rounded border"
+                />
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="ct-ratio-image">CT Ratio (Image URL)</Label>
+              <Input
+                id="ct-ratio-image"
+                value={newTenant.ctRatioImage}
+                onChange={(e) => setNewTenant({ ...newTenant, ctRatioImage: e.target.value })}
+                placeholder="Paste image URL"
+              />
+              {newTenant.ctRatioImage && (
+                <img
+                  src={newTenant.ctRatioImage}
+                  alt="CT Ratio preview"
+                  className="mt-2 w-full h-48 object-cover rounded border"
+                />
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setTenantDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleSaveTenant}>
+              {newTenant.id && tenants.find(t => t.id === newTenant.id) ? 'Update Tenant' : 'Add Tenant'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Snag Creation Dialog */}
       <Dialog open={snagDialogOpen} onOpenChange={setSnagDialogOpen}>
