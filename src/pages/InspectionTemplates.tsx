@@ -119,6 +119,14 @@ const InspectionTemplates = () => {
           }
         }
 
+        console.log('Template loaded:', {
+          name: template.name,
+          sectionsCount: sections.length,
+          tenantsCount: tenants.length,
+          sections,
+          tenants
+        });
+
         return {
           ...template,
           sections,
