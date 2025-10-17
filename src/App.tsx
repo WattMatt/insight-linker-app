@@ -23,8 +23,6 @@ import InspectionTemplates from "./pages/InspectionTemplates";
 import TemplateBuilderPage from "./pages/TemplateBuilderPage";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
-import DataImport from "./pages/DataImport";
-
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ValidationFeedback from "./pages/ValidationFeedback";
@@ -228,16 +226,6 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Calendar />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/data-import"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <DataImport />
                 </DashboardLayout>
               </ProtectedRoute>
             }
