@@ -58,6 +58,7 @@ interface UserProfile {
   postal_code?: string | null;
   bio?: string | null;
   avatar_url?: string | null;
+  assignedSites?: Array<{ site_id: string; sites: { name: string } }>;
 }
 
 interface PendingInvite {
@@ -151,7 +152,7 @@ const Users = () => {
 
       if (profilesError) throw profilesError;
 
-      // Fetch roles and client mappings for each user
+      // Fetch roles, client mappings, and site assignments for each user
       const usersWithRoles = await Promise.all(
         profiles.map(async (profile) => {
           const { data: roleData } = await supabase
@@ -166,10 +167,16 @@ const Users = () => {
             .eq("user_id", profile.id)
             .maybeSingle();
 
+          const { data: siteAssignments } = await supabase
+            .from("user_sites")
+            .select("site_id, sites(name)")
+            .eq("user_id", profile.id);
+
           return {
             ...profile,
             role: roleData?.role || "User",
             clientInfo: clientMapping,
+            assignedSites: siteAssignments || [],
           };
         })
       );
@@ -753,6 +760,7 @@ const Users = () => {
               <TableHead>Name</TableHead>
               <TableHead>Email</TableHead>
               <TableHead>Role</TableHead>
+              <TableHead>Assigned Sites</TableHead>
               <TableHead>Status</TableHead>
               <TableHead className="text-right">Actions</TableHead>
             </TableRow>
@@ -760,7 +768,7 @@ const Users = () => {
           <TableBody>
             {isLoading ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   Loading users...
                 </TableCell>
               </TableRow>
@@ -775,6 +783,21 @@ const Users = () => {
                     <Badge variant="secondary" className="capitalize">
                       {user.role}
                     </Badge>
+                  </TableCell>
+                  <TableCell>
+                    {user.role === "Contractor" && user.assignedSites && user.assignedSites.length > 0 ? (
+                      <div className="flex flex-wrap gap-1">
+                        {user.assignedSites.map((assignment) => (
+                          <Badge key={assignment.site_id} variant="outline" className="text-xs">
+                            {assignment.sites.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    ) : user.role === "Contractor" ? (
+                      <span className="text-xs text-muted-foreground">No sites assigned</span>
+                    ) : (
+                      <span className="text-xs text-muted-foreground">—</span>
+                    )}
                   </TableCell>
                   <TableCell>
                     <Badge variant={user.status === "Active" ? "default" : "outline"}>
@@ -811,7 +834,7 @@ const Users = () => {
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                   No users found. Invite your first user to get started.
                 </TableCell>
               </TableRow>
