@@ -584,7 +584,15 @@ const InspectionTemplates = () => {
                       variant="outline" 
                       size="sm" 
                       className="flex-1"
-                      onClick={() => setPreviewTemplate(template)}
+                      onClick={() => {
+                        console.log('Preview clicked for template:', {
+                          name: template.name,
+                          hasSections: Array.isArray(template.sections),
+                          sectionsCount: template.sections?.length || 0,
+                          sections: template.sections
+                        });
+                        setPreviewTemplate(template);
+                      }}
                     >
                       <Eye className="mr-2 h-4 w-4" />
                       View
@@ -765,7 +773,8 @@ const InspectionTemplates = () => {
                   </div>
 
                   {/* Section Pages */}
-                  {Array.isArray(previewTemplate.sections) && previewTemplate.sections.map((section, sectionIdx) => (
+                  {Array.isArray(previewTemplate.sections) && previewTemplate.sections.length > 0 ? (
+                    previewTemplate.sections.map((section, sectionIdx) => (
                     <div key={`section-${section.id}`} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
                       <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
                         <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
@@ -777,132 +786,7 @@ const InspectionTemplates = () => {
                             <div className="font-bold text-sm mb-3 text-gray-900">
                               {itemIdx + 1}. {item.name}
                             </div>
-                            
-                            {(item.type === 'checkbox' || item.type === 'checklist') && (
-                              <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                  <span className="text-xs font-semibold text-gray-700">Status:</span>
-                                  <div className={`inline-block px-3 py-1 text-xs font-bold rounded ${
-                                    ['bg-green-100 text-green-800', 'bg-gray-100 text-gray-800', 'bg-red-100 text-red-800'][itemIdx % 3]
-                                  }`}>
-                                    {['✓ PASS', 'N/A', '✗ FAIL'][itemIdx % 3]}
-                                  </div>
-                                </div>
-                                <div className="space-y-1">
-                                  <p className="text-xs font-semibold text-gray-700">Notes:</p>
-                                  <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                                    Inspection completed on site. {item.name} has been thoroughly checked and documented. All safety protocols followed.
-                                  </p>
-                                </div>
-                                <div className="mt-3 grid grid-cols-2 gap-2">
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                    <div className="text-gray-400 text-center">
-                                      <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 1}</div>
-                                      <div className="text-[8px]">Image Placeholder</div>
-                                      <div className="text-[8px] text-gray-400">1024x768</div>
-                                    </div>
-                                  </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                    <div className="text-gray-400 text-center">
-                                      <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx * 2 + 2}</div>
-                                      <div className="text-[8px]">Image Placeholder</div>
-                                      <div className="text-[8px] text-gray-400">1024x768</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'text' && (
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Value:</span>
-                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded flex-1">
-                                    Sample text value for {item.name}
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'number' && (
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Value:</span>
-                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded">
-                                    {Math.floor(Math.random() * 100) + 50} units
-                                  </span>
-                                </div>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-[10px] font-semibold mb-1">PHOTO {itemIdx + 1}</div>
-                                    <div className="text-[8px]">Image Placeholder</div>
-                                    <div className="text-[8px] text-gray-400">1024x768</div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'textarea' && (
-                              <div className="space-y-2">
-                                <div className="space-y-1">
-                                  <p className="text-xs font-semibold text-gray-700">Detailed Notes:</p>
-                                  <p className="text-xs text-gray-600 bg-gray-50 p-3 rounded leading-relaxed">
-                                    Comprehensive inspection notes for {item.name}. All components have been visually inspected and tested according to the standard procedures. Documentation has been completed and all measurements recorded. Additional observations noted during the inspection process.
-                                  </p>
-                                </div>
-                                <div className="mt-3 grid grid-cols-3 gap-2">
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                    <div className="text-gray-400 text-center">
-                                      <div className="text-[9px] font-semibold mb-1">PHOTO A</div>
-                                      <div className="text-[7px]">Placeholder</div>
-                                    </div>
-                                  </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                    <div className="text-gray-400 text-center">
-                                      <div className="text-[9px] font-semibold mb-1">PHOTO B</div>
-                                      <div className="text-[7px]">Placeholder</div>
-                                    </div>
-                                  </div>
-                                  <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                    <div className="text-gray-400 text-center">
-                                      <div className="text-[9px] font-semibold mb-1">PHOTO C</div>
-                                      <div className="text-[7px]">Placeholder</div>
-                                    </div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'image' && (
-                              <div className="space-y-2">
-                                <p className="text-xs font-semibold text-gray-700">Photo Documentation:</p>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-full h-32 flex flex-col items-center justify-center rounded">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-sm font-semibold mb-2">PHOTO {itemIdx + 1}</div>
-                                    <div className="text-xs">Image Placeholder</div>
-                                    <div className="text-xs text-gray-400 mt-1">1024x768 pixels</div>
-                                  </div>
-                                </div>
-                                <p className="text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                                  Caption: Photo taken during inspection of {item.name}
-                                </p>
-                              </div>
-                            )}
-                            
-                            {item.type === 'select' && (
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700 min-w-[80px]">Selected:</span>
-                                  <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded">
-                                    Option {itemIdx + 1}
-                                  </span>
-                                </div>
-                                <div className="text-[10px] text-gray-500 mt-1">
-                                  Available options: {item.options?.join(', ') || 'Option 1, Option 2, Option 3'}
-                                </div>
-                              </div>
-                            )}
-                            
+...
                             {/* Fallback for any unhandled field types */}
                             {!['checkbox', 'checklist', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
                               <div className="space-y-2">
@@ -922,7 +806,16 @@ const InspectionTemplates = () => {
                         {previewTemplate.name} - Page {sectionIdx + 2}
                       </div>
                     </div>
-                  ))}
+                  ))
+                  ) : (
+                    <div className="bg-white aspect-[210/297] p-8 border shadow-lg flex items-center justify-center">
+                      <div className="text-center text-gray-500">
+                        <p className="text-lg font-semibold mb-2">No Sections Defined</p>
+                        <p className="text-sm">This template doesn't have any sections configured yet.</p>
+                        <p className="text-xs mt-2">Edit the template to add sections and fields.</p>
+                      </div>
+                    </div>
+                  )}
 
                   {/* Tenants Page */}
                   {previewTemplate.tenants && previewTemplate.tenants.length > 0 && (
