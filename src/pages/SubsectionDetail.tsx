@@ -1019,11 +1019,8 @@ const SubsectionDetail = () => {
         return;
       }
 
-      // Construct the full URL - signedUrl is a relative path
-      const fullUrl = `https://oltzgidkjxwsukvkomof.supabase.co/storage/v1${signedData.signedUrl}`;
-      
-      // Open the document in a new tab
-      window.open(fullUrl, '_blank');
+      // Open the document in a new tab - signedUrl is already a full URL
+      window.open(signedData.signedUrl, '_blank');
       toast.success(`Opening ${fileName}`);
     } catch (error) {
       console.error("Error downloading document:", error);
@@ -1740,8 +1737,7 @@ const SubsectionDetail = () => {
                                           }
                                           
                                           if (data?.signedUrl) {
-                                            const fullUrl = `https://oltzgidkjxwsukvkomof.supabase.co/storage/v1${data.signedUrl}`;
-                                            window.open(fullUrl, '_blank');
+                                            window.open(data.signedUrl, '_blank');
                                           } else {
                                             throw new Error('No signed URL generated');
                                           }
@@ -2024,8 +2020,7 @@ const SubsectionDetail = () => {
                                     }
                                     
                                     if (data?.signedUrl) {
-                                      const fullUrl = `https://oltzgidkjxwsukvkomof.supabase.co/storage/v1${data.signedUrl}`;
-                                      window.open(fullUrl, '_blank');
+                                      window.open(data.signedUrl, '_blank');
                                     } else {
                                       throw new Error('No signed URL generated');
                                     }
@@ -2604,8 +2599,7 @@ const SubsectionDetail = () => {
                                     }
                                     
                                     if (data?.signedUrl) {
-                                      const fullUrl = `https://oltzgidkjxwsukvkomof.supabase.co/storage/v1${data.signedUrl}`;
-                                      window.open(fullUrl, '_blank');
+                                      window.open(data.signedUrl, '_blank');
                                     } else {
                                       throw new Error('No signed URL generated');
                                     }
