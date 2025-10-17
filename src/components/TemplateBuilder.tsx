@@ -90,6 +90,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
   };
 
   const deleteSection = (sectionId: string) => {
+    if (!confirm("Are you sure you want to delete this section? This action cannot be undone.")) {
+      return;
+    }
     setSections(sections.filter(s => s.id !== sectionId));
   };
 
@@ -122,6 +125,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
   };
 
   const deleteItem = (sectionId: string, itemId: string) => {
+    if (!confirm("Are you sure you want to delete this field? This action cannot be undone.")) {
+      return;
+    }
     setSections(sections.map(s => {
       if (s.id === sectionId) {
         return { ...s, items: s.items.filter(i => i.id !== itemId) };
@@ -148,6 +154,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
   };
 
   const deleteTenant = (tenantId: string) => {
+    if (!confirm("Are you sure you want to delete this tenant? This action cannot be undone.")) {
+      return;
+    }
     setTenants(tenants.filter(t => t.id !== tenantId));
   };
 
