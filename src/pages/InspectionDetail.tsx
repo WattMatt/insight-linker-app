@@ -1213,10 +1213,11 @@ const InspectionDetail = () => {
           {templateCategory !== "Site Drawing" && <TabsTrigger value="general">General Info</TabsTrigger>}
           {Object.entries(template.sections || {})
             .filter(([key, section]) => {
-              // Skip generalInfo sections and any section named "General Information" or similar
+              // Skip generalInfo and observations sections
               const lowerKey = key.toLowerCase();
               const lowerName = section.name?.toLowerCase() || '';
-              return !lowerKey.includes('general') && !lowerName.includes('general');
+              return !lowerKey.includes('general') && !lowerName.includes('general') &&
+                     !lowerKey.includes('observation') && !lowerName.includes('observation');
             })
             .map(([key, section]) => (
               <TabsTrigger key={key} value={key}>
@@ -1255,10 +1256,11 @@ const InspectionDetail = () => {
 
             {Object.entries(template.sections || {})
               .filter(([key, section]) => {
-                // Skip generalInfo sections and any section named "General Information" or similar
+                // Skip generalInfo and observations sections
                 const lowerKey = key.toLowerCase();
                 const lowerName = section.name?.toLowerCase() || '';
-                return !lowerKey.includes('general') && !lowerName.includes('general');
+                return !lowerKey.includes('general') && !lowerName.includes('general') &&
+                       !lowerKey.includes('observation') && !lowerName.includes('observation');
               })
               .map(([sectionKey, section]) => (
               <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
