@@ -38,6 +38,7 @@ import ContractorProtectedRoute from "./components/ContractorProtectedRoute";
 import ContractorDashboard from "./pages/ContractorDashboard";
 import ContractorSites from "./pages/ContractorSites";
 import ContractorSiteDetail from "./pages/ContractorSiteDetail";
+import ContractorSubsectionDetail from "./pages/ContractorSubsectionDetail";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 
@@ -359,6 +360,14 @@ const App = () => (
             element={
               <ContractorProtectedRoute>
                 <ContractorSiteDetail />
+              </ContractorProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor/subsections/:subsectionId"
+            element={
+              <ContractorProtectedRoute>
+                <ContractorSubsectionDetail />
               </ContractorProtectedRoute>
             }
           />
