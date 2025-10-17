@@ -92,18 +92,44 @@ const InspectionTemplates = () => {
 
       if (error) throw error;
       
-      // Type cast the data to match our interface
-      const typedData = (data || []).map(template => ({
-        ...template,
-        sections: template.sections as unknown as TemplateSection[],
-        tenants: (template as any).tenants as Tenant[] || [],
-        cover_page: template.cover_page as unknown as {
-          title: string;
-          subtitle: string;
-          company_name: string;
-          logo_url?: string;
-        },
-      })) as InspectionTemplate[];
+      // Type cast and parse the data to match our interface
+      const typedData = (data || []).map(template => {
+        // Ensure sections is an array
+        let sections: TemplateSection[] = [];
+        if (Array.isArray(template.sections)) {
+          sections = template.sections as unknown as TemplateSection[];
+        } else if (typeof template.sections === 'string') {
+          try {
+            sections = JSON.parse(template.sections) as TemplateSection[];
+          } catch (e) {
+            console.error('Failed to parse sections:', e);
+          }
+        }
+
+        // Ensure tenants is an array
+        let tenants: Tenant[] = [];
+        if (Array.isArray((template as any).tenants)) {
+          tenants = (template as any).tenants as unknown as Tenant[];
+        } else if (typeof (template as any).tenants === 'string') {
+          try {
+            tenants = JSON.parse((template as any).tenants) as Tenant[];
+          } catch (e) {
+            console.error('Failed to parse tenants:', e);
+          }
+        }
+
+        return {
+          ...template,
+          sections,
+          tenants,
+          cover_page: template.cover_page as unknown as {
+            title: string;
+            subtitle: string;
+            company_name: string;
+            logo_url?: string;
+          },
+        };
+      }) as InspectionTemplate[];
       
       setTemplates(typedData);
     } catch (error) {
@@ -738,7 +764,7 @@ const InspectionTemplates = () => {
                   </div>
 
                   {/* Section Pages */}
-                  {previewTemplate.sections?.map((section, sectionIdx) => (
+                  {Array.isArray(previewTemplate.sections) && previewTemplate.sections.map((section, sectionIdx) => (
                     <div key={`section-${section.id}`} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
                       <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
                         <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
