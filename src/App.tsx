@@ -26,6 +26,7 @@ import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ValidationFeedback from "./pages/ValidationFeedback";
+import AdminClientPreview from "./pages/AdminClientPreview";
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
 import { ClientPortalLayout } from "./components/ClientPortalLayout";
 import ClientPortalDashboard from "./pages/ClientPortalDashboard";
@@ -253,6 +254,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <ValidationFeedback />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin-client-preview"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AdminClientPreview />
                 </DashboardLayout>
               </ProtectedRoute>
             }

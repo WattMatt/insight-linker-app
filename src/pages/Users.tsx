@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X } from "lucide-react";
+import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 interface UserProfile {
@@ -74,10 +74,11 @@ const Users = () => {
   const [editOpen, setEditOpen] = useState(false);
   const [email, setEmail] = useState("");
   const [fullName, setFullName] = useState("");
-  const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
+  const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
+  const [selectedClientId, setSelectedClientId] = useState<string>("");
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
-  const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor">("User");
+  const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
   const [editStatus, setEditStatus] = useState<"Active" | "Inactive">("Active");
   const [editFormData, setEditFormData] = useState({
     full_name: "",
@@ -112,7 +113,20 @@ const Users = () => {
     },
   });
 
-  // Fetch all users with their roles
+  // Fetch clients for client user assignment
+  const { data: clients } = useQuery({
+    queryKey: ["clients"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("*")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch all users with their roles and client mappings
   const { data: users, isLoading } = useQuery({
     queryKey: ["users"],
     queryFn: async () => {
@@ -123,7 +137,7 @@ const Users = () => {
 
       if (profilesError) throw profilesError;
 
-      // Fetch roles for each user
+      // Fetch roles and client mappings for each user
       const usersWithRoles = await Promise.all(
         profiles.map(async (profile) => {
           const { data: roleData } = await supabase
@@ -132,9 +146,16 @@ const Users = () => {
             .eq("user_id", profile.id)
             .maybeSingle();
 
+          const { data: clientMapping } = await supabase
+            .from("user_clients")
+            .select("client_id, clients(name, company_name)")
+            .eq("user_id", profile.id)
+            .maybeSingle();
+
           return {
             ...profile,
             role: roleData?.role || "User",
+            clientInfo: clientMapping,
           };
         })
       );
@@ -168,7 +189,7 @@ const Users = () => {
 
   // Invite user mutation
   const inviteMutation = useMutation({
-    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string }) => {
+    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; clientId?: string }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: userData.email,
@@ -176,6 +197,7 @@ const Users = () => {
           role: userData.role,
           isResend: false,
           temporaryPassword: userData.temporaryPassword,
+          clientId: userData.clientId,
         },
       });
 
@@ -197,6 +219,7 @@ const Users = () => {
       setEmail("");
       setFullName("");
       setRole("User");
+      setSelectedClientId("");
       setTemporaryPassword("");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
@@ -422,11 +445,19 @@ const Users = () => {
 
   const handleInvite = (e: React.FormEvent) => {
     e.preventDefault();
+    
+    // Validate client selection for Client role
+    if (role === "Client" && !selectedClientId) {
+      toast.error("Please select a client for this user");
+      return;
+    }
+    
     inviteMutation.mutate({ 
       email, 
       fullName, 
       role,
-      temporaryPassword: temporaryPassword || undefined 
+      temporaryPassword: temporaryPassword || undefined,
+      clientId: role === "Client" ? selectedClientId : undefined
     });
   };
 
@@ -440,7 +471,14 @@ const Users = () => {
           </p>
         </div>
 
-        <Dialog open={open} onOpenChange={setOpen}>
+        <div className="flex gap-2">
+          <a href="/admin-client-preview" target="_blank" rel="noopener noreferrer">
+            <Button variant="outline">
+              <Eye className="mr-2 h-4 w-4" />
+              Preview Client Portal
+            </Button>
+          </a>
+          <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button>
               <UserPlus className="mr-2 h-4 w-4" />
@@ -479,7 +517,10 @@ const Users = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="role">Role</Label>
-                  <Select value={role} onValueChange={(value: any) => setRole(value)}>
+                  <Select value={role} onValueChange={(value: any) => {
+                    setRole(value);
+                    if (value !== "Client") setSelectedClientId("");
+                  }}>
                     <SelectTrigger>
                       <SelectValue />
                     </SelectTrigger>
@@ -488,9 +529,30 @@ const Users = () => {
                       <SelectItem value="Moderator">Moderator</SelectItem>
                       <SelectItem value="User">User</SelectItem>
                       <SelectItem value="Contractor">Contractor</SelectItem>
+                      <SelectItem value="Client">Client</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>
+                {role === "Client" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="client">Assign to Client</Label>
+                    <Select value={selectedClientId} onValueChange={setSelectedClientId} required>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a client" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {clients?.map((client) => (
+                          <SelectItem key={client.id} value={client.id}>
+                            {client.company_name || client.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <p className="text-xs text-muted-foreground">
+                      This user will only see data for the selected client.
+                    </p>
+                  </div>
+                )}
                 <div className="space-y-2">
                   <Label htmlFor="temporaryPassword">Temporary Password (Optional)</Label>
                   <Input
@@ -517,6 +579,7 @@ const Users = () => {
             </form>
           </DialogContent>
         </Dialog>
+        </div>
       </div>
 
       {/* Pending Invites Section */}
@@ -743,6 +806,7 @@ const Users = () => {
                       <SelectItem value="Moderator">Moderator</SelectItem>
                       <SelectItem value="User">User</SelectItem>
                       <SelectItem value="Contractor">Contractor</SelectItem>
+                      <SelectItem value="Client">Client</SelectItem>
                     </SelectContent>
                   </Select>
                 </div>

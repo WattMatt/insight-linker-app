@@ -11,6 +11,7 @@ interface InviteUserRequest {
   role: string;
   isResend?: boolean;
   temporaryPassword?: string;
+  clientId?: string;
 }
 
 Deno.serve(async (req) => {
@@ -48,9 +49,14 @@ Deno.serve(async (req) => {
       throw new Error('Only admins can invite users');
     }
 
-    const { email, fullName, role, isResend, temporaryPassword }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend, temporaryPassword, clientId }: InviteUserRequest = await req.json();
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
+    
+    // Validate clientId for Client role
+    if (role === 'Client' && !clientId) {
+      throw new Error('Client ID is required for Client role users');
+    }
 
     // Validate temporary password if provided
     if (temporaryPassword && temporaryPassword.length < 6) {
@@ -206,6 +212,23 @@ Deno.serve(async (req) => {
       }
 
       console.log('Role assigned successfully');
+      
+      // If Client role, create user_clients mapping
+      if (role === 'Client' && clientId) {
+        const { error: clientMappingError } = await supabase
+          .from('user_clients')
+          .insert({
+            user_id: userId,
+            client_id: clientId,
+          });
+
+        if (clientMappingError) {
+          console.error('Client mapping error:', clientMappingError);
+          throw new Error(`Failed to map user to client: ${clientMappingError.message}`);
+        }
+
+        console.log('User mapped to client successfully');
+      }
     }
 
     // If using temporary password, skip email invitation
