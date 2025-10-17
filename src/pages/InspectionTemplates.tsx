@@ -902,6 +902,18 @@ const InspectionTemplates = () => {
                                 </div>
                               </div>
                             )}
+                            
+                            {/* Fallback for any unhandled field types */}
+                            {!['checkbox', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
+                              <div className="space-y-2">
+                                <div className="flex items-start gap-2">
+                                  <span className="text-xs font-semibold text-gray-700">Type:</span>
+                                  <span className="text-xs text-gray-900 bg-yellow-50 px-3 py-1 rounded">
+                                    {item.type} (Preview not implemented)
+                                  </span>
+                                </div>
+                              </div>
+                            )}
                           </div>
                         ))}
                       </div>
