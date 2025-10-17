@@ -164,8 +164,22 @@ export const SiteDrawingInspection = ({
   };
 
   const handlePinCameraCapture = async (pinId: string) => {
+    const input = document.getElementById(`pin-image-${pinId}`) as HTMLInputElement;
+    
     if (!isNative) {
-      document.getElementById(`pin-image-${pinId}`)?.click();
+      if (input) {
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          input.removeAttribute('multiple');
+          input.setAttribute('capture', 'environment');
+        } else {
+          input.setAttribute('multiple', '');
+          input.removeAttribute('capture');
+        }
+      }
+      
+      input?.click();
       return;
     }
 

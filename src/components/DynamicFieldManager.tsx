@@ -160,8 +160,22 @@ export const DynamicFieldManager = ({
   };
 
   const handleCameraCapture = async (fieldId: string) => {
+    const input = document.getElementById(`image-upload-${fieldId}`) as HTMLInputElement;
+    
     if (!isNative) {
-      document.getElementById(`image-upload-${fieldId}`)?.click();
+      if (input) {
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          input.removeAttribute('multiple');
+          input.setAttribute('capture', 'environment');
+        } else {
+          input.setAttribute('multiple', '');
+          input.removeAttribute('capture');
+        }
+      }
+      
+      input?.click();
       return;
     }
 

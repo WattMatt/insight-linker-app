@@ -837,14 +837,30 @@ const InspectionDetail = () => {
 
   // Handler for camera button that uses native camera on mobile
   const handleCameraCapture = async (sectionKey: string, itemKey: string) => {
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    
     if (!isNative) {
-      // Fall back to file input on web
-      const uploadKey = `${sectionKey}-${itemKey}`;
-      fileInputRefs.current[uploadKey]?.click();
+      // On mobile web browsers, we need to set capture attribute dynamically
+      const input = fileInputRefs.current[uploadKey];
+      if (input) {
+        // Check if it's a mobile device
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          // On mobile, remove multiple and add capture for direct camera access
+          input.removeAttribute('multiple');
+          input.setAttribute('capture', 'environment');
+        } else {
+          // On desktop, ensure multiple is set and no capture
+          input.setAttribute('multiple', '');
+          input.removeAttribute('capture');
+        }
+      }
+      
+      input?.click();
       return;
     }
 
-    const uploadKey = `${sectionKey}-${itemKey}`;
     setUploadingImages(prev => new Set(prev).add(uploadKey));
 
     try {
@@ -875,12 +891,24 @@ const InspectionDetail = () => {
 
   // Handler for tenant image camera capture
   const handleTenantCameraCapture = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage') => {
+    const uploadKey = `${tenantId}-${field}`;
+    const input = tenantImageInputRefs.current[uploadKey];
+    
     if (!isNative) {
-      tenantImageInputRefs.current[`${tenantId}-${field}`]?.click();
+      if (input) {
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          input.setAttribute('capture', 'environment');
+        } else {
+          input.removeAttribute('capture');
+        }
+      }
+      
+      input?.click();
       return;
     }
 
-    const uploadKey = `${tenantId}-${field}`;
     setUploadingTenantImages(prev => new Set(prev).add(uploadKey));
 
     try {
@@ -908,8 +936,22 @@ const InspectionDetail = () => {
 
   // Handler for snag photo camera capture
   const handleSnagCameraCapture = async () => {
+    const input = document.getElementById('snag-photo-upload') as HTMLInputElement;
+    
     if (!isNative) {
-      document.getElementById('snag-photo-upload')?.click();
+      if (input) {
+        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+        
+        if (isMobileDevice) {
+          input.removeAttribute('multiple');
+          input.setAttribute('capture', 'environment');
+        } else {
+          input.setAttribute('multiple', '');
+          input.removeAttribute('capture');
+        }
+      }
+      
+      input?.click();
       return;
     }
 
@@ -1381,7 +1423,6 @@ const InspectionDetail = () => {
                 type="file"
                 accept="image/*"
                 multiple
-                capture="environment"
                 className="hidden"
                 onChange={(e) => handleImageUpload(sectionKey, itemKey, e.target.files)}
               />
@@ -1716,7 +1757,6 @@ const InspectionDetail = () => {
                                   ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-breakerImage`] = el)}
                                   type="file"
                                   accept="image/*"
-                                  capture="environment"
                                   className="hidden"
                                   onChange={(e) => handleTenantImageUpload(tenant.id, 'breakerImage', e.target.files)}
                                 />
@@ -1768,7 +1808,6 @@ const InspectionDetail = () => {
                                   ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-ctRatioImage`] = el)}
                                   type="file"
                                   accept="image/*"
-                                  capture="environment"
                                   className="hidden"
                                   onChange={(e) => handleTenantImageUpload(tenant.id, 'ctRatioImage', e.target.files)}
                                 />
@@ -2114,7 +2153,6 @@ const InspectionDetail = () => {
                   type="file"
                   accept="image/*"
                   multiple
-                  capture="environment"
                   className="hidden"
                   id="snag-photo-upload"
                   onChange={(e) => handleSnagPhotoUpload(e.target.files)}
