@@ -1212,7 +1212,12 @@ const InspectionDetail = () => {
         <TabsList className="w-full justify-start overflow-x-auto flex-wrap h-auto">
           {templateCategory !== "Site Drawing" && <TabsTrigger value="general">General Info</TabsTrigger>}
           {Object.entries(template.sections || {})
-            .filter(([key]) => key !== 'generalInfo') // Skip if template has its own generalInfo section
+            .filter(([key, section]) => {
+              // Skip generalInfo sections and any section named "General Information" or similar
+              const lowerKey = key.toLowerCase();
+              const lowerName = section.name?.toLowerCase() || '';
+              return !lowerKey.includes('general') && !lowerName.includes('general');
+            })
             .map(([key, section]) => (
               <TabsTrigger key={key} value={key}>
                 {section.name}
@@ -1248,7 +1253,14 @@ const InspectionDetail = () => {
               {renderGeneralInfo()}
             </TabsContent>
 
-            {Object.entries(template.sections || {}).map(([sectionKey, section]) => (
+            {Object.entries(template.sections || {})
+              .filter(([key, section]) => {
+                // Skip generalInfo sections and any section named "General Information" or similar
+                const lowerKey = key.toLowerCase();
+                const lowerName = section.name?.toLowerCase() || '';
+                return !lowerKey.includes('general') && !lowerName.includes('general');
+              })
+              .map(([sectionKey, section]) => (
               <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
                 {section.isImageGallery ? (
                   renderImageGallery(sectionKey)
