@@ -39,7 +39,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye } from "lucide-react";
+import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 
 interface UserProfile {
@@ -198,6 +198,25 @@ const Users = () => {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to send invitation");
+    },
+  });
+
+  // Delete pending invite mutation
+  const deletePendingInviteMutation = useMutation({
+    mutationFn: async (inviteId: string) => {
+      const { error } = await supabase
+        .from("pending_user_invites")
+        .delete()
+        .eq("id", inviteId);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast.success("Pending invite deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["pending-invites"] });
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete pending invite");
     },
   });
 
@@ -690,14 +709,24 @@ const Users = () => {
                         )}
                       </TableCell>
                       <TableCell className="text-right">
-                        <Button
-                          size="sm"
-                          onClick={() => sendInviteMutation.mutate(invite)}
-                          disabled={!!invite.invited_at || sendInviteMutation.isPending}
-                        >
-                          <Send className="mr-2 h-3 w-3" />
-                          {invite.invited_at ? 'Resend' : 'Send Invite'}
-                        </Button>
+                        <div className="flex items-center justify-end gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => sendInviteMutation.mutate(invite)}
+                            disabled={!!invite.invited_at || sendInviteMutation.isPending}
+                          >
+                            <Send className="mr-2 h-3 w-3" />
+                            {invite.invited_at ? 'Resend' : 'Send Invite'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => deletePendingInviteMutation.mutate(invite.id)}
+                            disabled={deletePendingInviteMutation.isPending}
+                          >
+                            <Trash2 className="h-3 w-3" />
+                          </Button>
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))
