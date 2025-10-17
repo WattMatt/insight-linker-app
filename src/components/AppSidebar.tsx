@@ -10,7 +10,9 @@ import {
   FileText,
   Settings as SettingsIcon,
   User as UserIcon,
-  MessageSquarePlus
+  MessageSquarePlus,
+  Eye,
+  Briefcase
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -38,6 +40,8 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus },
   { title: "Users", url: "/users", icon: UserCog },
+  { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye },
+  { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase },
   { title: "Settings", url: "/settings", icon: SettingsIcon },
   
 ];
