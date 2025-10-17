@@ -28,6 +28,16 @@ interface TemplateSection {
   }>;
 }
 
+interface Tenant {
+  id: string;
+  shopNumber: string;
+  shopName: string;
+  breakerSize: string;
+  breakerImage: string;
+  ctSizeAndRatio: string;
+  ctRatioImage: string;
+}
+
 interface InspectionTemplate {
   id: string;
   name: string;
@@ -37,6 +47,7 @@ interface InspectionTemplate {
   pages_count: number;
   created_at?: string;
   sections?: TemplateSection[];
+  tenants?: Tenant[];
   cover_page?: {
     title: string;
     subtitle: string;
@@ -85,6 +96,7 @@ const InspectionTemplates = () => {
       const typedData = (data || []).map(template => ({
         ...template,
         sections: template.sections as unknown as TemplateSection[],
+        tenants: (template as any).tenants as Tenant[] || [],
         cover_page: template.cover_page as unknown as {
           title: string;
           subtitle: string;
@@ -313,6 +325,87 @@ const InspectionTemplates = () => {
           yPos += boxHeight + 5;
         });
       });
+
+      // Tenants section if template has tenants
+      if (template.tenants && template.tenants.length > 0) {
+        doc.addPage();
+        
+        // Tenants header
+        doc.setFillColor(41, 128, 185);
+        doc.rect(0, 10, pageWidth, 15, 'F');
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text('TENANT INFORMATION', pageWidth / 2, 20, { align: 'center' });
+        
+        doc.setTextColor(0, 0, 0);
+        yPos = 35;
+        
+        template.tenants.forEach((tenant, tenantIdx) => {
+          // Check if we need a new page
+          if (yPos > pageHeight - 100) {
+            doc.addPage();
+            doc.setFillColor(240, 240, 240);
+            doc.rect(0, 10, pageWidth, 10, 'F');
+            doc.setFontSize(11);
+            doc.setFont(undefined, 'bold');
+            doc.text('Tenant Information (cont)', pageWidth / 2, 17, { align: 'center' });
+            yPos = 30;
+          }
+          
+          // Tenant box
+          doc.setDrawColor(200, 200, 200);
+          doc.setLineWidth(0.5);
+          doc.rect(margin, yPos, contentWidth, 60);
+          
+          // Tenant header
+          doc.setFontSize(11);
+          doc.setFont(undefined, 'bold');
+          doc.text(`Tenant ${tenantIdx + 1}: ${tenant.shopName || 'N/A'}`, margin + 5, yPos + 7);
+          
+          // Tenant details
+          doc.setFontSize(9);
+          doc.setFont(undefined, 'normal');
+          let detailY = yPos + 15;
+          
+          doc.setFont(undefined, 'bold');
+          doc.text('Shop Number:', margin + 5, detailY);
+          doc.setFont(undefined, 'normal');
+          doc.text(tenant.shopNumber || 'N/A', margin + 40, detailY);
+          
+          detailY += 7;
+          doc.setFont(undefined, 'bold');
+          doc.text('Breaker Size:', margin + 5, detailY);
+          doc.setFont(undefined, 'normal');
+          doc.text(tenant.breakerSize || 'N/A', margin + 40, detailY);
+          
+          detailY += 7;
+          doc.setFont(undefined, 'bold');
+          doc.text('CT Size & Ratio:', margin + 5, detailY);
+          doc.setFont(undefined, 'normal');
+          doc.text(tenant.ctSizeAndRatio || 'N/A', margin + 40, detailY);
+          
+          // Image placeholders
+          detailY += 10;
+          doc.setDrawColor(150, 150, 150);
+          doc.setFillColor(250, 250, 250);
+          
+          // Breaker image placeholder
+          doc.rect(margin + 5, detailY, 30, 20, 'FD');
+          doc.setFontSize(7);
+          doc.setTextColor(150, 150, 150);
+          doc.text('Breaker', margin + 20, detailY + 8, { align: 'center' });
+          doc.text('Image', margin + 20, detailY + 12, { align: 'center' });
+          
+          // CT Ratio image placeholder
+          doc.rect(margin + 40, detailY, 30, 20, 'FD');
+          doc.text('CT Ratio', margin + 55, detailY + 8, { align: 'center' });
+          doc.text('Image', margin + 55, detailY + 12, { align: 'center' });
+          
+          doc.setTextColor(0, 0, 0);
+          yPos += 65;
+        });
+      }
 
       // Add page numbers to all content pages
       const totalPages = doc.getNumberOfPages();
@@ -807,6 +900,65 @@ const InspectionTemplates = () => {
                       </div>
                     </div>
                   ))}
+
+                  {/* Tenants Page */}
+                  {previewTemplate.tenants && previewTemplate.tenants.length > 0 && (
+                    <div className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
+                      <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
+                        <h2 className="text-sm font-bold text-center uppercase">Tenant Information</h2>
+                      </div>
+                      
+                      <div className="space-y-4">
+                        {previewTemplate.tenants.map((tenant, tenantIdx) => (
+                          <div key={tenant.id} className="border border-gray-300 p-4">
+                            <div className="font-bold text-sm mb-3 text-gray-900">
+                              Tenant {tenantIdx + 1}: {tenant.shopName || 'N/A'}
+                            </div>
+                            
+                            <div className="space-y-2 text-xs">
+                              <div className="flex">
+                                <span className="font-bold w-32">Shop Number:</span>
+                                <span>{tenant.shopNumber || 'N/A'}</span>
+                              </div>
+                              <div className="flex">
+                                <span className="font-bold w-32">Breaker Size:</span>
+                                <span>{tenant.breakerSize || 'N/A'}</span>
+                              </div>
+                              <div className="flex">
+                                <span className="font-bold w-32">CT Size & Ratio:</span>
+                                <span>{tenant.ctSizeAndRatio || 'N/A'}</span>
+                              </div>
+                            </div>
+
+                            <div className="mt-3 grid grid-cols-2 gap-2">
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 mb-1">Breaker Image:</p>
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-[10px] font-semibold mb-1">BREAKER</div>
+                                    <div className="text-[8px]">Image Placeholder</div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div>
+                                <p className="text-xs font-semibold text-gray-700 mb-1">CT Ratio Image:</p>
+                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
+                                  <div className="text-gray-400 text-center">
+                                    <div className="text-[10px] font-semibold mb-1">CT RATIO</div>
+                                    <div className="text-[8px]">Image Placeholder</div>
+                                  </div>
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                      
+                      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
+                        {previewTemplate.name} - Tenants Page
+                      </div>
+                    </div>
+                  )}
                 </>
               )}
             </div>
