@@ -76,6 +76,7 @@ const Users = () => {
   const [fullName, setFullName] = useState("");
   const [role, setRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
   const [selectedClientId, setSelectedClientId] = useState<string>("");
+  const [selectedSiteIds, setSelectedSiteIds] = useState<string[]>([]);
   const [temporaryPassword, setTemporaryPassword] = useState("");
   const [selectedUser, setSelectedUser] = useState<UserProfile | null>(null);
   const [editRole, setEditRole] = useState<"Admin" | "Moderator" | "User" | "Contractor" | "Client">("User");
@@ -120,6 +121,19 @@ const Users = () => {
       const { data, error } = await supabase
         .from("clients")
         .select("*")
+        .order("name");
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  // Fetch sites for contractor assignment
+  const { data: sites } = useQuery({
+    queryKey: ["sites"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("id, name, address")
         .order("name");
       if (error) throw error;
       return data;
@@ -189,7 +203,7 @@ const Users = () => {
 
   // Invite user mutation
   const inviteMutation = useMutation({
-    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; clientId?: string }) => {
+    mutationFn: async (userData: { email: string; fullName: string; role: string; temporaryPassword?: string; clientId?: string; siteIds?: string[] }) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: userData.email,
@@ -198,6 +212,7 @@ const Users = () => {
           isResend: false,
           temporaryPassword: userData.temporaryPassword,
           clientId: userData.clientId,
+          siteIds: userData.siteIds,
         },
       });
 
@@ -220,6 +235,7 @@ const Users = () => {
       setFullName("");
       setRole("User");
       setSelectedClientId("");
+      setSelectedSiteIds([]);
       setTemporaryPassword("");
       queryClient.invalidateQueries({ queryKey: ["users"] });
     },
@@ -451,13 +467,20 @@ const Users = () => {
       toast.error("Please select a client for this user");
       return;
     }
+
+    // Validate site selection for Contractor role
+    if (role === "Contractor" && selectedSiteIds.length === 0) {
+      toast.error("Please select at least one site for this contractor");
+      return;
+    }
     
     inviteMutation.mutate({ 
       email, 
       fullName, 
       role,
       temporaryPassword: temporaryPassword || undefined,
-      clientId: role === "Client" ? selectedClientId : undefined
+      clientId: role === "Client" ? selectedClientId : undefined,
+      siteIds: role === "Contractor" ? selectedSiteIds : undefined
     });
   };
 
@@ -520,6 +543,7 @@ const Users = () => {
                   <Select value={role} onValueChange={(value: any) => {
                     setRole(value);
                     if (value !== "Client") setSelectedClientId("");
+                    if (value !== "Contractor") setSelectedSiteIds([]);
                   }}>
                     <SelectTrigger>
                       <SelectValue />
@@ -550,6 +574,42 @@ const Users = () => {
                     </Select>
                     <p className="text-xs text-muted-foreground">
                       This user will only see data for the selected client.
+                    </p>
+                  </div>
+                )}
+                {role === "Contractor" && (
+                  <div className="space-y-2">
+                    <Label>Assign to Sites</Label>
+                    <div className="border rounded-lg p-3 space-y-2 max-h-60 overflow-y-auto">
+                      {sites && sites.length > 0 ? (
+                        sites.map((site) => (
+                          <label key={site.id} className="flex items-center space-x-2 cursor-pointer hover:bg-muted/50 p-2 rounded">
+                            <input
+                              type="checkbox"
+                              checked={selectedSiteIds.includes(site.id)}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setSelectedSiteIds([...selectedSiteIds, site.id]);
+                                } else {
+                                  setSelectedSiteIds(selectedSiteIds.filter(id => id !== site.id));
+                                }
+                              }}
+                              className="rounded border-gray-300 text-primary focus:ring-primary"
+                            />
+                            <div className="flex-1">
+                              <div className="font-medium text-sm">{site.name}</div>
+                              {site.address && (
+                                <div className="text-xs text-muted-foreground">{site.address}</div>
+                              )}
+                            </div>
+                          </label>
+                        ))
+                      ) : (
+                        <p className="text-sm text-muted-foreground text-center py-2">No sites available</p>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      This contractor will only see inspections for the selected sites.
                     </p>
                   </div>
                 )}

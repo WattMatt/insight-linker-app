@@ -12,6 +12,7 @@ interface InviteUserRequest {
   isResend?: boolean;
   temporaryPassword?: string;
   clientId?: string;
+  siteIds?: string[];
 }
 
 Deno.serve(async (req) => {
@@ -49,13 +50,18 @@ Deno.serve(async (req) => {
       throw new Error('Only admins can invite users');
     }
 
-    const { email, fullName, role, isResend, temporaryPassword, clientId }: InviteUserRequest = await req.json();
+    const { email, fullName, role, isResend, temporaryPassword, clientId, siteIds }: InviteUserRequest = await req.json();
 
     console.log(isResend ? 'Resending invite to:' : 'Inviting user:', email, 'with role:', role);
     
     // Validate clientId for Client role
     if (role === 'Client' && !clientId) {
       throw new Error('Client ID is required for Client role users');
+    }
+
+    // Validate siteIds for Contractor role
+    if (role === 'Contractor' && (!siteIds || siteIds.length === 0)) {
+      throw new Error('At least one site must be assigned for Contractor role users');
     }
 
     // Validate temporary password if provided
@@ -122,6 +128,48 @@ Deno.serve(async (req) => {
         await supabase
           .from('user_roles')
           .insert({ user_id: userId, role });
+      }
+
+      // Update client mapping if Client role
+      if (role === 'Client' && clientId) {
+        // Check if mapping exists
+        const { data: existingMapping } = await supabase
+          .from('user_clients')
+          .select('id')
+          .eq('user_id', userId)
+          .maybeSingle();
+
+        if (existingMapping) {
+          await supabase
+            .from('user_clients')
+            .update({ client_id: clientId })
+            .eq('user_id', userId);
+        } else {
+          await supabase
+            .from('user_clients')
+            .insert({ user_id: userId, client_id: clientId });
+        }
+      }
+
+      // Update site mappings if Contractor role
+      if (role === 'Contractor' && siteIds && siteIds.length > 0) {
+        // Delete existing site mappings
+        await supabase
+          .from('user_sites')
+          .delete()
+          .eq('user_id', userId);
+
+        // Insert new site mappings
+        const siteMappings = siteIds.map(siteId => ({
+          user_id: userId,
+          site_id: siteId,
+        }));
+
+        await supabase
+          .from('user_sites')
+          .insert(siteMappings);
+
+        console.log(`Updated user site assignments to ${siteIds.length} site(s)`);
       }
 
       // If using temporary password, skip email invitation
@@ -228,6 +276,25 @@ Deno.serve(async (req) => {
         }
 
         console.log('User mapped to client successfully');
+      }
+
+      // If Contractor role, create user_sites mappings
+      if (role === 'Contractor' && siteIds && siteIds.length > 0) {
+        const siteMappings = siteIds.map(siteId => ({
+          user_id: userId,
+          site_id: siteId,
+        }));
+
+        const { error: siteMappingError } = await supabase
+          .from('user_sites')
+          .insert(siteMappings);
+
+        if (siteMappingError) {
+          console.error('Site mapping error:', siteMappingError);
+          throw new Error(`Failed to map user to sites: ${siteMappingError.message}`);
+        }
+
+        console.log(`User mapped to ${siteIds.length} site(s) successfully`);
       }
     }
 
