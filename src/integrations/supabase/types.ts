@@ -292,6 +292,7 @@ export type Database = {
           pages_count: number | null
           sections: Json | null
           sections_count: number | null
+          tenants: Json | null
           updated_at: string
         }
         Insert: {
@@ -304,6 +305,7 @@ export type Database = {
           pages_count?: number | null
           sections?: Json | null
           sections_count?: number | null
+          tenants?: Json | null
           updated_at?: string
         }
         Update: {
@@ -316,6 +318,7 @@ export type Database = {
           pages_count?: number | null
           sections?: Json | null
           sections_count?: number | null
+          tenants?: Json | null
           updated_at?: string
         }
         Relationships: []

@@ -182,7 +182,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         category,
         description,
         sections: sectionsObj,
-        tenants: tenants.length > 0 ? tenants : undefined,
+        tenants: tenants.length > 0 ? tenants as any : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
         updated_at: new Date().toISOString(),
