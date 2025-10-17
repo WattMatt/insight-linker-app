@@ -39,6 +39,7 @@ import ContractorDashboard from "./pages/ContractorDashboard";
 import ContractorSites from "./pages/ContractorSites";
 import ContractorSiteDetail from "./pages/ContractorSiteDetail";
 import ContractorSubsectionDetail from "./pages/ContractorSubsectionDetail";
+import ContractorPortal from "./pages/ContractorPortal";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 
@@ -343,23 +344,7 @@ const App = () => (
             path="/contractor"
             element={
               <ContractorProtectedRoute>
-                <ContractorDashboard />
-              </ContractorProtectedRoute>
-            }
-          />
-          <Route
-            path="/contractor/sites"
-            element={
-              <ContractorProtectedRoute>
-                <ContractorSites />
-              </ContractorProtectedRoute>
-            }
-          />
-          <Route
-            path="/contractor/sites/:siteId"
-            element={
-              <ContractorProtectedRoute>
-                <ContractorSiteDetail />
+                <ContractorPortal />
               </ContractorProtectedRoute>
             }
           />

@@ -25,8 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 
 const menuItems = [
-  { title: "Dashboard", url: "/contractor", icon: Home },
-  { title: "My Sites", url: "/contractor/sites", icon: MapPin },
+  { title: "Site Overview", url: "/contractor", icon: Home },
 ];
 
 const ContractorSidebar = () => {
