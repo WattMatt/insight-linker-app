@@ -1,11 +1,13 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
 import { Skeleton } from "./ui/skeleton";
 
 const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
   const { data: userRole, isLoading: roleLoading } = useUserRole();
 
   useEffect(() => {
@@ -38,6 +40,12 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
     return <Navigate to="/auth" replace />;
   }
 
+  // Allow admins with preview parameter to access contractor portal
+  if (userRole === "Admin" && previewSiteId) {
+    return <>{children}</>;
+  }
+
+  // Redirect to dashboard if user is not a contractor
   if (userRole !== "Contractor") {
     return <Navigate to="/dashboard" replace />;
   }

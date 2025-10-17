@@ -38,6 +38,7 @@ import ContractorProtectedRoute from "./components/ContractorProtectedRoute";
 import ContractorDashboard from "./pages/ContractorDashboard";
 import ContractorSites from "./pages/ContractorSites";
 import ContractorSiteDetail from "./pages/ContractorSiteDetail";
+import AdminContractorPreview from "./pages/AdminContractorPreview";
 
 const queryClient = new QueryClient();
 
@@ -268,6 +269,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <AdminClientPreview />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin-contractor-preview"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <AdminContractorPreview />
                 </DashboardLayout>
               </ProtectedRoute>
             }

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useContractorSites } from "@/hooks/useContractorSites";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -9,7 +9,9 @@ import ContractorPortalLayout from "@/components/ContractorPortalLayout";
 
 const ContractorSites = () => {
   const navigate = useNavigate();
-  const { data: sites, isLoading } = useContractorSites();
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
+  const { data: sites, isLoading } = useContractorSites(previewSiteId || undefined);
   const [searchTerm, setSearchTerm] = useState("");
 
   const filteredSites = sites?.filter((site: any) =>

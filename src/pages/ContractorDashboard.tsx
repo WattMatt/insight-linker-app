@@ -1,3 +1,4 @@
+import { useSearchParams } from "react-router-dom";
 import { useContractorSites } from "@/hooks/useContractorSites";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -7,7 +8,9 @@ import { supabase } from "@/integrations/supabase/client";
 import ContractorPortalLayout from "@/components/ContractorPortalLayout";
 
 const ContractorDashboard = () => {
-  const { data: sites, isLoading: sitesLoading } = useContractorSites();
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
+  const { data: sites, isLoading: sitesLoading } = useContractorSites(previewSiteId || undefined);
 
   const { data: inspections, isLoading: inspectionsLoading } = useQuery({
     queryKey: ["contractor-inspections"],

@@ -1,8 +1,10 @@
 import { Home, MapPin, LogOut, User, Briefcase } from "lucide-react";
-import { NavLink, useNavigate } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
+import { useUserRole } from "@/hooks/useUserRole";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
   Sidebar,
   SidebarContent,
@@ -30,6 +32,9 @@ const menuItems = [
 const ContractorSidebar = () => {
   const navigate = useNavigate();
   const { open } = useSidebar();
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
+  const { data: userRole } = useUserRole();
 
   const { data: currentUser } = useQuery({
     queryKey: ["current-user-profile"],
@@ -48,6 +53,13 @@ const ContractorSidebar = () => {
   });
 
   const handleLogout = async () => {
+    // If admin is in preview mode, exit preview instead of logging out
+    if (userRole === "Admin" && previewSiteId) {
+      navigate("/admin-contractor-preview");
+      toast.success("Exited contractor preview mode");
+      return;
+    }
+    
     await supabase.auth.signOut();
     toast.success("Logged out successfully");
     navigate("/auth");
@@ -143,6 +155,10 @@ const ContractorSidebar = () => {
 };
 
 const ContractorPortalLayout = ({ children }: { children: React.ReactNode }) => {
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
+  const { data: userRole } = useUserRole();
+
   return (
     <SidebarProvider>
       <div className="min-h-screen flex w-full">
@@ -153,6 +169,13 @@ const ContractorPortalLayout = ({ children }: { children: React.ReactNode }) => 
             <h1 className="text-lg font-semibold">Contractor Portal</h1>
           </header>
           <div className="p-6">
+            {userRole === "Admin" && previewSiteId && (
+              <Alert className="mb-6 bg-blue-50 border-blue-200">
+                <AlertDescription>
+                  You are viewing the contractor portal as an admin. This is how contractors see their assigned site.
+                </AlertDescription>
+              </Alert>
+            )}
             {children}
           </div>
         </main>
