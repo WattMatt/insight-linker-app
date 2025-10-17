@@ -34,6 +34,10 @@ import ClientPortalSites from "./pages/ClientPortalSites";
 import ClientPortalSiteDetail from "./pages/ClientPortalSiteDetail";
 import ClientPortalSubsectionDetail from "./pages/ClientPortalSubsectionDetail";
 import ClientPortalCalendar from "./pages/ClientPortalCalendar";
+import ContractorProtectedRoute from "./components/ContractorProtectedRoute";
+import ContractorDashboard from "./pages/ContractorDashboard";
+import ContractorSites from "./pages/ContractorSites";
+import ContractorSiteDetail from "./pages/ContractorSiteDetail";
 
 const queryClient = new QueryClient();
 
@@ -318,6 +322,42 @@ const App = () => (
                   <ClientPortalCalendar />
                 </ClientPortalLayout>
               </ClientProtectedRoute>
+            }
+          />
+          
+          {/* Contractor Portal Routes */}
+          <Route
+            path="/contractor"
+            element={
+              <ContractorProtectedRoute>
+                <ContractorDashboard />
+              </ContractorProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor/sites"
+            element={
+              <ContractorProtectedRoute>
+                <ContractorSites />
+              </ContractorProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor/sites/:siteId"
+            element={
+              <ContractorProtectedRoute>
+                <ContractorSiteDetail />
+              </ContractorProtectedRoute>
+            }
+          />
+          <Route
+            path="/contractor/inspections/:inspectionId"
+            element={
+              <ContractorProtectedRoute>
+                <DashboardLayout>
+                  <InspectionDetail />
+                </DashboardLayout>
+              </ContractorProtectedRoute>
             }
           />
           

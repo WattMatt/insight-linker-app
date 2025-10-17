@@ -1001,6 +1001,35 @@ export type Database = {
         }
         Relationships: []
       }
+      user_sites: {
+        Row: {
+          created_at: string | null
+          id: string
+          site_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          site_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          site_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_sites_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       validation_conversations: {
         Row: {
           created_at: string | null
