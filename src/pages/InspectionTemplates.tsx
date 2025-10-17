@@ -739,7 +739,7 @@ const InspectionTemplates = () => {
 
                   {/* Section Pages */}
                   {previewTemplate.sections?.map((section, sectionIdx) => (
-                    <div key={section.id} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
+                    <div key={`section-${section.id}`} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
                       <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
                         <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
                       </div>
