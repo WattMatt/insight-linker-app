@@ -119,14 +119,6 @@ const InspectionTemplates = () => {
           }
         }
 
-        console.log('Template loaded:', {
-          name: template.name,
-          sectionsCount: sections.length,
-          tenantsCount: tenants.length,
-          sections,
-          tenants
-        });
-
         return {
           ...template,
           sections,
@@ -786,7 +778,7 @@ const InspectionTemplates = () => {
                               {itemIdx + 1}. {item.name}
                             </div>
                             
-                            {item.type === 'checkbox' && (
+                            {(item.type === 'checkbox' || item.type === 'checklist') && (
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-semibold text-gray-700">Status:</span>
@@ -912,7 +904,7 @@ const InspectionTemplates = () => {
                             )}
                             
                             {/* Fallback for any unhandled field types */}
-                            {!['checkbox', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
+                            {!['checkbox', 'checklist', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
                               <div className="space-y-2">
                                 <div className="flex items-start gap-2">
                                   <span className="text-xs font-semibold text-gray-700">Type:</span>
