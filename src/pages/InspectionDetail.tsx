@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -72,6 +72,9 @@ interface InspectionData {
 const InspectionDetail = () => {
   const { clientId, siteId, subsectionId, inspectionId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
+  const isContractorPortal = !clientId && !siteId && !subsectionId;
   const [template, setTemplate] = useState<InspectionTemplate | null>(null);
   const [templateCategory, setTemplateCategory] = useState<string>("");
   const [inspection, setInspection] = useState<InspectionData | null>(null);
@@ -356,10 +359,11 @@ const InspectionDetail = () => {
         console.error("Error fetching inspection:", inspError);
         toast.error("Inspection not found");
         // Navigate based on available parameters
-        if (subsectionId) {
+        if (isContractorPortal) {
+          navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
+        } else if (subsectionId) {
           navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
         } else {
-          // For contractor portal without subsectionId
           navigate('/contractor');
         }
         return;
@@ -1172,9 +1176,15 @@ const InspectionDetail = () => {
           <p className="text-muted-foreground">Inspection not found</p>
           <Button 
             className="mt-4" 
-            onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
+            onClick={() => {
+              if (isContractorPortal) {
+                navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
+              } else {
+                navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
+              }
+            }}
           >
-            Back to Subsection
+            {isContractorPortal ? 'Back to Portal' : 'Back to Subsection'}
           </Button>
         </div>
       </div>
@@ -1189,7 +1199,18 @@ const InspectionDetail = () => {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
+            onClick={() => {
+              if (isContractorPortal) {
+                // Navigate back to subsection detail if we have subsection_id from inspection data
+                if (inspection?.jsonData && subsectionData?.id) {
+                  navigate(`/contractor/subsections/${subsectionData.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
+                } else {
+                  navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
+                }
+              } else {
+                navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
+              }
+            }}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>

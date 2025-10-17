@@ -89,7 +89,7 @@ const ContractorSubsectionDetail = () => {
       <div className="space-y-6">
         <Button
           variant="ghost"
-          onClick={() => navigate(`/contractor/sites/${subsection.sites.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
+          onClick={() => navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
           className="mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
