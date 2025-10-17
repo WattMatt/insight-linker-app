@@ -28,23 +28,28 @@ const TemplateBuilderPage = () => {
 
       if (error) throw error;
 
-      // Convert database sections format to builder format
-      const sections = data.sections
-        ? Object.entries(data.sections).map(([sectionId, sectionData]: [string, any]) => ({
-            id: sectionId,
-            name: sectionData.name,
-            order_index: sectionData.order_index || 0,
-            items: sectionData.items
-              ? Object.entries(sectionData.items).map(([itemId, itemData]: [string, any]) => ({
-                  id: itemId,
-                  name: itemData.name,
-                  type: itemData.type || "text",
-                  required: itemData.required || false,
-                  options: itemData.options,
-                }))
-              : [],
-          }))
-        : [];
+      // Handle both array and object formats for sections
+      let sections = [];
+      if (Array.isArray(data.sections)) {
+        // New format: already an array
+        sections = data.sections;
+      } else if (data.sections && typeof data.sections === 'object') {
+        // Old format: convert object to array
+        sections = Object.entries(data.sections).map(([sectionId, sectionData]: [string, any]) => ({
+          id: sectionId,
+          name: sectionData.name,
+          order_index: sectionData.order_index || 0,
+          items: sectionData.items
+            ? Object.entries(sectionData.items).map(([itemId, itemData]: [string, any]) => ({
+                id: itemId,
+                name: itemData.name,
+                type: itemData.type || "text",
+                required: itemData.required || false,
+                options: itemData.options,
+              }))
+            : [],
+        }));
+      }
 
       setTemplateData({
         name: data.name,
@@ -62,7 +67,8 @@ const TemplateBuilderPage = () => {
   };
 
   const handleSave = () => {
-    navigate("/inspection-templates");
+    // Force a page reload to fetch fresh data
+    window.location.href = "/inspection-templates";
   };
 
   if (loading) {
