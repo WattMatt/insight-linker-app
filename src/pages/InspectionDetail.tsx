@@ -123,6 +123,8 @@ const InspectionDetail = () => {
     ctSizeAndRatio: '',
     ctRatioImage: ''
   });
+  const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
+  const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
 
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
@@ -302,6 +304,81 @@ const InspectionDetail = () => {
     if (!confirm("Are you sure you want to delete this tenant?")) return;
     setTenants(tenants.filter(t => t.id !== tenantId));
     toast.success("Tenant deleted successfully");
+  };
+
+  const handleTenantImageUpload = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage', files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const uploadKey = `${tenantId}-${field}`;
+    setUploadingTenantImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      const file = files[0];
+      const fileExt = file.name.split('.').pop();
+      const timestamp = Date.now();
+      const fileName = `${inspectionId}/tenants/${tenantId}/${field}/${timestamp}.${fileExt}`;
+
+      const { data, error } = await supabase.storage
+        .from('inspection-photos')
+        .upload(fileName, file);
+
+      if (error) throw error;
+
+      const { data: urlData } = supabase.storage
+        .from('inspection-photos')
+        .getPublicUrl(data.path);
+
+      setTenants(tenants.map(t => 
+        t.id === tenantId ? { ...t, [field]: urlData.publicUrl } : t
+      ));
+
+      toast.success("Image uploaded successfully");
+    } catch (error) {
+      console.error("Error uploading tenant image:", error);
+      toast.error("Failed to upload image");
+    } finally {
+      setUploadingTenantImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadKey);
+        return newSet;
+      });
+    }
+  };
+
+  const handleTenantFieldChange = (tenantId: string, field: keyof Tenant, value: string) => {
+    setTenants(tenants.map(t => 
+      t.id === tenantId ? { ...t, [field]: value } : t
+    ));
+  };
+
+  const handleDeleteTenantImage = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage') => {
+    const tenant = tenants.find(t => t.id === tenantId);
+    if (!tenant) return;
+
+    const imageUrl = tenant[field];
+    if (!imageUrl) return;
+
+    if (!imageUrl.includes('supabase.co/storage')) {
+      toast.error("Only Supabase images can be deleted");
+      return;
+    }
+
+    try {
+      const urlParts = imageUrl.split('/inspection-photos/');
+      if (urlParts.length > 1) {
+        const filePath = urlParts[1].split('?')[0];
+        await supabase.storage.from('inspection-photos').remove([filePath]);
+      }
+
+      setTenants(tenants.map(t => 
+        t.id === tenantId ? { ...t, [field]: '' } : t
+      ));
+
+      toast.success("Image deleted successfully");
+    } catch (error) {
+      console.error("Error deleting tenant image:", error);
+      toast.error("Failed to delete image");
+    }
   };
 
   const handleSnagPhotoUpload = async (files: FileList | null) => {
@@ -1447,65 +1524,170 @@ const InspectionDetail = () => {
                       </Button>
                     </div>
                   ) : (
-                    <div className="space-y-4">
+                    <div className="space-y-6">
                       {tenants.map((tenant) => (
                         <Card key={tenant.id}>
-                          <CardContent className="pt-6">
+                          <CardContent className="pt-6 space-y-4">
                             <div className="flex justify-between items-start mb-4">
                               <div>
-                                <h4 className="font-semibold text-lg">{tenant.shopName}</h4>
-                                <p className="text-sm text-muted-foreground">Shop Number: {tenant.shopNumber}</p>
+                                <h4 className="font-semibold text-lg">{tenant.shopName || 'New Tenant'}</h4>
+                                <p className="text-sm text-muted-foreground">Shop Number: {tenant.shopNumber || 'Not set'}</p>
                               </div>
-                              <div className="flex gap-2">
-                                <Button
-                                  variant="outline"
-                                  size="sm"
-                                  onClick={() => handleEditTenant(tenant)}
-                                >
-                                  Edit
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => handleDeleteTenant(tenant.id)}
-                                >
-                                  <Trash2 className="h-4 w-4 text-destructive" />
-                                </Button>
-                              </div>
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => handleDeleteTenant(tenant.id)}
+                              >
+                                <Trash2 className="h-4 w-4 text-destructive" />
+                              </Button>
                             </div>
                             
                             <div className="grid md:grid-cols-2 gap-4">
-                              <div>
-                                <Label className="text-xs text-muted-foreground">Breaker Size</Label>
-                                <p className="text-sm font-medium">{tenant.breakerSize || 'Not specified'}</p>
+                              <div className="space-y-2">
+                                <Label htmlFor={`shop-number-${tenant.id}`}>Shop Number *</Label>
+                                <Input
+                                  id={`shop-number-${tenant.id}`}
+                                  value={tenant.shopNumber}
+                                  onChange={(e) => handleTenantFieldChange(tenant.id, 'shopNumber', e.target.value)}
+                                  placeholder="e.g., Shop 101"
+                                />
                               </div>
-                              <div>
-                                <Label className="text-xs text-muted-foreground">CT Size and Ratio</Label>
-                                <p className="text-sm font-medium">{tenant.ctSizeAndRatio || 'Not specified'}</p>
+                              <div className="space-y-2">
+                                <Label htmlFor={`shop-name-${tenant.id}`}>Shop Name *</Label>
+                                <Input
+                                  id={`shop-name-${tenant.id}`}
+                                  value={tenant.shopName}
+                                  onChange={(e) => handleTenantFieldChange(tenant.id, 'shopName', e.target.value)}
+                                  placeholder="e.g., Coffee Shop"
+                                />
                               </div>
                             </div>
 
-                            <div className="grid md:grid-cols-2 gap-4 mt-4">
-                              {tenant.breakerImage && (
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">Breaker Image</Label>
-                                  <img
-                                    src={tenant.breakerImage}
-                                    alt="Breaker"
-                                    className="mt-2 w-full h-48 object-cover rounded border"
-                                  />
-                                </div>
-                              )}
-                              {tenant.ctRatioImage && (
-                                <div>
-                                  <Label className="text-xs text-muted-foreground">CT Ratio Image</Label>
-                                  <img
-                                    src={tenant.ctRatioImage}
-                                    alt="CT Ratio"
-                                    className="mt-2 w-full h-48 object-cover rounded border"
-                                  />
-                                </div>
-                              )}
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label htmlFor={`breaker-size-${tenant.id}`}>Breaker Size</Label>
+                                <Input
+                                  id={`breaker-size-${tenant.id}`}
+                                  value={tenant.breakerSize}
+                                  onChange={(e) => handleTenantFieldChange(tenant.id, 'breakerSize', e.target.value)}
+                                  placeholder="e.g., 63A"
+                                />
+                              </div>
+                              <div className="space-y-2">
+                                <Label htmlFor={`ct-size-${tenant.id}`}>CT Size and Ratio</Label>
+                                <Input
+                                  id={`ct-size-${tenant.id}`}
+                                  value={tenant.ctSizeAndRatio}
+                                  onChange={(e) => handleTenantFieldChange(tenant.id, 'ctSizeAndRatio', e.target.value)}
+                                  placeholder="e.g., 100/5A"
+                                />
+                              </div>
+                            </div>
+
+                            <div className="grid md:grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <Label>Breaker Image</Label>
+                                {tenant.breakerImage ? (
+                                  <div className="relative group">
+                                    <img
+                                      src={tenant.breakerImage}
+                                      alt="Breaker"
+                                      className="w-full h-48 object-cover rounded border"
+                                    />
+                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => handleDeleteTenantImage(tenant.id, 'breakerImage')}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
+                                    <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-xs text-gray-500">No breaker image</p>
+                                  </div>
+                                )}
+                                <input
+                                  ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-breakerImage`] = el)}
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="hidden"
+                                  onChange={(e) => handleTenantImageUpload(tenant.id, 'breakerImage', e.target.files)}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => tenantImageInputRefs.current[`${tenant.id}-breakerImage`]?.click()}
+                                  disabled={uploadingTenantImages.has(`${tenant.id}-breakerImage`)}
+                                >
+                                  {uploadingTenantImages.has(`${tenant.id}-breakerImage`) ? (
+                                    <>Uploading...</>
+                                  ) : (
+                                    <>
+                                      <Upload className="mr-2 h-4 w-4" />
+                                      {tenant.breakerImage ? 'Replace Image' : 'Upload Image'}
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
+
+                              <div className="space-y-2">
+                                <Label>CT Ratio Image</Label>
+                                {tenant.ctRatioImage ? (
+                                  <div className="relative group">
+                                    <img
+                                      src={tenant.ctRatioImage}
+                                      alt="CT Ratio"
+                                      className="w-full h-48 object-cover rounded border"
+                                    />
+                                    <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                      <Button
+                                        type="button"
+                                        variant="destructive"
+                                        size="sm"
+                                        onClick={() => handleDeleteTenantImage(tenant.id, 'ctRatioImage')}
+                                      >
+                                        <X className="h-4 w-4" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
+                                    <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                    <p className="text-xs text-gray-500">No CT ratio image</p>
+                                  </div>
+                                )}
+                                <input
+                                  ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-ctRatioImage`] = el)}
+                                  type="file"
+                                  accept="image/*"
+                                  capture="environment"
+                                  className="hidden"
+                                  onChange={(e) => handleTenantImageUpload(tenant.id, 'ctRatioImage', e.target.files)}
+                                />
+                                <Button
+                                  type="button"
+                                  variant="outline"
+                                  className="w-full"
+                                  onClick={() => tenantImageInputRefs.current[`${tenant.id}-ctRatioImage`]?.click()}
+                                  disabled={uploadingTenantImages.has(`${tenant.id}-ctRatioImage`)}
+                                >
+                                  {uploadingTenantImages.has(`${tenant.id}-ctRatioImage`) ? (
+                                    <>Uploading...</>
+                                  ) : (
+                                    <>
+                                      <Upload className="mr-2 h-4 w-4" />
+                                      {tenant.ctRatioImage ? 'Replace Image' : 'Upload Image'}
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           </CardContent>
                         </Card>
