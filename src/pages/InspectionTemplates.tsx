@@ -25,6 +25,7 @@ interface TemplateSection {
     name: string;
     type: string;
     required: boolean;
+    options?: string[];
   }>;
 }
 
@@ -777,7 +778,7 @@ const InspectionTemplates = () => {
                               {itemIdx + 1}. {item.name}
                             </div>
                             
-                            {item.type === 'checklist' && (
+                            {item.type === 'checkbox' && (
                               <div className="space-y-2">
                                 <div className="flex items-center gap-2">
                                   <span className="text-xs font-semibold text-gray-700">Status:</span>
@@ -888,32 +889,16 @@ const InspectionTemplates = () => {
                               </div>
                             )}
                             
-                            {item.type === 'signature' && (
-                              <div className="space-y-2">
-                                <p className="text-xs font-semibold text-gray-700">Signature Required:</p>
-                                <div className="border-2 border-gray-300 bg-white h-20 flex items-end px-3 pb-2 rounded">
-                                  <div className="text-gray-400 italic text-xs">Signature placeholder</div>
-                                </div>
-                                <div className="flex gap-4 text-xs">
-                                  <div>
-                                    <span className="font-semibold text-gray-700">Name:</span>
-                                    <span className="ml-2 text-gray-600">Inspector Name</span>
-                                  </div>
-                                  <div>
-                                    <span className="font-semibold text-gray-700">Date:</span>
-                                    <span className="ml-2 text-gray-600">{new Date().toLocaleDateString()}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'date' && (
+                            {item.type === 'select' && (
                               <div className="space-y-2">
                                 <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700 min-w-[60px]">Date:</span>
+                                  <span className="text-xs font-semibold text-gray-700 min-w-[80px]">Selected:</span>
                                   <span className="text-xs text-gray-900 bg-gray-50 px-3 py-1 rounded">
-                                    {new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}
+                                    Option {itemIdx + 1}
                                   </span>
+                                </div>
+                                <div className="text-[10px] text-gray-500 mt-1">
+                                  Available options: {item.options?.join(', ') || 'Option 1, Option 2, Option 3'}
                                 </div>
                               </div>
                             )}
