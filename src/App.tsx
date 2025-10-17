@@ -39,6 +39,7 @@ import ContractorDashboard from "./pages/ContractorDashboard";
 import ContractorSites from "./pages/ContractorSites";
 import ContractorSiteDetail from "./pages/ContractorSiteDetail";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
+import ContractorPortalLayout from "./components/ContractorPortalLayout";
 
 const queryClient = new QueryClient();
 
@@ -365,9 +366,9 @@ const App = () => (
             path="/contractor/inspections/:inspectionId"
             element={
               <ContractorProtectedRoute>
-                <DashboardLayout>
+                <ContractorPortalLayout>
                   <InspectionDetail />
-                </DashboardLayout>
+                </ContractorPortalLayout>
               </ContractorProtectedRoute>
             }
           />
