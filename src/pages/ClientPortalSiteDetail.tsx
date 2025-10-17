@@ -187,16 +187,16 @@ const ClientPortalSiteDetail = () => {
       <Tabs defaultValue="overview" className="space-y-6">
         <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="overview" className="gap-2">
-            <LayoutGrid className="h-4 w-4" />
-            {!isMobile && <span>Overview</span>}
+            <LayoutGrid className="h-4 w-4 shrink-0" />
+            <span className="hidden md:inline">Overview</span>
           </TabsTrigger>
           <TabsTrigger value="subsections" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            {!isMobile && <span>Subsections</span>}
+            <Building2 className="h-4 w-4 shrink-0" />
+            <span className="hidden md:inline">Subsections</span>
           </TabsTrigger>
           <TabsTrigger value="documents" className="gap-2">
-            <FileText className="h-4 w-4" />
-            {!isMobile && <span>Documents</span>}
+            <FileText className="h-4 w-4 shrink-0" />
+            <span className="hidden md:inline">Documents</span>
           </TabsTrigger>
         </TabsList>
 
