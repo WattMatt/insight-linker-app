@@ -159,29 +159,11 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
 
     setSaving(true);
     try {
-      // Convert sections to the format expected by the database
-      const sectionsObj = sections.reduce((acc, section) => {
-        acc[section.id] = {
-          name: section.name,
-          order_index: section.order_index,
-          items: section.items.reduce((itemsAcc, item) => {
-            itemsAcc[item.id] = {
-              name: item.name,
-              type: item.type,
-              required: item.required,
-              ...(item.options && { options: item.options })
-            };
-            return itemsAcc;
-          }, {} as any)
-        };
-        return acc;
-      }, {} as any);
-
       const templateData = {
         name: templateName,
         category,
         description,
-        sections: sectionsObj,
+        sections: sections as any,  // Save as array
         tenants: tenants.length > 0 ? tenants as any : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
