@@ -330,14 +330,15 @@ const InspectionTemplates = () => {
             doc.setFillColor(mockStatus === 'Pass' ? 220 : 240, mockStatus === 'Pass' ? 240 : 240, mockStatus === 'Pass' ? 220 : 240);
             doc.rect(margin + 5, yPos + labelHeight + 5, 30, 6, 'F');
             doc.setFont(undefined, 'bold');
-            doc.text(`Value for ${mockStatus}`, margin + 7, yPos + labelHeight + 9);
+            doc.text(`Status: ${mockStatus}`, margin + 7, yPos + labelHeight + 9);
             doc.setFont(undefined, 'normal');
-            doc.text(`Notes: This is a mock note for ${item.name}`, margin + 5, yPos + labelHeight + 16);
+            doc.text('Notes: This is a mock note for preview purposes', margin + 5, yPos + labelHeight + 16);
           } else if (item.type === 'text' || item.type === 'number') {
-            doc.text(`Value for ${item.name}`, margin + 5, yPos + labelHeight + 8);
+            doc.text(`Value: Sample ${item.type} value`, margin + 5, yPos + labelHeight + 8);
           } else if (item.type === 'textarea') {
             doc.text('Notes:', margin + 5, yPos + labelHeight + 8);
-            doc.text(`This is a mock note for ${item.name}`, margin + 5, yPos + labelHeight + 14);
+            doc.text('This is a sample note for preview purposes.', margin + 5, yPos + labelHeight + 14);
+            doc.text('Actual field will contain inspector notes.', margin + 5, yPos + labelHeight + 19);
           } else if (item.type === 'image') {
             doc.setDrawColor(150, 150, 150);
             doc.setFillColor(250, 250, 250);
@@ -347,6 +348,19 @@ const InspectionTemplates = () => {
             doc.text('Photo', margin + 25, yPos + labelHeight + 22, { align: 'center' });
             doc.text('Placeholder', margin + 25, yPos + labelHeight + 27, { align: 'center' });
             doc.setTextColor(0, 0, 0);
+          } else if (item.type === 'select' && (item as any).options) {
+            doc.setFillColor(230, 240, 255);
+            doc.rect(margin + 5, yPos + labelHeight + 5, 35, 6, 'F');
+            doc.setFont(undefined, 'bold');
+            doc.text(`Selected: ${(item as any).options[0]}`, margin + 7, yPos + labelHeight + 9);
+          } else if (item.type === 'checkbox') {
+            doc.setDrawColor(100, 100, 100);
+            doc.setLineWidth(0.5);
+            doc.rect(margin + 5, yPos + labelHeight + 5, 4, 4, 'S');
+            doc.setFillColor(41, 128, 185);
+            doc.rect(margin + 6, yPos + labelHeight + 6, 2, 2, 'F');
+            doc.setFont(undefined, 'normal');
+            doc.text('Checked', margin + 11, yPos + labelHeight + 9);
           }
           
           yPos += boxHeight + 5;
