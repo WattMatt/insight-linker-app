@@ -30,10 +30,17 @@ const menuItems = [
 
 const ContractorSidebar = () => {
   const navigate = useNavigate();
-  const { open } = useSidebar();
+  const { open, setOpenMobile, isMobile } = useSidebar();
   const [searchParams] = useSearchParams();
   const previewSiteId = searchParams.get("preview");
   const { data: userRole } = useUserRole();
+
+  // Close mobile sidebar on navigation
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   // Build menu items with preview parameter if present
   const navigationItems = menuItems.map(item => ({
@@ -104,6 +111,7 @@ const ContractorSidebar = () => {
                     <NavLink
                       to={item.url}
                       end
+                      onClick={handleNavClick}
                       className={({ isActive }) =>
                         isActive
                           ? "bg-primary/10 text-primary font-medium"
@@ -165,7 +173,7 @@ const ContractorPortalLayout = ({ children }: { children: React.ReactNode }) => 
   const { data: userRole } = useUserRole();
 
   return (
-    <SidebarProvider>
+    <SidebarProvider defaultOpen={false}>
       <div className="min-h-screen flex w-full">
         <ContractorSidebar />
         <main className="flex-1 overflow-auto">

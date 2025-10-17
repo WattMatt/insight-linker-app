@@ -47,9 +47,16 @@ const menuItems = [
 ];
 
 export function AppSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile, isMobile } = useSidebar();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
+
+  // Close mobile sidebar on navigation
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
 
   // Fetch company settings for logo and name
   const { data: settings } = useQuery({
@@ -137,6 +144,7 @@ export function AppSidebar() {
                   <SidebarMenuButton asChild className="h-12 md:h-10">
                     <NavLink
                       to={item.url}
+                      onClick={handleNavClick}
                       className={({ isActive }) =>
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"

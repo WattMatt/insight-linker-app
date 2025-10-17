@@ -22,13 +22,20 @@ import {
 import { useClientInfo, useUserRole } from "@/hooks/useUserRole";
 
 function ClientSidebar() {
-  const { state } = useSidebar();
+  const { state, setOpenMobile, isMobile } = useSidebar();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
   const [searchParams] = useSearchParams();
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   const { data: userRole } = useUserRole();
+  
+  // Close mobile sidebar on navigation
+  const handleNavClick = () => {
+    if (isMobile) {
+      setOpenMobile(false);
+    }
+  };
   
   const menuItems = [
     { title: "Dashboard", url: `/client-portal${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: Home },
@@ -117,6 +124,7 @@ function ClientSidebar() {
                     <NavLink
                       to={item.url}
                       end={item.url === "/client-portal"}
+                      onClick={handleNavClick}
                       className={({ isActive }) =>
                         isActive
                           ? "bg-sidebar-accent text-sidebar-accent-foreground"
