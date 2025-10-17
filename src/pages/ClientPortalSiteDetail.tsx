@@ -183,10 +183,10 @@ const ClientPortalSiteDetail = () => {
 
       {/* Tabs */}
       <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview">Overview</TabsTrigger>
-          <TabsTrigger value="subsections">Subsections</TabsTrigger>
-          <TabsTrigger value="documents">Documents</TabsTrigger>
+        <TabsList className="flex w-full flex-wrap md:grid md:grid-cols-3 gap-1">
+          <TabsTrigger value="overview" className="flex-1 min-w-[100px]">Overview</TabsTrigger>
+          <TabsTrigger value="subsections" className="flex-1 min-w-[100px]">Subsections</TabsTrigger>
+          <TabsTrigger value="documents" className="flex-1 min-w-[100px]">Documents</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
