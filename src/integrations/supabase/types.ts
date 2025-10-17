@@ -1193,6 +1193,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      cleanup_old_pending_invites: {
+        Args: Record<PropertyKey, never>
+        Returns: number
+      }
       get_user_client_id: {
         Args: Record<PropertyKey, never>
         Returns: string
