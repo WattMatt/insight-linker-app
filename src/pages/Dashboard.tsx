@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, ClipboardCheck, Activity, CheckCircle } from "lucide-react";
+import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatDistanceToNow } from "date-fns";
+import { formatDistanceToNow, format, differenceInDays } from "date-fns";
+import { useNavigate } from "react-router-dom";
 
 interface DashboardStats {
   totalClients: number;
@@ -28,6 +29,24 @@ interface UpcomingEvent {
   status: string;
 }
 
+interface HighRiskSnag {
+  id: string;
+  title: string;
+  risk_level: string;
+  status: string;
+  created_at: string;
+  updated_at: string;
+  subsection_id: string;
+  subsections: {
+    name: string;
+    site_id: string;
+    sites: {
+      name: string;
+      client_id: string;
+    };
+  };
+}
+
 const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
@@ -37,7 +56,9 @@ const Dashboard = () => {
   });
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
+  const [highRiskSnags, setHighRiskSnags] = useState<HighRiskSnag[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
@@ -48,12 +69,33 @@ const Dashboard = () => {
       const today = new Date().toISOString().split('T')[0];
       
       // Fetch from Supabase only
-      const [supabaseClientsRes, supabaseSitesRes, supabaseInspectionsRes, activityRes, eventsRes] = await Promise.all([
+      const [supabaseClientsRes, supabaseSitesRes, supabaseInspectionsRes, activityRes, eventsRes, highRiskSnagsRes] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("sites").select("id", { count: "exact", head: true }),
         supabase.from("inspections").select("id, status", { count: "exact" }),
         supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(5),
         supabase.from("calendar_events").select("*").gte("start_date", today).order("start_date", { ascending: true }).limit(5),
+        supabase.from("snags")
+          .select(`
+            id,
+            title,
+            risk_level,
+            status,
+            created_at,
+            updated_at,
+            subsection_id,
+            subsections (
+              name,
+              site_id,
+              sites (
+                name,
+                client_id
+              )
+            )
+          `)
+          .in("risk_level", ["High", "Critical"])
+          .order("created_at", { ascending: false })
+          .limit(10),
       ]);
 
       const totalClients = supabaseClientsRes.count || 0;
@@ -73,6 +115,7 @@ const Dashboard = () => {
 
       setActivities(activityRes.data || []);
       setUpcomingEvents(eventsRes.data || []);
+      setHighRiskSnags(highRiskSnagsRes.data || []);
     } catch (error) {
       console.error("Error fetching dashboard data:", error);
     } finally {
@@ -133,6 +176,81 @@ const Dashboard = () => {
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
+        {/* High-Risk Snags Tracker */}
+        <Card className="md:col-span-2">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-orange-500" />
+              High-Risk Snags Tracker
+            </CardTitle>
+            <CardDescription>
+              Critical and high-risk issues requiring immediate attention
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {highRiskSnags.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No high-risk snags at the moment</p>
+            ) : (
+              <div className="space-y-3">
+                {highRiskSnags.map((snag) => {
+                  const daysSinceLogged = differenceInDays(new Date(), new Date(snag.created_at));
+                  const daysSinceCleared = snag.status === 'Closed' 
+                    ? differenceInDays(new Date(), new Date(snag.updated_at))
+                    : null;
+
+                  return (
+                    <div 
+                      key={snag.id} 
+                      className="flex items-start gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
+                      onClick={() => {
+                        const clientId = snag.subsections?.sites?.client_id;
+                        const siteId = snag.subsections?.site_id;
+                        if (clientId && siteId && snag.subsection_id) {
+                          navigate(`/clients/${clientId}/sites/${siteId}/subsections/${snag.subsection_id}`);
+                        }
+                      }}
+                    >
+                      <AlertTriangle className={`h-5 w-5 mt-0.5 flex-shrink-0 ${
+                        snag.risk_level === 'Critical' ? 'text-red-500' : 'text-orange-500'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1 flex-wrap">
+                          <p className="text-sm font-medium">{snag.title}</p>
+                          <Badge variant={snag.risk_level === 'Critical' ? 'destructive' : 'default'}>
+                            {snag.risk_level} Risk
+                          </Badge>
+                          <Badge variant={snag.status === 'Open' ? 'destructive' : 'secondary'}>
+                            {snag.status}
+                          </Badge>
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-1">
+                          {snag.subsections?.name} • {snag.subsections?.sites?.name}
+                        </p>
+                        <div className="flex gap-4 text-xs text-muted-foreground">
+                          <span>
+                            Logged: {format(new Date(snag.created_at), 'MMM dd, yyyy')} 
+                            ({daysSinceLogged} {daysSinceLogged === 1 ? 'day' : 'days'} ago)
+                          </span>
+                          {snag.status === 'Closed' && daysSinceCleared !== null && (
+                            <span className="text-green-600 dark:text-green-400">
+                              Cleared: {daysSinceCleared} {daysSinceCleared === 1 ? 'day' : 'days'} ago
+                            </span>
+                          )}
+                          {snag.status === 'Open' && (
+                            <span className="text-orange-600 dark:text-orange-400 font-medium">
+                              Still open
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
         {/* Upcoming Schedule */}
         <Card>
           <CardHeader>
