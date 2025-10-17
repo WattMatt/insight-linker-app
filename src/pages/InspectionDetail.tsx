@@ -575,10 +575,10 @@ const InspectionDetail = () => {
           sections: templateData.sections as any
         });
         
-        // Set first section as active tab
-        const firstSection = Object.keys(templateData.sections as any)[0];
-        if (firstSection) {
-          setActiveTab(firstSection);
+        // Set active tab - default to general for non-Site Drawing templates
+        if (templateData.category === "Site Drawing") {
+          const firstSection = Object.keys(templateData.sections as any)[0];
+          setActiveTab(firstSection || 'general');
         } else {
           setActiveTab('general');
         }

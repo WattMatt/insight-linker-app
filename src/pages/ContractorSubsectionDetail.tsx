@@ -171,7 +171,7 @@ const ContractorSubsectionDetail = () => {
                   >
                     <div className="flex-1">
                       <h3 className="font-semibold">
-                        {inspection.inspection_templates?.name || inspection.title}
+                        {inspection.inspection_templates?.name || `${subsection.name} Inspection`}
                       </h3>
                       {inspection.description && (
                         <p className="text-sm text-muted-foreground mt-1">
