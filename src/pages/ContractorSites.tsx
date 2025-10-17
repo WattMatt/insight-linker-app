@@ -61,7 +61,7 @@ const ContractorSites = () => {
               <Card
                 key={site.id}
                 className="cursor-pointer hover:shadow-lg transition-shadow"
-                onClick={() => navigate(`/contractor/sites/${site.id}`)}
+                onClick={() => navigate(`/contractor/sites/${site.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
               >
                 {site.site_image_url && (
                   <div className="h-48 overflow-hidden rounded-t-lg">

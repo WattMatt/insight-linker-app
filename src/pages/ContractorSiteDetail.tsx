@@ -1,4 +1,4 @@
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -11,6 +11,8 @@ import ContractorPortalLayout from "@/components/ContractorPortalLayout";
 const ContractorSiteDetail = () => {
   const { siteId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const previewSiteId = searchParams.get("preview");
 
   const { data: site, isLoading: siteLoading } = useQuery({
     queryKey: ["contractor-site", siteId],
@@ -82,7 +84,7 @@ const ContractorSiteDetail = () => {
       <div className="space-y-6">
         <Button
           variant="ghost"
-          onClick={() => navigate("/contractor/sites")}
+          onClick={() => navigate(`/contractor/sites${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
           className="mb-4"
         >
           <ArrowLeft className="h-4 w-4 mr-2" />
@@ -134,7 +136,7 @@ const ContractorSiteDetail = () => {
                   <div
                     key={inspection.id}
                     className="flex items-center justify-between p-4 border rounded-lg hover:bg-muted/50 transition-colors cursor-pointer"
-                    onClick={() => navigate(`/contractor/inspections/${inspection.id}`)}
+                    onClick={() => navigate(`/contractor/inspections/${inspection.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
                   >
                     <div className="flex-1">
                       <h3 className="font-semibold">{inspection.title}</h3>
