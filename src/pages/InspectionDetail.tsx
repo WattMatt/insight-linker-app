@@ -154,18 +154,27 @@ const InspectionDetail = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
+      // Check if inspectionId is a valid UUID (not a Firebase ID)
+      const isValidUUID = inspectionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId);
+      
+      const snagData: any = {
+        subsection_id: subsectionId,
+        title: newSnag.title,
+        description: newSnag.description,
+        notes: newSnag.notes,
+        photos: newSnag.photos,
+        status: 'Open',
+        created_by: user?.id
+      };
+      
+      // Only add inspection_id if it's a valid UUID
+      if (isValidUUID) {
+        snagData.inspection_id = inspectionId;
+      }
+      
       const { error } = await supabase
         .from('snags')
-        .insert({
-          subsection_id: subsectionId,
-          inspection_id: inspectionId,
-          title: newSnag.title,
-          description: newSnag.description,
-          notes: newSnag.notes,
-          photos: newSnag.photos,
-          status: 'Open',
-          created_by: user?.id
-        });
+        .insert(snagData);
       
       if (error) throw error;
       
