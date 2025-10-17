@@ -33,7 +33,7 @@ const ContractorSubsectionDetail = () => {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inspections")
-        .select("*")
+        .select("*, inspection_templates(name)")
         .eq("subsection_id", subsectionId)
         .order("inspection_date", { ascending: false });
 
@@ -170,7 +170,9 @@ const ContractorSubsectionDetail = () => {
                     onClick={() => navigate(`/contractor/inspections/${inspection.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`)}
                   >
                     <div className="flex-1">
-                      <h3 className="font-semibold">{inspection.title}</h3>
+                      <h3 className="font-semibold">
+                        {inspection.inspection_templates?.name || inspection.title}
+                      </h3>
                       {inspection.description && (
                         <p className="text-sm text-muted-foreground mt-1">
                           {inspection.description}
