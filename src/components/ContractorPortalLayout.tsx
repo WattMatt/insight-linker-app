@@ -35,6 +35,12 @@ const ContractorSidebar = () => {
   const previewSiteId = searchParams.get("preview");
   const { data: userRole } = useUserRole();
 
+  // Build menu items with preview parameter if present
+  const navigationItems = menuItems.map(item => ({
+    ...item,
+    url: previewSiteId ? `${item.url}?preview=${previewSiteId}` : item.url
+  }));
+
   const { data: currentUser } = useQuery({
     queryKey: ["current-user-profile"],
     queryFn: async () => {
@@ -92,7 +98,7 @@ const ContractorSidebar = () => {
           <SidebarGroupLabel>Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
+              {navigationItems.map((item) => (
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton asChild>
                     <NavLink
