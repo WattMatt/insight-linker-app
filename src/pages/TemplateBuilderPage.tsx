@@ -51,6 +51,7 @@ const TemplateBuilderPage = () => {
         category: data.category,
         description: data.description || "",
         sections,
+        tenants: (data as any).tenants || [],
       });
     } catch (error) {
       console.error("Error fetching template:", error);

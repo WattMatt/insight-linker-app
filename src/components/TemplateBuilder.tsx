@@ -6,6 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, GripVertical, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
@@ -25,6 +26,16 @@ interface TemplateSection {
   items: TemplateItem[];
 }
 
+interface Tenant {
+  id: string;
+  shopNumber: string;
+  shopName: string;
+  breakerSize: string;
+  breakerImage: string;
+  ctSizeAndRatio: string;
+  ctRatioImage: string;
+}
+
 interface TemplateBuilderProps {
   templateId?: string;
   initialData?: {
@@ -32,6 +43,7 @@ interface TemplateBuilderProps {
     category: string;
     description: string;
     sections: TemplateSection[];
+    tenants?: Tenant[];
   };
   onSave?: () => void;
 }
@@ -60,6 +72,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
   const [category, setCategory] = useState(initialData?.category || "General");
   const [description, setDescription] = useState(initialData?.description || "");
   const [sections, setSections] = useState<TemplateSection[]>(initialData?.sections || []);
+  const [tenants, setTenants] = useState<Tenant[]>(initialData?.tenants || []);
   const [saving, setSaving] = useState(false);
 
   const addSection = () => {
@@ -117,6 +130,27 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
     }));
   };
 
+  const addTenant = () => {
+    const newTenant: Tenant = {
+      id: `tenant_${Date.now()}`,
+      shopNumber: "",
+      shopName: "",
+      breakerSize: "",
+      breakerImage: "",
+      ctSizeAndRatio: "",
+      ctRatioImage: "",
+    };
+    setTenants([...tenants, newTenant]);
+  };
+
+  const updateTenant = (tenantId: string, updates: Partial<Tenant>) => {
+    setTenants(tenants.map(t => t.id === tenantId ? { ...t, ...updates } : t));
+  };
+
+  const deleteTenant = (tenantId: string) => {
+    setTenants(tenants.filter(t => t.id !== tenantId));
+  };
+
   const saveTemplate = async () => {
     if (!templateName.trim()) {
       toast.error("Please enter a template name");
@@ -148,6 +182,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         category,
         description,
         sections: sectionsObj,
+        tenants: tenants.length > 0 ? tenants : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
         updated_at: new Date().toISOString(),
@@ -227,23 +262,30 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         </CardContent>
       </Card>
 
-      <div className="flex items-center justify-between">
-        <h3 className="text-lg font-semibold">Sections & Fields</h3>
-        <Button onClick={addSection} variant="outline" size="sm">
-          <Plus className="mr-2 h-4 w-4" />
-          Add Section
-        </Button>
-      </div>
+      <Tabs defaultValue="structure" className="w-full">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="structure">Template Structure</TabsTrigger>
+          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+        </TabsList>
 
-      {sections.length === 0 && (
-        <Card>
-          <CardContent className="py-12 text-center text-muted-foreground">
-            No sections yet. Click "Add Section" to create your first section.
-          </CardContent>
-        </Card>
-      )}
+        <TabsContent value="structure" className="space-y-6 mt-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Sections & Fields</h3>
+            <Button onClick={addSection} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Section
+            </Button>
+          </div>
 
-      {sections.map((section, sectionIdx) => (
+          {sections.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                No sections yet. Click "Add Section" to create your first section.
+              </CardContent>
+            </Card>
+          )}
+
+          {sections.map((section, sectionIdx) => (
         <Card key={section.id}>
           <CardHeader className="pb-3">
             <div className="flex items-center gap-3">
@@ -334,7 +376,104 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
             </Button>
           </CardContent>
         </Card>
-      ))}
+          ))}
+        </TabsContent>
+
+        <TabsContent value="tenants" className="space-y-6 mt-6">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Tenant Information</h3>
+            <Button onClick={addTenant} variant="outline" size="sm">
+              <Plus className="mr-2 h-4 w-4" />
+              Add Tenant
+            </Button>
+          </div>
+
+          {tenants.length === 0 && (
+            <Card>
+              <CardContent className="py-12 text-center text-muted-foreground">
+                No tenants yet. Click "Add Tenant" to create your first tenant entry.
+              </CardContent>
+            </Card>
+          )}
+
+          {tenants.map((tenant) => (
+            <Card key={tenant.id}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-base">
+                    {tenant.shopName || tenant.shopNumber || "New Tenant"}
+                  </CardTitle>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => deleteTenant(tenant.id)}
+                  >
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Shop Number</Label>
+                    <Input
+                      value={tenant.shopNumber}
+                      onChange={(e) => updateTenant(tenant.id, { shopNumber: e.target.value })}
+                      placeholder="e.g., Shop 101"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Shop Name</Label>
+                    <Input
+                      value={tenant.shopName}
+                      onChange={(e) => updateTenant(tenant.id, { shopName: e.target.value })}
+                      placeholder="e.g., Coffee Shop"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>Breaker Size</Label>
+                    <Input
+                      value={tenant.breakerSize}
+                      onChange={(e) => updateTenant(tenant.id, { breakerSize: e.target.value })}
+                      placeholder="e.g., 63A"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>Breaker (Image URL)</Label>
+                    <Input
+                      value={tenant.breakerImage}
+                      onChange={(e) => updateTenant(tenant.id, { breakerImage: e.target.value })}
+                      placeholder="Image URL or upload path"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label>CT Size and Ratio</Label>
+                    <Input
+                      value={tenant.ctSizeAndRatio}
+                      onChange={(e) => updateTenant(tenant.id, { ctSizeAndRatio: e.target.value })}
+                      placeholder="e.g., 100/5A"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <Label>CT Ratio (Image URL)</Label>
+                    <Input
+                      value={tenant.ctRatioImage}
+                      onChange={(e) => updateTenant(tenant.id, { ctRatioImage: e.target.value })}
+                      placeholder="Image URL or upload path"
+                    />
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </TabsContent>
+      </Tabs>
 
       <div className="flex justify-end gap-3 pt-6 border-t">
         <Button onClick={saveTemplate} disabled={saving}>
