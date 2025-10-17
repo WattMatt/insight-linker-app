@@ -26,6 +26,13 @@ import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
 import NotFound from "./pages/NotFound";
 import ValidationFeedback from "./pages/ValidationFeedback";
+import ClientProtectedRoute from "./components/ClientProtectedRoute";
+import { ClientPortalLayout } from "./components/ClientPortalLayout";
+import ClientPortalDashboard from "./pages/ClientPortalDashboard";
+import ClientPortalSites from "./pages/ClientPortalSites";
+import ClientPortalSiteDetail from "./pages/ClientPortalSiteDetail";
+import ClientPortalSubsectionDetail from "./pages/ClientPortalSubsectionDetail";
+import ClientPortalCalendar from "./pages/ClientPortalCalendar";
 
 const queryClient = new QueryClient();
 
@@ -250,6 +257,59 @@ const App = () => (
               </ProtectedRoute>
             }
           />
+          
+          {/* Client Portal Routes */}
+          <Route
+            path="/client-portal"
+            element={
+              <ClientProtectedRoute>
+                <ClientPortalLayout>
+                  <ClientPortalDashboard />
+                </ClientPortalLayout>
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/client-portal/sites"
+            element={
+              <ClientProtectedRoute>
+                <ClientPortalLayout>
+                  <ClientPortalSites />
+                </ClientPortalLayout>
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/client-portal/sites/:siteId"
+            element={
+              <ClientProtectedRoute>
+                <ClientPortalLayout>
+                  <ClientPortalSiteDetail />
+                </ClientPortalLayout>
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/client-portal/subsections/:subsectionId"
+            element={
+              <ClientProtectedRoute>
+                <ClientPortalLayout>
+                  <ClientPortalSubsectionDetail />
+                </ClientPortalLayout>
+              </ClientProtectedRoute>
+            }
+          />
+          <Route
+            path="/client-portal/calendar"
+            element={
+              <ClientProtectedRoute>
+                <ClientPortalLayout>
+                  <ClientPortalCalendar />
+                </ClientPortalLayout>
+              </ClientProtectedRoute>
+            }
+          />
+          
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

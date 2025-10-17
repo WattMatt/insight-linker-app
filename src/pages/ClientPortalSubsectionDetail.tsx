@@ -1,0 +1,210 @@
+import { useParams, Link } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { FileText, Download, ArrowLeft } from "lucide-react";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+const ClientPortalSubsectionDetail = () => {
+  const { subsectionId } = useParams();
+
+  const { data: subsection, isLoading: subsectionLoading } = useQuery({
+    queryKey: ["client-subsection", subsectionId],
+    enabled: !!subsectionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subsections")
+        .select("*, sites(name, id)")
+        .eq("id", subsectionId!)
+        .single();
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: documents, isLoading: docsLoading } = useQuery({
+    queryKey: ["client-subsection-documents", subsectionId],
+    enabled: !!subsectionId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subsection_documents")
+        .select("*, document_categories(name)")
+        .eq("subsection_id", subsectionId!)
+        .order("uploaded_at", { ascending: false });
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  if (subsectionLoading) {
+    return (
+      <div className="space-y-6">
+        <Skeleton className="h-32 w-full" />
+        <Skeleton className="h-64 w-full" />
+      </div>
+    );
+  }
+
+  if (!subsection) {
+    return (
+      <Card>
+        <CardContent className="py-12 text-center">
+          <p className="text-lg font-medium">Subsection not found</p>
+          <Link to="/client-portal/sites">
+            <Button className="mt-4">Back to Sites</Button>
+          </Link>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const getStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "compliant": return "bg-green-500";
+      case "missing": return "bg-red-500";
+      case "expired": return "bg-orange-500";
+      default: return "bg-gray-500";
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Subsection Header */}
+      <Card>
+        <CardHeader>
+          <div className="flex items-start justify-between">
+            <div className="flex items-center gap-4">
+              <div className="h-16 w-16 bg-primary/10 rounded-lg flex items-center justify-center">
+                <FileText className="h-8 w-8 text-primary" />
+              </div>
+              <div>
+                <CardTitle className="text-2xl">{subsection.name}</CardTitle>
+                {subsection.description && (
+                  <p className="text-muted-foreground mt-1">{subsection.description}</p>
+                )}
+                <p className="text-sm text-muted-foreground mt-2">
+                  Site: {subsection.sites?.name}
+                </p>
+              </div>
+            </div>
+            <Link to={`/client-portal/sites/${subsection.site_id}`}>
+              <Button variant="outline" className="gap-2">
+                <ArrowLeft className="h-4 w-4" />
+                Back to Site
+              </Button>
+            </Link>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+            {subsection.coc_status && (
+              <div>
+                <p className="text-sm text-muted-foreground">COC Status</p>
+                <Badge className={`${getStatusColor(subsection.coc_status)} text-white mt-1`}>
+                  {subsection.coc_status}
+                </Badge>
+              </div>
+            )}
+            {subsection.coc_number && (
+              <div>
+                <p className="text-sm text-muted-foreground">COC Number</p>
+                <p className="font-medium mt-1">{subsection.coc_number}</p>
+              </div>
+            )}
+            {subsection.coc_issue_date && (
+              <div>
+                <p className="text-sm text-muted-foreground">COC Issue Date</p>
+                <p className="font-medium mt-1">
+                  {new Date(subsection.coc_issue_date).toLocaleDateString()}
+                </p>
+              </div>
+            )}
+            {subsection.coc_type && (
+              <div>
+                <p className="text-sm text-muted-foreground">COC Type</p>
+                <p className="font-medium mt-1">{subsection.coc_type}</p>
+              </div>
+            )}
+            {subsection.tenant_name && (
+              <div>
+                <p className="text-sm text-muted-foreground">Tenant Name</p>
+                <p className="font-medium mt-1">{subsection.tenant_name}</p>
+              </div>
+            )}
+            {subsection.meter_serial_number && (
+              <div>
+                <p className="text-sm text-muted-foreground">Meter Serial Number</p>
+                <p className="font-medium mt-1">{subsection.meter_serial_number}</p>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Documents */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Documents</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {docsLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-16 w-full" />
+              ))}
+            </div>
+          ) : documents && documents.length > 0 ? (
+            <div className="space-y-2">
+              {documents.map((doc) => (
+                <div 
+                  key={doc.id}
+                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <FileText className="h-5 w-5 text-muted-foreground" />
+                    <div>
+                      <p className="font-medium">{doc.file_name}</p>
+                      <div className="flex items-center gap-2 mt-1">
+                        {doc.document_categories && (
+                          <Badge variant="secondary" className="text-xs">
+                            {doc.document_categories.name}
+                          </Badge>
+                        )}
+                        {doc.file_size && (
+                          <span className="text-xs text-muted-foreground">
+                            {(doc.file_size / 1024 / 1024).toFixed(2)} MB
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <a 
+                    href={doc.file_url} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    download
+                  >
+                    <Button variant="ghost" size="sm" className="gap-2">
+                      <Download className="h-4 w-4" />
+                      Download
+                    </Button>
+                  </a>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-muted-foreground py-8">
+              No documents available for this subsection
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  );
+};
+
+export default ClientPortalSubsectionDetail;

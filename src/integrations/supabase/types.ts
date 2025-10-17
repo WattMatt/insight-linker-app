@@ -951,6 +951,35 @@ export type Database = {
         }
         Relationships: []
       }
+      user_clients: {
+        Row: {
+          client_id: string
+          created_at: string | null
+          id: string
+          user_id: string
+        }
+        Insert: {
+          client_id: string
+          created_at?: string | null
+          id?: string
+          user_id: string
+        }
+        Update: {
+          client_id?: string
+          created_at?: string | null
+          id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "user_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: true
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string | null
@@ -1132,6 +1161,10 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      get_user_client_id: {
+        Args: Record<PropertyKey, never>
+        Returns: string
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -1141,7 +1174,7 @@ export type Database = {
       }
     }
     Enums: {
-      app_role: "Admin" | "User" | "Contractor" | "Moderator"
+      app_role: "Admin" | "User" | "Contractor" | "Moderator" | "Client"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1269,7 +1302,7 @@ export type CompositeTypes<
 export const Constants = {
   public: {
     Enums: {
-      app_role: ["Admin", "User", "Contractor", "Moderator"],
+      app_role: ["Admin", "User", "Contractor", "Moderator", "Client"],
     },
   },
 } as const
