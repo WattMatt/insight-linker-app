@@ -12,6 +12,8 @@ import { Badge } from "@/components/ui/badge";
 import { Plus, Trash2, ClipboardCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
+import { inspectionSchema } from "@/lib/validation-schemas";
+import { z } from "zod";
 
 interface Inspection {
   id: string;
@@ -89,13 +91,16 @@ const Inspections = () => {
     e.preventDefault();
 
     try {
+      // Validate input
+      const validated = inspectionSchema.parse(formData);
+      
       const { data: { user } } = await supabase.auth.getUser();
 
       const { error } = await supabase.from("inspections").insert([
         {
-          ...formData,
+          ...validated,
           inspector_id: user?.id,
-        },
+        } as any,  // Type assertion needed due to zod inference
       ]);
 
       if (error) throw error;
@@ -110,9 +115,15 @@ const Inspections = () => {
         site_id: "",
       });
       fetchData();
-    } catch (error) {
-      console.error("Error creating inspection:", error);
-      toast.error("Failed to create inspection");
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        error.errors.forEach(err => {
+          toast.error(`${err.path.join('.')}: ${err.message}`);
+        });
+      } else {
+        console.error("Error creating inspection:", error);
+        toast.error(error.message || "Failed to create inspection");
+      }
     }
   };
 

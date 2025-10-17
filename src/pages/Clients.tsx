@@ -11,16 +11,8 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Badge } from "@/components/ui/badge";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
+import { clientSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
-
-const clientSchema = z.object({
-  name: z.string().trim().min(1, "Client name is required").max(100, "Name must be less than 100 characters"),
-  contact_person: z.string().trim().max(100, "Contact person must be less than 100 characters").optional(),
-  email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters").optional().or(z.literal("")),
-  phone: z.string().trim().max(20, "Phone must be less than 20 characters").optional(),
-  company_name: z.string().trim().max(200, "Company name must be less than 200 characters").optional(),
-  primary_contact_email: z.string().trim().email("Invalid email address").max(255, "Email must be less than 255 characters").optional().or(z.literal("")),
-});
 
 interface Client {
   id: string;
@@ -120,6 +112,8 @@ const Clients = () => {
       return;
     }
 
+    const validated = validation.data;
+
     try {
       setUploading(true);
       setFormErrors({});
@@ -149,10 +143,10 @@ const Clients = () => {
       
       const { error } = await supabase.from("clients").insert([
         {
-          ...formData,
+          ...validated,
           logo_url: logo_url ? `${logo_url}?t=${Date.now()}` : null,
           created_by: user?.id,
-        },
+        } as any,  // Type assertion needed due to zod inference
       ]);
 
       if (error) throw error;

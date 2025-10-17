@@ -11,6 +11,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2, Building2, MapPin, MoreVertical } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { toast } from "sonner";
+import { siteSchema } from "@/lib/validation-schemas";
+import { z } from "zod";
 
 interface Site {
   id: string;
@@ -91,13 +93,16 @@ const Sites = () => {
     e.preventDefault();
 
     try {
+      // Validate input
+      const validated = siteSchema.parse(formData);
+      
       const { data: { user } } = await supabase.auth.getUser();
 
       const { error } = await supabase.from("sites").insert([
         {
-          ...formData,
+          ...validated,
           created_by: user?.id,
-        },
+        } as any,  // Type assertion needed due to zod inference
       ]);
 
       if (error) throw error;
@@ -106,9 +111,15 @@ const Sites = () => {
       setDialogOpen(false);
       setFormData({ name: "", address: "", site_type: "", client_id: "" });
       fetchData();
-    } catch (error) {
-      console.error("Error adding site:", error);
-      toast.error("Failed to add site");
+    } catch (error: any) {
+      if (error instanceof z.ZodError) {
+        error.errors.forEach(err => {
+          toast.error(`${err.path.join('.')}: ${err.message}`);
+        });
+      } else {
+        console.error("Error adding site:", error);
+        toast.error(error.message || "Failed to add site");
+      }
     }
   };
 
