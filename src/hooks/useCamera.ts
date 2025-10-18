@@ -8,12 +8,48 @@ export interface CameraOptions {
   source?: CameraSource;
 }
 
+// Web fallback: Create file input and trigger camera
+const capturePhotoWeb = (multiple: boolean = false): Promise<File[]> => {
+  return new Promise((resolve, reject) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = 'image/*';
+    input.capture = 'environment'; // Request rear camera on mobile
+    if (multiple) {
+      input.multiple = true;
+    }
+
+    input.onchange = async (e) => {
+      const files = (e.target as HTMLInputElement).files;
+      if (files && files.length > 0) {
+        resolve(Array.from(files));
+      } else {
+        resolve([]);
+      }
+    };
+
+    input.oncancel = () => {
+      resolve([]); // User cancelled
+    };
+
+    // Trigger the file picker
+    input.click();
+  });
+};
+
 export const useCamera = () => {
   const isNative = Capacitor.isNativePlatform();
 
   const takePicture = async (options: CameraOptions = {}): Promise<File | null> => {
     if (!isNative) {
-      return null; // Fall back to file input on web
+      // Web fallback with camera capture
+      try {
+        const files = await capturePhotoWeb(false);
+        return files.length > 0 ? files[0] : null;
+      } catch (error) {
+        console.error('Error capturing photo on web:', error);
+        return null;
+      }
     }
 
     try {
@@ -57,7 +93,13 @@ export const useCamera = () => {
 
   const selectImages = async (options: CameraOptions = {}): Promise<File[]> => {
     if (!isNative) {
-      return []; // Fall back to file input on web
+      // Web fallback with multiple image selection
+      try {
+        return await capturePhotoWeb(true);
+      } catch (error) {
+        console.error('Error selecting images on web:', error);
+        return [];
+      }
     }
 
     try {
