@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -32,7 +32,26 @@ export default function IssueReports() {
   const [selectedIssue, setSelectedIssue] = useState<IssueReport | null>(null);
   const [adminNotes, setAdminNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
+  const [imageUrl, setImageUrl] = useState<string | null>(null);
   const queryClient = useQueryClient();
+
+  // Generate signed URL for screenshot
+  useEffect(() => {
+    const getSignedUrl = async () => {
+      if (selectedIssue?.screenshot_url) {
+        const path = selectedIssue.screenshot_url.split('/').pop();
+        if (path) {
+          const { data } = await supabase.storage
+            .from('issue-screenshots')
+            .createSignedUrl(path, 3600);
+          setImageUrl(data?.signedUrl || null);
+        }
+      } else {
+        setImageUrl(null);
+      }
+    };
+    getSignedUrl();
+  }, [selectedIssue]);
 
   const { data: issues, isLoading } = useQuery({
     queryKey: ['issue-reports'],
@@ -287,11 +306,17 @@ export default function IssueReports() {
               {selectedIssue.screenshot_url && (
                 <div>
                   <h4 className="text-sm font-medium mb-2">Screenshot</h4>
-                  <img
-                    src={selectedIssue.screenshot_url}
-                    alt="Issue screenshot"
-                    className="w-full border rounded-lg"
-                  />
+                  {imageUrl ? (
+                    <img
+                      src={imageUrl}
+                      alt="Issue screenshot"
+                      className="w-full border rounded-lg"
+                    />
+                  ) : (
+                    <div className="w-full h-48 border rounded-lg flex items-center justify-center bg-muted">
+                      <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -328,13 +353,27 @@ export default function IssueReports() {
             </div>
           )}
 
-          <DialogFooter>
+          <DialogFooter className="gap-2">
             <Button variant="outline" onClick={() => setSelectedIssue(null)}>
               Cancel
             </Button>
+            {selectedIssue?.status !== 'resolved' && (
+              <Button 
+                variant="default"
+                onClick={() => {
+                  setNewStatus('resolved');
+                  setTimeout(() => handleUpdateIssue(), 0);
+                }}
+                disabled={updateIssueMutation.isPending}
+              >
+                {updateIssueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Mark as Resolved
+              </Button>
+            )}
             <Button onClick={handleUpdateIssue} disabled={updateIssueMutation.isPending}>
               {updateIssueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Update Issue
+              Save Changes
             </Button>
           </DialogFooter>
         </DialogContent>
