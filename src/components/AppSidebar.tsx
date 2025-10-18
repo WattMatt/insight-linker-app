@@ -33,18 +33,19 @@ import {
   SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
+import { useUserRole } from "@/hooks/useUserRole";
 
 const menuItems = [
-  { title: "Dashboard", url: "/dashboard", icon: Home },
-  { title: "Calendar", url: "/calendar", icon: CalendarDays },
-  { title: "Clients", url: "/clients", icon: Users },
-  { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
-  { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus },
-  { title: "Issue Reports", url: "/issue-reports", icon: AlertCircle },
-  { title: "Users", url: "/users", icon: UserCog },
-  { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye },
-  { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase },
-  { title: "Settings", url: "/settings", icon: SettingsIcon },
+  { title: "Dashboard", url: "/dashboard", icon: Home, adminOnly: false },
+  { title: "Calendar", url: "/calendar", icon: CalendarDays, adminOnly: false },
+  { title: "Clients", url: "/clients", icon: Users, adminOnly: false },
+  { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
+  { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
+  { title: "Issue Reports", url: "/issue-reports", icon: AlertCircle, adminOnly: true },
+  { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
+  { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
+  { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase, adminOnly: true },
+  { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
   
 ];
 
@@ -52,6 +53,7 @@ export function AppSidebar() {
   const { state, setOpenMobile, isMobile } = useSidebar();
   const navigate = useNavigate();
   const collapsed = state === "collapsed";
+  const { data: userRole } = useUserRole();
 
   // Close mobile sidebar on navigation
   const handleNavClick = () => {
@@ -141,24 +143,26 @@ export function AppSidebar() {
           <SidebarGroupLabel className="px-4 py-2 text-xs md:text-sm">Navigation</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
-              {menuItems.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild className="h-12 md:h-10">
-                    <NavLink
-                      to={item.url}
-                      onClick={handleNavClick}
-                      className={({ isActive }) =>
-                        isActive
-                          ? "bg-sidebar-accent text-sidebar-accent-foreground"
-                          : "hover:bg-sidebar-accent/50"
-                      }
-                    >
-                      <item.icon className="h-5 w-5 md:h-4 md:w-4" />
-                      {!collapsed && <span className="text-base md:text-sm">{item.title}</span>}
-                    </NavLink>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {menuItems
+                .filter(item => !item.adminOnly || userRole === 'Admin')
+                .map((item) => (
+                  <SidebarMenuItem key={item.title}>
+                    <SidebarMenuButton asChild className="h-12 md:h-10">
+                      <NavLink
+                        to={item.url}
+                        onClick={handleNavClick}
+                        className={({ isActive }) =>
+                          isActive
+                            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+                            : "hover:bg-sidebar-accent/50"
+                        }
+                      >
+                        <item.icon className="h-5 w-5 md:h-4 md:w-4" />
+                        {!collapsed && <span className="text-base md:text-sm">{item.title}</span>}
+                      </NavLink>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
