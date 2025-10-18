@@ -363,8 +363,12 @@ export default function IssueReports() {
               <Button 
                 variant="default"
                 onClick={() => {
-                  setNewStatus('resolved');
-                  setTimeout(() => handleUpdateIssue(), 0);
+                  if (!selectedIssue) return;
+                  updateIssueMutation.mutate({
+                    id: selectedIssue.id,
+                    status: 'resolved',
+                    notes: adminNotes,
+                  });
                 }}
                 disabled={updateIssueMutation.isPending}
               >
