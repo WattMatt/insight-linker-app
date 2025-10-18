@@ -42,6 +42,8 @@ import ContractorSubsectionDetail from "./pages/ContractorSubsectionDetail";
 import ContractorPortal from "./pages/ContractorPortal";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
+import IssueReports from "./pages/IssueReports";
+import { HelpButton } from "./components/HelpButton";
 
 const queryClient = new QueryClient();
 
@@ -67,6 +69,7 @@ const App = () => (
     <TooltipProvider>
       <Toaster />
       <Sonner />
+      <HelpButton />
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<Index />} />
@@ -257,11 +260,21 @@ const App = () => (
             }
           />
           <Route
-            path="/validation-feedback"
+          path="/validation-feedback"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
                   <ValidationFeedback />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/issue-reports"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <IssueReports />
                 </DashboardLayout>
               </ProtectedRoute>
             }

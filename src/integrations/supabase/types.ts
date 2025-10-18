@@ -435,6 +435,63 @@ export type Database = {
           },
         ]
       }
+      issue_reports: {
+        Row: {
+          admin_notes: string | null
+          browser_info: Json | null
+          category: string
+          created_at: string
+          description: string
+          id: string
+          page_url: string
+          reported_by: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          screenshot_url: string | null
+          severity: string
+          status: string
+          updated_at: string
+          user_email: string
+          user_name: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          browser_info?: Json | null
+          category?: string
+          created_at?: string
+          description: string
+          id?: string
+          page_url: string
+          reported_by?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          severity?: string
+          status?: string
+          updated_at?: string
+          user_email: string
+          user_name?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          browser_info?: Json | null
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          page_url?: string
+          reported_by?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          severity?: string
+          status?: string
+          updated_at?: string
+          user_email?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       pending_user_invites: {
         Row: {
           created_at: string

@@ -12,7 +12,8 @@ import {
   User as UserIcon,
   MessageSquarePlus,
   Eye,
-  Briefcase
+  Briefcase,
+  AlertCircle
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ const menuItems = [
   { title: "Clients", url: "/clients", icon: Users },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus },
+  { title: "Issue Reports", url: "/issue-reports", icon: AlertCircle },
   { title: "Users", url: "/users", icon: UserCog },
   { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye },
   { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase },
