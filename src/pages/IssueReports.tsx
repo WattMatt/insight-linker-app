@@ -39,8 +39,10 @@ export default function IssueReports() {
   useEffect(() => {
     const getSignedUrl = async () => {
       if (selectedIssue?.screenshot_url) {
-        const path = selectedIssue.screenshot_url.split('/').pop();
-        if (path) {
+        // Extract the path after 'issue-screenshots/'
+        const urlParts = selectedIssue.screenshot_url.split('issue-screenshots/');
+        if (urlParts.length > 1) {
+          const path = urlParts[1];
           const { data } = await supabase.storage
             .from('issue-screenshots')
             .createSignedUrl(path, 3600);
