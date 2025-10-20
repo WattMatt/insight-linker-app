@@ -1880,39 +1880,37 @@ const SiteDetail = () => {
                   <Button
                     onClick={async () => {
                       setGeneratingAll(true);
-                      toast.info("Generating QR codes for all subsections...");
+                      toast.info("Regenerating QR codes for all subsections...");
                       
                       let successCount = 0;
                       let failCount = 0;
                       
                       for (const subsection of subsections) {
-                        if (!subsection.qr_code_url) {
-                          try {
-                            await generateAndUploadQRCode({
-                              subsectionId: subsection.id,
-                              siteName: site.name,
-                              subsectionName: subsection.name,
-                              logoUrl: companyLogo || undefined
-                            });
-                            successCount++;
-                          } catch (error) {
-                            console.error(`Failed to generate QR for ${subsection.name}:`, error);
-                            failCount++;
-                          }
+                        try {
+                          await generateAndUploadQRCode({
+                            subsectionId: subsection.id,
+                            siteName: site.name,
+                            subsectionName: subsection.name,
+                            logoUrl: companyLogo || undefined
+                          });
+                          successCount++;
+                        } catch (error) {
+                          console.error(`Failed to generate QR for ${subsection.name}:`, error);
+                          failCount++;
                         }
                       }
                       
                       setGeneratingAll(false);
                       
                       if (failCount === 0) {
-                        toast.success(`Successfully generated ${successCount} QR codes!`);
+                        toast.success(`Successfully regenerated ${successCount} QR codes!`);
                       } else {
-                        toast.warning(`Generated ${successCount} QR codes, ${failCount} failed`);
+                        toast.warning(`Regenerated ${successCount} QR codes, ${failCount} failed`);
                       }
                       
                       fetchSiteData(); // Refresh to show new QR codes
                     }}
-                    disabled={generatingAll || subsections.length === 0 || subsections.every(s => s.qr_code_url)}
+                    disabled={generatingAll || subsections.length === 0}
                     variant="secondary"
                   >
                     <RefreshCw className="h-4 w-4 mr-2" />
