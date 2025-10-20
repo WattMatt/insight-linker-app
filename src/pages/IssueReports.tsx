@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Eye, CheckCircle, Loader2, AlertCircle, Clock } from "lucide-react";
+import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 
 interface IssueReport {
@@ -108,6 +108,38 @@ export default function IssueReports() {
       status: newStatus,
       notes: adminNotes,
     });
+  };
+
+  const handleDebugIssue = async () => {
+    if (!selectedIssue) return;
+
+    const debugInfo = `
+🐛 ISSUE REPORT DEBUG INFO
+========================
+
+📧 Reported By: ${selectedIssue.user_name} (${selectedIssue.user_email})
+📅 Date: ${format(new Date(selectedIssue.created_at), 'MMM d, yyyy HH:mm:ss')}
+🔗 Page URL: ${selectedIssue.page_url}
+📊 Category: ${selectedIssue.category}
+⚠️ Severity: ${selectedIssue.severity}
+
+📝 Description:
+${selectedIssue.description}
+
+🌐 Browser Info:
+${JSON.stringify(selectedIssue.browser_info, null, 2)}
+
+${selectedIssue.screenshot_url ? `📸 Screenshot: ${imageUrl || selectedIssue.screenshot_url}` : ''}
+
+${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` : ''}
+    `.trim();
+
+    try {
+      await navigator.clipboard.writeText(debugInfo);
+      toast.success('Issue details copied to clipboard');
+    } catch (error) {
+      toast.error('Failed to copy to clipboard');
+    }
   };
 
   const getSeverityColor = (severity: string) => {
@@ -295,6 +327,15 @@ export default function IssueReports() {
                 <h4 className="text-sm font-medium mb-1">Description</h4>
                 <p className="text-sm bg-muted p-3 rounded-md">{selectedIssue.description}</p>
               </div>
+
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleDebugIssue}
+              >
+                <Bug className="mr-2 h-4 w-4" />
+                Copy Debug Info to Clipboard
+              </Button>
 
               <div>
                 <h4 className="text-sm font-medium mb-1">Page URL</h4>
