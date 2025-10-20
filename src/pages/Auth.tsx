@@ -173,7 +173,7 @@ const Auth = () => {
           toast.success("Welcome! Please change your password to continue.");
         } else {
           toast.success("Signed in successfully!");
-          navigate("/dashboard");
+          navigate("/");
         }
       }
     } catch (error) {
