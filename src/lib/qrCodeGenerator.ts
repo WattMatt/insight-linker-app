@@ -16,12 +16,15 @@ export async function generateAndUploadQRCode({
 }: GenerateQRCodeOptions): Promise<string | null> {
   try {
     // Get QR base URL from settings
-    const { data: settings } = await supabase
+    const { data: settings, error: settingsError } = await supabase
       .from('settings')
       .select('qr_base_url')
       .single();
     
-    const baseUrl = settings?.qr_base_url || window.location.origin;
+    console.log('Settings query result:', { settings, settingsError });
+    
+    const baseUrl = (settings?.qr_base_url || window.location.origin).replace(/\/$/, '');
+    console.log('Using base URL for QR code:', baseUrl);
     
     // Create canvas
     const canvas = document.createElement('canvas');
