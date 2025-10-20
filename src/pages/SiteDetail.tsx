@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
 import { Button } from "@/components/ui/button";
@@ -87,6 +87,7 @@ interface SiteStats {
 const SiteDetail = () => {
   const { clientId, siteId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
@@ -95,7 +96,7 @@ const SiteDetail = () => {
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [migrating, setMigrating] = useState<string | null>(null);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string, category_id: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
