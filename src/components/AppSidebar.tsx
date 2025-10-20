@@ -13,7 +13,8 @@ import {
   MessageSquarePlus,
   Eye,
   Briefcase,
-  AlertCircle
+  AlertCircle,
+  QrCode
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -39,6 +40,7 @@ const menuItems = [
   { title: "Dashboard", url: "/dashboard", icon: Home, adminOnly: false },
   { title: "Calendar", url: "/calendar", icon: CalendarDays, adminOnly: false },
   { title: "Clients", url: "/clients", icon: Users, adminOnly: false },
+  { title: "QR Codes", url: "/qr-codes", icon: QrCode, adminOnly: false },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "Issue Reports", url: "/issue-reports", icon: AlertCircle, adminOnly: true },

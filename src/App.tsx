@@ -43,6 +43,7 @@ import ContractorPortal from "./pages/ContractorPortal";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
+import QRCodes from "./pages/QRCodes";
 import { HelpButton } from "./components/HelpButton";
 
 const queryClient = new QueryClient();
@@ -275,6 +276,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <IssueReports />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/qr-codes"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <QRCodes />
                 </DashboardLayout>
               </ProtectedRoute>
             }
