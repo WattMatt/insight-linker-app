@@ -1878,11 +1878,15 @@ const SiteDetail = () => {
                 <Button
                   onClick={async () => {
                     setDownloadingAll(true);
-                    toast.info("Generating all QR codes...");
+                    toast.info("Generating all QR codes and PDF...");
                     
-                    // Import dynamically since we need it for bulk generation
+                    // Import dynamically
                     const QRCode = await import('qrcode');
+                    const { default: jsPDF } = await import('jspdf');
                     const zip = new JSZip();
+                    
+                    // Store canvas data URLs for PDF generation
+                    const qrCodeDataUrls: { dataUrl: string; name: string }[] = [];
                     
                     for (const subsection of subsections) {
                       try {
@@ -1966,6 +1970,10 @@ const SiteDetail = () => {
                         ctx.font = '32px Arial, sans-serif';
                         ctx.fillText(subsection.name, totalWidth / 2, textStartY + 52);
                         
+                        // Store data URL for PDF
+                        const dataUrl = canvas.toDataURL('image/png');
+                        qrCodeDataUrls.push({ dataUrl, name: subsection.name });
+                        
                         // Convert to blob and add to zip
                         const blob = await new Promise<Blob>((resolve) => {
                           canvas.toBlob((blob) => resolve(blob!), 'image/png');
@@ -1978,6 +1986,61 @@ const SiteDetail = () => {
                       }
                     }
                     
+                    // Generate PDF with QR codes arranged 3 across
+                    try {
+                      const pdf = new jsPDF({
+                        orientation: 'portrait',
+                        unit: 'mm',
+                        format: 'a4'
+                      });
+                      
+                      const pageWidth = 210; // A4 width in mm
+                      const pageHeight = 297; // A4 height in mm
+                      const margin = 15;
+                      const cols = 3;
+                      const qrWidth = (pageWidth - (margin * 2) - (10 * (cols - 1))) / cols; // 10mm gap between columns
+                      const qrHeight = qrWidth; // Square QR codes
+                      const rowSpacing = 15; // Space between rows
+                      
+                      let currentX = margin;
+                      let currentY = margin;
+                      let col = 0;
+                      
+                      for (let i = 0; i < qrCodeDataUrls.length; i++) {
+                        const { dataUrl, name } = qrCodeDataUrls[i];
+                        
+                        // Add new page if we exceed the page height
+                        if (currentY + qrHeight > pageHeight - margin) {
+                          pdf.addPage();
+                          currentY = margin;
+                          currentX = margin;
+                          col = 0;
+                        }
+                        
+                        // Add QR code image
+                        pdf.addImage(dataUrl, 'PNG', currentX, currentY, qrWidth, qrHeight);
+                        
+                        // Move to next position
+                        col++;
+                        if (col >= cols) {
+                          // Move to next row
+                          col = 0;
+                          currentX = margin;
+                          currentY += qrHeight + rowSpacing;
+                        } else {
+                          // Move to next column
+                          currentX += qrWidth + 10;
+                        }
+                      }
+                      
+                      // Add PDF to zip
+                      const pdfBlob = pdf.output('blob');
+                      zip.file(`${site.name}-All-QR-Codes.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_'), pdfBlob);
+                    } catch (error) {
+                      console.error('Error generating PDF:', error);
+                      toast.error("Failed to generate PDF, but individual images are ready");
+                    }
+                    
                     // Generate and download zip
                     const content = await zip.generateAsync({ type: 'blob' });
                     const link = document.createElement('a');
@@ -1985,7 +2048,7 @@ const SiteDetail = () => {
                     link.download = `${site.name}-All-QR-Codes.zip`.replace(/[^a-zA-Z0-9.-]/g, '_');
                     link.click();
                     
-                    toast.success("All QR codes downloaded!");
+                    toast.success("All QR codes and PDF downloaded!");
                     setDownloadingAll(false);
                   }}
                   disabled={downloadingAll || subsections.length === 0}
