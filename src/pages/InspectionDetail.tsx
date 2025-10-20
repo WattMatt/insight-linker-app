@@ -1528,18 +1528,7 @@ const InspectionDetail = () => {
           <Button 
             variant="ghost" 
             size="icon" 
-            onClick={() => {
-              if (isContractorPortal) {
-                // Navigate back to subsection detail if we have subsection_id from inspection data
-                if (inspection?.jsonData && subsectionData?.id) {
-                  navigate(`/contractor/subsections/${subsectionData.id}${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
-                } else {
-                  navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
-                }
-              } else {
-                navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
-              }
-            }}
+            onClick={() => navigate(-1)}
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
