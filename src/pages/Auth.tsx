@@ -39,19 +39,26 @@ const Auth = () => {
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, session) => {
+      async (event, session) => {
+        console.log("Auth state change:", event, session?.user?.email);
         setSession(session);
+        
         // Check if user needs to change password
         const needsChange = session?.user?.user_metadata?.requires_password_change;
         setRequiresPasswordChange(needsChange || false);
         
-        if (session && !isInvite && !needsChange) {
+        // Only redirect on SIGNED_IN event to avoid race conditions
+        if (event === 'SIGNED_IN' && session && !isInvite && !needsChange) {
+          console.log("Attempting redirect for user:", session.user.email);
+          
           // Redirect based on user role
           const { data: roleData, error: roleError } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", session.user.id)
             .maybeSingle();
+          
+          console.log("Role data:", roleData, "Error:", roleError);
           
           if (roleError) {
             console.error("Error fetching role:", roleError);
@@ -61,11 +68,13 @@ const Auth = () => {
           
           // Always redirect somewhere - default to dashboard if no role found
           if (roleData?.role === "Client") {
+            console.log("Redirecting to client portal");
             navigate("/client-portal");
           } else if (roleData?.role === "Contractor") {
+            console.log("Redirecting to contractor portal");
             navigate("/contractor");
           } else {
-            // Default to dashboard for Admin or if role is not set
+            console.log("Redirecting to dashboard");
             navigate("/dashboard");
           }
         }
