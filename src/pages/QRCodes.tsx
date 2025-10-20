@@ -12,21 +12,17 @@ import { LabeledQRCode } from "@/components/LabeledQRCode";
 
 interface QRCodeEntry {
   id: string;
-  qr_code_url: string;
-  label: string | null;
+  name: string;
+  qr_code_url: string | null;
   created_at: string;
-  client_id: string | null;
-  site_id: string | null;
-  subsection_id: string | null;
-  clients: {
-    name: string;
-    company_name: string | null;
-  } | null;
+  site_id: string;
   sites: {
     name: string;
-  } | null;
-  subsections: {
-    name: string;
+    client_id: string;
+    clients: {
+      name: string;
+      company_name: string | null;
+    } | null;
   } | null;
 }
 
@@ -68,20 +64,23 @@ const QRCodes = () => {
   const fetchQRCodes = async () => {
     try {
       const { data, error } = await supabase
-        .from("qr_codes")
+        .from("subsections")
         .select(`
-          *,
-          clients (
-            name,
-            company_name
-          ),
+          id,
+          name,
+          qr_code_url,
+          created_at,
+          site_id,
           sites (
-            name
-          ),
-          subsections (
-            name
+            name,
+            client_id,
+            clients (
+              name,
+              company_name
+            )
           )
         `)
+        .not("qr_code_url", "is", null)
         .order("created_at", { ascending: false });
 
       if (error) throw error;
@@ -107,18 +106,16 @@ const QRCodes = () => {
 
     const term = searchTerm.toLowerCase();
     const filtered = qrCodes.filter((qr) => {
-      const clientName = qr.clients?.name?.toLowerCase() || "";
-      const companyName = qr.clients?.company_name?.toLowerCase() || "";
+      const clientName = qr.sites?.clients?.name?.toLowerCase() || "";
+      const companyName = qr.sites?.clients?.company_name?.toLowerCase() || "";
       const siteName = qr.sites?.name?.toLowerCase() || "";
-      const subsectionName = qr.subsections?.name?.toLowerCase() || "";
-      const label = qr.label?.toLowerCase() || "";
+      const subsectionName = qr.name?.toLowerCase() || "";
 
       return (
         clientName.includes(term) ||
         companyName.includes(term) ||
         siteName.includes(term) ||
-        subsectionName.includes(term) ||
-        label.includes(term)
+        subsectionName.includes(term)
       );
     });
 
@@ -126,12 +123,8 @@ const QRCodes = () => {
   };
 
   const handleViewDetails = (qr: QRCodeEntry) => {
-    if (qr.client_id && qr.site_id && qr.subsection_id) {
-      navigate(`/clients/${qr.client_id}/sites/${qr.site_id}/subsections/${qr.subsection_id}`);
-    } else if (qr.client_id && qr.site_id) {
-      navigate(`/clients/${qr.client_id}/sites/${qr.site_id}`);
-    } else if (qr.client_id) {
-      navigate(`/clients/${qr.client_id}`);
+    if (qr.sites?.client_id && qr.site_id && qr.id) {
+      navigate(`/clients/${qr.sites.client_id}/sites/${qr.site_id}/subsections/${qr.id}`);
     }
   };
 
@@ -201,16 +194,14 @@ const QRCodes = () => {
                         <QrCode className="h-5 w-5 text-primary" />
                       </div>
                       <div className="flex-1">
-                        {qr.label && (
-                          <h3 className="font-semibold text-lg mb-2">{qr.label}</h3>
-                        )}
+                        <h3 className="font-semibold text-lg mb-2">{qr.name}</h3>
                         
                         <div className="space-y-2">
-                          {qr.clients && (
+                          {qr.sites?.clients && (
                             <div className="flex items-center gap-2 text-sm">
                               <Building2 className="h-4 w-4 text-muted-foreground" />
                               <span className="font-medium">
-                                {qr.clients.company_name || qr.clients.name}
+                                {qr.sites.clients.company_name || qr.sites.clients.name}
                               </span>
                             </div>
                           )}
@@ -222,12 +213,10 @@ const QRCodes = () => {
                             </div>
                           )}
                           
-                          {qr.subsections && (
-                            <div className="flex items-center gap-2 text-sm">
-                              <Layers className="h-4 w-4 text-muted-foreground" />
-                              <span>{qr.subsections.name}</span>
-                            </div>
-                          )}
+                          <div className="flex items-center gap-2 text-sm">
+                            <Layers className="h-4 w-4 text-muted-foreground" />
+                            <span className="text-muted-foreground">Subsection</span>
+                          </div>
                         </div>
 
                         <div className="flex items-center gap-2 mt-3">
@@ -240,21 +229,19 @@ const QRCodes = () => {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    {qr.subsection_id && qr.sites && qr.subsections && (
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => setSelectedQR(qr)}
-                      >
-                        <Download className="h-4 w-4 mr-2" />
-                        Download QR
-                      </Button>
-                    )}
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => setSelectedQR(qr)}
+                    >
+                      <Download className="h-4 w-4 mr-2" />
+                      Download QR
+                    </Button>
                     <Button
                       variant="secondary"
                       size="sm"
                       onClick={() => handleViewDetails(qr)}
-                      disabled={!qr.client_id}
+                      disabled={!qr.sites?.client_id}
                     >
                       View Details
                     </Button>
@@ -278,12 +265,12 @@ const QRCodes = () => {
           <DialogHeader>
             <DialogTitle>Download QR Code</DialogTitle>
           </DialogHeader>
-          {selectedQR && selectedQR.sites && selectedQR.subsections && (
+          {selectedQR && selectedQR.sites && (
             <div className="py-4">
               <LabeledQRCode
-                url={`${window.location.origin}/public/subsections/${selectedQR.subsection_id}`}
+                url={`${window.location.origin}/public/subsections/${selectedQR.id}`}
                 siteName={selectedQR.sites.name}
-                subsectionName={selectedQR.subsections.name}
+                subsectionName={selectedQR.name}
                 logoUrl={companyLogo || undefined}
               />
             </div>
