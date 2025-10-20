@@ -1377,7 +1377,6 @@ const SubsectionDetail = () => {
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="coc-metering">COC Docs & Metering Data</TabsTrigger>
-          <TabsTrigger value="qr-code">QR Code</TabsTrigger>
         </TabsList>
 
         {/* Overview Tab */}
@@ -2813,43 +2812,6 @@ const SubsectionDetail = () => {
               </CardContent>
             </Card>
           </div>
-        </TabsContent>
-
-        {/* QR Code Tab */}
-        <TabsContent value="qr-code" className="space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>QR Code</CardTitle>
-            </CardHeader>
-            <CardContent className="flex flex-col items-center py-8">
-              {subsection && siteData ? (
-                <>
-                  <LabeledQRCode
-                    url={`${window.location.origin}/public/subsections/${subsectionId}`}
-                    siteName={siteData.siteName}
-                    subsectionName={subsection.name}
-                    logoUrl={companyLogo || undefined}
-                  />
-                  <p className="text-sm text-muted-foreground mt-4 text-center max-w-md">
-                    Scan this QR code to view public subsection details, documents, and COC
-                  </p>
-                  <Button 
-                    variant="outline"
-                    onClick={() => {
-                      const publicUrl = `${window.location.origin}/public/subsections/${subsectionId}`;
-                      window.open(publicUrl, '_blank');
-                    }}
-                    className="mt-4"
-                  >
-                    <ExternalLink className="h-4 w-4 mr-2" />
-                    View Public Page
-                  </Button>
-                </>
-              ) : (
-                <p className="text-muted-foreground">Loading QR code...</p>
-              )}
-            </CardContent>
-          </Card>
         </TabsContent>
       </Tabs>
 

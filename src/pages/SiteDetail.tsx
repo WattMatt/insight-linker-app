@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
 import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid } from "lucide-react";
+import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -21,6 +22,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { useIsMobile } from "@/hooks/use-mobile";
+import JSZip from 'jszip';
 
 interface Site {
   id: string;
@@ -99,6 +101,8 @@ const SiteDetail = () => {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string, category_id: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string>("");
+  const [downloadingAll, setDownloadingAll] = useState(false);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
   const [fixingCategories, setFixingCategories] = useState(false);
@@ -134,7 +138,24 @@ const SiteDetail = () => {
     fetchSiteDocuments();
     fetchDocumentCategories();
     fetchTemplates();
+    fetchCompanyLogo();
   }, [siteId]);
+
+  const fetchCompanyLogo = async () => {
+    try {
+      const { data } = await supabase
+        .from('settings')
+        .select('company_logo_url')
+        .limit(1)
+        .maybeSingle();
+      
+      if (data?.company_logo_url) {
+        setCompanyLogo(data.company_logo_url);
+      }
+    } catch (error) {
+      console.error('Error fetching company logo:', error);
+    }
+  };
 
   const fetchSiteDocuments = async () => {
     try {
@@ -1114,8 +1135,8 @@ const SiteDetail = () => {
             <span className="hidden lg:inline">Subsections</span>
           </TabsTrigger>
           <TabsTrigger value="qr-analytics" className="gap-2">
-            <BarChart3 className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Analytics</span>
+            <QrCode className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">QR Codes</span>
           </TabsTrigger>
           <TabsTrigger value="export" className="gap-2">
             <FileDown className="h-4 w-4 shrink-0" />
@@ -1845,15 +1866,161 @@ const SiteDetail = () => {
         <TabsContent value="qr-analytics" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>QR Code Analytics</CardTitle>
-              <CardDescription>
-                A summary of QR code scan activity across all subsections for {site.name}
-              </CardDescription>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle>QR Codes for All Subsections</CardTitle>
+                  <CardDescription>
+                    Generate and download QR codes for all subsections on {site.name}
+                  </CardDescription>
+                </div>
+                <Button
+                  onClick={async () => {
+                    setDownloadingAll(true);
+                    toast.info("Generating all QR codes...");
+                    
+                    // Import dynamically since we need it for bulk generation
+                    const QRCode = await import('qrcode');
+                    const zip = new JSZip();
+                    
+                    for (const subsection of subsections) {
+                      try {
+                        // Create a canvas for this QR code
+                        const canvas = document.createElement('canvas');
+                        const qrSize = 500;
+                        const padding = 40;
+                        const textHeight = 140;
+                        const totalHeight = qrSize + textHeight + (padding * 2);
+                        const totalWidth = qrSize + (padding * 2);
+                        
+                        canvas.width = totalWidth;
+                        canvas.height = totalHeight;
+                        
+                        const ctx = canvas.getContext('2d');
+                        if (!ctx) continue;
+                        
+                        // White background
+                        ctx.fillStyle = 'white';
+                        ctx.fillRect(0, 0, totalWidth, totalHeight);
+                        
+                        // Border
+                        ctx.strokeStyle = 'black';
+                        ctx.lineWidth = 3;
+                        ctx.strokeRect(1.5, 1.5, totalWidth - 3, totalHeight - 3);
+                        
+                        // Generate QR code
+                        const tempCanvas = document.createElement('canvas');
+                        await QRCode.default.toCanvas(tempCanvas, `${window.location.origin}/public/subsections/${subsection.id}`, {
+                          width: qrSize,
+                          margin: 1,
+                          errorCorrectionLevel: 'H'
+                        });
+                        
+                        // Draw QR code
+                        ctx.drawImage(tempCanvas, padding, padding, qrSize, qrSize);
+                        
+                        // Add logo if available
+                        if (companyLogo) {
+                          await new Promise<void>((resolve) => {
+                            const img = document.createElement('img');
+                            img.crossOrigin = 'anonymous';
+                            img.onload = () => {
+                              const maxLogoSize = qrSize * 0.2;
+                              let logoWidth = img.width;
+                              let logoHeight = img.height;
+                              
+                              if (logoWidth > logoHeight) {
+                                if (logoWidth > maxLogoSize) {
+                                  logoHeight = (logoHeight * maxLogoSize) / logoWidth;
+                                  logoWidth = maxLogoSize;
+                                }
+                              } else {
+                                if (logoHeight > maxLogoSize) {
+                                  logoWidth = (logoWidth * maxLogoSize) / logoHeight;
+                                  logoHeight = maxLogoSize;
+                                }
+                              }
+                              
+                              const logoX = padding + (qrSize - logoWidth) / 2;
+                              const logoY = padding + (qrSize - logoHeight) / 2;
+                              const logoPadding = Math.min(logoWidth, logoHeight) * 0.15;
+                              
+                              ctx.fillStyle = 'white';
+                              ctx.fillRect(logoX - logoPadding, logoY - logoPadding, logoWidth + (logoPadding * 2), logoHeight + (logoPadding * 2));
+                              ctx.drawImage(img, logoX, logoY, logoWidth, logoHeight);
+                              resolve();
+                            };
+                            img.onerror = () => resolve();
+                            img.src = companyLogo;
+                          });
+                        }
+                        
+                        // Add text labels
+                        const textStartY = padding + qrSize + 40;
+                        ctx.fillStyle = 'black';
+                        ctx.font = 'bold 38px Arial, sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'top';
+                        ctx.fillText(site.name.toUpperCase(), totalWidth / 2, textStartY);
+                        ctx.font = '32px Arial, sans-serif';
+                        ctx.fillText(subsection.name, totalWidth / 2, textStartY + 52);
+                        
+                        // Convert to blob and add to zip
+                        const blob = await new Promise<Blob>((resolve) => {
+                          canvas.toBlob((blob) => resolve(blob!), 'image/png');
+                        });
+                        
+                        const fileName = `${site.name}-${subsection.name}-QR.png`.replace(/[^a-zA-Z0-9.-]/g, '_');
+                        zip.file(fileName, blob);
+                      } catch (error) {
+                        console.error(`Error generating QR for ${subsection.name}:`, error);
+                      }
+                    }
+                    
+                    // Generate and download zip
+                    const content = await zip.generateAsync({ type: 'blob' });
+                    const link = document.createElement('a');
+                    link.href = URL.createObjectURL(content);
+                    link.download = `${site.name}-All-QR-Codes.zip`.replace(/[^a-zA-Z0-9.-]/g, '_');
+                    link.click();
+                    
+                    toast.success("All QR codes downloaded!");
+                    setDownloadingAll(false);
+                  }}
+                  disabled={downloadingAll || subsections.length === 0}
+                >
+                  <Download className="h-4 w-4 mr-2" />
+                  {downloadingAll ? "Generating..." : `Download All (${subsections.length})`}
+                </Button>
+              </div>
             </CardHeader>
             <CardContent>
-              <p className="text-sm text-muted-foreground">
-                QR analytics feature coming soon...
-              </p>
+              {subsections.length === 0 ? (
+                <div className="text-center py-12">
+                  <QrCode className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                  <p className="text-muted-foreground">No subsections found. Create a subsection to generate QR codes.</p>
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {subsections.map((subsection) => (
+                    <Card key={subsection.id} className="overflow-hidden">
+                      <CardContent className="p-4">
+                        <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
+                          <LabeledQRCode
+                            url={`${window.location.origin}/public/subsections/${subsection.id}`}
+                            siteName={site.name}
+                            subsectionName={subsection.name}
+                            logoUrl={companyLogo || undefined}
+                          />
+                        </div>
+                        <h3 className="font-semibold text-sm mb-1">{subsection.name}</h3>
+                        {subsection.tenant_name && (
+                          <p className="text-xs text-muted-foreground">{subsection.tenant_name}</p>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </TabsContent>
