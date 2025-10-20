@@ -37,16 +37,20 @@ export const LabeledQRCode = ({
     if (!ctx) return;
 
     try {
-      // Canvas dimensions
+      console.log('Generating QR code with labels:', { siteName, subsectionName });
+      
+      // Canvas dimensions - increased text area
       const qrSize = 500;
       const padding = 40;
       const borderWidth = 3;
-      const textHeight = 120;
+      const textHeight = 140;  // Increased for better text spacing
       const totalHeight = qrSize + textHeight + (padding * 2);
       const totalWidth = qrSize + (padding * 2);
 
       canvas.width = totalWidth;
       canvas.height = totalHeight;
+      
+      console.log('Canvas dimensions:', { width: canvas.width, height: canvas.height });
 
       // Fill white background
       ctx.fillStyle = 'white';
@@ -104,19 +108,25 @@ export const LabeledQRCode = ({
       }
 
       // Draw text labels below QR code
-      const textY = padding + qrSize + 35;
+      const textStartY = padding + qrSize + 40;
+      
+      console.log('Drawing text at Y position:', textStartY);
       
       // Site name (larger, bold, uppercase)
       ctx.fillStyle = 'black';
-      ctx.font = 'bold 36px Arial, sans-serif';
+      ctx.font = 'bold 38px Arial, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
       const siteNameUpper = siteName.toUpperCase();
-      ctx.fillText(siteNameUpper, totalWidth / 2, textY);
+      ctx.fillText(siteNameUpper, totalWidth / 2, textStartY);
+      
+      console.log('Drew site name:', siteNameUpper);
 
       // Subsection name (slightly smaller)
-      ctx.font = '30px Arial, sans-serif';
-      ctx.fillText(subsectionName, totalWidth / 2, textY + 50);
+      ctx.font = '32px Arial, sans-serif';
+      ctx.fillText(subsectionName, totalWidth / 2, textStartY + 52);
+      
+      console.log('Drew subsection name:', subsectionName);
 
       const dataUrl = canvas.toDataURL('image/png');
       setGeneratedUrl(dataUrl);
