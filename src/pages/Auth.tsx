@@ -47,17 +47,25 @@ const Auth = () => {
         
         if (session && !isInvite && !needsChange) {
           // Redirect based on user role
-          const { data: roleData } = await supabase
+          const { data: roleData, error: roleError } = await supabase
             .from("user_roles")
             .select("role")
             .eq("user_id", session.user.id)
             .maybeSingle();
           
+          if (roleError) {
+            console.error("Error fetching role:", roleError);
+            toast.error("Error loading user role. Please contact support.");
+            return;
+          }
+          
+          // Always redirect somewhere - default to dashboard if no role found
           if (roleData?.role === "Client") {
             navigate("/client-portal");
           } else if (roleData?.role === "Contractor") {
             navigate("/contractor");
           } else {
+            // Default to dashboard for Admin or if role is not set
             navigate("/dashboard");
           }
         }
@@ -72,17 +80,25 @@ const Auth = () => {
       
       if (session && !isInvite && !needsChange) {
         // Redirect based on user role
-        const { data: roleData } = await supabase
+        const { data: roleData, error: roleError } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", session.user.id)
           .maybeSingle();
         
+        if (roleError) {
+          console.error("Error fetching role:", roleError);
+          toast.error("Error loading user role. Please contact support.");
+          return;
+        }
+        
+        // Always redirect somewhere - default to dashboard if no role found
         if (roleData?.role === "Client") {
           navigate("/client-portal");
         } else if (roleData?.role === "Contractor") {
           navigate("/contractor");
         } else {
+          // Default to dashboard for Admin or if role is not set
           navigate("/dashboard");
         }
       }
@@ -173,7 +189,7 @@ const Auth = () => {
           toast.success("Welcome! Please change your password to continue.");
         } else {
           toast.success("Signed in successfully!");
-          navigate("/");
+          // Let the onAuthStateChange listener handle the redirect
         }
       }
     } catch (error) {
