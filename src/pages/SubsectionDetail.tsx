@@ -13,6 +13,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
+import { LabeledQRCode } from "@/components/LabeledQRCode";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -952,87 +953,9 @@ const SubsectionDetail = () => {
   };
 
   const generateQRCode = async () => {
-    try {
-      console.log("Starting QR code generation...");
-      console.log("Subsection ID:", subsectionId);
-      console.log("Company Logo:", companyLogo);
-      
-      // Simplified QR code URL - we can fetch all data from subsectionId
-      const url = `${window.location.origin}/public/subsections/${subsectionId}`;
-      console.log("QR Code URL:", url);
-      
-      // Create canvas for QR code
-      const canvas = document.createElement('canvas');
-      const size = 300;
-      canvas.width = size;
-      canvas.height = size;
-      
-      // Generate QR code with high error correction to allow logo overlay
-      await QRCode.toCanvas(canvas, url, {
-        width: size,
-        margin: 2,
-        errorCorrectionLevel: 'H' // High error correction allows ~30% of QR code to be covered
-      });
-      
-      console.log("QR code base generated");
-      
-      // If we have a company logo, overlay it in the center
-      if (companyLogo) {
-        console.log("Adding logo to QR code...");
-        const ctx = canvas.getContext('2d');
-        if (ctx) {
-          const img = new Image();
-          img.crossOrigin = 'anonymous';
-          
-          img.onload = () => {
-            console.log("Logo loaded successfully");
-            // Calculate rectangular logo size (24% of QR code size, wider than tall)
-            const logoWidth = size * 0.24 * 1.5; // Make it 1.5x wider
-            const logoHeight = size * 0.24;
-            const x = (size - logoWidth) / 2;
-            const y = (size - logoHeight) / 2;
-            const padding = logoHeight * 0.1; // 10% of logo height
-            
-            // Draw white rectangular background for logo
-            ctx.fillStyle = 'white';
-            ctx.fillRect(
-              x - padding, 
-              y - padding, 
-              logoWidth + (padding * 2), 
-              logoHeight + (padding * 2)
-            );
-            
-            // Draw logo
-            ctx.drawImage(img, x, y, logoWidth, logoHeight);
-            
-            // Convert canvas to data URL
-            const dataUrl = canvas.toDataURL();
-            console.log("QR code with logo generated successfully");
-            setQrCodeUrl(dataUrl);
-          };
-          
-          img.onerror = (e) => {
-            // If logo fails to load, just use QR code without logo
-            console.error("Failed to load logo image:", e);
-            const dataUrl = canvas.toDataURL();
-            console.log("Using QR code without logo");
-            setQrCodeUrl(dataUrl);
-          };
-          
-          img.src = companyLogo;
-        } else {
-          console.error("Could not get canvas context");
-          setQrCodeUrl(canvas.toDataURL());
-        }
-      } else {
-        // No logo, just use plain QR code
-        console.log("No logo available, using plain QR code");
-        const dataUrl = canvas.toDataURL();
-        setQrCodeUrl(dataUrl);
-      }
-    } catch (error) {
-      console.error("Error generating QR code:", error);
-    }
+    // This function is now handled by the LabeledQRCode component
+    // Keeping for backward compatibility
+    setQrCodeUrl('generated');
   };
 
   const handleDownloadDocument = async (url: string, fileName: string) => {
@@ -2899,38 +2822,31 @@ const SubsectionDetail = () => {
               <CardTitle>QR Code</CardTitle>
             </CardHeader>
             <CardContent className="flex flex-col items-center py-8">
-              {qrCodeUrl ? (
+              {subsection && siteData ? (
                 <>
-                  <img src={qrCodeUrl} alt="QR Code" className="w-64 h-64 border rounded-lg" />
+                  <LabeledQRCode
+                    url={`${window.location.origin}/public/subsections/${subsectionId}`}
+                    siteName={siteData.siteName}
+                    subsectionName={subsection.name}
+                    logoUrl={companyLogo || undefined}
+                  />
                   <p className="text-sm text-muted-foreground mt-4 text-center max-w-md">
                     Scan this QR code to view public subsection details, documents, and COC
                   </p>
-                  <div className="flex gap-3 mt-4">
-                    <Button 
-                      onClick={() => {
-                        const link = document.createElement('a');
-                        link.download = `${subsection.name}-qr-code.png`;
-                        link.href = qrCodeUrl;
-                        link.click();
-                        toast.success('QR code downloaded');
-                      }}
-                    >
-                      Download QR Code
-                    </Button>
-                    <Button 
-                      variant="outline"
-                      onClick={() => {
-                        const publicUrl = `${window.location.origin}/public/clients/${clientId || 'unknown'}/sites/${siteId || 'unknown'}/subsections/${subsectionId}`;
-                        window.open(publicUrl, '_blank');
-                      }}
-                    >
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      View Public Page
-                    </Button>
-                  </div>
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      const publicUrl = `${window.location.origin}/public/subsections/${subsectionId}`;
+                      window.open(publicUrl, '_blank');
+                    }}
+                    className="mt-4"
+                  >
+                    <ExternalLink className="h-4 w-4 mr-2" />
+                    View Public Page
+                  </Button>
                 </>
               ) : (
-                <p className="text-muted-foreground">Generating QR code...</p>
+                <p className="text-muted-foreground">Loading QR code...</p>
               )}
             </CardContent>
           </Card>

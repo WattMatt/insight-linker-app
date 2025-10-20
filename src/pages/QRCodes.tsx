@@ -4,9 +4,11 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { QrCode, Search, ExternalLink, Building2, MapPin, Layers } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { QrCode, Search, ExternalLink, Building2, MapPin, Layers, Download } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
+import { LabeledQRCode } from "@/components/LabeledQRCode";
 
 interface QRCodeEntry {
   id: string;
@@ -33,12 +35,31 @@ const QRCodes = () => {
   const [filteredCodes, setFilteredCodes] = useState<QRCodeEntry[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [loading, setLoading] = useState(true);
+  const [selectedQR, setSelectedQR] = useState<QRCodeEntry | null>(null);
+  const [companyLogo, setCompanyLogo] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
   useEffect(() => {
     fetchQRCodes();
+    fetchCompanyLogo();
   }, []);
+
+  const fetchCompanyLogo = async () => {
+    try {
+      const { data } = await supabase
+        .from('settings')
+        .select('company_logo_url')
+        .limit(1)
+        .maybeSingle();
+      
+      if (data?.company_logo_url) {
+        setCompanyLogo(data.company_logo_url);
+      }
+    } catch (error) {
+      console.error('Error fetching company logo:', error);
+    }
+  };
 
   useEffect(() => {
     filterQRCodes();
@@ -219,14 +240,14 @@ const QRCodes = () => {
                   </div>
 
                   <div className="flex flex-col gap-2">
-                    {qr.qr_code_url && (
+                    {qr.subsection_id && qr.sites && qr.subsections && (
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
-                        onClick={() => window.open(qr.qr_code_url, "_blank")}
+                        onClick={() => setSelectedQR(qr)}
                       >
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        View QR
+                        <Download className="h-4 w-4 mr-2" />
+                        Download QR
                       </Button>
                     )}
                     <Button
@@ -250,6 +271,25 @@ const QRCodes = () => {
           Showing {filteredCodes.length} of {qrCodes.length} QR codes
         </div>
       )}
+
+      {/* QR Code Download Dialog */}
+      <Dialog open={!!selectedQR} onOpenChange={() => setSelectedQR(null)}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Download QR Code</DialogTitle>
+          </DialogHeader>
+          {selectedQR && selectedQR.sites && selectedQR.subsections && (
+            <div className="py-4">
+              <LabeledQRCode
+                url={`${window.location.origin}/public/subsections/${selectedQR.subsection_id}`}
+                siteName={selectedQR.sites.name}
+                subsectionName={selectedQR.subsections.name}
+                logoUrl={companyLogo || undefined}
+              />
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
