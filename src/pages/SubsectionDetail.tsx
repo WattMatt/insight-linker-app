@@ -88,7 +88,7 @@ const SubsectionDetail = () => {
   const [validationReportOpen, setValidationReportOpen] = useState(false);
 
   useEffect(() => {
-    if (subsectionId) {
+    if (subsectionId && subsectionId !== "new") {
       fetchSubsectionData();
       fetchCompanyLogo();
       fetchTemplates();
@@ -96,6 +96,10 @@ const SubsectionDetail = () => {
       fetchSupabaseDocuments();
       fetchSnags();
       fetchCocValidations();
+    } else if (subsectionId === "new") {
+      // For new subsections, just load templates and set loading to false
+      setLoading(false);
+      fetchTemplates();
     }
   }, [subsectionId]);
 
@@ -503,6 +507,54 @@ const SubsectionDetail = () => {
     });
     
     setIsEditDialogOpen(true);
+  };
+
+  const handleCreateSubsection = async () => {
+    if (!editFormData.name.trim()) {
+      toast.error("Subsection name is required");
+      return;
+    }
+
+    if (!editFormData.category) {
+      toast.error("Please select a category");
+      return;
+    }
+
+    if (!siteId) {
+      toast.error("Site ID is required");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      
+      const { data: newSubsection, error } = await supabase
+        .from('subsections')
+        .insert({
+          site_id: siteId,
+          name: editFormData.name,
+          tenant_name: editFormData.tenant_name,
+          category: editFormData.category,
+          is_coc_required: editFormData.is_coc_required,
+          coc_status: 'Missing',
+          metering_status: 'Missing'
+        })
+        .select()
+        .single();
+      
+      if (error) throw error;
+      
+      toast.success("Subsection created successfully");
+      
+      // Navigate to the newly created subsection
+      const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+      navigate(`${basePath}/subsections/${newSubsection.id}`);
+    } catch (error) {
+      console.error("Error creating subsection:", error);
+      toast.error("Failed to create subsection");
+    } finally {
+      setSaving(false);
+    }
   };
 
   const handleSaveEdit = async () => {
@@ -1221,6 +1273,112 @@ const SubsectionDetail = () => {
           <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
           <p className="text-muted-foreground">Loading...</p>
         </div>
+      </div>
+    );
+  }
+
+  // Handle "new" subsection creation
+  if (subsectionId === "new") {
+    return (
+      <div className="max-w-2xl mx-auto space-y-6 p-6">
+        <div className="flex items-center gap-4">
+          <Button variant="ghost" size="icon" onClick={() => {
+            const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+            navigate(basePath);
+          }}>
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Create New Subsection</h1>
+            <p className="text-sm text-muted-foreground">Add a new subsection or tenant to this site</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Subsection Details</CardTitle>
+            <CardDescription>Enter the details for the new subsection</CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="name">Subsection Name *</Label>
+              <Input
+                id="name"
+                placeholder="e.g., Main Board, Tenant A"
+                value={editFormData.name}
+                onChange={(e) => setEditFormData({ ...editFormData, name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tenant_name">Tenant/Unit Name</Label>
+              <Input
+                id="tenant_name"
+                placeholder="e.g., Shop 123, Office Floor 2"
+                value={editFormData.tenant_name}
+                onChange={(e) => setEditFormData({ ...editFormData, tenant_name: e.target.value })}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="category">Category *</Label>
+              <Select
+                value={editFormData.category}
+                onValueChange={(value) => setEditFormData({ ...editFormData, category: value })}
+              >
+                <SelectTrigger id="category">
+                  <SelectValue placeholder="Select a category" />
+                </SelectTrigger>
+                <SelectContent>
+                  {SUBSECTION_CATEGORIES.map((cat) => {
+                    const Icon = getCategoryIcon(cat.value);
+                    return (
+                      <SelectItem key={cat.value} value={cat.value}>
+                        <div className="flex items-center gap-2">
+                          <Icon className="h-4 w-4" />
+                          {cat.label}
+                        </div>
+                      </SelectItem>
+                    );
+                  })}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <input
+                type="checkbox"
+                id="is_coc_required"
+                checked={editFormData.is_coc_required}
+                onChange={(e) => setEditFormData({ ...editFormData, is_coc_required: e.target.checked })}
+                className="rounded border-gray-300"
+              />
+              <Label htmlFor="is_coc_required" className="font-normal cursor-pointer">
+                Certificate of Compliance (COC) Required
+              </Label>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button
+                onClick={handleCreateSubsection}
+                disabled={saving}
+                className="flex-1"
+              >
+                {saving ? "Creating..." : "Create Subsection"}
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+                  navigate(basePath);
+                }}
+                disabled={saving}
+              >
+                Cancel
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     );
   }
