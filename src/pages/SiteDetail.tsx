@@ -105,6 +105,7 @@ const SiteDetail = () => {
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
+  const [generatingAll, setGeneratingAll] = useState(false);
   const [uploadingImage, setUploadingImage] = useState<string | null>(null);
   const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
   const [fixingCategories, setFixingCategories] = useState(false);
@@ -1875,15 +1876,57 @@ const SiteDetail = () => {
                     Generate and download QR codes for all subsections on {site.name}
                   </CardDescription>
                 </div>
-                <Button
-                  onClick={async () => {
-                    setDownloadingAll(true);
-                    toast.info("Generating all QR codes and PDF...");
-                    
-                    // Import dynamically
-                    const QRCode = await import('qrcode');
-                    const { default: jsPDF } = await import('jspdf');
-                    const zip = new JSZip();
+                <div className="flex gap-2">
+                  <Button
+                    onClick={async () => {
+                      setGeneratingAll(true);
+                      toast.info("Generating QR codes for all subsections...");
+                      
+                      let successCount = 0;
+                      let failCount = 0;
+                      
+                      for (const subsection of subsections) {
+                        if (!subsection.qr_code_url) {
+                          try {
+                            await generateAndUploadQRCode({
+                              subsectionId: subsection.id,
+                              siteName: site.name,
+                              subsectionName: subsection.name,
+                              logoUrl: companyLogo || undefined
+                            });
+                            successCount++;
+                          } catch (error) {
+                            console.error(`Failed to generate QR for ${subsection.name}:`, error);
+                            failCount++;
+                          }
+                        }
+                      }
+                      
+                      setGeneratingAll(false);
+                      
+                      if (failCount === 0) {
+                        toast.success(`Successfully generated ${successCount} QR codes!`);
+                      } else {
+                        toast.warning(`Generated ${successCount} QR codes, ${failCount} failed`);
+                      }
+                      
+                      fetchSiteData(); // Refresh to show new QR codes
+                    }}
+                    disabled={generatingAll || subsections.length === 0 || subsections.every(s => s.qr_code_url)}
+                    variant="secondary"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    {generatingAll ? "Generating..." : "Generate All"}
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      setDownloadingAll(true);
+                      toast.info("Generating all QR codes and PDF...");
+                      
+                      // Import dynamically
+                      const QRCode = await import('qrcode');
+                      const { default: jsPDF } = await import('jspdf');
+                      const zip = new JSZip();
                     
                     // Get QR base URL from settings
                     const { data: qrSettings } = await supabase
@@ -2057,10 +2100,11 @@ const SiteDetail = () => {
                     setDownloadingAll(false);
                   }}
                   disabled={downloadingAll || subsections.length === 0}
-                >
-                  <Download className="h-4 w-4 mr-2" />
-                  {downloadingAll ? "Generating..." : `Download All (${subsections.length})`}
-                </Button>
+                  >
+                    <Download className="h-4 w-4 mr-2" />
+                    {downloadingAll ? "Generating..." : `Download All (${subsections.length})`}
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>
