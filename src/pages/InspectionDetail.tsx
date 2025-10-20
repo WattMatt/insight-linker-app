@@ -1422,6 +1422,7 @@ const InspectionDetail = () => {
                 ref={(el) => (fileInputRefs.current[uploadKey] = el)}
                 type="file"
                 accept="image/*"
+                capture="environment"
                 multiple
                 className="hidden"
                 onChange={(e) => handleImageUpload(sectionKey, itemKey, e.target.files)}
@@ -1757,6 +1758,7 @@ const InspectionDetail = () => {
                                   ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-breakerImage`] = el)}
                                   type="file"
                                   accept="image/*"
+                                  capture="environment"
                                   className="hidden"
                                   onChange={(e) => handleTenantImageUpload(tenant.id, 'breakerImage', e.target.files)}
                                 />
@@ -1808,6 +1810,7 @@ const InspectionDetail = () => {
                                   ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-ctRatioImage`] = el)}
                                   type="file"
                                   accept="image/*"
+                                  capture="environment"
                                   className="hidden"
                                   onChange={(e) => handleTenantImageUpload(tenant.id, 'ctRatioImage', e.target.files)}
                                 />
@@ -2152,6 +2155,7 @@ const InspectionDetail = () => {
                 <input
                   type="file"
                   accept="image/*"
+                  capture="environment"
                   multiple
                   className="hidden"
                   id="snag-photo-upload"
