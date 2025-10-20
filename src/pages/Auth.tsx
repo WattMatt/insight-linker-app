@@ -39,8 +39,7 @@ const Auth = () => {
 
     // Set up auth state listener FIRST
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        console.log("Auth state change:", event, session?.user?.email);
+      (event, session) => {
         setSession(session);
         
         // Check if user needs to change password
@@ -49,34 +48,29 @@ const Auth = () => {
         
         // Only redirect on SIGNED_IN event to avoid race conditions
         if (event === 'SIGNED_IN' && session && !isInvite && !needsChange) {
-          console.log("Attempting redirect for user:", session.user.email);
-          
-          // Redirect based on user role
-          const { data: roleData, error: roleError } = await supabase
-            .from("user_roles")
-            .select("role")
-            .eq("user_id", session.user.id)
-            .maybeSingle();
-          
-          console.log("Role data:", roleData, "Error:", roleError);
-          
-          if (roleError) {
-            console.error("Error fetching role:", roleError);
-            toast.error("Error loading user role. Please contact support.");
-            return;
-          }
-          
-          // Always redirect somewhere - default to dashboard if no role found
-          if (roleData?.role === "Client") {
-            console.log("Redirecting to client portal");
-            navigate("/client-portal");
-          } else if (roleData?.role === "Contractor") {
-            console.log("Redirecting to contractor portal");
-            navigate("/contractor");
-          } else {
-            console.log("Redirecting to dashboard");
-            navigate("/dashboard");
-          }
+          // Defer Supabase calls with setTimeout to avoid deadlock
+          setTimeout(async () => {
+            const { data: roleData, error: roleError } = await supabase
+              .from("user_roles")
+              .select("role")
+              .eq("user_id", session.user.id)
+              .maybeSingle();
+            
+            if (roleError) {
+              console.error("Error fetching role:", roleError);
+              toast.error("Error loading user role. Please contact support.");
+              return;
+            }
+            
+            // Always redirect somewhere - default to dashboard if no role found
+            if (roleData?.role === "Client") {
+              navigate("/client-portal");
+            } else if (roleData?.role === "Contractor") {
+              navigate("/contractor");
+            } else {
+              navigate("/dashboard");
+            }
+          }, 0);
         }
       }
     );
