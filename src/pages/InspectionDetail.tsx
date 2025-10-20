@@ -897,18 +897,10 @@ const InspectionDetail = () => {
       // On mobile web browsers, we need to set capture attribute dynamically
       const input = fileInputRefs.current[uploadKey];
       if (input) {
-        // Check if it's a mobile device
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        if (isMobileDevice) {
-          // On mobile, remove multiple and add capture for direct camera access
-          input.removeAttribute('multiple');
-          input.setAttribute('capture', 'environment');
-        } else {
-          // On desktop, ensure multiple is set and no capture
-          input.setAttribute('multiple', '');
-          input.removeAttribute('capture');
-        }
+        // Allow multiple images on all platforms
+        input.setAttribute('multiple', '');
+        // Don't force camera mode - let browser/device handle it naturally
+        input.removeAttribute('capture');
       }
       
       input?.click();
@@ -950,13 +942,8 @@ const InspectionDetail = () => {
     
     if (!isNative) {
       if (input) {
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        if (isMobileDevice) {
-          input.setAttribute('capture', 'environment');
-        } else {
-          input.removeAttribute('capture');
-        }
+        // Don't force camera mode - let browser/device handle it naturally
+        input.removeAttribute('capture');
       }
       
       input?.click();
@@ -994,15 +981,10 @@ const InspectionDetail = () => {
     
     if (!isNative) {
       if (input) {
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-        
-        if (isMobileDevice) {
-          input.removeAttribute('multiple');
-          input.setAttribute('capture', 'environment');
-        } else {
-          input.setAttribute('multiple', '');
-          input.removeAttribute('capture');
-        }
+        // Allow multiple images
+        input.setAttribute('multiple', '');
+        // Don't force camera mode - let browser/device handle it naturally
+        input.removeAttribute('capture');
       }
       
       input?.click();

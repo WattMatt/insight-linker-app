@@ -8,13 +8,13 @@ export interface CameraOptions {
   source?: CameraSource;
 }
 
-// Web fallback: Create file input and trigger camera
+// Web fallback: Create file input and trigger file picker
 const capturePhotoWeb = (multiple: boolean = false): Promise<File[]> => {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = 'image/*';
-    input.capture = 'environment'; // Request rear camera on mobile
+    // Don't force camera mode - let user choose camera or gallery naturally
     if (multiple) {
       input.multiple = true;
     }
@@ -32,8 +32,10 @@ const capturePhotoWeb = (multiple: boolean = false): Promise<File[]> => {
       resolve([]); // User cancelled
     };
 
-    // Trigger the file picker
-    input.click();
+    // Add a small delay to ensure the dialog appears
+    setTimeout(() => {
+      input.click();
+    }, 100);
   });
 };
 
