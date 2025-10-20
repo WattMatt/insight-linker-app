@@ -1291,7 +1291,11 @@ const SiteDetail = () => {
                     <img
                       src={imagePreview.site_image}
                       alt="Preview"
-                      className="w-64 h-48 object-cover rounded border"
+                      className="w-64 h-48 object-cover rounded border bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.className = 'w-64 h-48 object-contain rounded border bg-muted p-4';
+                      }}
                     />
                     <Badge variant="secondary" className="absolute top-2 left-2">
                       Preview
@@ -1303,7 +1307,11 @@ const SiteDetail = () => {
                       key={site.site_image_url}
                       src={site.site_image_url}
                       alt="Site main image"
-                      className="w-64 h-48 object-cover rounded border"
+                      className="w-64 h-48 object-cover rounded border bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.className = 'w-64 h-48 object-contain rounded border bg-muted p-4';
+                      }}
                     />
                     {site.site_image_url.includes('firebasestorage.googleapis.com') && (
                       <Badge variant="secondary" className="absolute top-2 left-2">
@@ -1363,7 +1371,10 @@ const SiteDetail = () => {
                     <img
                       src={imagePreview.client_logo}
                       alt="Preview"
-                      className="w-48 h-32 object-contain rounded border p-2"
+                      className="w-48 h-32 object-contain rounded border p-2 bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                      }}
                     />
                     <Badge variant="secondary" className="absolute top-2 left-2">
                       Preview
@@ -1375,7 +1386,10 @@ const SiteDetail = () => {
                       key={site.client_logo_url}
                       src={site.client_logo_url}
                       alt="Client logo"
-                      className="w-48 h-32 object-contain rounded border p-2"
+                      className="w-48 h-32 object-contain rounded border p-2 bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                      }}
                     />
                     {site.client_logo_url.includes('firebasestorage.googleapis.com') && (
                       <Badge variant="secondary" className="absolute top-2 left-2">
