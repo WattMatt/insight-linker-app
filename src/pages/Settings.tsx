@@ -14,6 +14,7 @@ interface Settings {
   company_name: string;
   primary_color: string;
   google_drive_connected: boolean;
+  qr_base_url: string | null;
 }
 
 const Settings = () => {
@@ -21,6 +22,7 @@ const Settings = () => {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [companyName, setCompanyName] = useState("");
+  const [qrBaseUrl, setQrBaseUrl] = useState("");
 
   useEffect(() => {
     fetchSettings();
@@ -36,6 +38,7 @@ const Settings = () => {
       if (error) throw error;
       setSettings(data);
       setCompanyName(data.company_name || "");
+      setQrBaseUrl(data.qr_base_url || "");
     } catch (error) {
       console.error("Error fetching settings:", error);
     } finally {
@@ -108,6 +111,22 @@ const Settings = () => {
     } catch (error: any) {
       console.error("Error updating company name:", error);
       toast.error(error.message || "Failed to update company name");
+    }
+  };
+
+  const handleQrBaseUrlUpdate = async () => {
+    try {
+      const { error } = await supabase
+        .from("settings")
+        .update({ qr_base_url: qrBaseUrl })
+        .eq("id", settings!.id);
+
+      if (error) throw error;
+      toast.success("QR code base URL updated. Regenerate QR codes to apply changes.");
+      fetchSettings();
+    } catch (error: any) {
+      console.error("Error updating QR base URL:", error);
+      toast.error(error.message || "Failed to update QR base URL");
     }
   };
 
@@ -229,6 +248,26 @@ const Settings = () => {
               <Button onClick={handleCompanyNameUpdate}>
                 Update
               </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <Label htmlFor="qr-base-url">QR Code Base URL</Label>
+            <div className="space-y-2">
+              <div className="flex gap-2">
+                <Input
+                  id="qr-base-url"
+                  value={qrBaseUrl}
+                  onChange={(e) => setQrBaseUrl(e.target.value)}
+                  placeholder="https://your-published-app.lovable.app"
+                />
+                <Button onClick={handleQrBaseUrlUpdate}>
+                  Update
+                </Button>
+              </div>
+              <p className="text-sm text-muted-foreground">
+                Enter your published app URL or custom domain. After updating, regenerate all QR codes from the site's QR Codes tab.
+              </p>
             </div>
           </div>
         </CardContent>

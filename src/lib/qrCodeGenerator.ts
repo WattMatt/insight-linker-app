@@ -15,6 +15,14 @@ export async function generateAndUploadQRCode({
   logoUrl
 }: GenerateQRCodeOptions): Promise<string | null> {
   try {
+    // Get QR base URL from settings
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('qr_base_url')
+      .single();
+    
+    const baseUrl = settings?.qr_base_url || window.location.origin;
+    
     // Create canvas
     const canvas = document.createElement('canvas');
     const qrSize = 500;
@@ -41,7 +49,7 @@ export async function generateAndUploadQRCode({
 
     // Generate QR code on temporary canvas
     const qrCanvas = document.createElement('canvas');
-    await QRCode.toCanvas(qrCanvas, `${window.location.origin}/public/subsections/${subsectionId}`, {
+    await QRCode.toCanvas(qrCanvas, `${baseUrl}/public/subsections/${subsectionId}`, {
       width: qrSize,
       margin: 1,
       errorCorrectionLevel: 'H'

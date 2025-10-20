@@ -1885,6 +1885,14 @@ const SiteDetail = () => {
                     const { default: jsPDF } = await import('jspdf');
                     const zip = new JSZip();
                     
+                    // Get QR base URL from settings
+                    const { data: qrSettings } = await supabase
+                      .from('settings')
+                      .select('qr_base_url')
+                      .single();
+                    
+                    const baseUrl = qrSettings?.qr_base_url || window.location.origin;
+                    
                     // Store canvas data URLs for PDF generation
                     const qrCodeDataUrls: { dataUrl: string; name: string }[] = [];
                     
@@ -1915,7 +1923,7 @@ const SiteDetail = () => {
                         
                         // Generate QR code
                         const tempCanvas = document.createElement('canvas');
-                        await QRCode.default.toCanvas(tempCanvas, `${window.location.origin}/public/subsections/${subsection.id}`, {
+                        await QRCode.default.toCanvas(tempCanvas, `${baseUrl}/public/subsections/${subsection.id}`, {
                           width: qrSize,
                           margin: 1,
                           errorCorrectionLevel: 'H'
