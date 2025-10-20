@@ -246,20 +246,44 @@ Deno.serve(async (req) => {
       isNewUser = true;
       console.log('New user created:', userId);
 
-      // Assign role
-      const { error: roleError } = await supabase
+      // Assign role (handle case where trigger already created one)
+      const { data: existingRole } = await supabase
         .from('user_roles')
-        .insert({
-          user_id: userId,
-          role: role,
-        });
+        .select('role')
+        .eq('user_id', userId)
+        .maybeSingle();
 
-      if (roleError) {
-        console.error('Role assignment error:', roleError);
-        throw new Error(`Failed to assign role: ${roleError.message}`);
+      if (existingRole) {
+        // Update existing role if different
+        if (existingRole.role !== role) {
+          const { error: roleError } = await supabase
+            .from('user_roles')
+            .update({ role })
+            .eq('user_id', userId);
+
+          if (roleError) {
+            console.error('Role update error:', roleError);
+            throw new Error(`Failed to update role: ${roleError.message}`);
+          }
+          console.log('Role updated successfully');
+        } else {
+          console.log('Role already assigned correctly');
+        }
+      } else {
+        // Insert new role
+        const { error: roleError } = await supabase
+          .from('user_roles')
+          .insert({
+            user_id: userId,
+            role: role,
+          });
+
+        if (roleError) {
+          console.error('Role assignment error:', roleError);
+          throw new Error(`Failed to assign role: ${roleError.message}`);
+        }
+        console.log('Role assigned successfully');
       }
-
-      console.log('Role assigned successfully');
       
       // If Client role, create user_clients mapping
       if (role === 'Client' && clientId) {
