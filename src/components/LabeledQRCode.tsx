@@ -72,29 +72,48 @@ export const LabeledQRCode = ({
       // Draw QR code
       ctx.drawImage(qrCanvas, padding, padding, qrSize, qrSize);
 
-      // If logo exists, overlay it
+      // If logo exists, overlay it in the center of QR code
       if (logoUrl) {
         await new Promise<void>((resolve) => {
           const img = new Image();
           img.crossOrigin = 'anonymous';
           
           img.onload = () => {
-            const logoSize = qrSize * 0.18;
-            const logoX = padding + (qrSize - logoSize) / 2;
-            const logoY = padding + (qrSize - logoSize) / 2;
-            const logoPadding = logoSize * 0.15;
+            // Calculate logo size maintaining aspect ratio
+            const maxLogoSize = qrSize * 0.2; // 20% of QR code size
+            let logoWidth = img.width;
+            let logoHeight = img.height;
+            
+            // Scale down to fit within maxLogoSize while maintaining aspect ratio
+            if (logoWidth > logoHeight) {
+              if (logoWidth > maxLogoSize) {
+                logoHeight = (logoHeight * maxLogoSize) / logoWidth;
+                logoWidth = maxLogoSize;
+              }
+            } else {
+              if (logoHeight > maxLogoSize) {
+                logoWidth = (logoWidth * maxLogoSize) / logoHeight;
+                logoHeight = maxLogoSize;
+              }
+            }
+            
+            const logoX = padding + (qrSize - logoWidth) / 2;
+            const logoY = padding + (qrSize - logoHeight) / 2;
+            const logoPadding = Math.min(logoWidth, logoHeight) * 0.15;
 
-            // White background for logo
+            // White background for logo (slightly larger than logo)
             ctx.fillStyle = 'white';
             ctx.fillRect(
               logoX - logoPadding,
               logoY - logoPadding,
-              logoSize + (logoPadding * 2),
-              logoSize + (logoPadding * 2)
+              logoWidth + (logoPadding * 2),
+              logoHeight + (logoPadding * 2)
             );
 
-            // Draw logo
-            ctx.drawImage(img, logoX, logoY, logoSize, logoSize);
+            // Draw logo maintaining aspect ratio
+            ctx.drawImage(img, logoX, logoY, logoWidth, logoHeight);
+            
+            console.log('Logo drawn with dimensions:', { logoWidth, logoHeight });
             resolve();
           };
 
