@@ -103,19 +103,20 @@ export const LabeledQRCode = ({
         });
       }
 
-      // Draw text labels
-      const textY = padding + qrSize + 30;
+      // Draw text labels below QR code
+      const textY = padding + qrSize + 35;
       
-      // Site name (larger, bold)
+      // Site name (larger, bold, uppercase)
       ctx.fillStyle = 'black';
-      ctx.font = 'bold 32px Arial, sans-serif';
+      ctx.font = 'bold 36px Arial, sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';
-      ctx.fillText(siteName, totalWidth / 2, textY);
+      const siteNameUpper = siteName.toUpperCase();
+      ctx.fillText(siteNameUpper, totalWidth / 2, textY);
 
-      // Subsection name (smaller)
-      ctx.font = '28px Arial, sans-serif';
-      ctx.fillText(subsectionName, totalWidth / 2, textY + 45);
+      // Subsection name (slightly smaller)
+      ctx.font = '30px Arial, sans-serif';
+      ctx.fillText(subsectionName, totalWidth / 2, textY + 50);
 
       const dataUrl = canvas.toDataURL('image/png');
       setGeneratedUrl(dataUrl);
@@ -152,11 +153,18 @@ export const LabeledQRCode = ({
     <div className="flex flex-col items-center gap-4">
       <canvas
         ref={canvasRef}
-        className="border rounded-lg shadow-sm"
-        style={{ maxWidth: '100%', height: 'auto' }}
+        className="border-2 border-border rounded-lg shadow-md bg-white"
+        style={{ 
+          maxWidth: '100%', 
+          height: 'auto',
+          display: 'block'
+        }}
       />
-      {generatedUrl && (
-        <Button onClick={handleDownload} disabled={isGenerating}>
+      {isGenerating && (
+        <p className="text-sm text-muted-foreground">Generating QR code...</p>
+      )}
+      {generatedUrl && !isGenerating && (
+        <Button onClick={handleDownload}>
           <Download className="h-4 w-4 mr-2" />
           Download QR Code
         </Button>
