@@ -103,6 +103,8 @@ const Users = () => {
   const [editSitesUser, setEditSitesUser] = useState<UserProfile | null>(null);
   const [editUserSiteIds, setEditUserSiteIds] = useState<string[]>([]);
   const [resendTempPassword, setResendTempPassword] = useState("");
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -417,6 +419,32 @@ const Users = () => {
     },
     onError: (error: any) => {
       toast.error(error.message || "Failed to update profile");
+    },
+  });
+
+  // Delete user mutation
+  const deleteUserMutation = useMutation({
+    mutationFn: async (userId: string) => {
+      const { data, error } = await supabase.functions.invoke('delete-user', {
+        body: { userId }
+      });
+      
+      if (error) throw error;
+      if (!data.success) {
+        throw new Error(data.error || 'Failed to delete user');
+      }
+      return data;
+    },
+    onSuccess: () => {
+      toast.success("User deleted successfully");
+      queryClient.invalidateQueries({ queryKey: ["users"] });
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to delete user");
+      setDeleteDialogOpen(false);
+      setUserToDelete(null);
     },
   });
 
@@ -875,6 +903,17 @@ const Users = () => {
                             Edit Sites
                           </DropdownMenuItem>
                         )}
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem 
+                          onClick={() => {
+                            setUserToDelete(user);
+                            setDeleteDialogOpen(true);
+                          }}
+                          className="text-destructive focus:text-destructive"
+                        >
+                          <Trash2 className="mr-2 h-4 w-4" />
+                          Delete User
+                        </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   </TableCell>
@@ -891,6 +930,42 @@ const Users = () => {
         </Table>
       </div>
       </div>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete User</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete {userToDelete?.full_name || userToDelete?.email}? 
+              This action cannot be undone and will remove all associated data including role assignments, 
+              client mappings, and site assignments.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setDeleteDialogOpen(false);
+                setUserToDelete(null);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (userToDelete) {
+                  deleteUserMutation.mutate(userToDelete.id);
+                }
+              }}
+              disabled={deleteUserMutation.isPending}
+            >
+              {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Edit User Dialog */}
       <Dialog open={editOpen} onOpenChange={setEditOpen}>
