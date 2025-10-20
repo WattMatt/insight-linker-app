@@ -335,9 +335,27 @@ const InspectionDetail = () => {
       ));
 
       toast.success("Image uploaded successfully");
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading tenant image:", error);
-      toast.error("Failed to upload image");
+      
+      // Check for JWT/authentication errors
+      if (error?.message?.includes('JWT') || 
+          error?.message?.includes('signature verification') ||
+          error?.statusCode === '408' ||
+          error?.error === 'InvalidJWT') {
+        toast.error("Your session has expired. Please refresh the page and try again.");
+        
+        // Try to refresh the session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (!session || sessionError) {
+          toast.error("Please log in again to continue.");
+          setTimeout(() => {
+            navigate('/auth');
+          }, 2000);
+        }
+      } else {
+        toast.error("Failed to upload image");
+      }
     } finally {
       setUploadingTenantImages(prev => {
         const newSet = new Set(prev);
@@ -435,9 +453,27 @@ const InspectionDetail = () => {
       
       setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
       toast.success(`${uploadedUrls.length} photo(s) uploaded`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading snag photos:", error);
-      toast.error("Failed to upload photos");
+      
+      // Check for JWT/authentication errors
+      if (error?.message?.includes('JWT') || 
+          error?.message?.includes('signature verification') ||
+          error?.statusCode === '408' ||
+          error?.error === 'InvalidJWT') {
+        toast.error("Your session has expired. Please refresh the page and try again.");
+        
+        // Try to refresh the session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (!session || sessionError) {
+          toast.error("Please log in again to continue.");
+          setTimeout(() => {
+            navigate('/auth');
+          }, 2000);
+        }
+      } else {
+        toast.error("Failed to upload photos");
+      }
     } finally {
       setUploadingSnagPhotos(false);
     }
@@ -823,9 +859,27 @@ const InspectionDetail = () => {
 
       toast.success(`${uploadedUrls.length} image(s) uploaded successfully`);
       console.log(`Upload complete: ${uploadedUrls.length}/${totalFiles} images uploaded`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading images:", error);
-      toast.error("Failed to upload images: " + (error as Error).message);
+      
+      // Check for JWT/authentication errors
+      if (error?.message?.includes('JWT') || 
+          error?.message?.includes('signature verification') ||
+          error?.statusCode === '408' ||
+          error?.error === 'InvalidJWT') {
+        toast.error("Your session has expired. Please refresh the page and try again.");
+        
+        // Try to refresh the session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+        if (!session || sessionError) {
+          toast.error("Please log in again to continue.");
+          setTimeout(() => {
+            navigate('/auth');
+          }, 2000);
+        }
+      } else {
+        toast.error("Failed to upload images: " + (error?.message || "Unknown error"));
+      }
     } finally {
       setUploadingImages(prev => {
         const newSet = new Set(prev);
