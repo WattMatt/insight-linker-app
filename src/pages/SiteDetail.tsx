@@ -1986,38 +1986,35 @@ const SiteDetail = () => {
                       }
                     }
                     
-                    // Generate PDF with QR codes arranged 3 across
+                    // Generate PDF with QR codes arranged 3 across on continuous page
                     try {
+                      const pageWidth = 210; // A4 width in mm
+                      const margin = 15;
+                      const cols = 3;
+                      const colGap = 10; // Gap between columns
+                      const qrWidth = (pageWidth - (margin * 2) - (colGap * (cols - 1))) / cols;
+                      const qrHeight = qrWidth; // Keep square
+                      const rowSpacing = 15; // Space between rows
+                      
+                      // Calculate total rows needed
+                      const totalRows = Math.ceil(qrCodeDataUrls.length / cols);
+                      const totalHeight = margin + (totalRows * qrHeight) + ((totalRows - 1) * rowSpacing) + margin;
+                      
+                      // Create continuous page with custom height
                       const pdf = new jsPDF({
                         orientation: 'portrait',
                         unit: 'mm',
-                        format: 'a4'
+                        format: [pageWidth, totalHeight]
                       });
-                      
-                      const pageWidth = 210; // A4 width in mm
-                      const pageHeight = 297; // A4 height in mm
-                      const margin = 15;
-                      const cols = 3;
-                      const qrWidth = (pageWidth - (margin * 2) - (10 * (cols - 1))) / cols; // 10mm gap between columns
-                      const qrHeight = qrWidth; // Square QR codes
-                      const rowSpacing = 15; // Space between rows
                       
                       let currentX = margin;
                       let currentY = margin;
                       let col = 0;
                       
                       for (let i = 0; i < qrCodeDataUrls.length; i++) {
-                        const { dataUrl, name } = qrCodeDataUrls[i];
+                        const { dataUrl } = qrCodeDataUrls[i];
                         
-                        // Add new page if we exceed the page height
-                        if (currentY + qrHeight > pageHeight - margin) {
-                          pdf.addPage();
-                          currentY = margin;
-                          currentX = margin;
-                          col = 0;
-                        }
-                        
-                        // Add QR code image
+                        // Add QR code image (square)
                         pdf.addImage(dataUrl, 'PNG', currentX, currentY, qrWidth, qrHeight);
                         
                         // Move to next position
@@ -2029,7 +2026,7 @@ const SiteDetail = () => {
                           currentY += qrHeight + rowSpacing;
                         } else {
                           // Move to next column
-                          currentX += qrWidth + 10;
+                          currentX += qrWidth + colGap;
                         }
                       }
                       
