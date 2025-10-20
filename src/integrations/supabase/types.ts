@@ -985,6 +985,7 @@ export type Database = {
           meter_serial_number: string | null
           metering_status: string | null
           name: string
+          qr_code_url: string | null
           site_id: string
           tenant_name: string | null
           updated_at: string
@@ -1006,6 +1007,7 @@ export type Database = {
           meter_serial_number?: string | null
           metering_status?: string | null
           name: string
+          qr_code_url?: string | null
           site_id: string
           tenant_name?: string | null
           updated_at?: string
@@ -1027,6 +1029,7 @@ export type Database = {
           meter_serial_number?: string | null
           metering_status?: string | null
           name?: string
+          qr_code_url?: string | null
           site_id?: string
           tenant_name?: string | null
           updated_at?: string

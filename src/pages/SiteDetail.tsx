@@ -9,8 +9,9 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
+import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
@@ -56,6 +57,7 @@ interface Subsection {
   coc_number: string | null;
   meter_serial_number: string | null;
   ct_ratio: string | null;
+  qr_code_url: string | null;
 }
 
 interface SiteDocument {
@@ -2004,17 +2006,50 @@ const SiteDetail = () => {
                   {subsections.map((subsection) => (
                     <Card key={subsection.id} className="overflow-hidden">
                       <CardContent className="p-4">
-                        <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center">
-                          <LabeledQRCode
-                            url={`${window.location.origin}/public/subsections/${subsection.id}`}
-                            siteName={site.name}
-                            subsectionName={subsection.name}
-                            logoUrl={companyLogo || undefined}
-                          />
+                        <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center relative">
+                          {subsection.qr_code_url ? (
+                            <img 
+                              src={subsection.qr_code_url} 
+                              alt={`QR Code for ${subsection.name}`}
+                              className="w-full h-full object-contain"
+                            />
+                          ) : (
+                            <LabeledQRCode
+                              url={`${window.location.origin}/public/subsections/${subsection.id}`}
+                              siteName={site.name}
+                              subsectionName={subsection.name}
+                              logoUrl={companyLogo || undefined}
+                            />
+                          )}
                         </div>
                         <h3 className="font-semibold text-sm mb-1">{subsection.name}</h3>
                         {subsection.tenant_name && (
-                          <p className="text-xs text-muted-foreground">{subsection.tenant_name}</p>
+                          <p className="text-xs text-muted-foreground mb-2">{subsection.tenant_name}</p>
+                        )}
+                        {!subsection.qr_code_url && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="w-full"
+                            onClick={async () => {
+                              toast.info("Generating QR code...");
+                              const url = await generateAndUploadQRCode({
+                                subsectionId: subsection.id,
+                                siteName: site.name,
+                                subsectionName: subsection.name,
+                                logoUrl: companyLogo || undefined
+                              });
+                              if (url) {
+                                toast.success("QR code generated!");
+                                fetchSiteData(); // Refresh to show the new QR code
+                              } else {
+                                toast.error("Failed to generate QR code");
+                              }
+                            }}
+                          >
+                            <RefreshCw className="h-3 w-3 mr-1" />
+                            Generate QR Code
+                          </Button>
                         )}
                       </CardContent>
                     </Card>

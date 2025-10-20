@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
+import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -546,6 +547,20 @@ const SubsectionDetail = () => {
       if (error) throw error;
       
       toast.success("Subsection created successfully");
+      
+      // Generate QR code in the background (don't wait for it)
+      if (siteData?.siteName) {
+        generateAndUploadQRCode({
+          subsectionId: newSubsection.id,
+          siteName: siteData.siteName,
+          subsectionName: newSubsection.name,
+          logoUrl: companyLogo || undefined
+        }).then(() => {
+          console.log('QR code generated for new subsection');
+        }).catch((err) => {
+          console.error('Failed to generate QR code:', err);
+        });
+      }
       
       // Navigate to the newly created subsection
       const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
