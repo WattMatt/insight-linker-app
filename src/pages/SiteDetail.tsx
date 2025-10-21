@@ -2125,7 +2125,7 @@ const SiteDetail = () => {
                             />
                           ) : (
                             <LabeledQRCode
-                              url={`${window.location.origin}/public/subsections/${subsection.id}`}
+                              url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${subsection.id}`}
                               siteName={site.name}
                               subsectionName={subsection.name}
                               logoUrl={companyLogo || undefined}

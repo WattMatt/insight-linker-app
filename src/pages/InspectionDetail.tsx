@@ -672,7 +672,7 @@ const InspectionDetail = () => {
       }
 
       // Generate QR code with logo
-      const url = `${window.location.origin}/public/subsections/${inspData.subsection_id || subsectionId}`;
+      const url = `${window.location.origin.replace(/\/$/, '')}/public/subsections/${inspData.subsection_id || subsectionId}`;
       
       const canvas = document.createElement('canvas');
       const size = 200;

@@ -268,7 +268,7 @@ const QRCodes = () => {
           {selectedQR && selectedQR.sites && (
             <div className="py-4">
               <LabeledQRCode
-                url={`${window.location.origin}/public/subsections/${selectedQR.id}`}
+                url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${selectedQR.id}`}
                 siteName={selectedQR.sites.name}
                 subsectionName={selectedQR.name}
                 logoUrl={companyLogo || undefined}
