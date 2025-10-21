@@ -14,10 +14,33 @@ serve(async (req) => {
 
   try {
     const url = new URL(req.url);
-    const path = url.searchParams.get('path') || url.pathname.replace('/qr-redirect/', '').replace('/qr-redirect', '');
+    let path = url.searchParams.get('path') || url.pathname.replace('/qr-redirect/', '').replace('/qr-redirect', '');
 
     console.log('QR Redirect received path:', path);
     console.log('Full URL:', req.url);
+
+    // Define UUID regex at the top for reuse
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Handle malformed URLs with double slashes (from old QR codes)
+    // e.g., //public/subsections/xxx should redirect to /public/subsections/xxx
+    if (path.startsWith('//public/subsections/') || path.startsWith('/public/subsections/')) {
+      const cleanPath = path.replace(/^\/+/, ''); // Remove leading slashes
+      const subsectionId = cleanPath.replace('public/subsections/', '');
+      
+      if (subsectionId && uuidRegex.test(subsectionId)) {
+        const appOrigin = 'https://watsonmattheus.com';
+        const redirectUrl = `${appOrigin}/public/subsections/${subsectionId}`;
+        console.log('Redirecting malformed URL to:', redirectUrl);
+        return new Response(null, {
+          status: 302,
+          headers: {
+            ...corsHeaders,
+            'Location': redirectUrl
+          }
+        });
+      }
+    }
 
     if (!path || path === '/') {
       return new Response('Missing path parameter', { 
@@ -36,7 +59,6 @@ serve(async (req) => {
     console.log('App origin:', appOrigin);
 
     // Check if it's a UUID (new Supabase format)
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
     if (uuidRegex.test(path.replace(/^\//, ''))) {
       const subsectionId = path.replace(/^\//, '');
       console.log('UUID detected, redirecting to:', subsectionId);
