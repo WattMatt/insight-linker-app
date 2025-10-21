@@ -1932,7 +1932,7 @@ const SiteDetail = () => {
                       .select('qr_base_url')
                       .single();
                     
-                    const baseUrl = qrSettings?.qr_base_url || window.location.origin;
+                    const baseUrl = (qrSettings?.qr_base_url || window.location.origin).replace(/\/$/, '');
                     
                     // Store canvas data URLs for PDF generation
                     const qrCodeDataUrls: { dataUrl: string; name: string }[] = [];
