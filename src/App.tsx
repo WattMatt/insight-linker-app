@@ -45,6 +45,7 @@ import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
 import QRCodes from "./pages/QRCodes";
 import { HelpButton } from "./components/HelpButton";
+import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 
 const queryClient = new QueryClient();
 
@@ -72,7 +73,8 @@ const App = () => (
       <Sonner />
       <HelpButton />
       <BrowserRouter>
-        <Routes>
+        <DoubleSlashRedirect>
+          <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           
@@ -393,6 +395,7 @@ const App = () => (
           
           <Route path="*" element={<NotFound />} />
         </Routes>
+        </DoubleSlashRedirect>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
