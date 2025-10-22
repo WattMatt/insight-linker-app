@@ -1397,13 +1397,19 @@ const SiteDetail = () => {
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
+                          // Show preview
                           const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            setImagePreview(prev => ({ ...prev, site_image: result }));
-                          };
+                          const previewPromise = new Promise<string>((resolve, reject) => {
+                            reader.onload = (event) => resolve(event.target?.result as string);
+                            reader.onerror = reject;
+                          });
                           reader.readAsDataURL(file);
+                          const result = await previewPromise;
+                          setImagePreview(prev => ({ ...prev, site_image: result }));
+                          
+                          // Upload image
                           await handleImageUpload(file, 'site_image');
+                          
                           // Clear preview after site data is refreshed
                           setImagePreview(prev => ({ ...prev, site_image: undefined }));
                         } catch (error) {
@@ -1477,13 +1483,19 @@ const SiteDetail = () => {
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
+                          // Show preview
                           const reader = new FileReader();
-                          reader.onload = (event) => {
-                            const result = event.target?.result as string;
-                            setImagePreview(prev => ({ ...prev, client_logo: result }));
-                          };
+                          const previewPromise = new Promise<string>((resolve, reject) => {
+                            reader.onload = (event) => resolve(event.target?.result as string);
+                            reader.onerror = reject;
+                          });
                           reader.readAsDataURL(file);
+                          const result = await previewPromise;
+                          setImagePreview(prev => ({ ...prev, client_logo: result }));
+                          
+                          // Upload image
                           await handleImageUpload(file, 'client_logo');
+                          
                           // Clear preview after site data is refreshed
                           setImagePreview(prev => ({ ...prev, client_logo: undefined }));
                         } catch (error) {
