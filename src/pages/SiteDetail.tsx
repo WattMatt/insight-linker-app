@@ -1456,14 +1456,16 @@ const SiteDetail = () => {
                         Legacy
                       </Badge>
                     )}
-                    <Button
-                      size="sm"
-                      variant="destructive"
-                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                      onClick={() => setDeleteImageType('client_logo')}
-                    >
-                      <Trash2 className="h-4 w-4" />
-                    </Button>
+                    {site.client_logo_url.includes('supabase.co/storage') && (
+                      <Button
+                        size="sm"
+                        variant="destructive"
+                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => setDeleteImageType('client_logo')}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    )}
                   </div>
                 ) : (
                   <div className="w-48 h-32 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
