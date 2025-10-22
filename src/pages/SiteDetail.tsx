@@ -1396,8 +1396,11 @@ const SiteDetail = () => {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const preview = URL.createObjectURL(file);
-                        setImagePreview(prev => ({ ...prev, site_image: preview }));
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImagePreview(prev => ({ ...prev, site_image: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
                         handleImageUpload(file, 'site_image').finally(() => {
                           setImagePreview(prev => ({ ...prev, site_image: undefined }));
                         });
@@ -1467,8 +1470,11 @@ const SiteDetail = () => {
                     onChange={(e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const preview = URL.createObjectURL(file);
-                        setImagePreview(prev => ({ ...prev, client_logo: preview }));
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setImagePreview(prev => ({ ...prev, client_logo: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
                         handleImageUpload(file, 'client_logo').finally(() => {
                           setImagePreview(prev => ({ ...prev, client_logo: undefined }));
                         });
