@@ -1397,7 +1397,7 @@ const SiteDetail = () => {
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
-                          // Show preview
+                          // Show preview immediately
                           const reader = new FileReader();
                           const previewPromise = new Promise<string>((resolve, reject) => {
                             reader.onload = (event) => resolve(event.target?.result as string);
@@ -1407,11 +1407,8 @@ const SiteDetail = () => {
                           const result = await previewPromise;
                           setImagePreview(prev => ({ ...prev, site_image: result }));
                           
-                          // Upload image
+                          // Upload image - preview will be replaced by actual image when site data refreshes
                           await handleImageUpload(file, 'site_image');
-                          
-                          // Clear preview after site data is refreshed
-                          setImagePreview(prev => ({ ...prev, site_image: undefined }));
                         } catch (error) {
                           console.error('Upload error:', error);
                           setImagePreview(prev => ({ ...prev, site_image: undefined }));
@@ -1483,7 +1480,7 @@ const SiteDetail = () => {
                       const file = e.target.files?.[0];
                       if (file) {
                         try {
-                          // Show preview
+                          // Show preview immediately
                           const reader = new FileReader();
                           const previewPromise = new Promise<string>((resolve, reject) => {
                             reader.onload = (event) => resolve(event.target?.result as string);
@@ -1493,11 +1490,8 @@ const SiteDetail = () => {
                           const result = await previewPromise;
                           setImagePreview(prev => ({ ...prev, client_logo: result }));
                           
-                          // Upload image
+                          // Upload image - preview will be replaced by actual image when site data refreshes
                           await handleImageUpload(file, 'client_logo');
-                          
-                          // Clear preview after site data is refreshed
-                          setImagePreview(prev => ({ ...prev, client_logo: undefined }));
                         } catch (error) {
                           console.error('Logo upload error:', error);
                           setImagePreview(prev => ({ ...prev, client_logo: undefined }));
