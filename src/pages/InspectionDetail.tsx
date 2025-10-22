@@ -45,6 +45,7 @@ interface Tenant {
   breakerImage: string;
   ctSizeAndRatio: string;
   ctRatioImage: string;
+  controlStatus48V?: string;
 }
 
 interface InspectionData {
@@ -123,7 +124,8 @@ const InspectionDetail = () => {
     breakerSize: '',
     breakerImage: '',
     ctSizeAndRatio: '',
-    ctRatioImage: ''
+    ctRatioImage: '',
+    controlStatus48V: ''
   });
   const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
@@ -273,7 +275,8 @@ const InspectionDetail = () => {
       breakerSize: '',
       breakerImage: '',
       ctSizeAndRatio: '',
-      ctRatioImage: ''
+      ctRatioImage: '',
+      controlStatus48V: ''
     });
     setTenantDialogOpen(true);
   };
@@ -1750,6 +1753,24 @@ const InspectionDetail = () => {
                                   placeholder="e.g., 100/5A"
                                 />
                               </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`control-status-48v-${tenant.id}`}>48V Control Status</Label>
+                              <Select
+                                value={tenant.controlStatus48V || ''}
+                                onValueChange={(value) => handleTenantFieldChange(tenant.id, 'controlStatus48V', value)}
+                              >
+                                <SelectTrigger id={`control-status-48v-${tenant.id}`}>
+                                  <SelectValue placeholder="Select status" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Pass">Pass</SelectItem>
+                                  <SelectItem value="Fail">Fail</SelectItem>
+                                  <SelectItem value="N/A">N/A</SelectItem>
+                                  <SelectItem value="Pending">Pending</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </div>
 
                             <div className="grid md:grid-cols-2 gap-4">
