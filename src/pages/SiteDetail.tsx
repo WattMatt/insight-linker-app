@@ -770,7 +770,7 @@ const SiteDetail = () => {
       if (updateError) throw updateError;
 
       toast.success("Image uploaded successfully!");
-      fetchSiteData();
+      await fetchSiteData();
     } catch (error) {
       console.error("Error uploading image:", error);
       toast.error("Failed to upload image");
@@ -1396,19 +1396,15 @@ const SiteDetail = () => {
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        console.log('File selected:', file.name, file.type, file.size);
                         try {
                           const reader = new FileReader();
                           reader.onload = (event) => {
                             const result = event.target?.result as string;
-                            console.log('FileReader loaded, data URL length:', result?.length);
                             setImagePreview(prev => ({ ...prev, site_image: result }));
-                          };
-                          reader.onerror = (error) => {
-                            console.error('FileReader error:', error);
                           };
                           reader.readAsDataURL(file);
                           await handleImageUpload(file, 'site_image');
+                          // Clear preview after site data is refreshed
                           setImagePreview(prev => ({ ...prev, site_image: undefined }));
                         } catch (error) {
                           console.error('Upload error:', error);
@@ -1480,19 +1476,15 @@ const SiteDetail = () => {
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        console.log('Logo file selected:', file.name, file.type, file.size);
                         try {
                           const reader = new FileReader();
                           reader.onload = (event) => {
                             const result = event.target?.result as string;
-                            console.log('Logo FileReader loaded, data URL length:', result?.length);
                             setImagePreview(prev => ({ ...prev, client_logo: result }));
-                          };
-                          reader.onerror = (error) => {
-                            console.error('Logo FileReader error:', error);
                           };
                           reader.readAsDataURL(file);
                           await handleImageUpload(file, 'client_logo');
+                          // Clear preview after site data is refreshed
                           setImagePreview(prev => ({ ...prev, client_logo: undefined }));
                         } catch (error) {
                           console.error('Logo upload error:', error);
