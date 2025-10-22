@@ -1393,17 +1393,27 @@ const SiteDetail = () => {
                     accept="image/*"
                     className="hidden"
                     id="site-image-upload"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setImagePreview(prev => ({ ...prev, site_image: reader.result as string }));
-                        };
-                        reader.readAsDataURL(file);
-                        handleImageUpload(file, 'site_image').finally(() => {
+                        console.log('File selected:', file.name, file.type, file.size);
+                        try {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            console.log('FileReader loaded, data URL length:', result?.length);
+                            setImagePreview(prev => ({ ...prev, site_image: result }));
+                          };
+                          reader.onerror = (error) => {
+                            console.error('FileReader error:', error);
+                          };
+                          reader.readAsDataURL(file);
+                          await handleImageUpload(file, 'site_image');
                           setImagePreview(prev => ({ ...prev, site_image: undefined }));
-                        });
+                        } catch (error) {
+                          console.error('Upload error:', error);
+                          setImagePreview(prev => ({ ...prev, site_image: undefined }));
+                        }
                       }
                     }}
                   />
@@ -1467,17 +1477,27 @@ const SiteDetail = () => {
                     accept="image/*"
                     className="hidden"
                     id="client-logo-upload"
-                    onChange={(e) => {
+                    onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        const reader = new FileReader();
-                        reader.onloadend = () => {
-                          setImagePreview(prev => ({ ...prev, client_logo: reader.result as string }));
-                        };
-                        reader.readAsDataURL(file);
-                        handleImageUpload(file, 'client_logo').finally(() => {
+                        console.log('Logo file selected:', file.name, file.type, file.size);
+                        try {
+                          const reader = new FileReader();
+                          reader.onload = (event) => {
+                            const result = event.target?.result as string;
+                            console.log('Logo FileReader loaded, data URL length:', result?.length);
+                            setImagePreview(prev => ({ ...prev, client_logo: result }));
+                          };
+                          reader.onerror = (error) => {
+                            console.error('Logo FileReader error:', error);
+                          };
+                          reader.readAsDataURL(file);
+                          await handleImageUpload(file, 'client_logo');
                           setImagePreview(prev => ({ ...prev, client_logo: undefined }));
-                        });
+                        } catch (error) {
+                          console.error('Logo upload error:', error);
+                          setImagePreview(prev => ({ ...prev, client_logo: undefined }));
+                        }
                       }
                     }}
                   />
