@@ -135,6 +135,7 @@ const SiteDetail = () => {
   const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [newInspectionDate, setNewInspectionDate] = useState("");
+  const [deleteSubsectionId, setDeleteSubsectionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchSiteData();
@@ -292,6 +293,40 @@ const SiteDetail = () => {
     } catch (error) {
       console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
+    }
+  };
+
+  const handleDeleteSubsection = async (subsectionId: string, subsectionName: string) => {
+    try {
+      toast.info("Deleting subsection...");
+
+      // Delete related records first
+      const deletions = [
+        supabase.from('subsection_documents').delete().eq('subsection_id', subsectionId),
+        supabase.from('inspection_items').delete().eq('subsection_id', subsectionId),
+        supabase.from('snags').delete().eq('subsection_id', subsectionId),
+        supabase.from('inspections').delete().eq('subsection_id', subsectionId),
+        supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
+        supabase.from('coc_validations').delete().eq('subsection_id', subsectionId),
+        supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
+      ];
+
+      await Promise.all(deletions);
+
+      // Finally delete the subsection itself
+      const { error: subsectionError } = await supabase
+        .from('subsections')
+        .delete()
+        .eq('id', subsectionId);
+
+      if (subsectionError) throw subsectionError;
+
+      toast.success(`${subsectionName} deleted successfully`);
+      setDeleteSubsectionId(null);
+      fetchSiteData(); // Refresh all data
+    } catch (error) {
+      console.error("Error deleting subsection:", error);
+      toast.error("Failed to delete subsection");
     }
   };
 
@@ -1781,6 +1816,7 @@ const SiteDetail = () => {
                                 <TableHead>Metering</TableHead>
                                 <TableHead>Last Inspected</TableHead>
                                 <TableHead>Open Snags</TableHead>
+                                <TableHead className="w-[50px]"></TableHead>
                               </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -1850,6 +1886,19 @@ const SiteDetail = () => {
                                       >
                                         {openSnags}
                                       </Badge>
+                                    </TableCell>
+                                    <TableCell>
+                                      <Button
+                                        variant="ghost"
+                                        size="icon"
+                                        onClick={(e) => {
+                                          e.stopPropagation();
+                                          setDeleteSubsectionId(sub.id);
+                                        }}
+                                        className="h-8 w-8 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                      >
+                                        <Trash2 className="h-4 w-4" />
+                                      </Button>
                                     </TableCell>
                                   </TableRow>
                                 );
@@ -2518,6 +2567,30 @@ const SiteDetail = () => {
               className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
             >
               Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Delete Subsection Dialog */}
+      <AlertDialog open={deleteSubsectionId !== null} onOpenChange={() => setDeleteSubsectionId(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Subsection</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this subsection? This will permanently delete all associated inspections, documents, snags, and QR codes. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={() => {
+                const subsection = subsections.find(s => s.id === deleteSubsectionId);
+                if (subsection) handleDeleteSubsection(deleteSubsectionId!, subsection.name);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Permanently
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
