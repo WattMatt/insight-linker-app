@@ -1348,7 +1348,7 @@ const SiteDetail = () => {
                 <h3 className="text-sm font-medium mb-3">Site Main Image</h3>
                 {imagePreview.site_image ? (
                   <div className="relative group w-fit mb-3">
-                    <img
+                  <img
                       src={imagePreview.site_image}
                       alt="Preview"
                       className="w-64 h-48 object-cover rounded border bg-muted"
@@ -1421,7 +1421,7 @@ const SiteDetail = () => {
                 <h3 className="text-sm font-medium mb-3">Client Logo</h3>
                 {imagePreview.client_logo ? (
                   <div className="relative group w-fit mb-3">
-                    <img
+                  <img
                       src={imagePreview.client_logo}
                       alt="Preview"
                       className="w-48 h-32 object-contain rounded border p-2 bg-muted"
