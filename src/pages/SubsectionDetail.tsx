@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { COCValidationReport } from "@/components/COCValidationReport";
 import { ValidationChat } from "@/components/ValidationChat";
+import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 
 interface SubsectionData {
   name: string;
@@ -93,6 +94,9 @@ const SubsectionDetail = () => {
   const [selectedValidation, setSelectedValidation] = useState<any>(null);
   const [validationReportOpen, setValidationReportOpen] = useState(false);
   const [deleteSubsectionDialogOpen, setDeleteSubsectionDialogOpen] = useState(false);
+  const [cocPreviewData, setCocPreviewData] = useState<any>(null);
+  const [showCocPreview, setShowCocPreview] = useState(false);
+  const [pendingDocumentForVerification, setPendingDocumentForVerification] = useState<{id: string, url: string, name: string} | null>(null);
 
   useEffect(() => {
     if (subsectionId && subsectionId !== "new") {
@@ -345,6 +349,121 @@ const SubsectionDetail = () => {
     } finally {
       setValidatingDocId(null);
     }
+  };
+
+  // New function to extract COC data for preview
+  const handleExtractCocData = async (documentId: string, documentUrl: string, fileName: string) => {
+    try {
+      setValidatingDocId(documentId);
+      toast.info("Extracting COC information...");
+
+      const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
+        body: {
+          documentUrl: documentUrl,
+          fileName: fileName
+        }
+      });
+
+      if (extractionError) {
+        console.error('Extraction error:', extractionError);
+        toast.error(`Failed to extract COC data: ${extractionError.message || 'Unknown error'}`);
+        return;
+      }
+
+      if (extractionData?.error) {
+        console.error('Function returned error:', extractionData.error);
+        toast.error(`Extraction error: ${extractionData.error}`);
+        return;
+      }
+
+      if (extractionData?.extractedData) {
+        // Show preview with extracted data
+        setCocPreviewData(extractionData.extractedData);
+        setShowCocPreview(true);
+        setPendingDocumentForVerification({ id: documentId, url: documentUrl, name: fileName });
+        toast.success('COC information extracted! Please review before verification.');
+      } else {
+        toast.error('No data could be extracted from the document');
+      }
+    } catch (error) {
+      console.error('Error during COC extraction:', error);
+      toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setValidatingDocId(null);
+    }
+  };
+
+  // Handle approval of extracted data and start verification
+  const handleApproveAndVerify = async (approvedData: any) => {
+    if (!pendingDocumentForVerification) {
+      toast.error('No document pending verification');
+      return;
+    }
+
+    try {
+      setValidatingDocId(pendingDocumentForVerification.id);
+      setShowCocPreview(false);
+      toast.info("Starting SANS 10142-1 verification...");
+
+      // Update subsection with approved data first
+      const updateData: any = {};
+      if (approvedData.cocNumber) updateData.coc_number = approvedData.cocNumber;
+      if (approvedData.cocType) updateData.coc_type = approvedData.cocType;
+      if (approvedData.cocIssueDate) updateData.coc_issue_date = approvedData.cocIssueDate;
+
+      if (Object.keys(updateData).length > 0) {
+        await supabase
+          .from('subsections')
+          .update(updateData)
+          .eq('id', subsectionId);
+      }
+
+      // Now run the validation
+      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
+        body: {
+          documentId: pendingDocumentForVerification.id,
+          documentUrl: pendingDocumentForVerification.url,
+          subsectionId: subsectionId
+        }
+      });
+
+      if (validationError || validationData?.error) {
+        toast.error(`Verification failed: ${validationError?.message || validationData?.error || 'Unknown error'}`);
+        return;
+      }
+
+      if (validationData?.validation) {
+        const result = validationData.validation;
+        
+        if (result.overallStatus === 'Pass' || result.status === 'Pass') {
+          toast.success('✅ COC verification passed!');
+        } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
+          toast.error(`❌ COC verification failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found`);
+        } else {
+          toast.warning(`⚠️ COC verification incomplete`);
+        }
+        
+        // Refresh data
+        await Promise.all([
+          fetchCocValidations(),
+          fetchSubsectionData()
+        ]);
+      }
+    } catch (error) {
+      console.error('Error during verification:', error);
+      toast.error(`Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setValidatingDocId(null);
+      setPendingDocumentForVerification(null);
+      setCocPreviewData(null);
+    }
+  };
+
+  const handleRejectPreview = () => {
+    setShowCocPreview(false);
+    setCocPreviewData(null);
+    setPendingDocumentForVerification(null);
+    toast.info('COC verification cancelled');
   };
 
   const fetchTemplates = async () => {
@@ -2202,14 +2321,14 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleManualValidation(doc.id, doc.file_url)}
+                                onClick={() => handleExtractCocData(doc.id, doc.file_url, doc.file_name)}
                                 disabled={validatingDocId === doc.id}
-                                title="Validate COC against SANS 10142-1"
+                                title="Extract and verify COC against SANS 10142-1"
                               >
                                 {validatingDocId === doc.id ? (
                                   <RefreshCw className="h-4 w-4 animate-spin" />
                                 ) : (
-                                  'Validate'
+                                  'Verify COC'
                                 )}
                               </Button>
                               <Button
@@ -3090,6 +3209,21 @@ const SubsectionDetail = () => {
               {saving ? "Saving..." : "Save Changes"}
             </Button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* COC Preview and Approval Dialog */}
+      <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          {cocPreviewData && pendingDocumentForVerification && (
+            <COCPreviewApproval
+              extractedData={cocPreviewData}
+              documentName={pendingDocumentForVerification.name}
+              onApprove={handleApproveAndVerify}
+              onReject={handleRejectPreview}
+              isProcessing={validatingDocId === pendingDocumentForVerification.id}
+            />
+          )}
         </DialogContent>
       </Dialog>
 

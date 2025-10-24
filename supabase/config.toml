@@ -12,5 +12,8 @@ verify_jwt = false
 [functions.validate-coc]
 verify_jwt = true
 
+[functions.extract-coc]
+verify_jwt = false
+
 [functions.validation-chat]
 verify_jwt = true
