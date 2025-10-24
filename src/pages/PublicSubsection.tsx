@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText } from "lucide-react";
+import { Download, FileText, Eye } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SubsectionData {
@@ -173,8 +173,27 @@ const PublicSubsection = () => {
     }
   };
 
-  const handleDownload = (url: string, fileName: string) => {
+  const handleView = (url: string) => {
     window.open(url, '_blank');
+  };
+
+  const handleDownload = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error('Download failed:', error);
+      // Fallback to opening in new tab
+      window.open(url, '_blank');
+    }
   };
 
   if (loading) {
@@ -277,15 +296,26 @@ const PublicSubsection = () => {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="ml-2 flex-shrink-0"
-                    onClick={() => handleDownload(file.url, file.name)}
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    <span className="text-xs">Download</span>
-                  </Button>
+                  <div className="flex gap-1 ml-2 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleView(file.url)}
+                      title="View document"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      <span className="text-xs">View</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDownload(file.url, file.name)}
+                      title="Download document"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Download</span>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
@@ -321,15 +351,26 @@ const PublicSubsection = () => {
                       </p>
                     </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    className="ml-2 flex-shrink-0"
-                    onClick={() => handleDownload(doc.file_url, doc.file_name)}
-                  >
-                    <Download className="h-4 w-4 mr-1" />
-                    <span className="text-xs">Download</span>
-                  </Button>
+                  <div className="flex gap-1 ml-2 flex-shrink-0">
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleView(doc.file_url)}
+                      title="View document"
+                    >
+                      <Eye className="h-4 w-4 mr-1" />
+                      <span className="text-xs">View</span>
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDownload(doc.file_url, doc.file_name)}
+                      title="Download document"
+                    >
+                      <Download className="h-4 w-4 mr-1" />
+                      <span className="text-xs">Download</span>
+                    </Button>
+                  </div>
                 </div>
               ))}
             </CardContent>
