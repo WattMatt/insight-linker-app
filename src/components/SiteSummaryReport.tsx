@@ -29,63 +29,95 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     colorG: number,
     colorB: number
   ) => {
-    // Card background
+    // Card background with subtle shadow
+    doc.setFillColor(250, 250, 250);
+    doc.roundedRect(x + 0.5, y + 0.5, width, height, 3, 3, 'F');
+    
+    // Card border
+    doc.setDrawColor(230, 230, 230);
+    doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, width, height, 3, 3, 'S');
+    
+    // White card background
     doc.setFillColor(255, 255, 255);
-    doc.roundedRect(x, y, width, height, 2, 2, 'F');
+    doc.roundedRect(x, y, width, height, 3, 3, 'F');
     
     // Title
-    doc.setFontSize(8);
-    doc.setTextColor(100, 100, 100);
-    doc.setFont(undefined, 'normal');
-    doc.text(title, x + width / 2, y + 10, { align: 'center', maxWidth: width - 4 });
-    
-    // Circular progress - fully filled circle
-    const centerX = x + width / 2;
-    const centerY = y + 28;
-    const radius = 12;
-    
-    // Fill the entire circle with color
-    doc.setFillColor(colorR, colorG, colorB);
-    doc.circle(centerX, centerY, radius, 'F');
-    
-    // Percentage text (white on colored circle)
-    doc.setFontSize(14);
-    doc.setTextColor(255, 255, 255);
+    doc.setFontSize(9);
+    doc.setTextColor(60, 60, 60);
     doc.setFont(undefined, 'bold');
-    doc.text(`${percentage}%`, centerX, centerY + 3, { align: 'center' });
+    doc.text(title, x + width / 2, y + 12, { align: 'center', maxWidth: width - 6 });
+    
+    // Progress ring
+    const centerX = x + width / 2;
+    const centerY = y + 33;
+    const outerRadius = 14;
+    const innerRadius = 11;
+    
+    // Background ring (light gray)
+    doc.setFillColor(240, 240, 240);
+    drawRing(doc, centerX, centerY, outerRadius, innerRadius, 0, 360);
+    
+    // Progress ring (colored)
+    const progressAngle = (percentage / 100) * 360;
+    doc.setFillColor(colorR, colorG, colorB);
+    drawRing(doc, centerX, centerY, outerRadius, innerRadius, 0, progressAngle);
+    
+    // Center circle background
+    doc.setFillColor(255, 255, 255);
+    doc.circle(centerX, centerY, innerRadius - 1, 'F');
+    
+    // Percentage text
+    doc.setFontSize(16);
+    doc.setTextColor(colorR, colorG, colorB);
+    doc.setFont(undefined, 'bold');
+    doc.text(`${percentage}`, centerX, centerY + 2, { align: 'center' });
+    
+    // Percent symbol
+    doc.setFontSize(8);
+    doc.setTextColor(120, 120, 120);
+    doc.setFont(undefined, 'normal');
+    doc.text('%', centerX, centerY + 7, { align: 'center' });
     
     // Subtitle
     if (subtitle) {
       doc.setFontSize(7);
       doc.setTextColor(100, 100, 100);
       doc.setFont(undefined, 'normal');
-      const lines = doc.splitTextToSize(subtitle, width - 4);
+      const lines = doc.splitTextToSize(subtitle, width - 6);
       doc.text(lines, x + width / 2, y + height - 8, { align: 'center' });
     }
   };
 
-  const drawArc = (
+  const drawRing = (
     doc: jsPDF,
     x: number,
     y: number,
-    radius: number,
+    outerRadius: number,
+    innerRadius: number,
     startAngle: number,
     endAngle: number
   ) => {
     const startRad = (startAngle - 90) * (Math.PI / 180);
     const endRad = (endAngle - 90) * (Math.PI / 180);
-    const steps = 30;
+    const steps = Math.max(30, Math.ceil(Math.abs(endAngle - startAngle) / 3));
     
-    for (let i = 0; i <= steps; i++) {
-      const angle = startRad + (endRad - startRad) * (i / steps);
-      const nextAngle = startRad + (endRad - startRad) * ((i + 1) / steps);
+    for (let i = 0; i < steps; i++) {
+      const angle1 = startRad + (endRad - startRad) * (i / steps);
+      const angle2 = startRad + (endRad - startRad) * ((i + 1) / steps);
       
-      const x1 = x + radius * Math.cos(angle);
-      const y1 = y + radius * Math.sin(angle);
-      const x2 = x + radius * Math.cos(nextAngle);
-      const y2 = y + radius * Math.sin(nextAngle);
+      const x1Out = x + outerRadius * Math.cos(angle1);
+      const y1Out = y + outerRadius * Math.sin(angle1);
+      const x2Out = x + outerRadius * Math.cos(angle2);
+      const y2Out = y + outerRadius * Math.sin(angle2);
       
-      doc.triangle(x, y, x1, y1, x2, y2, 'F');
+      const x1In = x + innerRadius * Math.cos(angle1);
+      const y1In = y + innerRadius * Math.sin(angle1);
+      const x2In = x + innerRadius * Math.cos(angle2);
+      const y2In = y + innerRadius * Math.sin(angle2);
+      
+      doc.triangle(x1Out, y1Out, x2Out, y2Out, x1In, y1In, 'F');
+      doc.triangle(x2Out, y2Out, x2In, y2In, x1In, y1In, 'F');
     }
   };
 
@@ -198,28 +230,30 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const meteringData = Math.round((meteringInstalled / subsections.length) * 100) || 0;
       const snagsPercentage = Math.round((subsectionsWithSnags.size / subsections.length) * 100) || 0;
       
-      // Draw 4 health metric cards
-      const cardWidth = 42;
-      const cardHeight = 50;
-      const cardSpacing = 5;
-      const startX = 15;
-      let cardY = 40;
+      // Draw 4 health metric cards with improved styling
+      const cardWidth = 46;
+      const cardHeight = 58;
+      const cardSpacing = 4;
+      const startX = 12;
+      let cardY = 45;
       
-      drawHealthCard(doc, startX, cardY, cardWidth, cardHeight, "OVERALL HEALTH", overallHealth, "", 220, 53, 69);
-      drawHealthCard(doc, startX + cardWidth + cardSpacing, cardY, cardWidth, cardHeight, "COC COMPLIANCE", cocCompliance, `${cocCompliant} of ${cocRequired} required`, 255, 193, 7);
-      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 2, cardY, cardWidth, cardHeight, "METERING DATA", meteringData, `${meteringInstalled} of ${subsections.length} required`, 220, 53, 69);
-      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 3, cardY, cardWidth, cardHeight, "SNAGGED ITEMS", snagsPercentage, `${subsectionsWithSnags.size} of ${subsections.length} subsections`, 220, 53, 69);
+      // Use professional color scheme
+      drawHealthCard(doc, startX, cardY, cardWidth, cardHeight, "OVERALL HEALTH", overallHealth, "", 46, 125, 50); // Green
+      drawHealthCard(doc, startX + cardWidth + cardSpacing, cardY, cardWidth, cardHeight, "COC COMPLIANCE", cocCompliance, `${cocCompliant} of ${cocRequired} required`, 255, 152, 0); // Orange
+      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 2, cardY, cardWidth, cardHeight, "METERING DATA", meteringData, `${meteringInstalled} of ${subsections.length} installed`, 33, 150, 243); // Blue
+      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 3, cardY, cardWidth, cardHeight, "OPEN SNAGS", 100 - snagsPercentage, `${totalSnags} total snags`, 244, 67, 54); // Red
       
       // Health by Category section
-      cardY = 110;
+      cardY = 118;
       doc.setTextColor(63, 81, 181);
       doc.setFontSize(16);
       doc.setFont(undefined, 'bold');
       doc.text("Health by Category", 20, cardY);
-      doc.setDrawColor(63, 81, 181);
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.5);
       doc.line(20, cardY + 3, pageWidth - 20, cardY + 3);
       
-      cardY = 125;
+      cardY = 133;
       
       // Group by category
       const categoryGroups = subsections.reduce((acc, sub) => {
@@ -231,13 +265,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       }, {} as Record<string, { total: number; compliant: number }>);
       
       // Abbreviate category names using our utility
-      const categories = Object.keys(categoryGroups).slice(0, 3);
+      const categories = Object.keys(categoryGroups).slice(0, 4);
       categories.forEach((cat, idx) => {
         const data = categoryGroups[cat];
         const percentage = Math.round((data.compliant / data.total) * 100) || 0;
         const xPos = startX + (cardWidth + cardSpacing) * idx;
         const abbrev = getCategoryAbbreviation(cat);
-        drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant} of ${data.total} compliant`, 220, 53, 69);
+        const color = percentage >= 80 ? [46, 125, 50] : percentage >= 60 ? [255, 152, 0] : [244, 67, 54];
+        drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant}/${data.total} compliant`, color[0], color[1], color[2]);
       });
       
       // Footer
