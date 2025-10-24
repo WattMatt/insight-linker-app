@@ -92,6 +92,7 @@ const SubsectionDetail = () => {
   const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
   const [selectedValidation, setSelectedValidation] = useState<any>(null);
   const [validationReportOpen, setValidationReportOpen] = useState(false);
+  const [deleteSubsectionDialogOpen, setDeleteSubsectionDialogOpen] = useState(false);
 
   useEffect(() => {
     if (subsectionId && subsectionId !== "new") {
@@ -617,6 +618,45 @@ const SubsectionDetail = () => {
       toast.error("Failed to update subsection");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleDeleteSubsection = async () => {
+    try {
+      toast.info("Deleting subsection...");
+      setDeleteSubsectionDialogOpen(false);
+
+      // Delete related records first
+      const deletions = [
+        supabase.from('subsection_documents').delete().eq('subsection_id', subsectionId),
+        supabase.from('inspection_items').delete().eq('subsection_id', subsectionId),
+        supabase.from('snags').delete().eq('subsection_id', subsectionId),
+        supabase.from('inspections').delete().eq('subsection_id', subsectionId),
+        supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
+        supabase.from('coc_validations').delete().eq('subsection_id', subsectionId),
+        supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
+      ];
+
+      await Promise.all(deletions);
+
+      // Finally delete the subsection itself
+      const { error: subsectionError } = await supabase
+        .from('subsections')
+        .delete()
+        .eq('id', subsectionId);
+
+      if (subsectionError) throw subsectionError;
+
+      toast.success(`${subsection?.name} deleted successfully`);
+      
+      // Navigate back to site page
+      const basePath = (actualClientId || clientId) 
+        ? `/clients/${actualClientId || clientId}/sites/${siteId}` 
+        : `/sites/${siteId}`;
+      navigate(`${basePath}?tab=subsections`);
+    } catch (error) {
+      console.error("Error deleting subsection:", error);
+      toast.error("Failed to delete subsection");
     }
   };
 
@@ -1463,6 +1503,14 @@ const SubsectionDetail = () => {
           <Button variant="outline" onClick={handleOpenEditDialog}>
             <Edit className="mr-2 h-4 w-4" />
             Edit
+          </Button>
+          <Button 
+            variant="outline" 
+            onClick={() => setDeleteSubsectionDialogOpen(true)}
+            className="text-destructive hover:text-destructive hover:bg-destructive/10"
+          >
+            <Trash2 className="mr-2 h-4 w-4" />
+            Delete
           </Button>
         </div>
       </div>
@@ -3074,6 +3122,27 @@ const SubsectionDetail = () => {
           )}
         </DialogContent>
       </Dialog>
+
+      {/* Delete Subsection Confirmation Dialog */}
+      <AlertDialog open={deleteSubsectionDialogOpen} onOpenChange={setDeleteSubsectionDialogOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Subsection</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete "{subsection?.name}"? This will permanently delete all associated inspections, documents, snags, and QR codes. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={handleDeleteSubsection}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete Permanently
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
