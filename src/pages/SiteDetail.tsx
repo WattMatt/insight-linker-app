@@ -84,6 +84,7 @@ interface SiteStats {
   totalSubsections: number;
   compliantCount: number;
   cocApprovedCount: number;
+  cocRequiredCount: number;
   meteringInstalledCount: number;
   openSnags: number;
 }
@@ -500,8 +501,13 @@ const SiteDetail = () => {
         compliantCount++;
       });
       
-      const cocApprovedCount = subs.filter((s) => s.coc_status === "Approved").length;
-      const meteringInstalledCount = subs.filter((s) => s.metering_status === "Installed").length;
+      const cocRequiredCount = subs.filter((s) => s.is_coc_required).length;
+      const cocApprovedCount = subs.filter((s) => 
+        s.is_coc_required && (s.coc_status === "Approved" || s.coc_status === "Valid")
+      ).length;
+      const meteringInstalledCount = subs.filter((s) => 
+        s.metering_status === "Installed" || s.meter_serial_number
+      ).length;
       
       // Calculate open snags from inspections
       let totalOpenSnags = 0;
@@ -526,6 +532,7 @@ const SiteDetail = () => {
         totalSubsections,
         compliantCount,
         cocApprovedCount,
+        cocRequiredCount,
         meteringInstalledCount,
         openSnags: totalOpenSnags,
       });
@@ -1107,7 +1114,9 @@ const SiteDetail = () => {
   };
   
   const overallHealth = stats ? Math.round((stats.compliantCount / stats.totalSubsections) * 100) || 0 : 0;
-  const cocCompliance = stats ? Math.round((stats.cocApprovedCount / stats.totalSubsections) * 100) || 0 : 0;
+  const cocCompliance = stats && stats.cocRequiredCount > 0 
+    ? Math.round((stats.cocApprovedCount / stats.cocRequiredCount) * 100) || 0 
+    : 0;
   const meteringPercentage = stats ? Math.round((stats.meteringInstalledCount / stats.totalSubsections) * 100) || 0 : 0;
   
   // Helper functions
@@ -1250,7 +1259,7 @@ const SiteDetail = () => {
               <CardContent className="flex flex-col items-center">
                 <CircularProgress value={cocCompliance} color="text-yellow-500" />
                 <p className="text-sm text-muted-foreground mt-4 text-center">
-                  {stats?.cocApprovedCount || 0} of {stats?.totalSubsections || 0} required COCs are compliant
+                  {stats?.cocApprovedCount || 0} of {stats?.cocRequiredCount || 0} required COCs are compliant
                 </p>
               </CardContent>
             </Card>
