@@ -128,9 +128,17 @@ serve(async (req) => {
     if (isPDF) {
       console.log('Processing PDF file with vision');
       
-      // Convert PDF blob to base64 for vision processing
+      // Convert PDF blob to base64 for vision processing (process in chunks to avoid stack overflow)
       const arrayBuffer = await fileData.arrayBuffer();
-      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      const uint8Array = new Uint8Array(arrayBuffer);
+      let binary = '';
+      const chunkSize = 0x8000; // Process 32KB at a time
+      
+      for (let i = 0; i < uint8Array.length; i += chunkSize) {
+        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+        binary += String.fromCharCode.apply(null, Array.from(chunk));
+      }
+      const base64 = btoa(binary);
       
       console.log('Calling AI with PDF vision...');
       
