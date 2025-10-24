@@ -244,11 +244,17 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
         ['Physical Address', details.physicalAddress || 'Not Found'],
         ['Erf / Lot No.', details.erfNumber || 'Not Found'],
         ['Registered Person', details.registeredPerson || 'Not Found'],
-        ['ID Number', details.idNumber || 'Not Found'],
         ['Registration Number', details.registrationNumber || 'Not Found'],
         ['Type of Registration', details.registrationType || 'Not Found'],
         ['Date of Registration', details.registrationDate || 'Not Found'],
-      ];
+      ].filter(([field, value]) => {
+        // Exclude fields with "Not Found" or placeholder values
+        const lowerValue = value.toLowerCase();
+        return !lowerValue.includes('not found') && 
+               !lowerValue.includes('not provided') && 
+               !lowerValue.includes('n/a') &&
+               value.trim().length > 0;
+      });
       
       autoTable(doc, {
         startY: yPosition,
@@ -579,43 +585,64 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {report.administrativeDetails.physicalAddress && (
+              {report.administrativeDetails.physicalAddress && 
+               !report.administrativeDetails.physicalAddress.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.physicalAddress.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.physicalAddress.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Physical Address:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.physicalAddress}</p>
                 </div>
               )}
-              {report.administrativeDetails.erfNumber && (
+              {report.administrativeDetails.erfNumber && 
+               !report.administrativeDetails.erfNumber.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.erfNumber.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.erfNumber.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Erf / Lot No.:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.erfNumber}</p>
                 </div>
               )}
-              {report.administrativeDetails.registeredPerson && (
+              {report.administrativeDetails.registeredPerson && 
+               !report.administrativeDetails.registeredPerson.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.registeredPerson.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.registeredPerson.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Registered Person Name:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.registeredPerson}</p>
                 </div>
               )}
-              {report.administrativeDetails.idNumber && (
+              {report.administrativeDetails.idNumber && 
+               !report.administrativeDetails.idNumber.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.idNumber.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.idNumber.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">ID Number:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.idNumber}</p>
                 </div>
               )}
-              {report.administrativeDetails.registrationNumber && (
+              {report.administrativeDetails.registrationNumber && 
+               !report.administrativeDetails.registrationNumber.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.registrationNumber.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.registrationNumber.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Registration Number:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.registrationNumber}</p>
                 </div>
               )}
-              {report.administrativeDetails.registrationType && (
+              {report.administrativeDetails.registrationType && 
+               !report.administrativeDetails.registrationType.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.registrationType.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.registrationType.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Type of Registration:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.registrationType}</p>
                 </div>
               )}
-              {report.administrativeDetails.registrationDate && (
+              {report.administrativeDetails.registrationDate && 
+               !report.administrativeDetails.registrationDate.toLowerCase().includes('not found') &&
+               !report.administrativeDetails.registrationDate.toLowerCase().includes('not provided') &&
+               !report.administrativeDetails.registrationDate.toLowerCase().includes('n/a') && (
                 <div>
                   <span className="font-semibold">Date of Registration:</span>
                   <p className="text-muted-foreground">{report.administrativeDetails.registrationDate}</p>
