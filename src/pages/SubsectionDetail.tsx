@@ -357,9 +357,36 @@ const SubsectionDetail = () => {
       setValidatingDocId(documentId);
       toast.info("Extracting COC information...");
 
+      // Generate a signed URL for private bucket access (valid for 1 hour)
+      let signedUrl = documentUrl;
+      
+      // Extract the path from the full URL
+      // URL format: https://...supabase.co/storage/v1/object/public/documents/path/to/file.pdf
+      const urlParts = documentUrl.split('/storage/v1/object/');
+      if (urlParts.length > 1) {
+        const pathPart = urlParts[1].replace('public/', ''); // Remove 'public/' prefix
+        const [bucket, ...pathSegments] = pathPart.split('/');
+        const filePath = pathSegments.join('/');
+        
+        // Create signed URL for the document (valid for 1 hour)
+        const { data: signedData, error: signError } = await supabase.storage
+          .from(bucket)
+          .createSignedUrl(filePath, 3600); // 1 hour expiry
+        
+        if (signError) {
+          console.error('Error creating signed URL:', signError);
+          toast.error('Failed to access document');
+          return;
+        }
+        
+        if (signedData?.signedUrl) {
+          signedUrl = signedData.signedUrl;
+        }
+      }
+
       const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
         body: {
-          documentUrl: documentUrl,
+          documentUrl: signedUrl,
           fileName: fileName
         }
       });
@@ -380,7 +407,7 @@ const SubsectionDetail = () => {
         // Show preview with extracted data
         setCocPreviewData(extractionData.extractedData);
         setShowCocPreview(true);
-        setPendingDocumentForVerification({ id: documentId, url: documentUrl, name: fileName });
+        setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
         toast.success('COC information extracted! Please review before verification.');
       } else {
         toast.error('No data could be extracted from the document');
