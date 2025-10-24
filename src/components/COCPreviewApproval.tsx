@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, XCircle, AlertTriangle, FileText, Edit2, Save, X } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, FileText, Edit2, Save, X, RefreshCw } from "lucide-react";
 import { useState } from "react";
 
 interface ExtractedData {
@@ -26,12 +26,13 @@ interface ExtractedData {
 }
 
 interface COCPreviewApprovalProps {
-  extractedData: ExtractedData;
+  extractedData: ExtractedData | null;
   documentName: string;
   documentUrl: string;
   onApprove: (data: ExtractedData) => void;
   onReject: () => void;
   isProcessing?: boolean;
+  onExtract?: () => void;
 }
 
 export function COCPreviewApproval({ 
@@ -40,10 +41,18 @@ export function COCPreviewApproval({
   documentUrl,
   onApprove, 
   onReject,
-  isProcessing = false 
+  isProcessing = false,
+  onExtract
 }: COCPreviewApprovalProps) {
-  const [isEditing, setIsEditing] = useState(false);
-  const [editedData, setEditedData] = useState<ExtractedData>(extractedData);
+  const [isEditing, setIsEditing] = useState(!extractedData); // Auto-enable editing if no data
+  const [editedData, setEditedData] = useState<ExtractedData>(extractedData || {
+    cocNumber: '',
+    cocIssueDate: '',
+    cocType: '',
+    administrativeDetails: {},
+    installationSummary: '',
+    confidence: 'low'
+  });
 
   const handleSaveEdits = () => {
     setIsEditing(false);
@@ -66,6 +75,8 @@ export function COCPreviewApproval({
     }
   };
 
+  const hasExtractedData = extractedData !== null;
+
   return (
     <Card className="border-primary/20">
       <CardHeader>
@@ -73,13 +84,25 @@ export function COCPreviewApproval({
           <div className="space-y-1 flex-1">
             <div className="flex items-center gap-2">
               <FileText className="h-5 w-5 text-primary" />
-              <CardTitle>Review Extracted COC Information</CardTitle>
+              <CardTitle>{hasExtractedData ? 'Review Extracted COC Information' : 'COC Document Preview'}</CardTitle>
             </div>
             <CardDescription>
-              Please review the information extracted from <strong>{documentName}</strong> before starting verification
+              {hasExtractedData ? (
+                <>Please review the information extracted from <strong>{documentName}</strong> before starting verification</>
+              ) : (
+                <>Preview of <strong>{documentName}</strong>. Fill in the fields manually or use AI extraction.</>
+              )}
             </CardDescription>
           </div>
-          {extractedData.confidence && getConfidenceBadge(extractedData.confidence)}
+          <div className="flex items-center gap-2">
+            {!hasExtractedData && onExtract && (
+              <Button onClick={onExtract} variant="outline" size="sm" disabled={isProcessing}>
+                <FileText className="h-4 w-4 mr-2" />
+                Extract with AI
+              </Button>
+            )}
+            {extractedData?.confidence && getConfidenceBadge(extractedData.confidence)}
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
@@ -109,12 +132,23 @@ export function COCPreviewApproval({
 
           {/* Right Side - Extracted Fields */}
           <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
-            <Alert>
-              <AlertTriangle className="h-4 w-4" />
-              <AlertDescription>
-                Review the extracted information carefully. You can edit any incorrect values before proceeding with verification.
-              </AlertDescription>
-            </Alert>
+            {!hasExtractedData && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  No data has been extracted yet. You can manually fill in the fields below or click "Extract with AI" to automatically extract information from the document.
+                </AlertDescription>
+              </Alert>
+            )}
+            
+            {hasExtractedData && (
+              <Alert>
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>
+                  Review the extracted information carefully. You can edit any incorrect values before proceeding with verification.
+                </AlertDescription>
+              </Alert>
+            )}
 
             <div className="space-y-4">
           <div className="flex items-center justify-between">
@@ -135,7 +169,14 @@ export function COCPreviewApproval({
                   variant="outline"
                   size="sm"
                   onClick={() => {
-                    setEditedData(extractedData);
+                    setEditedData(extractedData || {
+                      cocNumber: '',
+                      cocIssueDate: '',
+                      cocType: '',
+                      administrativeDetails: {},
+                      installationSummary: '',
+                      confidence: 'low'
+                    });
                     setIsEditing(false);
                   }}
                   className="gap-2"

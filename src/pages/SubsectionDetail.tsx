@@ -2831,33 +2831,23 @@ const SubsectionDetail = () => {
 
                               toast.success("COC document uploaded successfully!");
                               
-                              // Trigger AI validation
-                              if (newDoc) {
-                                toast.info("Starting AI validation...");
-                                const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
-                                  body: {
-                                    documentId: newDoc.id,
-                                    documentUrl: urlData.publicUrl,
-                                    subsectionId: subsectionId
-                                  }
+                              // Show preview immediately without extraction
+                              if (newDoc && urlData.publicUrl) {
+                                // Generate a signed URL for preview
+                                const { data: signedData } = await supabase.storage
+                                  .from('documents')
+                                  .createSignedUrl(uploadData.path, 3600);
+                                
+                                const previewUrl = signedData?.signedUrl || urlData.publicUrl;
+                                
+                                // Show preview dialog with empty fields
+                                setCocPreviewData(null); // No extracted data yet
+                                setShowCocPreview(true);
+                                setPendingDocumentForVerification({ 
+                                  id: newDoc.id, 
+                                  url: previewUrl, 
+                                  name: sanitizedFileName 
                                 });
-
-                                if (validationError) {
-                                  console.error('Validation error:', validationError);
-                                  toast.error('COC uploaded but validation failed');
-                                } else if (validationData?.validation) {
-                                  const result = validationData.validation;
-                                  if (result.status === 'Pass') {
-                                    toast.success('✅ COC validation passed!');
-                                  } else if (result.status === 'Fail') {
-                                    toast.error(`❌ COC validation failed: ${result.violations?.length || 0} violations found`);
-                                  } else {
-                                    toast.warning(`⚠️ COC validation incomplete`);
-                                  }
-                                  
-                                  // Refresh validations
-                                  fetchCocValidations();
-                                }
                               }
 
                               setUploadCategoryId(null);
@@ -3242,7 +3232,7 @@ const SubsectionDetail = () => {
       {/* COC Preview and Approval Dialog */}
       <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
         <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
-          {cocPreviewData && pendingDocumentForVerification && (
+          {pendingDocumentForVerification && (
             <COCPreviewApproval
               extractedData={cocPreviewData}
               documentName={pendingDocumentForVerification.name}
@@ -3250,6 +3240,15 @@ const SubsectionDetail = () => {
               onApprove={handleApproveAndVerify}
               onReject={handleRejectPreview}
               isProcessing={validatingDocId === pendingDocumentForVerification.id}
+              onExtract={() => {
+                if (pendingDocumentForVerification) {
+                  handleExtractCocData(
+                    pendingDocumentForVerification.id,
+                    pendingDocumentForVerification.url,
+                    pendingDocumentForVerification.name
+                  );
+                }
+              }}
             />
           )}
         </DialogContent>
