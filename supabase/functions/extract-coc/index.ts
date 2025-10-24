@@ -125,16 +125,96 @@ serve(async (req) => {
     // Check if this is a PDF file
     const isPDF = fileName?.toLowerCase().endsWith('.pdf');
     
-    let documentText = '';
-    
     if (isPDF) {
-      documentText = `[PDF Document: ${fileName}]\n\nNote: This is a PDF Certificate of Compliance document. Please extract all administrative and certificate information as accurately as possible.`;
-      console.log('Processing PDF file');
-    } else {
-      documentText = await fileData.text();
-      console.log('Processing text file');
+      console.log('Processing PDF file with vision');
+      
+      // Convert PDF blob to base64 for vision processing
+      const arrayBuffer = await fileData.arrayBuffer();
+      const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+      
+      console.log('Calling AI with PDF vision...');
+      
+      // Use Claude Sonnet for PDF vision extraction
+      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') || '',
+          'anthropic-version': '2023-06-01',
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-5',
+          max_tokens: 4096,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'document',
+                  source: {
+                    type: 'base64',
+                    media_type: 'application/pdf',
+                    data: base64
+                  }
+                },
+                {
+                  type: 'text',
+                  text: EXTRACTION_PROMPT + '\n\nPlease extract the COC data from this PDF and return ONLY the JSON result.'
+                }
+              ]
+            }
+          ]
+        }),
+      });
+
+      if (!aiResponse.ok) {
+        const errorText = await aiResponse.text();
+        console.error('Anthropic API error:', aiResponse.status, errorText);
+        throw new Error('PDF extraction failed');
+      }
+
+      const aiData = await aiResponse.json();
+      console.log('AI response received');
+
+      const aiContent = aiData.content[0].text;
+      
+      // Extract JSON from response
+      let extractedData;
+      try {
+        const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/) || 
+                         aiContent.match(/```\n([\s\S]*?)\n```/) ||
+                         [null, aiContent];
+        const jsonStr = jsonMatch[1] || aiContent;
+        extractedData = JSON.parse(jsonStr);
+      } catch (parseError) {
+        console.error('Failed to parse AI response as JSON:', parseError);
+        extractedData = {
+          cocNumber: null,
+          cocType: 'Unknown',
+          cocIssueDate: null,
+          administrativeDetails: {},
+          confidence: 'low',
+          extractionNotes: 'Failed to parse extraction response'
+        };
+      }
+
+      console.log('Extraction completed:', JSON.stringify(extractedData));
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          extractedData
+        }),
+        { 
+          status: 200, 
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' } 
+        }
+      );
     }
     
+    // For non-PDF files, use text extraction
+    const documentText = await fileData.text();
+    console.log('Processing text file');
     const truncatedText = documentText.substring(0, 8000);
 
     console.log('Document fetched, calling AI for extraction...');

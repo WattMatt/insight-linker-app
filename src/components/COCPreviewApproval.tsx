@@ -87,17 +87,31 @@ export function COCPreviewApproval({
           {/* Left Side - Document Preview */}
           <div className="space-y-2">
             <Label>Document Preview</Label>
-            <div className="border rounded-lg overflow-hidden bg-muted">
-              <iframe
-                src={documentUrl}
-                className="w-full h-[600px]"
+            <div className="border rounded-lg overflow-hidden bg-muted h-[600px] flex items-center justify-center">
+              <object
+                data={documentUrl}
+                type="application/pdf"
+                className="w-full h-full"
                 title="COC Document Preview"
-              />
+              >
+                <div className="flex flex-col items-center justify-center gap-4 p-8 text-center">
+                  <FileText className="h-16 w-16 text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Unable to display PDF preview in browser
+                  </p>
+                  <Button
+                    variant="outline"
+                    onClick={() => window.open(documentUrl, '_blank')}
+                  >
+                    Open PDF in New Tab
+                  </Button>
+                </div>
+              </object>
             </div>
           </div>
 
           {/* Right Side - Extracted Fields */}
-          <div className="space-y-6">
+          <div className="space-y-6 max-h-[600px] overflow-y-auto pr-2">
             <Alert>
               <AlertTriangle className="h-4 w-4" />
               <AlertDescription>
@@ -148,7 +162,7 @@ export function COCPreviewApproval({
           <Separator />
 
           {/* Core Certificate Fields */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 gap-4">
             <div className="space-y-2">
               <Label htmlFor="cocNumber">COC Number</Label>
               {isEditing ? (
@@ -204,7 +218,7 @@ export function COCPreviewApproval({
               <Separator className="my-6" />
               <h3 className="text-lg font-semibold">Administrative Details</h3>
               
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="registeredPerson">Registered Person</Label>
                   {isEditing ? (
@@ -245,6 +259,50 @@ export function COCPreviewApproval({
                   ) : (
                     <div className="p-2 bg-muted rounded-md font-mono">
                       {editedData.administrativeDetails?.registrationNumber || <span className="text-muted-foreground">Not extracted</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="registrationType">Registration Type</Label>
+                  {isEditing ? (
+                    <Input
+                      id="registrationType"
+                      value={editedData.administrativeDetails?.registrationType || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        administrativeDetails: {
+                          ...editedData.administrativeDetails,
+                          registrationType: e.target.value
+                        }
+                      })}
+                      placeholder="e.g., Electrical Contractor"
+                    />
+                  ) : (
+                    <div className="p-2 bg-muted rounded-md">
+                      {editedData.administrativeDetails?.registrationType || <span className="text-muted-foreground">Not extracted</span>}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="idNumber">ID Number</Label>
+                  {isEditing ? (
+                    <Input
+                      id="idNumber"
+                      value={editedData.administrativeDetails?.idNumber || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        administrativeDetails: {
+                          ...editedData.administrativeDetails,
+                          idNumber: e.target.value
+                        }
+                      })}
+                      placeholder="Enter ID number"
+                    />
+                  ) : (
+                    <div className="p-2 bg-muted rounded-md font-mono">
+                      {editedData.administrativeDetails?.idNumber || <span className="text-muted-foreground">Not extracted</span>}
                     </div>
                   )}
                 </div>
