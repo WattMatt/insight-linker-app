@@ -465,14 +465,24 @@ const SiteDetail = () => {
       
       // Calculate compliant count using Firebase rules
       let compliantCount = 0;
+      console.log('=== CALCULATING SITE HEALTH ===');
+      console.log('Total subsections:', totalSubsections);
+      
       subs.forEach(sub => {
-        // Rule 1: If COC required, must be approved
-        if (sub.is_coc_required && sub.coc_status !== 'Approved') {
+        console.log(`\nChecking subsection: ${sub.name}`);
+        console.log(`- COC Required: ${sub.is_coc_required}`);
+        console.log(`- COC Status: ${sub.coc_status}`);
+        console.log(`- Metering Status: ${sub.metering_status}`);
+        
+        // Rule 1: If COC required, must be approved or valid
+        if (sub.is_coc_required && sub.coc_status !== 'Approved' && sub.coc_status !== 'Valid') {
+          console.log(`  ❌ Failed Rule 1: COC not approved/valid`);
           return; // Not compliant
         }
         
         // Rule 2: If COC required, metering must not be missing
         if (sub.is_coc_required && sub.metering_status === 'Missing') {
+          console.log(`  ❌ Failed Rule 2: Metering missing`);
           return; // Not compliant
         }
         
@@ -494,12 +504,16 @@ const SiteDetail = () => {
         }
         
         if (hasOpenSnags) {
+          console.log(`  ❌ Failed Rule 3: Has open snags`);
           return; // Not compliant
         }
         
         // All checks passed
+        console.log(`  ✅ COMPLIANT`);
         compliantCount++;
       });
+      
+      console.log(`\nFinal compliant count: ${compliantCount} / ${totalSubsections}`);
       
       const cocRequiredCount = subs.filter((s) => s.is_coc_required).length;
       const cocApprovedCount = subs.filter((s) => 
