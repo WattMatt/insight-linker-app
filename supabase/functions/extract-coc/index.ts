@@ -110,30 +110,25 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log('Starting COC data extraction for:', fileName);
-
-    // Extract the storage path from the URL
-    const urlParts = documentUrl.split('/storage/v1/object/public/documents/')[1];
-    const storagePath = decodeURIComponent(urlParts);
+    console.log('Downloading document from URL:', documentUrl.substring(0, 100) + '...');
     
-    console.log('Downloading document from storage:', storagePath);
+    // Download the document using fetch (works for both signed URLs and public URLs)
+    const docResponse = await fetch(documentUrl);
     
-    // Download the document
-    const { data: fileData, error: downloadError } = await supabase.storage
-      .from('documents')
-      .download(storagePath);
-    
-    if (downloadError || !fileData) {
-      console.error('Storage download error:', downloadError);
-      throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
+    if (!docResponse.ok) {
+      console.error('Failed to fetch document:', docResponse.status, docResponse.statusText);
+      throw new Error(`Failed to download document: ${docResponse.statusText}`);
     }
+    
+    const fileData = await docResponse.blob();
 
     // Check if this is a PDF file
-    const isPDF = fileName?.toLowerCase().endsWith('.pdf') || storagePath.toLowerCase().endsWith('.pdf');
+    const isPDF = fileName?.toLowerCase().endsWith('.pdf');
     
     let documentText = '';
     
     if (isPDF) {
-      documentText = `[PDF Document: ${fileName || storagePath}]\n\nNote: This is a PDF Certificate of Compliance document. Please extract all administrative and certificate information as accurately as possible.`;
+      documentText = `[PDF Document: ${fileName}]\n\nNote: This is a PDF Certificate of Compliance document. Please extract all administrative and certificate information as accurately as possible.`;
       console.log('Processing PDF file');
     } else {
       documentText = await fileData.text();
