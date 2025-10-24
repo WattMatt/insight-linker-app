@@ -87,26 +87,23 @@ export function COCPreviewApproval({
           {/* Left Side - Document Preview */}
           <div className="space-y-2">
             <Label>Document Preview</Label>
-            <div className="border rounded-lg overflow-hidden bg-muted h-[600px] flex items-center justify-center">
-              <object
-                data={documentUrl}
-                type="application/pdf"
+            <div className="border rounded-lg overflow-hidden bg-muted h-[600px] relative">
+              <iframe
+                src={documentUrl}
                 className="w-full h-full"
                 title="COC Document Preview"
-              >
-                <div className="flex flex-col items-center justify-center gap-4 p-8 text-center">
-                  <FileText className="h-16 w-16 text-muted-foreground" />
-                  <p className="text-sm text-muted-foreground">
-                    Unable to display PDF preview in browser
-                  </p>
-                  <Button
-                    variant="outline"
-                    onClick={() => window.open(documentUrl, '_blank')}
-                  >
-                    Open PDF in New Tab
-                  </Button>
-                </div>
-              </object>
+              />
+              <div className="absolute top-2 right-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={() => window.open(documentUrl, '_blank')}
+                  className="gap-2"
+                >
+                  <FileText className="h-4 w-4" />
+                  Open in New Tab
+                </Button>
+              </div>
             </div>
           </div>
 
