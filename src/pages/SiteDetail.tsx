@@ -474,9 +474,9 @@ const SiteDetail = () => {
         console.log(`- COC Status: ${sub.coc_status}`);
         console.log(`- Metering Status: ${sub.metering_status}`);
         
-        // Rule 1: If COC required, must be approved or valid
-        if (sub.is_coc_required && sub.coc_status !== 'Approved' && sub.coc_status !== 'Valid') {
-          console.log(`  ❌ Failed Rule 1: COC not approved/valid`);
+        // Rule 1: If COC required, must be approved/valid/pass
+        if (sub.is_coc_required && sub.coc_status !== 'Approved' && sub.coc_status !== 'Valid' && sub.coc_status !== 'Pass') {
+          console.log(`  ❌ Failed Rule 1: COC not approved/valid/pass (status: ${sub.coc_status})`);
           return; // Not compliant
         }
         
@@ -517,7 +517,7 @@ const SiteDetail = () => {
       
       const cocRequiredCount = subs.filter((s) => s.is_coc_required).length;
       const cocApprovedCount = subs.filter((s) => 
-        s.is_coc_required && (s.coc_status === "Approved" || s.coc_status === "Valid")
+        s.is_coc_required && (s.coc_status === "Approved" || s.coc_status === "Valid" || s.coc_status === "Pass")
       ).length;
       const meteringInstalledCount = subs.filter((s) => 
         s.metering_status === "Installed" || s.meter_serial_number

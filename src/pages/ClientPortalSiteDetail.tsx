@@ -123,7 +123,10 @@ const ClientPortalSiteDetail = () => {
 
   // Calculate KPIs
   const totalSubsections = subsections?.length || 0;
-  const compliantSubsections = subsections?.filter(s => s.coc_status?.toLowerCase() === "compliant").length || 0;
+  const compliantSubsections = subsections?.filter(s => {
+    const status = s.coc_status?.toLowerCase();
+    return status === "compliant" || status === "valid" || status === "approved" || status === "pass";
+  }).length || 0;
   const missingCOCs = subsections?.filter(s => s.coc_status?.toLowerCase() === "missing").length || 0;
   const expiredCOCs = subsections?.filter(s => s.coc_status?.toLowerCase() === "expired").length || 0;
   const totalDocuments = documents?.length || 0;

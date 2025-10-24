@@ -74,7 +74,7 @@ const ContractorPortal = () => {
   );
 
   const totalSubsections = subsections?.length || 0;
-  const compliantCOCs = subsections?.filter(s => s.coc_status === "Valid").length || 0;
+  const compliantCOCs = subsections?.filter(s => s.coc_status === "Valid" || s.coc_status === "Approved" || s.coc_status === "Pass").length || 0;
   const missingExpiredCOCs = subsections?.filter(s => 
     s.coc_status === "Missing" || s.coc_status === "Expired"
   ).length || 0;
