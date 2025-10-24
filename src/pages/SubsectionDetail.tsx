@@ -3214,11 +3214,12 @@ const SubsectionDetail = () => {
 
       {/* COC Preview and Approval Dialog */}
       <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
           {cocPreviewData && pendingDocumentForVerification && (
             <COCPreviewApproval
               extractedData={cocPreviewData}
               documentName={pendingDocumentForVerification.name}
+              documentUrl={pendingDocumentForVerification.url}
               onApprove={handleApproveAndVerify}
               onReject={handleRejectPreview}
               isProcessing={validatingDocId === pendingDocumentForVerification.id}

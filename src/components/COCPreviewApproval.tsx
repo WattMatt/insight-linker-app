@@ -28,6 +28,7 @@ interface ExtractedData {
 interface COCPreviewApprovalProps {
   extractedData: ExtractedData;
   documentName: string;
+  documentUrl: string;
   onApprove: (data: ExtractedData) => void;
   onReject: () => void;
   isProcessing?: boolean;
@@ -35,7 +36,8 @@ interface COCPreviewApprovalProps {
 
 export function COCPreviewApproval({ 
   extractedData, 
-  documentName, 
+  documentName,
+  documentUrl,
   onApprove, 
   onReject,
   isProcessing = false 
@@ -81,14 +83,29 @@ export function COCPreviewApproval({
         </div>
       </CardHeader>
       <CardContent className="space-y-6">
-        <Alert>
-          <AlertTriangle className="h-4 w-4" />
-          <AlertDescription>
-            Review the extracted information carefully. You can edit any incorrect values before proceeding with verification.
-          </AlertDescription>
-        </Alert>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Left Side - Document Preview */}
+          <div className="space-y-2">
+            <Label>Document Preview</Label>
+            <div className="border rounded-lg overflow-hidden bg-muted">
+              <iframe
+                src={documentUrl}
+                className="w-full h-[600px]"
+                title="COC Document Preview"
+              />
+            </div>
+          </div>
 
-        <div className="space-y-4">
+          {/* Right Side - Extracted Fields */}
+          <div className="space-y-6">
+            <Alert>
+              <AlertTriangle className="h-4 w-4" />
+              <AlertDescription>
+                Review the extracted information carefully. You can edit any incorrect values before proceeding with verification.
+              </AlertDescription>
+            </Alert>
+
+            <div className="space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Certificate Information</h3>
             {!isEditing ? (
@@ -291,6 +308,8 @@ export function COCPreviewApproval({
               </div>
             </>
           )}
+            </div>
+          </div>
         </div>
 
         <Separator />
