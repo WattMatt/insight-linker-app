@@ -1352,6 +1352,10 @@ const SiteDetail = () => {
                       src={imagePreview.site_image}
                       alt="Preview"
                       className="w-64 h-48 object-cover rounded border bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.alt = 'Image preview unavailable';
+                      }}
                     />
                     <Badge variant="secondary" className="absolute top-2 left-2">
                       Preview
@@ -1365,6 +1369,10 @@ const SiteDetail = () => {
                       alt="Site main image"
                       className="w-64 h-48 object-cover rounded border bg-muted"
                       crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.alt = 'Image preview unavailable';
+                      }}
                     />
                     {site.site_image_url.includes('firebasestorage.googleapis.com') && (
                       <Badge variant="secondary" className="absolute top-2 left-2">
@@ -1437,6 +1445,10 @@ const SiteDetail = () => {
                       src={imagePreview.client_logo}
                       alt="Preview"
                       className="w-48 h-32 object-contain rounded border p-2 bg-muted"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.alt = 'Image preview unavailable';
+                      }}
                     />
                     <Badge variant="secondary" className="absolute top-2 left-2">
                       Preview
@@ -1450,6 +1462,10 @@ const SiteDetail = () => {
                       alt="Client logo"
                       className="w-48 h-32 object-contain rounded border p-2 bg-muted"
                       crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.alt = 'Image preview unavailable';
+                      }}
                     />
                     {site.client_logo_url.includes('firebasestorage.googleapis.com') && (
                       <Badge variant="secondary" className="absolute top-2 left-2">
