@@ -110,7 +110,7 @@ export function COCPreviewApproval({
           {/* Left Side - Document Preview */}
           <div className="space-y-2">
             <Label>Document Preview</Label>
-            <div className="border rounded-lg overflow-hidden bg-muted h-[600px] relative">
+            <div className="border rounded-lg overflow-hidden bg-muted h-[600px]">
               <object
                 data={`${documentUrl}#toolbar=0&navpanes=0&scrollbar=0`}
                 type="application/pdf"
@@ -122,17 +122,6 @@ export function COCPreviewApproval({
                   className="w-full h-full"
                 />
               </object>
-              <div className="absolute top-2 right-2 z-10">
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => window.open(documentUrl, '_blank')}
-                  className="gap-2"
-                >
-                  <FileText className="h-4 w-4" />
-                  Open in New Tab
-                </Button>
-              </div>
             </div>
           </div>
 
