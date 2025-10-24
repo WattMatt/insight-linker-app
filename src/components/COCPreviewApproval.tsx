@@ -111,12 +111,18 @@ export function COCPreviewApproval({
           <div className="space-y-2">
             <Label>Document Preview</Label>
             <div className="border rounded-lg overflow-hidden bg-muted h-[600px] relative">
-              <iframe
-                src={documentUrl}
+              <object
+                data={`${documentUrl}#toolbar=0&navpanes=0&scrollbar=0`}
+                type="application/pdf"
                 className="w-full h-full"
-                title="COC Document Preview"
-              />
-              <div className="absolute top-2 right-2">
+              >
+                <embed
+                  src={`${documentUrl}#toolbar=0`}
+                  type="application/pdf"
+                  className="w-full h-full"
+                />
+              </object>
+              <div className="absolute top-2 right-2 z-10">
                 <Button
                   size="sm"
                   variant="outline"
