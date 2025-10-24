@@ -54,6 +54,8 @@ const SubsectionDetail = () => {
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [cocType, setCocType] = useState<string>("");
   const [cocStatus, setCocStatus] = useState<string>("");
+  const [cocNumber, setCocNumber] = useState<string>("");
+  const [cocIssueDate, setCocIssueDate] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
   const [newInspectionDate, setNewInspectionDate] = useState("");
@@ -463,6 +465,8 @@ const SubsectionDetail = () => {
       });
       setCocType(fullSubsection.coc_type || '');
       setCocStatus(fullSubsection.coc_status || '');
+      setCocNumber(fullSubsection.coc_number || '');
+      setCocIssueDate(fullSubsection.coc_issue_date || '');
       
       // Fetch site info for header
       const { data: siteInfo } = await supabase
@@ -638,13 +642,23 @@ const SubsectionDetail = () => {
       }
       
       // Update the subsection with new COC details
+      const updateData: any = {
+        coc_type: cocType,
+        coc_status: cocStatus,
+        updated_at: new Date().toISOString()
+      };
+      
+      // Only update COC number and issue date if they have values
+      if (cocNumber) {
+        updateData.coc_number = cocNumber;
+      }
+      if (cocIssueDate) {
+        updateData.coc_issue_date = cocIssueDate;
+      }
+      
       const { error: updateError } = await supabase
         .from('subsections')
-        .update({
-          coc_type: cocType,
-          coc_status: cocStatus,
-          updated_at: new Date().toISOString()
-        })
+        .update(updateData)
         .eq('id', supabaseSubsection.id);
       
       if (updateError) {
@@ -656,7 +670,9 @@ const SubsectionDetail = () => {
       setSubsection({
         ...subsection,
         cocType,
-        cocStatus
+        cocStatus,
+        cocNumber: cocNumber || subsection.cocNumber,
+        cocIssueDate: cocIssueDate || subsection.cocIssueDate
       });
       
       toast.success("COC details saved successfully");
@@ -2141,19 +2157,19 @@ const SubsectionDetail = () => {
                             <div>
                               <Label>COC Number</Label>
                               <Input
-                                value={subsection.cocNumber || ''}
+                                value={cocNumber || subsection.cocNumber || ''}
+                                onChange={(e) => setCocNumber(e.target.value)}
                                 placeholder="ECA 642760"
                                 className="mt-1"
-                                readOnly
                               />
                             </div>
                             <div>
                               <Label>Issue Date</Label>
                               <Input
                                 type="date"
-                                value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                                value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
+                                onChange={(e) => setCocIssueDate(e.target.value)}
                                 className="mt-1"
-                                readOnly
                               />
                             </div>
                           </div>
@@ -2280,26 +2296,26 @@ const SubsectionDetail = () => {
                             </Button>
                           </div>
 
-                          <div className="grid md:grid-cols-2 gap-4">
-                            <div>
-                              <Label>COC Number</Label>
-                              <Input
-                                value={subsection.cocNumber || ''}
-                                placeholder="ECA 642760"
-                                className="mt-1"
-                                readOnly
-                              />
-                            </div>
-                            <div>
-                              <Label>Issue Date</Label>
-                              <Input
-                                type="date"
-                                value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
-                                className="mt-1"
-                                readOnly
-                              />
-                            </div>
-                          </div>
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <div>
+                          <Label>COC Number</Label>
+                          <Input
+                            value={cocNumber || subsection.cocNumber || ''}
+                            onChange={(e) => setCocNumber(e.target.value)}
+                            placeholder="ECA 642760"
+                            className="mt-1"
+                          />
+                        </div>
+                        <div>
+                          <Label>Issue Date</Label>
+                          <Input
+                            type="date"
+                            value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
+                            onChange={(e) => setCocIssueDate(e.target.value)}
+                            className="mt-1"
+                          />
+                        </div>
+                      </div>
 
                           <div className="mt-4">
                             <Label>COC Type</Label>
@@ -2401,19 +2417,19 @@ const SubsectionDetail = () => {
                         <div>
                           <Label>COC Number</Label>
                           <Input
-                            value={subsection.cocNumber || ''}
+                            value={cocNumber || subsection.cocNumber || ''}
+                            onChange={(e) => setCocNumber(e.target.value)}
                             placeholder="ECA 642760"
                             className="mt-1"
-                            readOnly
                           />
                         </div>
                         <div>
                           <Label>Issue Date</Label>
                           <Input
                             type="date"
-                            value={subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : ''}
+                            value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
+                            onChange={(e) => setCocIssueDate(e.target.value)}
                             className="mt-1"
-                            readOnly
                           />
                         </div>
                       </div>
