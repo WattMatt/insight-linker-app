@@ -56,6 +56,8 @@ const SubsectionDetail = () => {
   const [cocStatus, setCocStatus] = useState<string>("");
   const [cocNumber, setCocNumber] = useState<string>("");
   const [cocIssueDate, setCocIssueDate] = useState<string>("");
+  const [meterSerialNumber, setMeterSerialNumber] = useState<string>("");
+  const [ctRatio, setCtRatio] = useState<string>("");
   const [saving, setSaving] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
   const [newInspectionDate, setNewInspectionDate] = useState("");
@@ -467,6 +469,8 @@ const SubsectionDetail = () => {
       setCocStatus(fullSubsection.coc_status || '');
       setCocNumber(fullSubsection.coc_number || '');
       setCocIssueDate(fullSubsection.coc_issue_date || '');
+      setMeterSerialNumber(fullSubsection.meter_serial_number || '');
+      setCtRatio(fullSubsection.ct_ratio || '');
       
       // Fetch site info for header
       const { data: siteInfo } = await supabase
@@ -611,6 +615,68 @@ const SubsectionDetail = () => {
     } catch (error) {
       console.error("Error updating subsection:", error);
       toast.error("Failed to update subsection");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveMeteringDetails = async () => {
+    if (!subsection) return;
+    
+    try {
+      setSaving(true);
+      
+      // Find the subsection in Supabase by id
+      const { data: supabaseSubsection, error: findError } = await supabase
+        .from('subsections')
+        .select('id')
+        .eq('id', subsectionId)
+        .maybeSingle();
+      
+      if (findError) {
+        console.error("Error finding subsection:", findError);
+        toast.error("Database error: " + findError.message);
+        return;
+      }
+      
+      if (!supabaseSubsection) {
+        toast.error("Subsection not found in database");
+        return;
+      }
+      
+      // Update the subsection with new metering details
+      const updateData: any = {
+        updated_at: new Date().toISOString()
+      };
+      
+      if (meterSerialNumber) {
+        updateData.meter_serial_number = meterSerialNumber;
+      }
+      if (ctRatio) {
+        updateData.ct_ratio = ctRatio;
+      }
+      
+      const { error: updateError } = await supabase
+        .from('subsections')
+        .update(updateData)
+        .eq('id', supabaseSubsection.id);
+      
+      if (updateError) {
+        console.error("Error updating subsection:", updateError);
+        throw updateError;
+      }
+      
+      // Update local state
+      setSubsection({
+        ...subsection,
+        meterSerialNumber: meterSerialNumber || subsection.meterSerialNumber,
+        ctRatio: ctRatio || subsection.ctRatio
+      });
+      
+      toast.success("Metering details saved successfully");
+    } catch (error) {
+      console.error("Error saving metering details:", error);
+      toast.error("Failed to save metering details");
     } finally {
       setSaving(false);
     }
@@ -2635,19 +2701,19 @@ const SubsectionDetail = () => {
                   <div>
                     <Label>Meter Serial Number</Label>
                     <Input
-                      value={subsection.meterSerialNumber || ''}
+                      value={meterSerialNumber || subsection.meterSerialNumber || ''}
+                      onChange={(e) => setMeterSerialNumber(e.target.value)}
                       placeholder="Enter meter serial number"
                       className="mt-1"
-                      readOnly
                     />
                   </div>
                   <div>
                     <Label>CT Ratio</Label>
                     <Input
-                      value={subsection.ctRatio || ''}
+                      value={ctRatio || subsection.ctRatio || ''}
+                      onChange={(e) => setCtRatio(e.target.value)}
                       placeholder="Enter CT ratio"
                       className="mt-1"
-                      readOnly
                     />
                   </div>
                 </div>
@@ -2837,8 +2903,12 @@ const SubsectionDetail = () => {
                   </label>
                 </div>
 
-                <Button className="w-full md:w-auto bg-blue-500 hover:bg-blue-600">
-                  Save Metering Details
+                <Button 
+                  onClick={handleSaveMeteringDetails}
+                  disabled={saving}
+                  className="w-full md:w-auto bg-blue-500 hover:bg-blue-600"
+                >
+                  {saving ? "Saving..." : "Save Metering Details"}
                 </Button>
               </CardContent>
             </Card>
