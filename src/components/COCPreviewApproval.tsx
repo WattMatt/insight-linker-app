@@ -431,7 +431,7 @@ export function COCPreviewApproval({
                 <XCircle className="h-4 w-4" />
                 <AlertDescription>
                   <div className="space-y-1">
-                    <p className="font-semibold">Incomplete - Missing {missingFields.length} required field(s):</p>
+                    <p className="font-semibold">Please complete the following required fields:</p>
                     <ul className="list-disc list-inside text-sm">
                       {missingFields.map((field, idx) => (
                         <li key={idx}>{field}</li>
