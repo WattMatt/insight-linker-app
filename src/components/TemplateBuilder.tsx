@@ -173,7 +173,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         category,
         description,
         sections: sections as any,  // Save as array
-        tenants: (category === "Low Voltage" && tenants.length > 0) ? tenants as any : undefined,
+        tenants: (templateName.toLowerCase().includes("main board") && tenants.length > 0) ? tenants as any : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
         updated_at: new Date().toISOString(),
@@ -254,9 +254,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
       </Card>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className={`grid w-full max-w-md ${category === "Low Voltage" ? "grid-cols-2" : "grid-cols-1"}`}>
+        <TabsList className={`grid w-full max-w-md ${templateName.toLowerCase().includes("main board") ? "grid-cols-2" : "grid-cols-1"}`}>
           <TabsTrigger value="structure">Template Structure</TabsTrigger>
-          {category === "Low Voltage" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
+          {templateName.toLowerCase().includes("main board") && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6 mt-6">
@@ -370,7 +370,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
           ))}
         </TabsContent>
 
-        {category === "Low Voltage" && (
+        {templateName.toLowerCase().includes("main board") && (
           <TabsContent value="tenants" className="space-y-6 mt-6">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold">Tenant Information</h3>
