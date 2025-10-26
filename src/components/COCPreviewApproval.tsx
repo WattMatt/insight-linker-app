@@ -145,50 +145,113 @@ export function COCPreviewApproval({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Validation: Check if all required fields are filled
+  // Validation: Check if all required fields are filled based on what was originally extracted
   const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
     const missing: string[] = [];
     
-    // Required Certificate Fields
+    // Helper function to check if a field was originally populated (not just an empty nested object)
+    const wasOriginallyExtracted = (value: any): boolean => {
+      if (value === null || value === undefined) return false;
+      if (typeof value === 'string') return value.trim().length > 0;
+      if (typeof value === 'object' && !Array.isArray(value)) {
+        // Check if object has any non-empty values
+        return Object.values(value).some(v => 
+          typeof v === 'string' ? v.trim().length > 0 : !!v
+        );
+      }
+      return false;
+    };
+
+    // ALWAYS REQUIRED: Core Certificate Fields (these must be on every COC)
     if (!editedData.cocNumber?.trim()) missing.push("COC Number");
     if (!editedData.cocType?.trim()) missing.push("COC Type");
     if (!editedData.cocIssueDate?.trim()) missing.push("Issue Date");
     
-    // Required Administrative Details
-    if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push("Physical Address");
-    if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push("Registered Person");
-    if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push("Registration Number");
+    // ALWAYS REQUIRED: Administrative Details
+    if (!editedData.administrativeDetails?.physicalAddress?.trim()) {
+      missing.push("Physical Address");
+    }
+    if (!editedData.administrativeDetails?.registeredPerson?.trim()) {
+      missing.push("Registered Person");
+    }
+    if (!editedData.administrativeDetails?.registrationNumber?.trim()) {
+      missing.push("Registration Number");
+    }
     
-    // Required Installation Details
-    if (!editedData.installationDetails?.supplyType?.trim()) missing.push("Supply Type");
-    if (!editedData.installationDetails?.mainSwitchRating?.trim()) missing.push("Main Switch Rating");
+    // CONDITIONALLY REQUIRED: Only validate if data was originally extracted
     
-    // Required Scope of Work
-    if (!editedData.scopeOfWork?.trim()) missing.push("Scope of Work");
+    // Installation Details - only required if originally extracted
+    if (wasOriginallyExtracted(extractedData?.installationDetails)) {
+      if (!editedData.installationDetails?.supplyType?.trim()) missing.push("Supply Type");
+      if (!editedData.installationDetails?.mainSwitchRating?.trim()) missing.push("Main Switch Rating");
+    }
     
-    // Required Test Results
-    if (!editedData.testResults?.earthElectrode?.resistance?.trim()) missing.push("Earth Electrode Resistance");
-    if (!editedData.testResults?.earthElectrode?.result?.trim()) missing.push("Earth Electrode Result");
+    // Scope of Work - only required if originally extracted
+    if (extractedData?.scopeOfWork || editedData.scopeOfWork?.trim()) {
+      if (!editedData.scopeOfWork?.trim()) missing.push("Scope of Work");
+    }
     
-    if (!editedData.testResults?.insulationResistance?.phase1ToEarth?.trim()) missing.push("Insulation Resistance (Phase 1)");
-    if (!editedData.testResults?.insulationResistance?.result?.trim()) missing.push("Insulation Resistance Result");
+    // Test Results - only validate sections that were originally extracted
+    if (wasOriginallyExtracted(extractedData?.testResults?.earthElectrode)) {
+      if (!editedData.testResults?.earthElectrode?.resistance?.trim()) {
+        missing.push("Earth Electrode Resistance");
+      }
+      if (!editedData.testResults?.earthElectrode?.result?.trim()) {
+        missing.push("Earth Electrode Result");
+      }
+    }
     
-    if (!editedData.testResults?.polarity?.verified?.trim()) missing.push("Polarity Verification");
-    if (!editedData.testResults?.polarity?.result?.trim()) missing.push("Polarity Result");
+    if (wasOriginallyExtracted(extractedData?.testResults?.insulationResistance)) {
+      if (!editedData.testResults?.insulationResistance?.phase1ToEarth?.trim()) {
+        missing.push("Insulation Resistance (Phase 1)");
+      }
+      if (!editedData.testResults?.insulationResistance?.result?.trim()) {
+        missing.push("Insulation Resistance Result");
+      }
+    }
     
-    if (!editedData.testResults?.earthContinuity?.result?.trim()) missing.push("Earth Continuity Result");
+    if (wasOriginallyExtracted(extractedData?.testResults?.polarity)) {
+      if (!editedData.testResults?.polarity?.verified?.trim()) {
+        missing.push("Polarity Verification");
+      }
+      if (!editedData.testResults?.polarity?.result?.trim()) {
+        missing.push("Polarity Result");
+      }
+    }
     
-    if (!editedData.testResults?.circuitBreakers?.tested?.trim()) missing.push("Circuit Breakers Tested");
-    if (!editedData.testResults?.circuitBreakers?.result?.trim()) missing.push("Circuit Breakers Result");
+    if (wasOriginallyExtracted(extractedData?.testResults?.earthContinuity)) {
+      if (!editedData.testResults?.earthContinuity?.result?.trim()) {
+        missing.push("Earth Continuity Result");
+      }
+    }
     
-    // RCD is conditional - only required if RCD is installed
-    // We'll make it required for now
-    if (!editedData.testResults?.rcdTests?.result?.trim()) missing.push("RCD Test Result");
+    if (wasOriginallyExtracted(extractedData?.testResults?.circuitBreakers)) {
+      if (!editedData.testResults?.circuitBreakers?.tested?.trim()) {
+        missing.push("Circuit Breakers Tested");
+      }
+      if (!editedData.testResults?.circuitBreakers?.result?.trim()) {
+        missing.push("Circuit Breakers Result");
+      }
+    }
     
-    // Required Declaration
-    if (!editedData.declarationAndSignature?.certifiedBy?.trim()) missing.push("Certified By");
-    if (!editedData.declarationAndSignature?.inspectorRegistrationNumber?.trim()) missing.push("Inspector Registration Number");
-    if (!editedData.declarationAndSignature?.date?.trim()) missing.push("Certification Date");
+    if (wasOriginallyExtracted(extractedData?.testResults?.rcdTests)) {
+      if (!editedData.testResults?.rcdTests?.result?.trim()) {
+        missing.push("RCD Test Result");
+      }
+    }
+    
+    // Declaration - only validate if originally extracted
+    if (wasOriginallyExtracted(extractedData?.declarationAndSignature)) {
+      if (!editedData.declarationAndSignature?.certifiedBy?.trim()) {
+        missing.push("Certified By");
+      }
+      if (!editedData.declarationAndSignature?.inspectorRegistrationNumber?.trim()) {
+        missing.push("Inspector Registration Number");
+      }
+      if (!editedData.declarationAndSignature?.date?.trim()) {
+        missing.push("Certification Date");
+      }
+    }
     
     return {
       isComplete: missing.length === 0,

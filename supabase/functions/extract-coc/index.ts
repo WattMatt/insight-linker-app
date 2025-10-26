@@ -7,49 +7,91 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EXTRACTION_PROMPT = `# 📋 Electrical COC Data Extraction
+const EXTRACTION_PROMPT = `# 📋 Complete Electrical COC Data Extraction
 
 ## 🎯 Objective
-Extract key information from an Electrical Certificate of Compliance (COC) document.
-DO NOT perform validation or compliance checking - only extract the data as shown on the document.
+Extract ALL information from an Electrical Certificate of Compliance (COC) document.
+Extract EVERY field that appears on the certificate - do not skip any data.
 
-## 📊 Data to Extract
+## 📊 Data to Extract (Extract ALL Fields Present)
 
-### 1. Certificate Information (HIGHEST PRIORITY)
-- **COC Number**: Look for "Certificate of Compliance (CoC) No." or "COC No." or similar field
-  - Extract the EXACT number as shown (e.g., "642 760", "ECA-2024-001234")
-  - DO NOT use filename or derived values
-  
-- **COC Type**: Determine if this is ECA, ECSA, or other type of certificate
-  - Look for issuing organization name/logo
-  
-- **Issue Date**: Look for "Date of issue:" or "Issue Date:" or "Certificate Date:"
-  - Extract the EXACT date shown
-  - Convert to YYYY-MM-DD format:
-    * "18.09.2025" → "2025-09-18"
-    * "15/05/2024" → "2024-05-15"
-  - If not clearly visible, set to null
+### 1. Certificate Information (REQUIRED)
+- **COC Number**: Extract EXACT certificate number (e.g., "642760", "ECA-2024-001234")
+- **COC Type**: ECA, ECSA, or other certificate type
+- **Issue Date**: Convert to YYYY-MM-DD format (e.g., "18.09.2025" → "2025-09-18")
 
-### 2. Administrative Details
-- **Physical Address**: Installation address from the certificate
-- **Erf/Lot Number**: Property identification number
-- **Registered Person**: Name of the registered electrician who issued the certificate
-- **Registration Number**: The electrician's registration/license number
-- **Registration Type**: Type of registration (e.g., "Electrical Contractor", "Master Electrician")
-- **ID Number**: ID number of the registered person (if shown)
+### 2. Administrative Details (REQUIRED)
+- **Physical Address**: Complete installation address
+- **Erf Number**: Property identification number
+- **Registered Person**: Name of registered electrician/contractor
+- **ID Number**: ID number if shown
+- **Registration Number**: Electrician's registration/license number
+- **Registration Type**: Type (e.g., "Electrical Contractor", "Installation Electrician")
 
-### 3. Installation Summary
-- Brief description of the electrical installation (if provided on certificate)
-- Type of work performed (new installation, alteration, maintenance, etc.)
+### 3. Installation Details (REQUIRED)
+- **Supply Type**: Single phase or Three phase
+- **Supply Voltage**: e.g., "230V", "400V"
+- **Main Switch Rating**: e.g., "80A", "100A"
+- **Distribution Board Type**: Type of DB
+- **Number of Circuits**: Total circuits
+
+### 4. Scope of Work (REQUIRED)
+- Complete description of work performed (new installation, alterations, etc.)
+
+### 5. Test Results (EXTRACT ALL TEST DATA)
+Extract ALL test results shown on the certificate:
+
+**5.1 Earth Electrode System:**
+- Resistance value in Ohms
+- Test method used
+- Result: Pass/Fail
+
+**5.2 Insulation Resistance (in MΩ):**
+- Phase 1 to Earth
+- Phase 2 to Earth (if applicable)
+- Phase 3 to Earth (if applicable)
+- Phase to Phase
+- Neutral to Earth
+- Result: Pass/Fail
+
+**5.3 Polarity Test:**
+- Verified: Yes/No
+- Result: Pass/Fail
+
+**5.4 Earth Continuity:**
+- Main bonding verified
+- Circuit conductors tested
+- Result: Pass/Fail
+
+**5.5 Circuit Protection Devices:**
+- Breaker ratings
+- Tested: Yes/No
+- Result: Pass/Fail
+
+**5.6 RCD Tests:**
+- Rated current (mA)
+- Trip time (ms)
+- Test current
+- Result: Pass/Fail or N/A if no RCD
+
+**5.7 Short Circuit Capacity (if shown):**
+- Prospective fault current
+- Verified: Yes/No
+- Result: Pass/Fail
+
+### 6. Declaration & Certification (REQUIRED)
+- **Certified By**: Name of person certifying
+- **Inspector Registration Number**: Registration number
+- **Certification Date**: Date certificate was signed
 
 ## 📤 Required JSON Output Format
 
-Return ONLY valid JSON in this exact format:
+Return ONLY valid JSON with ALL fields:
 
 \`\`\`json
 {
-  "cocNumber": "string (exact value from certificate field) or null",
-  "cocType": "ECA | ECSA | Other | Unknown",
+  "cocNumber": "string or null",
+  "cocType": "string or null",
   "cocIssueDate": "YYYY-MM-DD or null",
   "administrativeDetails": {
     "physicalAddress": "string or null",
@@ -59,29 +101,74 @@ Return ONLY valid JSON in this exact format:
     "registrationNumber": "string or null",
     "registrationType": "string or null"
   },
+  "installationDetails": {
+    "supplyType": "string or null",
+    "supplyVoltage": "string or null",
+    "mainSwitchRating": "string or null",
+    "distributionBoardType": "string or null",
+    "numberOfCircuits": "string or null"
+  },
+  "scopeOfWork": "string or null",
+  "testResults": {
+    "earthElectrode": {
+      "resistance": "string or null",
+      "method": "string or null",
+      "result": "string or null"
+    },
+    "insulationResistance": {
+      "phase1ToEarth": "string or null",
+      "phase2ToEarth": "string or null",
+      "phase3ToEarth": "string or null",
+      "phaseToPhase": "string or null",
+      "neutralToEarth": "string or null",
+      "result": "string or null"
+    },
+    "polarity": {
+      "verified": "string or null",
+      "result": "string or null"
+    },
+    "earthContinuity": {
+      "mainBonding": "string or null",
+      "circuitConductors": "string or null",
+      "result": "string or null"
+    },
+    "circuitBreakers": {
+      "ratings": "string or null",
+      "tested": "string or null",
+      "result": "string or null"
+    },
+    "rcdTests": {
+      "ratedCurrent": "string or null",
+      "tripTime": "string or null",
+      "testCurrent": "string or null",
+      "result": "string or null"
+    },
+    "shortCircuitCapacity": {
+      "prospectiveFaultCurrent": "string or null",
+      "verified": "string or null",
+      "result": "string or null"
+    }
+  },
+  "declarationAndSignature": {
+    "certifiedBy": "string or null",
+    "inspectorRegistrationNumber": "string or null",
+    "date": "YYYY-MM-DD or null"
+  },
   "installationSummary": "string or null",
   "confidence": "high | medium | low",
-  "extractionNotes": "Any issues or uncertainties during extraction"
+  "extractionNotes": "string"
 }
 \`\`\`
 
-## ✅ Extraction Rules
+## ✅ Critical Extraction Rules
 
-1. **Be Precise**: Extract EXACTLY what is shown on the document
-2. **Use Null for Missing Data**: If a field is not visible or unclear, set it to null
-3. **No Placeholders**: Never use "Not provided", "N/A", or similar - use null instead
-4. **Confidence Assessment**:
-   - "high": All critical fields clearly visible and extracted
-   - "medium": Most fields extracted, some unclear
-   - "low": Significant fields missing or unclear
+1. **Extract EVERYTHING**: Extract ALL data visible on the certificate
+2. **Use null for Missing**: If a field is not on the certificate, set to null
+3. **NO Placeholders**: Never use "Not provided", "N/A", "TBD" - use null
+4. **Exact Values**: Extract numbers and text EXACTLY as shown
+5. **All Test Results**: Extract EVERY test result shown on the certificate
 
-5. **Date Conversion Examples**:
-   - "18.09.2025" → "2025-09-18"
-   - "15/05/2024" → "2024-05-15"
-   - "2024-03-10" → "2024-03-10" (already correct)
-   - "18 September 2025" → "2025-09-18"
-
-Now extract the data from the following COC document:`;
+Now extract ALL data from this COC document:`;
 
 serve(async (req) => {
   // Handle CORS preflight
