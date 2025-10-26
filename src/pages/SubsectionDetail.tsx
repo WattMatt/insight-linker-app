@@ -1248,19 +1248,16 @@ const SubsectionDetail = () => {
     }
 
     try {
-      // For public documents, download directly
+      // For public documents, use direct link with download attribute
       if (url.includes('/storage/v1/object/public/')) {
-        const response = await fetch(url);
-        const blob = await response.blob();
-        const downloadUrl = window.URL.createObjectURL(blob);
         const link = document.createElement('a');
-        link.href = downloadUrl;
+        link.href = url;
         link.download = fileName;
+        link.target = '_blank';
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
-        window.URL.revokeObjectURL(downloadUrl);
-        toast.success(`Downloaded ${fileName}`);
+        toast.success(`Downloading ${fileName}`);
         return;
       }
 
@@ -1290,8 +1287,14 @@ const SubsectionDetail = () => {
         return;
       }
 
-      window.open(signedData.signedUrl, '_blank');
-      toast.success(`Opening ${fileName}`);
+      const link = document.createElement('a');
+      link.href = signedData.signedUrl;
+      link.download = fileName;
+      link.target = '_blank';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      toast.success(`Downloading ${fileName}`);
     } catch (error) {
       console.error("Error downloading document:", error);
       toast.error("Failed to download document");
