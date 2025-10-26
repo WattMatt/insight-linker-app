@@ -2090,45 +2090,7 @@ const SubsectionDetail = () => {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={async () => {
-                                        try {
-                                          // Extract the file path from the storage URL
-                                          const urlStr = doc.file_url;
-                                          let filePath = '';
-                                          
-                                          // Handle different URL formats
-                                          if (urlStr.includes('/storage/v1/object/public/documents/')) {
-                                            filePath = urlStr.split('/storage/v1/object/public/documents/')[1];
-                                          } else if (urlStr.includes('/documents/')) {
-                                            filePath = urlStr.split('/documents/')[1];
-                                          } else {
-                                            // If URL format is unexpected, try direct download
-                                            window.open(urlStr, '_blank');
-                                            return;
-                                          }
-                                          
-                                          console.log('Downloading file:', filePath);
-                                          
-                                          // Generate a signed URL for the private bucket
-                                          const { data, error } = await supabase.storage
-                                            .from('documents')
-                                            .createSignedUrl(filePath, 3600); // 1 hour expiry
-                                          
-                                          if (error) {
-                                            console.error('Signed URL error:', error);
-                                            throw error;
-                                          }
-                                          
-                                          if (data?.signedUrl) {
-                                            window.open(data.signedUrl, '_blank');
-                                          } else {
-                                            throw new Error('No signed URL generated');
-                                          }
-                                        } catch (error) {
-                                          console.error('Error downloading document:', error);
-                                          toast.error('Failed to download document');
-                                        }
-                                      }}
+                                      onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
