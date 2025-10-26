@@ -132,6 +132,7 @@ Extract the circuit/point counts from the table. Each item has "New" and "Existi
 1. Conductors correct rating and capacity
 2. Components correctly selected and installed
 3. Disconnecting devices correctly located
+4. Circuits, fuses, switches, terminals, earth leakage units, circuit-breakers, distribution boards correctly and permanently marked or labelled
 
 *Test Results with Readings:*
 1. Continuity of bonding (result)
@@ -146,8 +147,9 @@ Extract the circuit/point counts from the table. Each item has "New" and "Existi
 10. Voltage at DB with full load for each phase to neutral (V values)
 11. Earth leakage unit operation value (mA and % or N/A)
 12. Earth leakage test button operation (result)
-13. Phase rotation consistency (result)
-14. All switching devices operation (result)
+13. Polarity of points of consumption (result)
+14. Phase rotation consistency (result)
+15. All switching devices operation (result)
 
 *Comments:*
 - Any comments on parts not covered
@@ -259,7 +261,8 @@ Return ONLY this JSON structure with ALL extracted data:
   "inspectionChecks": {
     "conductorsCorrect": "Yes | No | N/A",
     "componentsCorrect": "Yes | No | N/A",
-    "disconnectingDevicesCorrect": "Yes | No | N/A"
+    "disconnectingDevicesCorrect": "Yes | No | N/A",
+    "markingAndLabelling": "Yes | No | N/A"
   },
   "testResults": {
     "continuityOfBonding": "string or null",
@@ -274,6 +277,7 @@ Return ONLY this JSON structure with ALL extracted data:
     "voltageFullLoad": "string or null",
     "earthLeakageOperation": "string or null",
     "earthLeakageTestButton": "string or null",
+    "polarityOfPoints": "string or null",
     "phaseRotation": "string or null",
     "switchingDevices": "string or null"
   },

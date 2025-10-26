@@ -124,6 +124,7 @@ interface ExtractedData {
     conductorsCorrect?: string;
     componentsCorrect?: string;
     disconnectingDevicesCorrect?: string;
+    markingAndLabelling?: string;
   };
   
   // Test Results
@@ -140,6 +141,7 @@ interface ExtractedData {
     voltageFullLoad?: string;
     earthLeakageOperation?: string;
     earthLeakageTestButton?: string;
+    polarityOfPoints?: string;
     phaseRotation?: string;
     switchingDevices?: string;
   };
@@ -974,6 +976,21 @@ export function COCPreviewApproval({
                       placeholder="Yes/No/N/A"
                     />
                   </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">4. Circuits, fuses, switches, terminals, earth leakage units, circuit-breakers, distribution boards correctly marked or labelled</Label>
+                    <Input
+                      value={editedData.inspectionChecks?.markingAndLabelling || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        inspectionChecks: {
+                          ...editedData.inspectionChecks,
+                          markingAndLabelling: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Yes/No/N/A"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -1158,6 +1175,21 @@ export function COCPreviewApproval({
                           testResults: {
                             ...editedData.testResults,
                             earthLeakageTestButton: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="correct"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Polarity of Points of Consumption</Label>
+                      <Input
+                        value={editedData.testResults?.polarityOfPoints || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            polarityOfPoints: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
