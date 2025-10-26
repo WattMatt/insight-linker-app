@@ -106,6 +106,26 @@ Extract ALL information from this TWO-PAGE ECA Certificate of Compliance documen
   - Rated earth leakage tripping current IΔn (e.g., "30 mA" or "N/A")
 - Connection to supply: Installed Yes/No, Tested Yes/No, Operational Yes/No
 
+**Section 3 - Description of Installation Covered by This Report:**
+Extract the circuit/point counts from the table. Each item has "New" and "Existing" columns:
+- Lighting circuits (New/Existing)
+- Lighting points (New/Existing)
+- Socket-outlet circuits (New/Existing)
+- Socket-outlets (New/Existing)
+- Air-conditioning circuits (New/Existing)
+- Transformer circuits: Lighting/Bell/Other (New/Existing)
+- Heating circuits (New/Existing)
+- Alternative power supply connections (New/Existing)
+- Other circuits or points (New/Existing)
+- Fan circuits (New/Existing)
+- Fan circuits - Cooking (New/Existing)
+- Fan circuits - Geyser (New/Existing)
+- Fixed appliance circuits - Pool pump (New/Existing)
+- Fixed appliance circuits - Borehole pump (New/Existing)
+- Fixed appliance circuits - Other (New/Existing)
+- Earth leakage protects: Complete installation / Only part of installation (New/Existing)
+- Other circuits or points (additional rows) (New/Existing)
+
 **Section 4 - Inspection and Tests:**
 
 *Initial Checks (Mark Yes/No/N/A):*
@@ -214,6 +234,27 @@ Return ONLY this JSON structure with ALL extracted data:
     "supplyInstalled": "Yes | No | null",
     "supplyTested": "Yes | No | null",
     "supplyOperational": "Yes | No | null"
+  },
+  "installationDescription": {
+    "lightingCircuits": {"new": "string", "existing": "string"},
+    "lightingPoints": {"new": "string", "existing": "string"},
+    "socketOutletCircuits": {"new": "string", "existing": "string"},
+    "socketOutlets": {"new": "string", "existing": "string"},
+    "airConditioningCircuits": {"new": "string", "existing": "string"},
+    "transformerCircuitsLighting": {"new": "string", "existing": "string"},
+    "transformerCircuitsBell": {"new": "string", "existing": "string"},
+    "transformerCircuitsOther": {"new": "string", "existing": "string"},
+    "heatingCircuits": {"new": "string", "existing": "string"},
+    "alternativePowerSupply": {"new": "string", "existing": "string"},
+    "otherCircuits": {"new": "string", "existing": "string"},
+    "fanCircuits": {"new": "string", "existing": "string"},
+    "fanCircuitsCooking": {"new": "string", "existing": "string"},
+    "fanCircuitsGeyser": {"new": "string", "existing": "string"},
+    "fixedAppliancePoolPump": {"new": "string", "existing": "string"},
+    "fixedApplianceBoreholeP": {"new": "string", "existing": "string"},
+    "fixedApplianceOther": {"new": "string", "existing": "string"},
+    "earthLeakageCompleteInstallation": {"new": "string", "existing": "string"},
+    "earthLeakagePartOfInstallation": {"new": "string", "existing": "string"}
   },
   "inspectionChecks": {
     "conductorsCorrect": "Yes | No | N/A",

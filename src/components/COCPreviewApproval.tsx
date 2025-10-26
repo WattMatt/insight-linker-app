@@ -95,6 +95,29 @@ interface ExtractedData {
     supplyTested?: string;
     supplyOperational?: string;
   };
+
+  // Installation Description (Section 3)
+  installationDescription?: {
+    lightingCircuits?: { new?: string; existing?: string };
+    lightingPoints?: { new?: string; existing?: string };
+    socketOutletCircuits?: { new?: string; existing?: string };
+    socketOutlets?: { new?: string; existing?: string };
+    airConditioningCircuits?: { new?: string; existing?: string };
+    transformerCircuitsLighting?: { new?: string; existing?: string };
+    transformerCircuitsBell?: { new?: string; existing?: string };
+    transformerCircuitsOther?: { new?: string; existing?: string };
+    heatingCircuits?: { new?: string; existing?: string };
+    alternativePowerSupply?: { new?: string; existing?: string };
+    otherCircuits?: { new?: string; existing?: string };
+    fanCircuits?: { new?: string; existing?: string };
+    fanCircuitsCooking?: { new?: string; existing?: string };
+    fanCircuitsGeyser?: { new?: string; existing?: string };
+    fixedAppliancePoolPump?: { new?: string; existing?: string };
+    fixedApplianceBoreholeP?: { new?: string; existing?: string };
+    fixedApplianceOther?: { new?: string; existing?: string };
+    earthLeakageCompleteInstallation?: { new?: string; existing?: string };
+    earthLeakagePartOfInstallation?: { new?: string; existing?: string };
+  };
   
   // Inspection Checks
   inspectionChecks?: {
@@ -827,6 +850,76 @@ export function COCPreviewApproval({
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Installation Description - Section 3 */}
+              <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
+                <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
+                  Section 3 - Description of Installation
+                </h3>
+                <p className="text-xs text-muted-foreground mb-3">Number of circuits or points</p>
+                <div className="grid grid-cols-3 gap-2 text-xs font-semibold mb-2">
+                  <div></div>
+                  <div className="text-center">New</div>
+                  <div className="text-center">Existing</div>
+                </div>
+                <div className="space-y-2">
+                  {[
+                    { label: 'Lighting circuits', key: 'lightingCircuits' },
+                    { label: 'Lighting points', key: 'lightingPoints' },
+                    { label: 'Socket-outlet circuits', key: 'socketOutletCircuits' },
+                    { label: 'Socket-outlets', key: 'socketOutlets' },
+                    { label: 'Air-conditioning circuits', key: 'airConditioningCircuits' },
+                    { label: 'Transformer circuits - Lighting', key: 'transformerCircuitsLighting' },
+                    { label: 'Transformer circuits - Bell', key: 'transformerCircuitsBell' },
+                    { label: 'Transformer circuits - Other', key: 'transformerCircuitsOther' },
+                    { label: 'Heating circuits', key: 'heatingCircuits' },
+                    { label: 'Alternative power supply connections', key: 'alternativePowerSupply' },
+                    { label: 'Other circuits or points', key: 'otherCircuits' },
+                    { label: 'Fan circuits', key: 'fanCircuits' },
+                    { label: 'Fan circuits - Cooking', key: 'fanCircuitsCooking' },
+                    { label: 'Fan circuits - Geyser', key: 'fanCircuitsGeyser' },
+                    { label: 'Fixed appliance - Pool pump', key: 'fixedAppliancePoolPump' },
+                    { label: 'Fixed appliance - Borehole pump', key: 'fixedApplianceBoreholeP' },
+                    { label: 'Fixed appliance - Other', key: 'fixedApplianceOther' },
+                    { label: 'Earth leakage - Complete installation', key: 'earthLeakageCompleteInstallation' },
+                    { label: 'Earth leakage - Only part', key: 'earthLeakagePartOfInstallation' },
+                  ].map(({ label, key }) => (
+                    <div key={key} className="grid grid-cols-3 gap-2 items-center">
+                      <Label className="text-xs">{label}</Label>
+                      <Input
+                        value={(editedData.installationDescription as any)?.[key]?.new || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDescription: {
+                            ...editedData.installationDescription,
+                            [key]: {
+                              ...(editedData.installationDescription as any)?.[key],
+                              new: e.target.value
+                            }
+                          }
+                        })}
+                        className="h-8 text-sm text-center"
+                        placeholder="-"
+                      />
+                      <Input
+                        value={(editedData.installationDescription as any)?.[key]?.existing || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDescription: {
+                            ...editedData.installationDescription,
+                            [key]: {
+                              ...(editedData.installationDescription as any)?.[key],
+                              existing: e.target.value
+                            }
+                          }
+                        })}
+                        className="h-8 text-sm text-center"
+                        placeholder="-"
+                      />
+                    </div>
+                  ))}
                 </div>
               </div>
 
