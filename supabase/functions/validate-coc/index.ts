@@ -283,9 +283,21 @@ serve(async (req) => {
 
     console.log('Starting COC validation for document:', documentId);
 
-    // Extract the storage path from the URL
-    const urlParts = documentUrl.split('/storage/v1/object/public/documents/')[1];
-    const storagePath = decodeURIComponent(urlParts);
+    // Extract the storage path from the signed URL
+    // Format: /storage/v1/object/sign/documents/{path}?token={token}
+    let storagePath: string;
+    
+    if (documentUrl.includes('/storage/v1/object/sign/documents/')) {
+      const pathPart = documentUrl.split('/storage/v1/object/sign/documents/')[1];
+      // Remove the token query parameter
+      storagePath = pathPart.split('?token=')[0];
+      storagePath = decodeURIComponent(storagePath);
+    } else if (documentUrl.includes('/storage/v1/object/public/documents/')) {
+      storagePath = documentUrl.split('/storage/v1/object/public/documents/')[1];
+      storagePath = decodeURIComponent(storagePath);
+    } else {
+      throw new Error('Invalid document URL format');
+    }
     
     console.log('Downloading document from storage:', storagePath);
     
