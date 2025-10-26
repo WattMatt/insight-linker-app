@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { FileText, Save } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -24,10 +24,10 @@ export const ComprehensiveInspectionReport = ({
   siteLogoUrl,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
-  const generateReport = async () => {
+  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string } | null> => {
     try {
-      setGenerating(true);
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
@@ -457,7 +457,27 @@ export const ComprehensiveInspectionReport = ({
         }
       }
 
-      doc.save(`${subsectionName}_Inspection_Report_${date}.pdf`);
+      const fileDate = new Date().toLocaleDateString('en-ZA').replace(/\//g, '-');
+      const fileName = `${subsectionName}_Inspection_Report_${fileDate}.pdf`;
+      
+      return { doc, fileName };
+    } catch (error) {
+      console.error("Error generating report:", error);
+      return null;
+    }
+  };
+
+  const generateReport = async () => {
+    try {
+      setGenerating(true);
+      const result = await generatePDFDocument();
+      
+      if (!result) {
+        toast.error("Failed to generate report");
+        return;
+      }
+      
+      result.doc.save(result.fileName);
       toast.success("Report generated successfully");
     } catch (error) {
       console.error("Error generating report:", error);
@@ -467,10 +487,105 @@ export const ComprehensiveInspectionReport = ({
     }
   };
 
+  const saveToDocuments = async () => {
+    if (!subsectionId) {
+      toast.error("Cannot save: subsection ID missing");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      toast.info("Saving report to documents...");
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      // Generate PDF
+      const result = await generatePDFDocument();
+      if (!result) {
+        toast.error("Failed to generate report");
+        return;
+      }
+
+      // Find or create "Inspection Reports" category
+      const { data: categories } = await supabase
+        .from("document_categories")
+        .select("id, name")
+        .eq("subsection_id", subsectionId);
+      
+      let categoryId = categories?.find(c => c.name === "Inspection Reports")?.id;
+      
+      if (!categoryId) {
+        const { data: newCategory, error: categoryError } = await supabase
+          .from("document_categories")
+          .insert({ 
+            name: "Inspection Reports", 
+            subsection_id: subsectionId,
+            order_index: (categories?.length || 0) + 1
+          })
+          .select()
+          .single();
+        
+        if (categoryError) throw categoryError;
+        categoryId = newCategory.id;
+      }
+
+      // Convert PDF to blob
+      const pdfBlob = result.doc.output('blob');
+      
+      // Upload to storage
+      const storagePath = `${subsectionId}/Inspection Reports/${result.fileName}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(storagePath);
+
+      // Create document record
+      const { error: docError } = await supabase
+        .from('subsection_documents')
+        .insert({
+          subsection_id: subsectionId,
+          category_id: categoryId,
+          file_name: result.fileName,
+          file_url: urlData.publicUrl,
+          file_size: pdfBlob.size,
+          uploaded_by: user.id
+        });
+
+      if (docError) throw docError;
+
+      toast.success("Inspection report saved to documents!");
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report to documents");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Button onClick={generateReport} disabled={generating} variant="default">
-      <FileText className="mr-2 h-4 w-4" />
-      {generating ? "Generating PDF..." : "Generate PDF"}
-    </Button>
+    <div className="flex gap-2">
+      <Button onClick={generateReport} disabled={generating || saving} variant="default">
+        <FileText className="mr-2 h-4 w-4" />
+        {generating ? "Generating..." : "Generate PDF"}
+      </Button>
+      {subsectionId && (
+        <Button onClick={saveToDocuments} disabled={generating || saving} variant="outline">
+          <Save className="mr-2 h-4 w-4" />
+          {saving ? "Saving..." : "Save to Documents"}
+        </Button>
+      )}
+    </div>
   );
 };

@@ -3,9 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, AlertTriangle, FileDown } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, FileDown, Save } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
+import { useState } from "react";
 
 interface ValidationReport {
   cocNumber?: string;
@@ -65,12 +68,16 @@ interface COCValidationReportProps {
     validated_at: string;
     validated_by?: string;
     report_data?: ValidationReport;
+    subsection_id: string;
+    document_id?: string;
   };
+  subsectionName?: string;
 }
 
-export function COCValidationReport({ validation }: COCValidationReportProps) {
+export function COCValidationReport({ validation, subsectionName }: COCValidationReportProps) {
   const report = (validation.report_data || {}) as ValidationReport;
   const status = report.overallStatus || report.status || validation.status;
+  const [saving, setSaving] = useState(false);
   
   // Legacy format handling
   const isLegacyFormat = !report.overallStatus && report.violations;
@@ -102,6 +109,89 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
   };
 
   const exportToPDF = () => {
+    const doc = generatePDF();
+    const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    doc.save(fileName);
+  };
+
+  const saveToDocuments = async () => {
+    try {
+      setSaving(true);
+      toast.info("Saving report to documents...");
+
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("User not authenticated");
+
+      // Find or create "COC Validation Reports" category
+      const { data: categories } = await supabase
+        .from("document_categories")
+        .select("id, name")
+        .eq("subsection_id", validation.subsection_id);
+      
+      let categoryId = categories?.find(c => c.name === "COC Validation Reports")?.id;
+      
+      if (!categoryId) {
+        const { data: newCategory, error: categoryError } = await supabase
+          .from("document_categories")
+          .insert({ 
+            name: "COC Validation Reports", 
+            subsection_id: validation.subsection_id,
+            order_index: (categories?.length || 0) + 1
+          })
+          .select()
+          .single();
+        
+        if (categoryError) throw categoryError;
+        categoryId = newCategory.id;
+      }
+
+      // Generate PDF as blob
+      const doc = generatePDF();
+      const pdfBlob = doc.output('blob');
+      
+      // Upload to storage
+      const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${Date.now()}.pdf`;
+      const storagePath = `${validation.subsection_id}/COC Validation Reports/${fileName}`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(storagePath, pdfBlob, {
+          contentType: 'application/pdf',
+          upsert: false
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(storagePath);
+
+      // Create document record
+      const { error: docError } = await supabase
+        .from('subsection_documents')
+        .insert({
+          subsection_id: validation.subsection_id,
+          category_id: categoryId,
+          file_name: fileName,
+          file_url: urlData.publicUrl,
+          file_size: pdfBlob.size,
+          uploaded_by: user.id
+        });
+
+      if (docError) throw docError;
+
+      toast.success("Validation report saved to documents!");
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report to documents");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const generatePDF = (): jsPDF => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -338,8 +428,7 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
     }
 
     // Save PDF
-    const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
+    return doc;
   };
 
   return (
@@ -359,10 +448,16 @@ export function COCValidationReport({ validation }: COCValidationReportProps) {
               )}
             </div>
             <div className="flex flex-col items-end gap-2">
-              <Button onClick={exportToPDF} variant="outline" size="sm">
-                <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={saveToDocuments} variant="outline" size="sm" disabled={saving}>
+                  <Save className="h-4 w-4 mr-2" />
+                  {saving ? "Saving..." : "Save to Documents"}
+                </Button>
+                <Button onClick={exportToPDF} variant="outline" size="sm">
+                  <FileDown className="h-4 w-4 mr-2" />
+                  Export PDF
+                </Button>
+              </div>
               {getStatusIcon()}
               <Badge className={getStatusColor()}>
                 {status?.toUpperCase()}

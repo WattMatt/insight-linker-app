@@ -3268,7 +3268,13 @@ const SubsectionDetail = () => {
                   <TabsTrigger value="chat">Ask Questions</TabsTrigger>
                 </TabsList>
                 <TabsContent value="report" className="mt-4">
-                  <COCValidationReport validation={selectedValidation} />
+                  <COCValidationReport 
+                    validation={{
+                      ...selectedValidation,
+                      subsection_id: subsectionId || ''
+                    }} 
+                    subsectionName={subsection?.name}
+                  />
                 </TabsContent>
                 <TabsContent value="chat" className="mt-4">
                   <ValidationChat
