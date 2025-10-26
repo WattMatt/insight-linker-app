@@ -1248,12 +1248,26 @@ const SubsectionDetail = () => {
     }
 
     try {
-      // Extract the file path from the storage URL
+      // For public documents, download directly
+      if (url.includes('/storage/v1/object/public/')) {
+        const response = await fetch(url);
+        const blob = await response.blob();
+        const downloadUrl = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = downloadUrl;
+        link.download = fileName;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(downloadUrl);
+        toast.success(`Downloaded ${fileName}`);
+        return;
+      }
+
+      // For private documents, create signed URL
       let filePath = '';
       
-      if (url.includes('/storage/v1/object/public/documents/')) {
-        filePath = url.split('/storage/v1/object/public/documents/')[1];
-      } else if (url.includes('/storage/v1/object/sign/documents/')) {
+      if (url.includes('/storage/v1/object/sign/documents/')) {
         filePath = url.split('/storage/v1/object/sign/documents/')[1].split('?')[0];
       } else if (url.includes('documents/')) {
         filePath = url.split('documents/')[1].split('?')[0];
@@ -1265,7 +1279,6 @@ const SubsectionDetail = () => {
         return;
       }
 
-      // Create a signed URL for the private document (valid for 1 hour)
       const { data: signedData, error: signError } = await supabase
         .storage
         .from('documents')
@@ -1277,7 +1290,6 @@ const SubsectionDetail = () => {
         return;
       }
 
-      // Open the document in a new tab - signedUrl is already a full URL
       window.open(signedData.signedUrl, '_blank');
       toast.success(`Opening ${fileName}`);
     } catch (error) {
