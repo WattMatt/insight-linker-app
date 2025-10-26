@@ -76,7 +76,13 @@ interface ExtractedData {
     additionalPages?: string;
     numberOfPagesAdded?: string;
   };
-  
+
+  // Test Report Section 1 - Location
+  testReportLocation?: {
+    physicalAddress?: string;
+    buildingName?: string;
+  };
+
   // Installation Details
   installationDetails?: {
     physicalAddress?: string;
@@ -662,6 +668,85 @@ export function COCPreviewApproval({
                       })}
                       className="h-9"
                       placeholder="Installation electrician"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Test Report Header */}
+              <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
+                <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
+                  Test Report Header (Page 2)
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Test Report For</Label>
+                    <Input
+                      value={editedData.testReport?.testReportFor || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testReport: {
+                          ...editedData.testReport,
+                          testReportFor: e.target.value
+                        }
+                      })}
+                      className="h-9"
+                      placeholder="DB/Supply description"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Additional Pages Added</Label>
+                    <Input
+                      value={editedData.testReport?.additionalPages || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testReport: {
+                          ...editedData.testReport,
+                          additionalPages: e.target.value
+                        }
+                      })}
+                      className="h-9"
+                      placeholder="Yes/No"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Section 1 - Location */}
+              <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
+                <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
+                  Section 1 - Location (Page 2)
+                </h3>
+                <p className="text-xs text-muted-foreground">Only required if not provided on Certificate of Compliance</p>
+                <div className="space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Physical Address</Label>
+                    <Input
+                      value={editedData.testReportLocation?.physicalAddress || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testReportLocation: {
+                          ...editedData.testReportLocation,
+                          physicalAddress: e.target.value
+                        }
+                      })}
+                      className="h-9"
+                      placeholder="14 Voortrekker Street"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Name of Building (include shop/unit number)</Label>
+                    <Input
+                      value={editedData.testReportLocation?.buildingName || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testReportLocation: {
+                          ...editedData.testReportLocation,
+                          buildingName: e.target.value
+                        }
+                      })}
+                      className="h-9"
+                      placeholder="Shop 8 Seqonyane"
                     />
                   </div>
                 </div>

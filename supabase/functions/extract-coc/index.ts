@@ -89,6 +89,10 @@ Extract ALL information from this TWO-PAGE ECA Certificate of Compliance documen
 - Additional pages added: Yes/No
 - Number added
 
+**Section 1 - Location (Only required if not provided on Certificate of Compliance):**
+- Physical address
+- Name of building (including shop/unit number)
+
 **Section 2 - Installation Details:**
 - Physical address
 - Name of building
@@ -226,6 +230,10 @@ Return ONLY this JSON structure with ALL extracted data:
     "testReportFor": "string or null",
     "additionalPages": "Yes | No | null",
     "numberOfPagesAdded": "string or null"
+  },
+  "testReportLocation": {
+    "physicalAddress": "string or null",
+    "buildingName": "string or null"
   },
   "installationDetails": {
     "physicalAddress": "string",
