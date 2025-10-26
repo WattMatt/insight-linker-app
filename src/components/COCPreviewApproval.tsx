@@ -928,11 +928,11 @@ export function COCPreviewApproval({
               {/* Inspection Checks */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  Section 4 - Inspection Checks
+                  Section 4 - Inspection (Mark as appropriate)
                 </h3>
                 <div className="space-y-2">
                   <div className="space-y-1">
-                    <Label className="text-xs">1. Conductors are of correct rating and current-carrying capacity</Label>
+                    <Label className="text-xs font-medium">1. Conductors are of the correct rating and current-carrying capacity for the protective devices and connected load</Label>
                     <Input
                       value={editedData.inspectionChecks?.conductorsCorrect || ''}
                       onChange={(e) => setEditedData({
@@ -947,7 +947,7 @@ export function COCPreviewApproval({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">2. Components have been correctly selected and installed</Label>
+                    <Label className="text-xs font-medium">2. Components have been correctly selected and installed</Label>
                     <Input
                       value={editedData.inspectionChecks?.componentsCorrect || ''}
                       onChange={(e) => setEditedData({
@@ -962,7 +962,7 @@ export function COCPreviewApproval({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">3. Disconnecting devices are correctly located</Label>
+                    <Label className="text-xs font-medium">3. Disconnecting devices are correctly located and all switchgear switches the phase conductors</Label>
                     <Input
                       value={editedData.inspectionChecks?.disconnectingDevicesCorrect || ''}
                       onChange={(e) => setEditedData({
@@ -977,7 +977,7 @@ export function COCPreviewApproval({
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs">4. Circuits, fuses, switches, terminals, earth leakage units, circuit-breakers, distribution boards correctly marked or labelled</Label>
+                    <Label className="text-xs font-medium">4. Circuits, fuses, switches, terminals, earth leakage units, circuit-breakers, distribution boards are correctly and permanently marked or labelled</Label>
                     <Input
                       value={editedData.inspectionChecks?.markingAndLabelling || ''}
                       onChange={(e) => setEditedData({
@@ -997,235 +997,233 @@ export function COCPreviewApproval({
               {/* Test Results */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  Test Results (Section 4)
+                  Section 4 - Tests
                 </h3>
                 <div className="space-y-2">
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Continuity of Bonding</Label>
-                      <Input
-                        value={editedData.testResults?.continuityOfBonding || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            continuityOfBonding: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="Compliant"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Earth Continuity Resistance</Label>
-                      <Input
-                        value={editedData.testResults?.earthContinuityResistance || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthContinuityResistance: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="Compliant"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ring Circuits Continuity</Label>
-                      <Input
-                        value={editedData.testResults?.ringCircuitsContinuity || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            ringCircuitsContinuity: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="N/A"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Earth Loop Impedance (Ω)</Label>
-                      <Input
-                        value={editedData.testResults?.earthLoopImpedance || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthLoopImpedance: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="0.16Ω"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Neutral Loop Impedance (Ω)</Label>
-                      <Input
-                        value={editedData.testResults?.neutralLoopImpedance || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            neutralLoopImpedance: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="0.16Ω"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Prospective Short Circuit Current</Label>
-                      <Input
-                        value={editedData.testResults?.prospectiveShortCircuitCurrent || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            prospectiveShortCircuitCurrent: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="1.44kA"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Elevated Voltage (V)</Label>
-                      <Input
-                        value={editedData.testResults?.elevatedVoltage || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            elevatedVoltage: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="0V"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Insulation Resistance (MΩ)</Label>
-                      <Input
-                        value={editedData.testResults?.insulationResistance || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            insulationResistance: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder=">90 MΩ"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Voltage No Load (V)</Label>
-                      <Input
-                        value={editedData.testResults?.voltageNoLoad || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            voltageNoLoad: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="237V, 237V, 237V"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Voltage Full Load (V)</Label>
-                      <Input
-                        value={editedData.testResults?.voltageFullLoad || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            voltageFullLoad: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="240V, 240V, 237V"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Earth Leakage Operation</Label>
-                      <Input
-                        value={editedData.testResults?.earthLeakageOperation || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthLeakageOperation: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="N/A or correct"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Earth Leakage Test Button</Label>
-                      <Input
-                        value={editedData.testResults?.earthLeakageTestButton || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthLeakageTestButton: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="correct"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Polarity of Points of Consumption</Label>
-                      <Input
-                        value={editedData.testResults?.polarityOfPoints || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            polarityOfPoints: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="correct"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Phase Rotation</Label>
-                      <Input
-                        value={editedData.testResults?.phaseRotation || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            phaseRotation: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="correct"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Switching Devices</Label>
-                      <Input
-                        value={editedData.testResults?.switchingDevices || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            switchingDevices: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="correct"
-                      />
-                    </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">1. Continuity of bonding</Label>
+                    <Input
+                      value={editedData.testResults?.continuityOfBonding || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          continuityOfBonding: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Compliant"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">2. Resistance of earth continuity conductor at all points of consumption</Label>
+                    <Input
+                      value={editedData.testResults?.earthContinuityResistance || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          earthContinuityResistance: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Compliant"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">3. Continuity of ring circuits (if applicable)</Label>
+                    <Input
+                      value={editedData.testResults?.ringCircuitsContinuity || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          ringCircuitsContinuity: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="N/A"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">4. Earth loop impedance test: at main or local switch (Ω)</Label>
+                    <Input
+                      value={editedData.testResults?.earthLoopImpedance || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          earthLoopImpedance: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="0.16"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">5. Neutral loop impedance test: at main or local switch (Ω)</Label>
+                    <Input
+                      value={editedData.testResults?.neutralLoopImpedance || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          neutralLoopImpedance: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="0.16"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">6. Prospective short-circuit current at main or local switch (PSCC) - kA</Label>
+                    <Input
+                      value={editedData.testResults?.prospectiveShortCircuitCurrent || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          prospectiveShortCircuitCurrent: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="1.44 kA Calculated/Measured"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">7. Elevated voltage between incoming neutral and external earth (ground) - V</Label>
+                    <Input
+                      value={editedData.testResults?.elevatedVoltage || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          elevatedVoltage: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="0V"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">8. Insulation resistance - MΩ</Label>
+                    <Input
+                      value={editedData.testResults?.insulationResistance || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          insulationResistance: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder=">90"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">9. Voltage at distribution board with no load for each phase to neutral - V</Label>
+                    <Input
+                      value={editedData.testResults?.voltageNoLoad || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          voltageNoLoad: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="237, 237, 237"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">10. Voltage at distribution board with load (as calculated for full load) for each phase to neutral - V</Label>
+                    <Input
+                      value={editedData.testResults?.voltageFullLoad || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          voltageFullLoad: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="240, 240, 237"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">11. Value of operation of earth leakage units - mA</Label>
+                    <Input
+                      value={editedData.testResults?.earthLeakageOperation || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          earthLeakageOperation: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="N/A or value"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">12. Operation of earth leakage test button</Label>
+                    <Input
+                      value={editedData.testResults?.earthLeakageTestButton || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          earthLeakageTestButton: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="correct"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">13. Polarity of points of consumption</Label>
+                    <Input
+                      value={editedData.testResults?.polarityOfPoints || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          polarityOfPoints: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="correct"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">14. Phase rotation is consistent at points all of consumption for three-phase systems</Label>
+                    <Input
+                      value={editedData.testResults?.phaseRotation || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          phaseRotation: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="correct"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-medium">15. All switching devices, make-and-break circuits</Label>
+                    <Input
+                      value={editedData.testResults?.switchingDevices || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        testResults: {
+                          ...editedData.testResults,
+                          switchingDevices: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="correct"
+                    />
                   </div>
                 </div>
               </div>
