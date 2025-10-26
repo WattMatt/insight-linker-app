@@ -10,10 +10,25 @@ const corsHeaders = {
 const EXTRACTION_PROMPT = `# 📋 Complete Electrical COC Data Extraction
 
 ## 🎯 Objective
-Extract ALL information from an Electrical Certificate of Compliance (COC) document.
-Extract EVERY field that appears on the certificate - do not skip any data.
+Extract ALL information from a TWO-PAGE Electrical Certificate of Compliance (COC) document.
 
-## 📊 Data to Extract (Extract ALL Fields Present)
+## 📄 COC Document Structure
+**PAGE 1 - Front Page:**
+- Certificate details (COC Number, Type, Issue Date)
+- Installation location details
+- Registered person/contractor details
+- Scope of work description
+- Declarations and certifications
+
+**PAGE 2 - Test Report Page:**
+- Header section: Initial, Test Report For, Issue Date, Additional Pages
+- Section 1: Earth Electrode System tests
+- Section 2: Insulation Resistance measurements
+- Section 3: Polarity verification
+- Section 4: Earth Continuity tests
+- Section 5: Circuit Protection/RCD tests
+
+## 📊 Data to Extract (Extract ALL Fields from BOTH Pages)
 
 ### 1. Certificate Information (REQUIRED)
 - **COC Number**: Extract EXACT certificate number (e.g., "642760", "ECA-2024-001234")
@@ -38,46 +53,55 @@ Extract EVERY field that appears on the certificate - do not skip any data.
 ### 4. Scope of Work (REQUIRED)
 - Complete description of work performed (new installation, alterations, etc.)
 
-### 5. Test Results (EXTRACT ALL TEST DATA)
-Extract ALL test results shown on the certificate:
+### 5. Test Results - PAGE 2 (EXTRACT ALL 5 TEST SECTIONS)
 
-**5.1 Earth Electrode System:**
-- Resistance value in Ohms
-- Test method used
-- Result: Pass/Fail
+**Page 2 Header Information:**
+- Initial/Inspector initial
+- Test Report For (name/description)
+- Issue Date on page 2
+- Additional Pages indicator
 
-**5.2 Insulation Resistance (in MΩ):**
-- Phase 1 to Earth
-- Phase 2 to Earth (if applicable)
-- Phase 3 to Earth (if applicable)
-- Phase to Phase
-- Neutral to Earth
-- Result: Pass/Fail
+**Test Section 1 - Earth Electrode System:**
+- Resistance measurement (Ω)
+- Test method (e.g., 3-point, 4-point)
+- Electrode type
+- Result: Pass/Fail/Satisfactory
 
-**5.3 Polarity Test:**
-- Verified: Yes/No
-- Result: Pass/Fail
+**Test Section 2 - Insulation Resistance (MΩ):**
+- Phase 1 to Earth (L1-E)
+- Phase 2 to Earth (L2-E) if applicable
+- Phase 3 to Earth (L3-E) if applicable
+- Phase to Neutral measurements
+- Phase to Phase measurements
+- Neutral to Earth (N-E)
+- Test voltage used
+- Result: Pass/Fail/Satisfactory
 
-**5.4 Earth Continuity:**
-- Main bonding verified
-- Circuit conductors tested
-- Result: Pass/Fail
+**Test Section 3 - Polarity Test:**
+- All circuits verified: Yes/No
+- Live conductors checked
+- Protective conductors verified
+- Result: Pass/Fail/Correct
 
-**5.5 Circuit Protection Devices:**
-- Breaker ratings
-- Tested: Yes/No
-- Result: Pass/Fail
+**Test Section 4 - Earth Continuity/Earth Fault Loop:**
+- Main protective bonding (Ω)
+- Supplementary bonding (Ω)
+- Circuit protective conductor continuity
+- Earth fault loop impedance (Zs)
+- Result: Pass/Fail/Satisfactory
 
-**5.6 RCD Tests:**
-- Rated current (mA)
-- Trip time (ms)
-- Test current
-- Result: Pass/Fail or N/A if no RCD
-
-**5.7 Short Circuit Capacity (if shown):**
-- Prospective fault current
-- Verified: Yes/No
-- Result: Pass/Fail
+**Test Section 5 - Circuit Protection & RCD Tests:**
+- **Circuit Breakers:**
+  - Ratings listed (e.g., 80A, 20A, 16A)
+  - Trip characteristics
+  - Tested: Yes/No
+  
+- **RCD/ELCB Tests:**
+  - Rated sensitivity (mA) - typically 30mA
+  - Rated trip time (ms)
+  - Test current used
+  - Actual trip time measured (ms)
+  - Result: Pass/Fail/N/A
 
 ### 6. Declaration & Certification (REQUIRED)
 - **Certified By**: Name of person certifying
@@ -162,13 +186,21 @@ Return ONLY valid JSON with ALL fields:
 
 ## ✅ Critical Extraction Rules
 
-1. **Extract EVERYTHING**: Extract ALL data visible on the certificate
-2. **Use null for Missing**: If a field is not on the certificate, set to null
-3. **NO Placeholders**: Never use "Not provided", "N/A", "TBD" - use null
-4. **Exact Values**: Extract numbers and text EXACTLY as shown
-5. **All Test Results**: Extract EVERY test result shown on the certificate
+1. **Process BOTH Pages**: Make sure to extract data from BOTH page 1 (declarations) AND page 2 (test results)
+2. **Extract EVERYTHING**: Don't skip any visible data on either page
+3. **Use null for Missing**: If a field is not visible on the certificate, set to null
+4. **NO Placeholders**: Never use "Not provided", "N/A", "TBD" - use null instead
+5. **Exact Values**: Extract numbers and text EXACTLY as shown
+6. **All 5 Test Sections**: Extract ALL test results from page 2's 5 sections
+7. **Measurements with Units**: Include the measurement values as shown (e.g., "2.5", ">1000", "25ms")
 
-Now extract ALL data from this COC document:`;
+## 🔍 Extraction Process
+1. First, review page 1 for certificate details, administrative info, and declarations
+2. Then, review page 2 for all test results (5 sections)
+3. Cross-reference dates and names between pages for consistency
+4. Ensure confidence is "high" only if BOTH pages are complete and clear
+
+Now extract ALL data from this TWO-PAGE COC document:`;
 
 serve(async (req) => {
   // Handle CORS preflight
