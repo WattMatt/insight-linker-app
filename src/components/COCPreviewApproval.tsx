@@ -13,9 +13,12 @@ import { Document, Page, pdfjs } from 'react-pdf';
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface ExtractedData {
+  // Certificate Identification (Required)
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
+  
+  // Administrative Details (Required)
   administrativeDetails?: {
     physicalAddress?: string;
     erfNumber?: string;
@@ -25,40 +28,72 @@ interface ExtractedData {
     registrationType?: string;
     registrationDate?: string;
   };
-  installationSummary?: string;
+  
+  // Installation Details (Required)
+  installationDetails?: {
+    supplyType?: string; // Single phase / Three phase
+    supplyVoltage?: string; // e.g., 230V / 400V
+    mainSwitchRating?: string; // e.g., 80A
+    distributionBoardType?: string;
+    numberOfCircuits?: string;
+  };
+  
+  // Scope of Work (Required)
+  scopeOfWork?: string;
+  
+  // Test Results (All Required for Valid COC)
   testResults?: {
     earthElectrode?: {
       resistance?: string;
       method?: string;
-      result?: string;
+      result?: string; // Pass/Fail
     };
     insulationResistance?: {
       phase1ToEarth?: string;
       phase2ToEarth?: string;
       phase3ToEarth?: string;
-      result?: string;
+      phaseToPhase?: string;
+      neutralToEarth?: string;
+      result?: string; // Pass/Fail
     };
     polarity?: {
-      verified?: boolean;
-      result?: string;
+      verified?: string; // Yes/No
+      result?: string; // Pass/Fail
+    };
+    earthContinuity?: {
+      mainBonding?: string;
+      circuitConductors?: string;
+      result?: string; // Pass/Fail
     };
     circuitBreakers?: {
       ratings?: string;
-      tested?: boolean;
-      result?: string;
+      tested?: string; // Yes/No
+      result?: string; // Pass/Fail
     };
     rcdTests?: {
       ratedCurrent?: string;
       tripTime?: string;
-      result?: string;
+      testCurrent?: string;
+      result?: string; // Pass/Fail
+    };
+    shortCircuitCapacity?: {
+      prospectiveFaultCurrent?: string;
+      verified?: string; // Yes/No
+      result?: string; // Pass/Fail
     };
   };
-  scopeOfWork?: string;
+  
+  // Declaration & Signature (Required)
   declarationAndSignature?: {
     certifiedBy?: string;
+    inspectorRegistrationNumber?: string;
     date?: string;
     signature?: string;
   };
+  
+  // Installation Summary (Optional but recommended)
+  installationSummary?: string;
+  
   confidence?: 'high' | 'medium' | 'low';
 }
 
@@ -87,13 +122,16 @@ export function COCPreviewApproval({
     cocIssueDate: '',
     cocType: '',
     administrativeDetails: {},
+    installationDetails: {},
     installationSummary: '',
     testResults: {
       earthElectrode: {},
       insulationResistance: {},
       polarity: {},
+      earthContinuity: {},
       circuitBreakers: {},
-      rcdTests: {}
+      rcdTests: {},
+      shortCircuitCapacity: {}
     },
     scopeOfWork: '',
     declarationAndSignature: {},
@@ -107,6 +145,59 @@ export function COCPreviewApproval({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  // Validation: Check if all required fields are filled
+  const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
+    const missing: string[] = [];
+    
+    // Required Certificate Fields
+    if (!editedData.cocNumber?.trim()) missing.push("COC Number");
+    if (!editedData.cocType?.trim()) missing.push("COC Type");
+    if (!editedData.cocIssueDate?.trim()) missing.push("Issue Date");
+    
+    // Required Administrative Details
+    if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push("Physical Address");
+    if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push("Registered Person");
+    if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push("Registration Number");
+    
+    // Required Installation Details
+    if (!editedData.installationDetails?.supplyType?.trim()) missing.push("Supply Type");
+    if (!editedData.installationDetails?.mainSwitchRating?.trim()) missing.push("Main Switch Rating");
+    
+    // Required Scope of Work
+    if (!editedData.scopeOfWork?.trim()) missing.push("Scope of Work");
+    
+    // Required Test Results
+    if (!editedData.testResults?.earthElectrode?.resistance?.trim()) missing.push("Earth Electrode Resistance");
+    if (!editedData.testResults?.earthElectrode?.result?.trim()) missing.push("Earth Electrode Result");
+    
+    if (!editedData.testResults?.insulationResistance?.phase1ToEarth?.trim()) missing.push("Insulation Resistance (Phase 1)");
+    if (!editedData.testResults?.insulationResistance?.result?.trim()) missing.push("Insulation Resistance Result");
+    
+    if (!editedData.testResults?.polarity?.verified?.trim()) missing.push("Polarity Verification");
+    if (!editedData.testResults?.polarity?.result?.trim()) missing.push("Polarity Result");
+    
+    if (!editedData.testResults?.earthContinuity?.result?.trim()) missing.push("Earth Continuity Result");
+    
+    if (!editedData.testResults?.circuitBreakers?.tested?.trim()) missing.push("Circuit Breakers Tested");
+    if (!editedData.testResults?.circuitBreakers?.result?.trim()) missing.push("Circuit Breakers Result");
+    
+    // RCD is conditional - only required if RCD is installed
+    // We'll make it required for now
+    if (!editedData.testResults?.rcdTests?.result?.trim()) missing.push("RCD Test Result");
+    
+    // Required Declaration
+    if (!editedData.declarationAndSignature?.certifiedBy?.trim()) missing.push("Certified By");
+    if (!editedData.declarationAndSignature?.inspectorRegistrationNumber?.trim()) missing.push("Inspector Registration Number");
+    if (!editedData.declarationAndSignature?.date?.trim()) missing.push("Certification Date");
+    
+    return {
+      isComplete: missing.length === 0,
+      missingFields: missing
+    };
+  };
+
+  const { isComplete, missingFields } = validateCompleteness();
 
   const handleSaveEdits = () => {
     setIsEditing(false);
@@ -290,11 +381,30 @@ export function COCPreviewApproval({
               </Alert>
             )}
             
-            {hasExtractedData && (
-              <Alert>
-                <AlertTriangle className="h-4 w-4" />
+            {hasExtractedData && !isComplete && (
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
                 <AlertDescription>
-                  Review the extracted information carefully. You can edit any incorrect values before proceeding with verification.
+                  <div className="space-y-1">
+                    <p className="font-semibold">Incomplete COC - Missing {missingFields.length} required field(s):</p>
+                    <ul className="list-disc list-inside text-sm">
+                      {missingFields.slice(0, 5).map((field, idx) => (
+                        <li key={idx}>{field}</li>
+                      ))}
+                      {missingFields.length > 5 && (
+                        <li>...and {missingFields.length - 5} more fields</li>
+                      )}
+                    </ul>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {hasExtractedData && isComplete && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  All required fields are complete. Review the information and proceed with verification.
                 </AlertDescription>
               </Alert>
             )}
@@ -399,9 +509,125 @@ export function COCPreviewApproval({
             </div>
           </div>
 
-          {/* Administrative Details */}
-          {editedData.administrativeDetails && (
-            <>
+          {/* Installation Details */}
+          <Separator className="my-6" />
+          <h3 className="text-lg font-semibold">Installation Details</h3>
+          
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="space-y-2">
+              <Label htmlFor="supplyType" className="flex items-center gap-1">
+                Supply Type <span className="text-destructive">*</span>
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="supplyType"
+                  value={editedData.installationDetails?.supplyType || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    installationDetails: {
+                      ...editedData.installationDetails,
+                      supplyType: e.target.value
+                    }
+                  })}
+                  placeholder="e.g., Single Phase / Three Phase"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.installationDetails?.supplyType || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="supplyVoltage">Supply Voltage</Label>
+              {isEditing ? (
+                <Input
+                  id="supplyVoltage"
+                  value={editedData.installationDetails?.supplyVoltage || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    installationDetails: {
+                      ...editedData.installationDetails,
+                      supplyVoltage: e.target.value
+                    }
+                  })}
+                  placeholder="e.g., 230V / 400V"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.installationDetails?.supplyVoltage || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="mainSwitchRating" className="flex items-center gap-1">
+                Main Switch Rating <span className="text-destructive">*</span>
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="mainSwitchRating"
+                  value={editedData.installationDetails?.mainSwitchRating || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    installationDetails: {
+                      ...editedData.installationDetails,
+                      mainSwitchRating: e.target.value
+                    }
+                  })}
+                  placeholder="e.g., 80A"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md font-mono">
+                  {editedData.installationDetails?.mainSwitchRating || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="distributionBoardType">Distribution Board Type</Label>
+              {isEditing ? (
+                <Input
+                  id="distributionBoardType"
+                  value={editedData.installationDetails?.distributionBoardType || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    installationDetails: {
+                      ...editedData.installationDetails,
+                      distributionBoardType: e.target.value
+                    }
+                  })}
+                  placeholder="e.g., Steel, Plastic"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.installationDetails?.distributionBoardType || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="numberOfCircuits">Number of Circuits</Label>
+              {isEditing ? (
+                <Input
+                  id="numberOfCircuits"
+                  value={editedData.installationDetails?.numberOfCircuits || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    installationDetails: {
+                      ...editedData.installationDetails,
+                      numberOfCircuits: e.target.value
+                    }
+                  })}
+                  placeholder="e.g., 12"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.installationDetails?.numberOfCircuits || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+          </div>
               <Separator className="my-6" />
               <h3 className="text-lg font-semibold">Administrative Details</h3>
               
@@ -538,8 +764,7 @@ export function COCPreviewApproval({
                   )}
                 </div>
               </div>
-            </>
-          )}
+            </div>
 
           {/* Scope of Work */}
           <Separator className="my-6" />
@@ -567,9 +792,11 @@ export function COCPreviewApproval({
           {/* Earth Electrode Tests */}
           <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
             <h4 className="font-semibold text-sm">Earth Electrode System</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="earthResistance">Resistance (Ohms)</Label>
+                <Label htmlFor="earthResistance" className="flex items-center gap-1">
+                  Resistance (Ohms) <span className="text-destructive">*</span>
+                </Label>
                 {isEditing ? (
                   <Input
                     id="earthResistance"
@@ -616,15 +843,43 @@ export function COCPreviewApproval({
                   </div>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="earthResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="earthResult"
+                    value={editedData.testResults?.earthElectrode?.result || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        earthElectrode: {
+                          ...editedData.testResults?.earthElectrode,
+                          result: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Pass / Fail"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.earthElectrode?.result || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* Insulation Resistance Tests */}
           <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
             <h4 className="font-semibold text-sm">Insulation Resistance (MΩ)</h4>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="phase1ToEarth">Phase 1 to Earth</Label>
+                <Label htmlFor="phase1ToEarth" className="flex items-center gap-1">
+                  Phase 1 to Earth <span className="text-destructive">*</span>
+                </Label>
                 {isEditing ? (
                   <Input
                     id="phase1ToEarth"
@@ -648,50 +903,144 @@ export function COCPreviewApproval({
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phase2ToEarth">Phase 2 to Earth</Label>
+                <Label htmlFor="insulationResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
                 {isEditing ? (
                   <Input
-                    id="phase2ToEarth"
-                    value={editedData.testResults?.insulationResistance?.phase2ToEarth || ''}
+                    id="insulationResult"
+                    value={editedData.testResults?.insulationResistance?.result || ''}
                     onChange={(e) => setEditedData({
                       ...editedData,
                       testResults: {
                         ...editedData.testResults,
                         insulationResistance: {
                           ...editedData.testResults?.insulationResistance,
-                          phase2ToEarth: e.target.value
+                          result: e.target.value
                         }
                       }
                     })}
-                    placeholder="e.g., >1000"
+                    placeholder="Pass / Fail"
                   />
                 ) : (
-                  <div className="p-2 bg-background rounded-md font-mono">
-                    {editedData.testResults?.insulationResistance?.phase2ToEarth || <span className="text-muted-foreground">Not extracted</span>}
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.insulationResistance?.result || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Polarity Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">Polarity Verification</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="polarityVerified" className="flex items-center gap-1">
+                  Verified <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="polarityVerified"
+                    value={editedData.testResults?.polarity?.verified || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        polarity: {
+                          ...editedData.testResults?.polarity,
+                          verified: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Yes / No"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.polarity?.verified || <span className="text-muted-foreground">Not extracted</span>}
                   </div>
                 )}
               </div>
               <div className="space-y-2">
-                <Label htmlFor="phase3ToEarth">Phase 3 to Earth</Label>
+                <Label htmlFor="polarityResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
                 {isEditing ? (
                   <Input
-                    id="phase3ToEarth"
-                    value={editedData.testResults?.insulationResistance?.phase3ToEarth || ''}
+                    id="polarityResult"
+                    value={editedData.testResults?.polarity?.result || ''}
                     onChange={(e) => setEditedData({
                       ...editedData,
                       testResults: {
                         ...editedData.testResults,
-                        insulationResistance: {
-                          ...editedData.testResults?.insulationResistance,
-                          phase3ToEarth: e.target.value
+                        polarity: {
+                          ...editedData.testResults?.polarity,
+                          result: e.target.value
                         }
                       }
                     })}
-                    placeholder="e.g., >1000"
+                    placeholder="Pass / Fail"
                   />
                 ) : (
-                  <div className="p-2 bg-background rounded-md font-mono">
-                    {editedData.testResults?.insulationResistance?.phase3ToEarth || <span className="text-muted-foreground">Not extracted</span>}
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.polarity?.result || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Earth Continuity Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">Earth Continuity</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="earthContinuity">Continuity Verified</Label>
+                {isEditing ? (
+                  <Input
+                    id="earthContinuity"
+                    value={editedData.testResults?.earthContinuity?.mainBonding || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        earthContinuity: {
+                          ...editedData.testResults?.earthContinuity,
+                          mainBonding: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., Yes"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.earthContinuity?.mainBonding || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="earthContinuityResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="earthContinuityResult"
+                    value={editedData.testResults?.earthContinuity?.result || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        earthContinuity: {
+                          ...editedData.testResults?.earthContinuity,
+                          result: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Pass / Fail"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.earthContinuity?.result || <span className="text-muted-foreground">Not extracted</span>}
                   </div>
                 )}
               </div>
@@ -701,7 +1050,7 @@ export function COCPreviewApproval({
           {/* Circuit Breaker Tests */}
           <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
             <h4 className="font-semibold text-sm">Circuit Breakers</h4>
-            <div className="grid grid-cols-1 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="cbRatings">Ratings & Details</Label>
                 {isEditing ? (
@@ -726,13 +1075,65 @@ export function COCPreviewApproval({
                   </div>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="cbTested" className="flex items-center gap-1">
+                  Tested <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="cbTested"
+                    value={editedData.testResults?.circuitBreakers?.tested || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        circuitBreakers: {
+                          ...editedData.testResults?.circuitBreakers,
+                          tested: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Yes / No"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.circuitBreakers?.tested || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cbResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="cbResult"
+                    value={editedData.testResults?.circuitBreakers?.result || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        circuitBreakers: {
+                          ...editedData.testResults?.circuitBreakers,
+                          result: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Pass / Fail"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.circuitBreakers?.result || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
           {/* RCD Tests */}
           <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
             <h4 className="font-semibold text-sm">RCD (Residual Current Device) Tests</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="rcdCurrent">Rated Current (mA)</Label>
                 {isEditing ? (
@@ -781,6 +1182,32 @@ export function COCPreviewApproval({
                   </div>
                 )}
               </div>
+              <div className="space-y-2">
+                <Label htmlFor="rcdResult" className="flex items-center gap-1">
+                  Result <span className="text-destructive">*</span>
+                </Label>
+                {isEditing ? (
+                  <Input
+                    id="rcdResult"
+                    value={editedData.testResults?.rcdTests?.result || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        rcdTests: {
+                          ...editedData.testResults?.rcdTests,
+                          result: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="Pass / Fail / N/A"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.rcdTests?.result || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
 
@@ -789,7 +1216,9 @@ export function COCPreviewApproval({
           <h3 className="text-lg font-semibold">Declaration & Certification</h3>
           <div className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="certifiedBy">Certified By</Label>
+              <Label htmlFor="certifiedBy" className="flex items-center gap-1">
+                Certified By <span className="text-destructive">*</span>
+              </Label>
               {isEditing ? (
                 <Input
                   id="certifiedBy"
@@ -810,7 +1239,32 @@ export function COCPreviewApproval({
               )}
             </div>
             <div className="space-y-2">
-              <Label htmlFor="certDate">Certification Date</Label>
+              <Label htmlFor="inspectorRegNumber" className="flex items-center gap-1">
+                Inspector Registration Number <span className="text-destructive">*</span>
+              </Label>
+              {isEditing ? (
+                <Input
+                  id="inspectorRegNumber"
+                  value={editedData.declarationAndSignature?.inspectorRegistrationNumber || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    declarationAndSignature: {
+                      ...editedData.declarationAndSignature,
+                      inspectorRegistrationNumber: e.target.value
+                    }
+                  })}
+                  placeholder="Inspector registration number"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md font-mono">
+                  {editedData.declarationAndSignature?.inspectorRegistrationNumber || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="certDate" className="flex items-center gap-1">
+                Certification Date <span className="text-destructive">*</span>
+              </Label>
               {isEditing ? (
                 <Input
                   id="certDate"
@@ -831,7 +1285,6 @@ export function COCPreviewApproval({
               )}
             </div>
           </div>
-            </div>
           </div>
         </div>
 
@@ -851,7 +1304,7 @@ export function COCPreviewApproval({
           <Button
             variant="default"
             onClick={handleApprove}
-            disabled={isProcessing || !editedData.cocNumber}
+            disabled={isProcessing || !isComplete}
             className="gap-2"
           >
             <CheckCircle2 className="h-4 w-4" />
