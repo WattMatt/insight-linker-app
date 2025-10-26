@@ -6,10 +6,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Upload, Plus, Trash2, Eye, X, MapPin } from "lucide-react";
+import { Upload, Plus, Trash2, Eye, X, MapPin, Pencil, Square, Circle as CircleIcon, Type, Eraser, Palette, Download, MousePointer } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCamera } from "@/hooks/useCamera";
+import { Canvas as FabricCanvas, PencilBrush, Circle, Rect, Textbox, Path } from "fabric";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
 
@@ -26,17 +28,21 @@ interface Pin {
   images: Array<{ url: string; name: string }>;
 }
 
+type DrawingTool = "select" | "pin" | "draw" | "rectangle" | "circle" | "text" | "eraser";
+
 interface SiteDrawingInspectionProps {
   inspectionId: string;
   initialPdfUrl?: string;
   initialPins?: Pin[];
-  onDataChange?: (pdfUrl: string, pins: Pin[]) => void;
+  initialCanvasData?: string;
+  onDataChange?: (pdfUrl: string, pins: Pin[], canvasData?: string) => void;
 }
 
 export const SiteDrawingInspection = ({
   inspectionId,
   initialPdfUrl,
   initialPins = [],
+  initialCanvasData,
   onDataChange,
 }: SiteDrawingInspectionProps) => {
   const [pdfUrl, setPdfUrl] = useState<string>(initialPdfUrl || "");
@@ -45,15 +51,103 @@ export const SiteDrawingInspection = ({
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [pins, setPins] = useState<Pin[]>(initialPins);
   const [selectedPin, setSelectedPin] = useState<Pin | null>(null);
-  const [isPinMode, setIsPinMode] = useState(false);
+  const [activeTool, setActiveTool] = useState<DrawingTool>("select");
   const [scale, setScale] = useState(1);
   const [uploading, setUploading] = useState(false);
+  const [drawingColor, setDrawingColor] = useState("#ef4444");
+  const [fabricCanvas, setFabricCanvas] = useState<FabricCanvas | null>(null);
   const pageRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const pdfCanvasRef = useRef<HTMLDivElement>(null);
   const { isNative, selectImages } = useCamera();
 
   useEffect(() => {
-    onDataChange?.(pdfUrl, pins);
-  }, [pdfUrl, pins]);
+    const canvasData = fabricCanvas?.toJSON();
+    onDataChange?.(pdfUrl, pins, JSON.stringify(canvasData));
+  }, [pdfUrl, pins, fabricCanvas]);
+
+  // Initialize Fabric canvas
+  useEffect(() => {
+    if (!canvasRef.current || !pdfUrl) return;
+
+    const canvas = new FabricCanvas(canvasRef.current, {
+      width: 800,
+      height: 600,
+      selection: activeTool === "select",
+    });
+
+    // Load initial canvas data if available
+    if (initialCanvasData) {
+      try {
+        canvas.loadFromJSON(JSON.parse(initialCanvasData), () => {
+          canvas.renderAll();
+        });
+      } catch (error) {
+        console.error("Error loading canvas data:", error);
+      }
+    }
+
+    setFabricCanvas(canvas);
+
+    return () => {
+      canvas.dispose();
+    };
+  }, [pdfUrl]);
+
+  // Handle tool changes
+  useEffect(() => {
+    if (!fabricCanvas) return;
+
+    fabricCanvas.isDrawingMode = activeTool === "draw";
+    fabricCanvas.selection = activeTool === "select";
+
+    if (activeTool === "draw") {
+      const brush = new PencilBrush(fabricCanvas);
+      brush.color = drawingColor;
+      brush.width = 3;
+      fabricCanvas.freeDrawingBrush = brush;
+    } else if (activeTool === "eraser") {
+      fabricCanvas.isDrawingMode = true;
+      const brush = new PencilBrush(fabricCanvas);
+      brush.color = "#ffffff";
+      brush.width = 10;
+      fabricCanvas.freeDrawingBrush = brush;
+    } else if (activeTool === "rectangle") {
+      const rect = new Rect({
+        left: 100,
+        top: 100,
+        fill: "transparent",
+        stroke: drawingColor,
+        strokeWidth: 2,
+        width: 100,
+        height: 100,
+      });
+      fabricCanvas.add(rect);
+      setActiveTool("select");
+    } else if (activeTool === "circle") {
+      const circle = new Circle({
+        left: 100,
+        top: 100,
+        fill: "transparent",
+        stroke: drawingColor,
+        strokeWidth: 2,
+        radius: 50,
+      });
+      fabricCanvas.add(circle);
+      setActiveTool("select");
+    } else if (activeTool === "text") {
+      const text = new Textbox("Type here...", {
+        left: 100,
+        top: 100,
+        fill: drawingColor,
+        fontSize: 20,
+        width: 200,
+      });
+      fabricCanvas.add(text);
+      fabricCanvas.setActiveObject(text);
+      setActiveTool("select");
+    }
+  }, [activeTool, drawingColor, fabricCanvas]);
 
   const handlePdfUpload = async (file: File) => {
     if (!file.type.includes("pdf")) {
@@ -88,7 +182,7 @@ export const SiteDrawingInspection = ({
   };
 
   const handlePageClick = (event: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPinMode || !pageRef.current) return;
+    if (activeTool !== "pin" || !pageRef.current) return;
 
     const rect = pageRef.current.getBoundingClientRect();
     const x = ((event.clientX - rect.left) / rect.width) * 100;
@@ -106,7 +200,7 @@ export const SiteDrawingInspection = ({
 
     setPins([...pins, newPin]);
     setSelectedPin(newPin);
-    setIsPinMode(false);
+    setActiveTool("select");
   };
 
   const updatePin = (pinId: string, updates: Partial<Pin>) => {
@@ -233,25 +327,106 @@ export const SiteDrawingInspection = ({
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
                   <Button
-                    variant={isPinMode ? "default" : "outline"}
-                    onClick={() => setIsPinMode(!isPinMode)}
+                    variant={activeTool === "select" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("select")}
                   >
-                    <MapPin className="mr-2 h-4 w-4" />
-                    {isPinMode ? "Click to Place Pin" : "Add Pin"}
+                    <MousePointer className="mr-2 h-4 w-4" />
+                    Select
                   </Button>
                   <Button
+                    variant={activeTool === "pin" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("pin")}
+                  >
+                    <MapPin className="mr-2 h-4 w-4" />
+                    {activeTool === "pin" ? "Click to Place Pin" : "Add Pin"}
+                  </Button>
+                  <Button
+                    variant={activeTool === "draw" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("draw")}
+                  >
+                    <Pencil className="mr-2 h-4 w-4" />
+                    Draw
+                  </Button>
+                  <Button
+                    variant={activeTool === "rectangle" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("rectangle")}
+                  >
+                    <Square className="mr-2 h-4 w-4" />
+                    Rectangle
+                  </Button>
+                  <Button
+                    variant={activeTool === "circle" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("circle")}
+                  >
+                    <CircleIcon className="mr-2 h-4 w-4" />
+                    Circle
+                  </Button>
+                  <Button
+                    variant={activeTool === "text" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("text")}
+                  >
+                    <Type className="mr-2 h-4 w-4" />
+                    Text
+                  </Button>
+                  <Button
+                    variant={activeTool === "eraser" ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setActiveTool("eraser")}
+                  >
+                    <Eraser className="mr-2 h-4 w-4" />
+                    Eraser
+                  </Button>
+                  <Popover>
+                    <PopoverTrigger asChild>
+                      <Button variant="outline" size="sm">
+                        <Palette className="mr-2 h-4 w-4" />
+                        <div className="h-4 w-4 rounded border" style={{ backgroundColor: drawingColor }} />
+                      </Button>
+                    </PopoverTrigger>
+                    <PopoverContent className="w-auto p-3">
+                      <div className="grid grid-cols-5 gap-2">
+                        {["#ef4444", "#f59e0b", "#10b981", "#3b82f6", "#8b5cf6", "#ec4899", "#000000", "#ffffff"].map(color => (
+                          <button
+                            key={color}
+                            className="h-8 w-8 rounded border-2 hover:scale-110 transition-transform"
+                            style={{ backgroundColor: color, borderColor: color === drawingColor ? "#000" : "#ccc" }}
+                            onClick={() => setDrawingColor(color)}
+                          />
+                        ))}
+                      </div>
+                    </PopoverContent>
+                  </Popover>
+                  <Button
                     variant="outline"
+                    size="sm"
                     onClick={() => setScale(s => Math.min(s + 0.2, 2))}
                   >
                     Zoom In
                   </Button>
                   <Button
                     variant="outline"
+                    size="sm"
                     onClick={() => setScale(s => Math.max(s - 0.2, 0.5))}
                   >
                     Zoom Out
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => {
+                      fabricCanvas?.clear();
+                      toast.success("Canvas cleared");
+                    }}
+                  >
+                    Clear Drawings
                   </Button>
                 </div>
                 <div className="text-sm text-muted-foreground">
@@ -263,42 +438,67 @@ export const SiteDrawingInspection = ({
                 ref={pageRef}
                 className="relative border rounded-lg overflow-auto max-h-[600px] bg-muted/30"
                 onClick={handlePageClick}
-                style={{ cursor: isPinMode ? "crosshair" : "default" }}
+                style={{ cursor: activeTool === "pin" ? "crosshair" : "default" }}
               >
-                <Document
-                  file={pdfUrl}
-                  onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                >
-                  <Page
-                    pageNumber={currentPage}
-                    scale={scale}
-                    renderTextLayer={false}
-                    renderAnnotationLayer={false}
-                  />
-                </Document>
-
-                {/* Render pins */}
-                {pins.map((pin) => (
-                  <div
-                    key={pin.id}
-                    className="absolute transform -translate-x-1/2 -translate-y-full cursor-pointer group"
-                    style={{
-                      left: `${pin.x}%`,
-                      top: `${pin.y}%`,
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setSelectedPin(pin);
+                <div ref={pdfCanvasRef} className="relative">
+                  <Document
+                    file={pdfUrl}
+                    onLoadSuccess={({ numPages }) => {
+                      setNumPages(numPages);
+                      // Adjust canvas size to match PDF
+                      if (canvasRef.current && pdfCanvasRef.current) {
+                        setTimeout(() => {
+                          const pdfCanvas = pdfCanvasRef.current?.querySelector('canvas');
+                          if (pdfCanvas && fabricCanvas) {
+                            fabricCanvas.setWidth(pdfCanvas.width);
+                            fabricCanvas.setHeight(pdfCanvas.height);
+                          }
+                        }, 100);
+                      }
                     }}
                   >
-                    <div className="relative">
-                      <MapPin className="h-8 w-8 text-destructive fill-destructive drop-shadow-lg group-hover:scale-110 transition-transform" />
-                      <div className="absolute top-1 left-1/2 transform -translate-x-1/2 text-white text-xs font-bold">
-                        {pin.number}
+                    <Page
+                      pageNumber={currentPage}
+                      scale={scale}
+                      renderTextLayer={false}
+                      renderAnnotationLayer={false}
+                    />
+                  </Document>
+
+                  {/* Fabric Canvas Overlay */}
+                  <canvas
+                    ref={canvasRef}
+                    className="absolute top-0 left-0 pointer-events-auto"
+                    style={{ 
+                      pointerEvents: activeTool === "pin" ? "none" : "auto",
+                      zIndex: 10
+                    }}
+                  />
+
+                  {/* Render pins */}
+                  {pins.map((pin) => (
+                    <div
+                      key={pin.id}
+                      className="absolute transform -translate-x-1/2 -translate-y-full cursor-pointer group"
+                      style={{
+                        left: `${pin.x}%`,
+                        top: `${pin.y}%`,
+                        zIndex: 20
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setSelectedPin(pin);
+                      }}
+                    >
+                      <div className="relative">
+                        <MapPin className="h-8 w-8 text-destructive fill-destructive drop-shadow-lg group-hover:scale-110 transition-transform" />
+                        <div className="absolute top-1 left-1/2 transform -translate-x-1/2 text-white text-xs font-bold">
+                          {pin.number}
+                        </div>
                       </div>
                     </div>
-                  </div>
-                ))}
+                  ))}
+                </div>
               </div>
 
               {numPages > 1 && (

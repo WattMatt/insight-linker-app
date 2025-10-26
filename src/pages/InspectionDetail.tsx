@@ -1543,14 +1543,25 @@ const InspectionDetail = () => {
           </div>
         </div>
         <div className="flex gap-2">
-          <ComprehensiveInspectionReport
-            inspectionData={inspection}
-            siteName={siteData?.siteName || 'Unknown Site'}
-            subsectionName={subsectionData?.name || 'Unknown Subsection'}
-            templateId={templateId}
-            subsectionId={subsectionId}
-            siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
-          />
+          {templateCategory === "Site Drawing" ? (
+            <SiteDrawingReport
+              inspectionData={inspection}
+              siteName={siteData?.siteName || 'Unknown Site'}
+              subsectionName={subsectionData?.name || 'Unknown Subsection'}
+              pdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf || ''}
+              pins={(inspection?.jsonData as any)?.siteDrawingPins || []}
+              canvasData={(inspection?.jsonData as any)?.siteDrawingCanvas}
+            />
+          ) : (
+            <ComprehensiveInspectionReport
+              inspectionData={inspection}
+              siteName={siteData?.siteName || 'Unknown Site'}
+              subsectionName={subsectionData?.name || 'Unknown Subsection'}
+              templateId={templateId}
+              subsectionId={subsectionId}
+              siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
+            />
+          )}
           <Button 
             variant="outline" 
             onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
@@ -1592,7 +1603,8 @@ const InspectionDetail = () => {
               inspectionId={inspectionId!}
               initialPdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf}
               initialPins={(inspection?.jsonData as any)?.siteDrawingPins || []}
-              onDataChange={(pdfUrl, pins) => {
+              initialCanvasData={(inspection?.jsonData as any)?.siteDrawingCanvas}
+              onDataChange={(pdfUrl, pins, canvasData) => {
                 setInspection(prev => {
                   if (!prev) return null;
                   return {
@@ -1600,7 +1612,8 @@ const InspectionDetail = () => {
                     jsonData: {
                       ...prev.jsonData,
                       siteDrawingPdf: pdfUrl,
-                      siteDrawingPins: pins
+                      siteDrawingPins: pins,
+                      siteDrawingCanvas: canvasData
                     } as any
                   };
                 });

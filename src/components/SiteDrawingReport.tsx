@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { pdfjs } from "react-pdf";
+import { Canvas as FabricCanvas } from "fabric";
 
 interface Pin {
   id: string;
@@ -22,6 +23,7 @@ interface SiteDrawingReportProps {
   subsectionName: string;
   pdfUrl: string;
   pins: Pin[];
+  canvasData?: string;
 }
 
 export const SiteDrawingReport = ({
@@ -30,6 +32,7 @@ export const SiteDrawingReport = ({
   subsectionName,
   pdfUrl,
   pins,
+  canvasData,
 }: SiteDrawingReportProps) => {
   const [generating, setGenerating] = useState(false);
 
@@ -148,6 +151,42 @@ export const SiteDrawingReport = ({
             context.textBaseline = 'middle';
             context.fillText(pin.number.toString(), x, y - 20);
           });
+
+          // Draw canvas annotations if available
+          if (canvasData) {
+            try {
+              const tempCanvas = document.createElement('canvas');
+              tempCanvas.width = canvas.width;
+              tempCanvas.height = canvas.height;
+              const fabricCanvasTemp = new FabricCanvas(tempCanvas);
+              
+              await new Promise((resolve) => {
+                fabricCanvasTemp.loadFromJSON(JSON.parse(canvasData), () => {
+                  // Scale canvas objects to match PDF size
+                  const objects = fabricCanvasTemp.getObjects();
+                  const scaleX = canvas.width / fabricCanvasTemp.width!;
+                  const scaleY = canvas.height / fabricCanvasTemp.height!;
+                  
+                  objects.forEach(obj => {
+                    obj.scaleX = (obj.scaleX || 1) * scaleX;
+                    obj.scaleY = (obj.scaleY || 1) * scaleY;
+                    obj.left = (obj.left || 0) * scaleX;
+                    obj.top = (obj.top || 0) * scaleY;
+                    obj.setCoords();
+                  });
+                  
+                  fabricCanvasTemp.renderAll();
+                  
+                  // Draw fabric canvas onto the PDF canvas
+                  context.drawImage(tempCanvas, 0, 0);
+                  fabricCanvasTemp.dispose();
+                  resolve(null);
+                });
+              });
+            } catch (error) {
+              console.error('Error rendering canvas annotations:', error);
+            }
+          }
 
           // Add annotated drawing to PDF
           const imgData = canvas.toDataURL('image/jpeg', 0.8);
