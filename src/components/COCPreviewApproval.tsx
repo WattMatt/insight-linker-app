@@ -126,11 +126,9 @@ export function COCPreviewApproval({
   const handleNextPage = () => setPageNumber(prev => Math.min(prev + 1, numPages));
 
   const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
-    }
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
   };
 
   const handleMouseDown = (e: React.MouseEvent) => {
