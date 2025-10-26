@@ -126,7 +126,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       setGenerating(true);
       toast.info("Generating site summary report...");
 
-      // Fetch all necessary data
+      // Fetch all necessary data including COC validations
       const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes] = await Promise.all([
         supabase.from("sites").select("*, clients(name)").eq("id", siteId).single(),
         supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
@@ -142,6 +142,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const allInspections = inspectionsRes.data || [];
       const siteDocuments = docsRes.data || [];
       const subsectionDocuments = subsectionDocsRes.data || [];
+      
+      // Get COC validations for subsections on this site
+      const subsectionIds = subsections.map(s => s.id);
+      const cocValidationsQuery = await supabase
+        .from("coc_validations")
+        .select("*")
+        .in("subsection_id", subsectionIds)
+        .order("validated_at", { ascending: false });
+      
+      const cocValidations = cocValidationsQuery.data || [];
 
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -303,6 +313,185 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         doc.setTextColor(150, 150, 150);
         doc.text(`Page ${pageNumber}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
         pageNumber++;
+      }
+
+      // ===== ANNEXES: COC VERIFICATION REPORTS =====
+      if (cocValidations.length > 0) {
+        // Add annexes divider page
+        doc.addPage();
+        doc.setFillColor(44, 62, 80);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        doc.setTextColor(255, 255, 255);
+        doc.setFontSize(32);
+        doc.setFont(undefined, 'bold');
+        doc.text('ANNEXES', pageWidth / 2, pageHeight / 2 - 10, { align: 'center' });
+        
+        doc.setFontSize(16);
+        doc.setFont(undefined, 'normal');
+        doc.text('COC Verification Reports', pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
+        
+        doc.setFontSize(12);
+        doc.text(`${cocValidations.length} Report${cocValidations.length !== 1 ? 's' : ''}`, pageWidth / 2, pageHeight / 2 + 25, { align: 'center' });
+
+        // Add each COC validation report as an annex
+        cocValidations.forEach((validation, annexIndex) => {
+          const report = (validation.report_data || {}) as any;
+          const status = report.overallStatus || report.status || validation.status;
+          const annexNumber = annexIndex + 1;
+          
+          // Annex Cover Page
+          doc.addPage();
+          doc.setFillColor(63, 81, 181);
+          doc.rect(0, 0, pageWidth, pageHeight, 'F');
+          
+          doc.setTextColor(255, 255, 255);
+          doc.setFontSize(24);
+          doc.setFont(undefined, 'bold');
+          doc.text(`ANNEX ${annexNumber}`, pageWidth / 2, 60, { align: 'center' });
+          
+          doc.setFontSize(20);
+          doc.setFont(undefined, 'normal');
+          doc.text('COC Verification Report', pageWidth / 2, 85, { align: 'center' });
+          
+          if (report.cocNumber) {
+            doc.setFontSize(14);
+            doc.text(`COC #${report.cocNumber}`, pageWidth / 2, 105, { align: 'center' });
+          }
+          
+          doc.setFontSize(12);
+          doc.text(`Validated: ${new Date(validation.validated_at).toLocaleDateString()}`, pageWidth / 2, 125, { align: 'center' });
+          
+          // Status Badge
+          doc.setFontSize(28);
+          doc.setFont(undefined, 'bold');
+          const statusText = status?.toUpperCase() || 'UNKNOWN';
+          let statusColor: [number, number, number] = [200, 200, 200];
+          if (status?.toLowerCase() === 'pass') statusColor = [76, 175, 80];
+          else if (status?.toLowerCase() === 'fail') statusColor = [220, 53, 69];
+          doc.setTextColor(...statusColor);
+          doc.text(statusText, pageWidth / 2, 155, { align: 'center' });
+          
+          // Report Details Page
+          doc.addPage();
+          doc.setFillColor(245, 245, 245);
+          doc.rect(0, 0, pageWidth, pageHeight, 'F');
+          
+          let yPos = 20;
+          doc.setTextColor(0, 0, 0);
+          doc.setFontSize(16);
+          doc.setFont(undefined, 'bold');
+          doc.text(`Annex ${annexNumber} - Verification Details`, 20, yPos);
+          yPos += 10;
+          
+          // Summary
+          if (report.installationSummary || report.overallAssessment) {
+            doc.setFontSize(12);
+            doc.setTextColor(63, 81, 181);
+            doc.text('Summary', 20, yPos);
+            yPos += 7;
+            
+            doc.setFontSize(9);
+            doc.setTextColor(33, 33, 33);
+            doc.setFont(undefined, 'normal');
+            
+            if (report.installationSummary) {
+              const summaryLines = doc.splitTextToSize(report.installationSummary, pageWidth - 40);
+              doc.text(summaryLines, 20, yPos);
+              yPos += (summaryLines.length * 5) + 5;
+            }
+            
+            if (report.overallAssessment) {
+              const assessmentLines = doc.splitTextToSize(report.overallAssessment, pageWidth - 40);
+              doc.text(assessmentLines, 20, yPos);
+              yPos += (assessmentLines.length * 5) + 10;
+            }
+          }
+          
+          // Critical Failures
+          if (report.criticalFailures && report.criticalFailures.length > 0) {
+            if (yPos > 240) {
+              doc.addPage();
+              doc.setFillColor(245, 245, 245);
+              doc.rect(0, 0, pageWidth, pageHeight, 'F');
+              yPos = 20;
+            }
+            
+            doc.setFontSize(12);
+            doc.setTextColor(220, 53, 69);
+            doc.setFont(undefined, 'bold');
+            doc.text(`Critical Failures (${report.criticalFailures.length})`, 20, yPos);
+            yPos += 7;
+            
+            doc.setFontSize(8);
+            doc.setFont(undefined, 'normal');
+            
+            report.criticalFailures.slice(0, 5).forEach((failure: any, idx: number) => {
+              if (yPos > 270) {
+                doc.addPage();
+                doc.setFillColor(245, 245, 245);
+                doc.rect(0, 0, pageWidth, pageHeight, 'F');
+                yPos = 20;
+              }
+              
+              doc.setTextColor(220, 53, 69);
+              doc.setFont(undefined, 'bold');
+              doc.text(`${idx + 1}. ${failure.clause}`, 20, yPos);
+              yPos += 5;
+              
+              doc.setTextColor(33, 33, 33);
+              doc.setFont(undefined, 'normal');
+              const desc = doc.splitTextToSize(failure.description, pageWidth - 40);
+              doc.text(desc, 20, yPos);
+              yPos += (desc.length * 4) + 5;
+            });
+            
+            if (report.criticalFailures.length > 5) {
+              doc.setTextColor(100, 100, 100);
+              doc.setFont(undefined, 'italic');
+              doc.text(`... and ${report.criticalFailures.length - 5} more failures`, 20, yPos);
+              yPos += 7;
+            }
+          }
+          
+          // Recommendations
+          if (report.recommendations && report.recommendations.length > 0) {
+            if (yPos > 240) {
+              doc.addPage();
+              doc.setFillColor(245, 245, 245);
+              doc.rect(0, 0, pageWidth, pageHeight, 'F');
+              yPos = 20;
+            }
+            
+            doc.setFontSize(12);
+            doc.setTextColor(63, 81, 181);
+            doc.setFont(undefined, 'bold');
+            doc.text('Recommendations', 20, yPos);
+            yPos += 7;
+            
+            doc.setFontSize(8);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(33, 33, 33);
+            
+            report.recommendations.slice(0, 3).forEach((rec: string, idx: number) => {
+              if (yPos > 270) {
+                doc.addPage();
+                doc.setFillColor(245, 245, 245);
+                doc.rect(0, 0, pageWidth, pageHeight, 'F');
+                yPos = 20;
+              }
+              
+              const recLines = doc.splitTextToSize(`${idx + 1}. ${rec}`, pageWidth - 40);
+              doc.text(recLines, 20, yPos);
+              yPos += (recLines.length * 4) + 4;
+            });
+          }
+          
+          // Footer for annex pages
+          doc.setFontSize(8);
+          doc.setTextColor(150, 150, 150);
+          doc.text(`Annex ${annexNumber} - COC #${report.cocNumber || 'N/A'}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        });
       }
 
       doc.save(`${siteName}_Summary_Report.pdf`);
