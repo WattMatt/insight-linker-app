@@ -82,6 +82,7 @@ interface ExtractedData {
     physicalAddress?: string;
     buildingName?: string;
     installationType?: string;
+    electricitySupplySystem?: string;
     voltage?: string;
     numberOfPhases?: string;
     phaseRotation?: string;
@@ -91,6 +92,11 @@ interface ExtractedData {
     currentRating?: string;
     shortCircuitRating?: string;
     earthLeakageRating?: string;
+    surgeProtectionInstalled?: string;
+    lightningProtectionInstalled?: string;
+    alternativePowerSupply?: string;
+    specializedInstallation?: string;
+    voltageAbove1kV?: string;
     supplyInstalled?: string;
     supplyTested?: string;
     supplyOperational?: string;
@@ -664,8 +670,23 @@ export function COCPreviewApproval({
               {/* Installation Details */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  Installation Details (Section 2)
+                  Section 2 - Installation Details
                 </h3>
+                <div className="space-y-1">
+                  <Label className="text-xs font-semibold">Type of electricity supply system</Label>
+                  <Input
+                    value={editedData.installationDetails?.electricitySupplySystem || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      installationDetails: {
+                        ...editedData.installationDetails,
+                        electricitySupplySystem: e.target.value
+                      }
+                    })}
+                    className="h-8 text-sm"
+                    placeholder="TN-S / TN-C-S / TN-C / TT / IT"
+                  />
+                </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold">Voltage</Label>
@@ -801,6 +822,86 @@ export function COCPreviewApproval({
                       className="h-8 text-sm"
                       placeholder="N/A or 30mA"
                     />
+                  </div>
+                </div>
+                <div className="border-t pt-3 mt-3">
+                  <h4 className="text-xs font-semibold mb-2">Additional Installation Questions</h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Is surge protection installed?</Label>
+                      <Input
+                        value={editedData.installationDetails?.surgeProtectionInstalled || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            surgeProtectionInstalled: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Is lightning protection installed?</Label>
+                      <Input
+                        value={editedData.installationDetails?.lightningProtectionInstalled || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            lightningProtectionInstalled: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Is alternative power supply installed?</Label>
+                      <Input
+                        value={editedData.installationDetails?.alternativePowerSupply || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            alternativePowerSupply: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Specialized electrical installation?</Label>
+                      <Input
+                        value={editedData.installationDetails?.specializedInstallation || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            specializedInstallation: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1 col-span-2">
+                      <Label className="text-xs">Installation at voltage above 1 kV?</Label>
+                      <Input
+                        value={editedData.installationDetails?.voltageAbove1kV || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            voltageAbove1kV: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
                   </div>
                 </div>
                 <div className="border-t pt-3 mt-3">

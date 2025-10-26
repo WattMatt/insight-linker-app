@@ -93,6 +93,7 @@ Extract ALL information from this TWO-PAGE ECA Certificate of Compliance documen
 - Physical address
 - Name of building
 - Installation type: Temporary / Permanent
+- **Type of electricity supply system:** TN-S / TN-C-S / TN-C / TT / IT
 - **Characteristics of supply:**
   - Voltage: 230V / 400V / 525V / Other
   - Number of phases: One / Two / Three
@@ -104,6 +105,12 @@ Extract ALL information from this TWO-PAGE ECA Certificate of Compliance documen
   - Current rating (e.g., "80A")
   - Short-circuit/withstand rating (e.g., "6 KA")
   - Rated earth leakage tripping current IΔn (e.g., "30 mA" or "N/A")
+- **Additional Installation Questions:**
+  - Is surge protection installed (see 6.7.6 and annex I): Yes/No
+  - Is lightning protection installed (see 6.7.7 and annex I): Yes/No
+  - Is alternative power supply installed? (See 7.12.): Yes/No
+  - Is any part of the installation a specialized electrical installation?: Yes/No
+  - Is any part of the installation at a voltage above 1 kV?: Yes/No
 - Connection to supply: Installed Yes/No, Tested Yes/No, Operational Yes/No
 
 **Section 3 - Description of Installation Covered by This Report:**
@@ -224,6 +231,7 @@ Return ONLY this JSON structure with ALL extracted data:
     "physicalAddress": "string",
     "buildingName": "string or null",
     "installationType": "Temporary | Permanent | null",
+    "electricitySupplySystem": "TN-S | TN-C-S | TN-C | TT | IT | null",
     "voltage": "230V | 400V | 525V | Other",
     "numberOfPhases": "One | Two | Three",
     "phaseRotation": "Clockwise | Anticlockwise | null",
@@ -233,6 +241,11 @@ Return ONLY this JSON structure with ALL extracted data:
     "currentRating": "string",
     "shortCircuitRating": "string or null",
     "earthLeakageRating": "string or null",
+    "surgeProtectionInstalled": "Yes | No | null",
+    "lightningProtectionInstalled": "Yes | No | null",
+    "alternativePowerSupply": "Yes | No | null",
+    "specializedInstallation": "Yes | No | null",
+    "voltageAbove1kV": "Yes | No | null",
     "supplyInstalled": "Yes | No | null",
     "supplyTested": "Yes | No | null",
     "supplyOperational": "Yes | No | null"
