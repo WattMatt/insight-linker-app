@@ -461,8 +461,15 @@ export function COCPreviewApproval({
                     </Label>
                     <Input
                       type="date"
-                      value={editedData.cocIssueDate || ''}
-                      onChange={(e) => setEditedData({ ...editedData, cocIssueDate: e.target.value })}
+                      value={editedData.cocIssueDate || editedData.testReport?.issueDate || ''}
+                      onChange={(e) => setEditedData({ 
+                        ...editedData, 
+                        cocIssueDate: e.target.value,
+                        testReport: {
+                          ...editedData.testReport,
+                          issueDate: e.target.value
+                        }
+                      })}
                       className="h-9"
                     />
                   </div>
