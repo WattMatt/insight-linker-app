@@ -1303,7 +1303,7 @@ export function COCPreviewApproval({
                         }
                       })}
                       className="h-8 text-sm"
-                      placeholder=">90"
+                      placeholder="∞ or >∞"
                     />
                   </div>
                   <div className="space-y-1">

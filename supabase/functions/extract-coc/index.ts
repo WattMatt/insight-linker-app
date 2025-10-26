@@ -153,7 +153,7 @@ Extract the circuit/point counts from the table. Each item has "New" and "Existi
 5. Neutral loop impedance at main/local switch (Ω value)
 6. Prospective short-circuit current PSCC (KA value, Calculated/Measured)
 7. Elevated voltage between neutral and earth (V value)
-8. Insulation resistance (MΩ value)
+8. Insulation resistance (MΩ value - often shown as infinity symbol ∞ or >∞, extract as "∞" or ">∞")
 9. Voltage at DB no load for each phase to neutral (V values)
 10. Voltage at DB with full load for each phase to neutral (V values)
 11. Earth leakage unit operation value (mA and % or N/A)
