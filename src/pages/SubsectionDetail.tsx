@@ -1248,47 +1248,8 @@ const SubsectionDetail = () => {
     }
 
     try {
-      // For public documents, use direct link with download attribute
-      if (url.includes('/storage/v1/object/public/')) {
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = fileName;
-        link.target = '_blank';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        toast.success(`Downloading ${fileName}`);
-        return;
-      }
-
-      // For private documents, create signed URL
-      let filePath = '';
-      
-      if (url.includes('/storage/v1/object/sign/documents/')) {
-        filePath = url.split('/storage/v1/object/sign/documents/')[1].split('?')[0];
-      } else if (url.includes('documents/')) {
-        filePath = url.split('documents/')[1].split('?')[0];
-      }
-
-      if (!filePath) {
-        console.error("Could not extract file path from URL:", url);
-        toast.error("Invalid document URL format");
-        return;
-      }
-
-      const { data: signedData, error: signError } = await supabase
-        .storage
-        .from('documents')
-        .createSignedUrl(decodeURIComponent(filePath), 3600);
-
-      if (signError || !signedData) {
-        console.error("Error creating signed URL:", signError);
-        toast.error("Failed to access document");
-        return;
-      }
-
       const link = document.createElement('a');
-      link.href = signedData.signedUrl;
+      link.href = url;
       link.download = fileName;
       link.target = '_blank';
       document.body.appendChild(link);
