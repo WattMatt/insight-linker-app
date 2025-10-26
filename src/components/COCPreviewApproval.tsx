@@ -6,95 +6,139 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, XCircle, AlertTriangle, FileText, Edit2, Save, X, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, FileText, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, X } from "lucide-react";
 import { useState } from "react";
 import { Document, Page, pdfjs } from 'react-pdf';
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface ExtractedData {
-  // Certificate Identification (Required)
+  // Core Certificate Identification
   cocNumber?: string;
   cocType?: string;
   cocIssueDate?: string;
   
-  // Administrative Details (Required)
+  // Supplement Details (if supplementary certificate)
+  supplementDetails?: {
+    supplementNo?: string;
+    initialCertificateNo?: string;
+    issuedOn?: string;
+  };
+  
+  // Administrative Details
   administrativeDetails?: {
     physicalAddress?: string;
+    buildingName?: string;
+    gpsCoordinates?: string;
+    suburb?: string;
+    poleNumber?: string;
+    district?: string;
     erfNumber?: string;
     registeredPerson?: string;
     idNumber?: string;
     registrationNumber?: string;
     registrationType?: string;
-    registrationDate?: string;
+    dateOfRegistration?: string;
   };
   
-  // Installation Details (Required)
+  // Registered Person Contact
+  registeredPersonContact?: {
+    address?: string;
+    telNo?: string;
+    faxNo?: string;
+    cellNo?: string;
+    email?: string;
+  };
+  
+  // Electrical Contractor Details
+  electricalContractor?: {
+    name?: string;
+    idNumber?: string;
+    registrationNumber?: string;
+    dateOfRegistration?: string;
+    address?: string;
+    telNo?: string;
+    faxNo?: string;
+    cellNo?: string;
+    email?: string;
+  };
+  
+  // Recipient
+  recipient?: {
+    name?: string;
+    signatureDate?: string;
+  };
+  
+  // Test Report Header
+  testReport?: {
+    issueDate?: string;
+    testReportFor?: string;
+    additionalPages?: string;
+    numberOfPagesAdded?: string;
+  };
+  
+  // Installation Details
   installationDetails?: {
-    supplyType?: string; // Single phase / Three phase
-    supplyVoltage?: string; // e.g., 230V / 400V
-    mainSwitchRating?: string; // e.g., 80A
-    distributionBoardType?: string;
-    numberOfCircuits?: string;
+    physicalAddress?: string;
+    buildingName?: string;
+    installationType?: string;
+    voltage?: string;
+    numberOfPhases?: string;
+    phaseRotation?: string;
+    frequency?: string;
+    mainSwitchType?: string;
+    numberOfPoles?: string;
+    currentRating?: string;
+    shortCircuitRating?: string;
+    earthLeakageRating?: string;
+    supplyInstalled?: string;
+    supplyTested?: string;
+    supplyOperational?: string;
   };
   
-  // Scope of Work (Required)
+  // Inspection Checks
+  inspectionChecks?: {
+    conductorsCorrect?: string;
+    componentsCorrect?: string;
+    disconnectingDevicesCorrect?: string;
+  };
+  
+  // Test Results
+  testResults?: {
+    continuityOfBonding?: string;
+    earthContinuityResistance?: string;
+    ringCircuitsContinuity?: string;
+    earthLoopImpedance?: string;
+    neutralLoopImpedance?: string;
+    prospectiveShortCircuitCurrent?: string;
+    elevatedVoltage?: string;
+    insulationResistance?: string;
+    voltageNoLoad?: string;
+    voltageFullLoad?: string;
+    earthLeakageOperation?: string;
+    earthLeakageTestButton?: string;
+    phaseRotation?: string;
+    switchingDevices?: string;
+  };
+  
+  // Comments
+  comments?: string;
+  
+  // Responsibility Section
+  responsibility?: {
+    name?: string;
+    registrationCertNo?: string;
+    registrationType?: string;
+    telNo?: string;
+    signatureDate?: string;
+  };
+  
+  // Scope of Work
   scopeOfWork?: string;
   
-  // Test Results (All Required for Valid COC)
-  testResults?: {
-    earthElectrode?: {
-      resistance?: string;
-      method?: string;
-      result?: string; // Pass/Fail
-    };
-    insulationResistance?: {
-      phase1ToEarth?: string;
-      phase2ToEarth?: string;
-      phase3ToEarth?: string;
-      phaseToPhase?: string;
-      neutralToEarth?: string;
-      result?: string; // Pass/Fail
-    };
-    polarity?: {
-      verified?: string; // Yes/No
-      result?: string; // Pass/Fail
-    };
-    earthContinuity?: {
-      mainBonding?: string;
-      circuitConductors?: string;
-      result?: string; // Pass/Fail
-    };
-    circuitBreakers?: {
-      ratings?: string;
-      tested?: string; // Yes/No
-      result?: string; // Pass/Fail
-    };
-    rcdTests?: {
-      ratedCurrent?: string;
-      tripTime?: string;
-      testCurrent?: string;
-      result?: string; // Pass/Fail
-    };
-    shortCircuitCapacity?: {
-      prospectiveFaultCurrent?: string;
-      verified?: string; // Yes/No
-      result?: string; // Pass/Fail
-    };
-  };
-  
-  // Declaration & Signature (Required)
-  declarationAndSignature?: {
-    certifiedBy?: string;
-    inspectorRegistrationNumber?: string;
-    date?: string;
-    signature?: string;
-  };
-  
-  // Installation Summary (Optional but recommended)
-  installationSummary?: string;
-  
+  // Metadata
   confidence?: 'high' | 'medium' | 'low';
+  extractionNotes?: string;
 }
 
 interface COCPreviewApprovalProps {
@@ -121,19 +165,16 @@ export function COCPreviewApproval({
     cocIssueDate: '',
     cocType: '',
     administrativeDetails: {},
+    registeredPersonContact: {},
+    electricalContractor: {},
+    recipient: {},
+    testReport: {},
     installationDetails: {},
-    installationSummary: '',
-    testResults: {
-      earthElectrode: {},
-      insulationResistance: {},
-      polarity: {},
-      earthContinuity: {},
-      circuitBreakers: {},
-      rcdTests: {},
-      shortCircuitCapacity: {}
-    },
+    inspectionChecks: {},
+    testResults: {},
+    responsibility: {},
     scopeOfWork: '',
-    declarationAndSignature: {},
+    comments: '',
     confidence: 'low'
   });
 
@@ -145,113 +186,19 @@ export function COCPreviewApproval({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-  // Validation: Check if all required fields are filled based on what was originally extracted
+  // Validation: Check if minimum required fields are filled
   const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
     const missing: string[] = [];
     
-    // Helper function to check if a field was originally populated (not just an empty nested object)
-    const wasOriginallyExtracted = (value: any): boolean => {
-      if (value === null || value === undefined) return false;
-      if (typeof value === 'string') return value.trim().length > 0;
-      if (typeof value === 'object' && !Array.isArray(value)) {
-        // Check if object has any non-empty values
-        return Object.values(value).some(v => 
-          typeof v === 'string' ? v.trim().length > 0 : !!v
-        );
-      }
-      return false;
-    };
-
-    // ALWAYS REQUIRED: Core Certificate Fields (these must be on every COC)
+    // ALWAYS REQUIRED: Core Certificate Fields
     if (!editedData.cocNumber?.trim()) missing.push("COC Number");
     if (!editedData.cocType?.trim()) missing.push("COC Type");
     if (!editedData.cocIssueDate?.trim()) missing.push("Issue Date");
     
-    // ALWAYS REQUIRED: Administrative Details
-    if (!editedData.administrativeDetails?.physicalAddress?.trim()) {
-      missing.push("Physical Address");
-    }
-    if (!editedData.administrativeDetails?.registeredPerson?.trim()) {
-      missing.push("Registered Person");
-    }
-    if (!editedData.administrativeDetails?.registrationNumber?.trim()) {
-      missing.push("Registration Number");
-    }
-    
-    // CONDITIONALLY REQUIRED: Only validate if data was originally extracted
-    
-    // Installation Details - only required if originally extracted
-    if (wasOriginallyExtracted(extractedData?.installationDetails)) {
-      if (!editedData.installationDetails?.supplyType?.trim()) missing.push("Supply Type");
-      if (!editedData.installationDetails?.mainSwitchRating?.trim()) missing.push("Main Switch Rating");
-    }
-    
-    // Scope of Work - only required if originally extracted
-    if (extractedData?.scopeOfWork || editedData.scopeOfWork?.trim()) {
-      if (!editedData.scopeOfWork?.trim()) missing.push("Scope of Work");
-    }
-    
-    // Test Results - only validate sections that were originally extracted
-    if (wasOriginallyExtracted(extractedData?.testResults?.earthElectrode)) {
-      if (!editedData.testResults?.earthElectrode?.resistance?.trim()) {
-        missing.push("Earth Electrode Resistance");
-      }
-      if (!editedData.testResults?.earthElectrode?.result?.trim()) {
-        missing.push("Earth Electrode Result");
-      }
-    }
-    
-    if (wasOriginallyExtracted(extractedData?.testResults?.insulationResistance)) {
-      if (!editedData.testResults?.insulationResistance?.phase1ToEarth?.trim()) {
-        missing.push("Insulation Resistance (Phase 1)");
-      }
-      if (!editedData.testResults?.insulationResistance?.result?.trim()) {
-        missing.push("Insulation Resistance Result");
-      }
-    }
-    
-    if (wasOriginallyExtracted(extractedData?.testResults?.polarity)) {
-      if (!editedData.testResults?.polarity?.verified?.trim()) {
-        missing.push("Polarity Verification");
-      }
-      if (!editedData.testResults?.polarity?.result?.trim()) {
-        missing.push("Polarity Result");
-      }
-    }
-    
-    if (wasOriginallyExtracted(extractedData?.testResults?.earthContinuity)) {
-      if (!editedData.testResults?.earthContinuity?.result?.trim()) {
-        missing.push("Earth Continuity Result");
-      }
-    }
-    
-    if (wasOriginallyExtracted(extractedData?.testResults?.circuitBreakers)) {
-      if (!editedData.testResults?.circuitBreakers?.tested?.trim()) {
-        missing.push("Circuit Breakers Tested");
-      }
-      if (!editedData.testResults?.circuitBreakers?.result?.trim()) {
-        missing.push("Circuit Breakers Result");
-      }
-    }
-    
-    if (wasOriginallyExtracted(extractedData?.testResults?.rcdTests)) {
-      if (!editedData.testResults?.rcdTests?.result?.trim()) {
-        missing.push("RCD Test Result");
-      }
-    }
-    
-    // Declaration - only validate if originally extracted
-    if (wasOriginallyExtracted(extractedData?.declarationAndSignature)) {
-      if (!editedData.declarationAndSignature?.certifiedBy?.trim()) {
-        missing.push("Certified By");
-      }
-      if (!editedData.declarationAndSignature?.inspectorRegistrationNumber?.trim()) {
-        missing.push("Inspector Registration Number");
-      }
-      if (!editedData.declarationAndSignature?.date?.trim()) {
-        missing.push("Certification Date");
-      }
-    }
+    // ALWAYS REQUIRED: Key Administrative Details
+    if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push("Physical Address");
+    if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push("Registered Person");
+    if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push("Registration Number");
     
     return {
       isComplete: missing.length === 0,
@@ -328,9 +275,9 @@ export function COCPreviewApproval({
             </div>
             <CardDescription>
               {hasExtractedData ? (
-                <>Please review the information extracted from <strong>{documentName}</strong> before starting verification</>
+                <>Review extracted data from <strong>{documentName}</strong> before verification</>
               ) : (
-                <>Preview of <strong>{documentName}</strong>. Fill in the fields manually or use AI extraction.</>
+                <>Preview <strong>{documentName}</strong> and fill fields manually or use AI extraction</>
               )}
             </CardDescription>
           </div>
@@ -434,7 +381,7 @@ export function COCPreviewApproval({
               <Alert>
                 <AlertTriangle className="h-4 w-4" />
                 <AlertDescription>
-                  No data has been extracted yet. Fill in the fields below or click "Extract with AI" for automatic extraction.
+                  No data extracted yet. Fill fields manually or click "Extract with AI".
                 </AlertDescription>
               </Alert>
             )}
@@ -444,14 +391,11 @@ export function COCPreviewApproval({
                 <XCircle className="h-4 w-4" />
                 <AlertDescription>
                   <div className="space-y-1">
-                    <p className="font-semibold">Incomplete COC - Missing {missingFields.length} required field(s):</p>
+                    <p className="font-semibold">Incomplete - Missing {missingFields.length} required field(s):</p>
                     <ul className="list-disc list-inside text-sm">
-                      {missingFields.slice(0, 5).map((field, idx) => (
+                      {missingFields.map((field, idx) => (
                         <li key={idx}>{field}</li>
                       ))}
-                      {missingFields.length > 5 && (
-                        <li>...and {missingFields.length - 5} more fields</li>
-                      )}
                     </ul>
                   </div>
                 </AlertDescription>
@@ -462,50 +406,50 @@ export function COCPreviewApproval({
               <Alert>
                 <CheckCircle2 className="h-4 w-4" />
                 <AlertDescription>
-                  All required fields are complete. Review and approve to proceed with verification.
+                  All required fields complete. Review and approve to verify.
                 </AlertDescription>
               </Alert>
             )}
 
-            {/* COC FORM - Document Style */}
+            {/* COC FORM - Matching ECA Format */}
             <div className="space-y-4 bg-white dark:bg-slate-950 border-2 rounded-lg p-6">
               
-              {/* Header Section */}
+              {/* Header */}
               <div className="border-b-2 pb-4 mb-4">
                 <h2 className="text-xl font-bold text-center uppercase tracking-wide">
                   Certificate of Compliance
                 </h2>
                 <p className="text-center text-sm text-muted-foreground mt-1">
-                  Electrical Installation Certificate
+                  General Electrical Installation
                 </p>
               </div>
 
-              {/* Section 1: Certificate Details */}
+              {/* Certificate Details */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  1. Certificate Details
+                  Certificate Details
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
-                      COC Number <span className="text-destructive">*</span>
+                      Certificate No. <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       value={editedData.cocNumber || ''}
                       onChange={(e) => setEditedData({ ...editedData, cocNumber: e.target.value })}
                       className="h-9 font-mono"
-                      placeholder="Enter COC number"
+                      placeholder="ECA 642760"
                     />
                   </div>
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
-                      COC Type <span className="text-destructive">*</span>
+                      Certificate Type <span className="text-destructive">*</span>
                     </Label>
                     <Input
                       value={editedData.cocType || ''}
                       onChange={(e) => setEditedData({ ...editedData, cocType: e.target.value })}
                       className="h-9"
-                      placeholder="e.g., New Installation"
+                      placeholder="Initial / Supplementary"
                     />
                   </div>
                   <div className="space-y-1 col-span-2">
@@ -522,10 +466,10 @@ export function COCPreviewApproval({
                 </div>
               </div>
 
-              {/* Section 2: Installation Location */}
+              {/* Installation Identification */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  2. Installation Location & Details
+                  Installation Identification
                 </h3>
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -542,31 +486,78 @@ export function COCPreviewApproval({
                         }
                       })}
                       className="h-9"
-                      placeholder="Street address"
+                      placeholder="14 Voortrekker Street"
                     />
                   </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Erf/Lot Number</Label>
-                    <Input
-                      value={editedData.administrativeDetails?.erfNumber || ''}
-                      onChange={(e) => setEditedData({
-                        ...editedData,
-                        administrativeDetails: {
-                          ...editedData.administrativeDetails,
-                          erfNumber: e.target.value
-                        }
-                      })}
-                      className="h-9"
-                      placeholder="Erf number"
-                    />
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Building Name</Label>
+                      <Input
+                        value={editedData.administrativeDetails?.buildingName || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          administrativeDetails: {
+                            ...editedData.administrativeDetails,
+                            buildingName: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                        placeholder="Shop 8"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Erf/Lot No.</Label>
+                      <Input
+                        value={editedData.administrativeDetails?.erfNumber || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          administrativeDetails: {
+                            ...editedData.administrativeDetails,
+                            erfNumber: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                        placeholder="2564"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Suburb/Township</Label>
+                      <Input
+                        value={editedData.administrativeDetails?.suburb || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          administrativeDetails: {
+                            ...editedData.administrativeDetails,
+                            suburb: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">District/Town/City</Label>
+                      <Input
+                        value={editedData.administrativeDetails?.district || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          administrativeDetails: {
+                            ...editedData.administrativeDetails,
+                            district: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>
 
-              {/* Section 3: Registered Person Details */}
+              {/* Registered Person */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  3. Registered Person / Contractor Details
+                  Declaration by Registered Person
                 </h3>
                 <div className="grid grid-cols-2 gap-3">
                   <div className="space-y-1 col-span-2">
@@ -583,7 +574,7 @@ export function COCPreviewApproval({
                         }
                       })}
                       className="h-9"
-                      placeholder="Full name"
+                      placeholder="H.C. Koekemoer"
                     />
                   </div>
                   <div className="space-y-1">
@@ -600,22 +591,7 @@ export function COCPreviewApproval({
                         }
                       })}
                       className="h-9 font-mono"
-                      placeholder="Registration no."
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold">Registration Type</Label>
-                    <Input
-                      value={editedData.administrativeDetails?.registrationType || ''}
-                      onChange={(e) => setEditedData({
-                        ...editedData,
-                        administrativeDetails: {
-                          ...editedData.administrativeDetails,
-                          registrationType: e.target.value
-                        }
-                      })}
-                      className="h-9"
-                      placeholder="e.g., Electrical Contractor"
+                      placeholder="25069"
                     />
                   </div>
                   <div className="space-y-1">
@@ -630,506 +606,305 @@ export function COCPreviewApproval({
                         }
                       })}
                       className="h-9 font-mono"
-                      placeholder="ID number"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Registration Type</Label>
+                    <Input
+                      value={editedData.administrativeDetails?.registrationType || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        administrativeDetails: {
+                          ...editedData.administrativeDetails,
+                          registrationType: e.target.value
+                        }
+                      })}
+                      className="h-9"
+                      placeholder="Installation electrician"
                     />
                   </div>
                 </div>
               </div>
 
-              {/* Section 4: Installation Particulars */}
+              {/* Installation Details */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  4. Installation Particulars
+                  Installation Details (Page 2)
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Supply Type <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      value={editedData.installationDetails?.supplyType || ''}
-                      onChange={(e) => setEditedData({
-                        ...editedData,
-                        installationDetails: {
-                          ...editedData.installationDetails,
-                          supplyType: e.target.value
-                        }
-                      })}
-                      className="h-9"
-                      placeholder="Single/Three Phase"
-                    />
-                  </div>
-                  <div className="space-y-1">
                     <Label className="text-xs font-semibold">Voltage</Label>
                     <Input
-                      value={editedData.installationDetails?.supplyVoltage || ''}
+                      value={editedData.installationDetails?.voltage || ''}
                       onChange={(e) => setEditedData({
                         ...editedData,
                         installationDetails: {
                           ...editedData.installationDetails,
-                          supplyVoltage: e.target.value
+                          voltage: e.target.value
                         }
                       })}
-                      className="h-9"
+                      className="h-8 text-sm"
                       placeholder="230V/400V"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Main Switch <span className="text-destructive">*</span>
-                    </Label>
+                    <Label className="text-xs font-semibold">Phases</Label>
                     <Input
-                      value={editedData.installationDetails?.mainSwitchRating || ''}
+                      value={editedData.installationDetails?.numberOfPhases || ''}
                       onChange={(e) => setEditedData({
                         ...editedData,
                         installationDetails: {
                           ...editedData.installationDetails,
-                          mainSwitchRating: e.target.value
+                          numberOfPhases: e.target.value
                         }
                       })}
-                      className="h-9"
-                      placeholder="e.g., 80A"
+                      className="h-8 text-sm"
+                      placeholder="Three"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">DB Type</Label>
+                    <Label className="text-xs font-semibold">Frequency</Label>
                     <Input
-                      value={editedData.installationDetails?.distributionBoardType || ''}
+                      value={editedData.installationDetails?.frequency || ''}
                       onChange={(e) => setEditedData({
                         ...editedData,
                         installationDetails: {
                           ...editedData.installationDetails,
-                          distributionBoardType: e.target.value
+                          frequency: e.target.value
                         }
                       })}
-                      className="h-9"
-                      placeholder="Steel/Plastic"
+                      className="h-8 text-sm"
+                      placeholder="50 Hz"
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold">No. of Circuits</Label>
+                    <Label className="text-xs font-semibold">Main Switch Type</Label>
                     <Input
-                      value={editedData.installationDetails?.numberOfCircuits || ''}
+                      value={editedData.installationDetails?.mainSwitchType || ''}
                       onChange={(e) => setEditedData({
                         ...editedData,
                         installationDetails: {
                           ...editedData.installationDetails,
-                          numberOfCircuits: e.target.value
+                          mainSwitchType: e.target.value
                         }
                       })}
-                      className="h-9"
-                      placeholder="e.g., 12"
+                      className="h-8 text-sm"
+                      placeholder="Circuit-breaker"
                     />
                   </div>
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs font-semibold flex items-center gap-1">
-                    Scope of Work <span className="text-destructive">*</span>
-                  </Label>
-                  <Textarea
-                    value={editedData.scopeOfWork || ''}
-                    onChange={(e) => setEditedData({ ...editedData, scopeOfWork: e.target.value })}
-                    rows={3}
-                    placeholder="Describe the work performed..."
-                  />
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Current Rating</Label>
+                    <Input
+                      value={editedData.installationDetails?.currentRating || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        installationDetails: {
+                          ...editedData.installationDetails,
+                          currentRating: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="80A"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Short-circuit Rating</Label>
+                    <Input
+                      value={editedData.installationDetails?.shortCircuitRating || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        installationDetails: {
+                          ...editedData.installationDetails,
+                          shortCircuitRating: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="6 KA"
+                    />
+                  </div>
                 </div>
               </div>
 
-              {/* Section 5: Test Results */}
+              {/* Test Results */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  5. Test Results & Measurements
+                  Test Results (Section 4)
                 </h3>
-                
-                {/* Earth Electrode */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.1 Earth Electrode System</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Resistance (Ω) <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        value={editedData.testResults?.earthElectrode?.resistance || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthElectrode: {
-                              ...editedData.testResults?.earthElectrode,
-                              resistance: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="e.g., 2.5"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">Method</Label>
-                      <Input
-                        value={editedData.testResults?.earthElectrode?.method || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthElectrode: {
-                              ...editedData.testResults?.earthElectrode,
-                              method: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="3-point"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        value={editedData.testResults?.earthElectrode?.result || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthElectrode: {
-                              ...editedData.testResults?.earthElectrode,
-                              result: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="Pass/Fail"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Insulation Resistance */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.2 Insulation Resistance (MΩ)</h4>
+                <div className="space-y-2">
                   <div className="grid grid-cols-2 gap-2">
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Phase to Earth <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Continuity of Bonding</Label>
                       <Input
-                        value={editedData.testResults?.insulationResistance?.phase1ToEarth || ''}
+                        value={editedData.testResults?.continuityOfBonding || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            insulationResistance: {
-                              ...editedData.testResults?.insulationResistance,
-                              phase1ToEarth: e.target.value
-                            }
+                            continuityOfBonding: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder=">1000"
+                        placeholder="Compliant"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Earth Continuity Resistance</Label>
                       <Input
-                        value={editedData.testResults?.insulationResistance?.result || ''}
+                        value={editedData.testResults?.earthContinuityResistance || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            insulationResistance: {
-                              ...editedData.testResults?.insulationResistance,
-                              result: e.target.value
-                            }
+                            earthContinuityResistance: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Pass/Fail"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Polarity */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.3 Polarity Test</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Verified <span className="text-destructive">*</span>
-                      </Label>
-                      <Input
-                        value={editedData.testResults?.polarity?.verified || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            polarity: {
-                              ...editedData.testResults?.polarity,
-                              verified: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="Yes/No"
+                        placeholder="Compliant"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Earth Loop Impedance (Ω)</Label>
                       <Input
-                        value={editedData.testResults?.polarity?.result || ''}
+                        value={editedData.testResults?.earthLoopImpedance || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            polarity: {
-                              ...editedData.testResults?.polarity,
-                              result: e.target.value
-                            }
+                            earthLoopImpedance: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Pass/Fail"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Earth Continuity */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.4 Earth Continuity</h4>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Bonding Verified</Label>
-                      <Input
-                        value={editedData.testResults?.earthContinuity?.mainBonding || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            earthContinuity: {
-                              ...editedData.testResults?.earthContinuity,
-                              mainBonding: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="Yes/No"
+                        placeholder="0.16"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Neutral Loop Impedance (Ω)</Label>
                       <Input
-                        value={editedData.testResults?.earthContinuity?.result || ''}
+                        value={editedData.testResults?.neutralLoopImpedance || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            earthContinuity: {
-                              ...editedData.testResults?.earthContinuity,
-                              result: e.target.value
-                            }
+                            neutralLoopImpedance: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Pass/Fail"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* Circuit Breakers */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.5 Circuit Protection Devices</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Ratings</Label>
-                      <Input
-                        value={editedData.testResults?.circuitBreakers?.ratings || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            circuitBreakers: {
-                              ...editedData.testResults?.circuitBreakers,
-                              ratings: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="80A, 20A, 16A"
+                        placeholder="0.165"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Tested <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Insulation Resistance (MΩ)</Label>
                       <Input
-                        value={editedData.testResults?.circuitBreakers?.tested || ''}
+                        value={editedData.testResults?.insulationResistance || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            circuitBreakers: {
-                              ...editedData.testResults?.circuitBreakers,
-                              tested: e.target.value
-                            }
+                            insulationResistance: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Yes/No"
+                        placeholder=">240"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">PSCC (KA)</Label>
                       <Input
-                        value={editedData.testResults?.circuitBreakers?.result || ''}
+                        value={editedData.testResults?.prospectiveShortCircuitCurrent || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            circuitBreakers: {
-                              ...editedData.testResults?.circuitBreakers,
-                              result: e.target.value
-                            }
+                            prospectiveShortCircuitCurrent: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Pass/Fail"
-                      />
-                    </div>
-                  </div>
-                </div>
-
-                {/* RCD Tests */}
-                <div className="bg-background rounded p-3 space-y-2">
-                  <h4 className="text-xs font-bold uppercase">5.6 RCD Tests</h4>
-                  <div className="grid grid-cols-3 gap-2">
-                    <div className="space-y-1">
-                      <Label className="text-xs">Rating (mA)</Label>
-                      <Input
-                        value={editedData.testResults?.rcdTests?.ratedCurrent || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            rcdTests: {
-                              ...editedData.testResults?.rcdTests,
-                              ratedCurrent: e.target.value
-                            }
-                          }
-                        })}
-                        className="h-8 text-sm"
-                        placeholder="30"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs">Trip Time (ms)</Label>
+                      <Label className="text-xs">Voltage No Load (V)</Label>
                       <Input
-                        value={editedData.testResults?.rcdTests?.tripTime || ''}
+                        value={editedData.testResults?.voltageNoLoad || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            rcdTests: {
-                              ...editedData.testResults?.rcdTests,
-                              tripTime: e.target.value
-                            }
+                            voltageNoLoad: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="25"
+                        placeholder="237"
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs flex items-center gap-1">
-                        Result <span className="text-destructive">*</span>
-                      </Label>
+                      <Label className="text-xs">Earth Leakage Operation</Label>
                       <Input
-                        value={editedData.testResults?.rcdTests?.result || ''}
+                        value={editedData.testResults?.earthLeakageOperation || ''}
                         onChange={(e) => setEditedData({
                           ...editedData,
                           testResults: {
                             ...editedData.testResults,
-                            rcdTests: {
-                              ...editedData.testResults?.rcdTests,
-                              result: e.target.value
-                            }
+                            earthLeakageOperation: e.target.value
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="Pass/Fail/N/A"
+                        placeholder="N/A or correct"
                       />
                     </div>
                   </div>
                 </div>
               </div>
 
-              {/* Section 6: Declaration */}
+              {/* Responsibility */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  6. Declaration & Certification
+                  Responsibility (Section 5)
                 </h3>
                 <div className="space-y-3">
                   <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Certified By <span className="text-destructive">*</span>
-                    </Label>
+                    <Label className="text-xs font-semibold">Name of Registered Person</Label>
                     <Input
-                      value={editedData.declarationAndSignature?.certifiedBy || ''}
+                      value={editedData.responsibility?.name || ''}
                       onChange={(e) => setEditedData({
                         ...editedData,
-                        declarationAndSignature: {
-                          ...editedData.declarationAndSignature,
-                          certifiedBy: e.target.value
-                        }
-                      })}
-                      className="h-9"
-                      placeholder="Full name"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Inspector Registration Number <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      value={editedData.declarationAndSignature?.inspectorRegistrationNumber || ''}
-                      onChange={(e) => setEditedData({
-                        ...editedData,
-                        declarationAndSignature: {
-                          ...editedData.declarationAndSignature,
-                          inspectorRegistrationNumber: e.target.value
-                        }
-                      })}
-                      className="h-9 font-mono"
-                      placeholder="Registration number"
-                    />
-                  </div>
-                  <div className="space-y-1">
-                    <Label className="text-xs font-semibold flex items-center gap-1">
-                      Date <span className="text-destructive">*</span>
-                    </Label>
-                    <Input
-                      type="date"
-                      value={editedData.declarationAndSignature?.date || ''}
-                      onChange={(e) => setEditedData({
-                        ...editedData,
-                        declarationAndSignature: {
-                          ...editedData.declarationAndSignature,
-                          date: e.target.value
+                        responsibility: {
+                          ...editedData.responsibility,
+                          name: e.target.value
                         }
                       })}
                       className="h-9"
                     />
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Registration Type</Label>
+                      <Input
+                        value={editedData.responsibility?.registrationType || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          responsibility: {
+                            ...editedData.responsibility,
+                            registrationType: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Date</Label>
+                      <Input
+                        type="date"
+                        value={editedData.responsibility?.signatureDate || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          responsibility: {
+                            ...editedData.responsibility,
+                            signatureDate: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
                   </div>
                 </div>
               </div>

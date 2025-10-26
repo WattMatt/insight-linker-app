@@ -7,200 +7,260 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const EXTRACTION_PROMPT = `# 📋 Complete Electrical COC Data Extraction
+const EXTRACTION_PROMPT = `# 📋 ECA Certificate of Compliance - Complete Data Extraction
 
 ## 🎯 Objective
-Extract ALL information from a TWO-PAGE Electrical Certificate of Compliance (COC) document.
+Extract ALL information from this TWO-PAGE ECA Certificate of Compliance document.
 
-## 📄 COC Document Structure
-**PAGE 1 - Front Page:**
-- Certificate details (COC Number, Type, Issue Date)
-- Installation location details
-- Registered person/contractor details
-- Scope of work description
-- Declarations and certifications
+## 📄 Document Structure
+**PAGE 1 - Certificate of Compliance (Front Page):**
+- Certificate header and number
+- Installation identification
+- Declaration by registered person
+- Declaration by electrical contractor
 
-**PAGE 2 - Test Report Page:**
-- Header section: Initial, Test Report For, Issue Date, Additional Pages
-- Section 1: Earth Electrode System tests
-- Section 2: Insulation Resistance measurements
-- Section 3: Polarity verification
-- Section 4: Earth Continuity tests
-- Section 5: Circuit Protection/RCD tests
+**PAGE 2 - Test Report:**
+- Test report header
+- Section 2: Installation details
+- Section 4: Inspection and tests
+- Section 5: Responsibility
 
-## 📊 Data to Extract (Extract ALL Fields from BOTH Pages)
+---
 
-### 1. Certificate Information (REQUIRED)
-- **COC Number**: Extract EXACT certificate number (e.g., "642760", "ECA-2024-001234")
-- **COC Type**: ECA, ECSA, or other certificate type
-- **Issue Date**: Convert to YYYY-MM-DD format (e.g., "18.09.2025" → "2025-09-18")
+## 📊 FIELDS TO EXTRACT
 
-### 2. Administrative Details (REQUIRED)
-- **Physical Address**: Complete installation address
-- **Erf Number**: Property identification number
-- **Registered Person**: Name of registered electrician/contractor
-- **ID Number**: ID number if shown
-- **Registration Number**: Electrician's registration/license number
-- **Registration Type**: Type (e.g., "Electrical Contractor", "Installation Electrician")
+### PAGE 1: Certificate Details
 
-### 3. Installation Details (REQUIRED)
-- **Supply Type**: Single phase or Three phase
-- **Supply Voltage**: e.g., "230V", "400V"
-- **Main Switch Rating**: e.g., "80A", "100A"
-- **Distribution Board Type**: Type of DB
-- **Number of Circuits**: Total circuits
+**1. Certificate Identification:**
+- Certificate No. (e.g., "ECA 642760")
+- Certificate type: "Initial Certificate" or "Supplementary Certificate"
+- Supplement No. (if supplementary)
+- Initial Certificate No. it supplements (if applicable)
+- Date issued (if supplementary)
 
-### 4. Scope of Work (REQUIRED)
-- Complete description of work performed (new installation, alterations, etc.)
+**2. Installation Identification:**
+- Physical address
+- Name of building/shop
+- GPS Coordinates
+- Suburb/Township
+- Pole number
+- District/Town/City
+- Erf/Lot No.
 
-### 5. Test Results - PAGE 2 (EXTRACT ALL 5 TEST SECTIONS)
+**3. Declaration by Registered Person:**
+- Full name
+- ID Number
+- Registration regulations: 9(2)(a) new / 9(2)(b) existing / 9(2)(c) new part to existing
+- Registered person registration number
+- Date of registration
+- Type of registration: Installation electrician / Master installation electrician / Electrical tester for single phase
+- Signature date
+- Contact details:
+  - Address
+  - Tel. No.
+  - Fax No.
+  - Cell No.
+  - Email
 
-**Page 2 Header Information:**
-- Initial/Inspector initial
-- Test Report For (name/description)
-- Issue Date on page 2
-- Additional Pages indicator
+**4. Declaration by Electrical Contractor:**
+- Full name
+- ID Number
+- Electrical contractor registration number
+- Date of registration
+- Contact details:
+  - Address
+  - Tel. No.
+  - Fax No.
+  - Cell No.
+  - Email
 
-**Test Section 1 - Earth Electrode System:**
-- Resistance measurement (Ω)
-- Test method (e.g., 3-point, 4-point)
-- Electrode type
-- Result: Pass/Fail/Satisfactory
+**5. Recipient Information:**
+- Recipient name
+- Signature
+- Date
 
-**Test Section 2 - Insulation Resistance (MΩ):**
-- Phase 1 to Earth (L1-E)
-- Phase 2 to Earth (L2-E) if applicable
-- Phase 3 to Earth (L3-E) if applicable
-- Phase to Neutral measurements
-- Phase to Phase measurements
-- Neutral to Earth (N-E)
-- Test voltage used
-- Result: Pass/Fail/Satisfactory
+---
 
-**Test Section 3 - Polarity Test:**
-- All circuits verified: Yes/No
-- Live conductors checked
-- Protective conductors verified
-- Result: Pass/Fail/Correct
+### PAGE 2: Test Report
 
-**Test Section 4 - Earth Continuity/Earth Fault Loop:**
-- Main protective bonding (Ω)
-- Supplementary bonding (Ω)
-- Circuit protective conductor continuity
-- Earth fault loop impedance (Zs)
-- Result: Pass/Fail/Satisfactory
+**Header Information:**
+- Date of issue
+- Test Report for (DB/Supply description)
+- Additional pages added: Yes/No
+- Number added
 
-**Test Section 5 - Circuit Protection & RCD Tests:**
-- **Circuit Breakers:**
-  - Ratings listed (e.g., 80A, 20A, 16A)
-  - Trip characteristics
-  - Tested: Yes/No
-  
-- **RCD/ELCB Tests:**
-  - Rated sensitivity (mA) - typically 30mA
-  - Rated trip time (ms)
-  - Test current used
-  - Actual trip time measured (ms)
-  - Result: Pass/Fail/N/A
+**Section 2 - Installation Details:**
+- Physical address
+- Name of building
+- Installation type: Temporary / Permanent
+- **Characteristics of supply:**
+  - Voltage: 230V / 400V / 525V / Other
+  - Number of phases: One / Two / Three
+  - Phase rotation: Clockwise / Anticlockwise
+  - Frequency: 50 Hz / Other / d.c.
+- **Main switch details:**
+  - Type: Fuse switch / Switch disconnector / Circuit-breaker / Earth leakage circuit-breaker / Earth leakage switch disconnector
+  - Number of poles
+  - Current rating (e.g., "80A")
+  - Short-circuit/withstand rating (e.g., "6 KA")
+  - Rated earth leakage tripping current IΔn (e.g., "30 mA" or "N/A")
+- Connection to supply: Installed Yes/No, Tested Yes/No, Operational Yes/No
 
-### 6. Declaration & Certification (REQUIRED)
-- **Certified By**: Name of person certifying
-- **Inspector Registration Number**: Registration number
-- **Certification Date**: Date certificate was signed
+**Section 4 - Inspection and Tests:**
 
-## 📤 Required JSON Output Format
+*Initial Checks (Mark Yes/No/N/A):*
+1. Conductors correct rating and capacity
+2. Components correctly selected and installed
+3. Disconnecting devices correctly located
 
-Return ONLY valid JSON with ALL fields:
+*Test Results with Readings:*
+1. Continuity of bonding (result)
+2. Resistance of earth continuity conductor (result)
+3. Continuity of ring circuits (result or N/A)
+4. Earth loop impedance at main/local switch (Ω value)
+5. Neutral loop impedance at main/local switch (Ω value)
+6. Prospective short-circuit current PSCC (KA value, Calculated/Measured)
+7. Elevated voltage between neutral and earth (V value)
+8. Insulation resistance (MΩ value)
+9. Voltage at DB no load for each phase to neutral (V values)
+10. Voltage at DB with full load for each phase to neutral (V values)
+11. Earth leakage unit operation value (mA and % or N/A)
+12. Earth leakage test button operation (result)
+13. Phase rotation consistency (result)
+14. All switching devices operation (result)
+
+*Comments:*
+- Any comments on parts not covered
+
+**Section 5 - Responsibility:**
+- Name of registered person
+- Registration Certificate No.
+- Type: Installation electrician / Master installation electrician / Single-phase tester
+- Tel no.
+- Signature
+- Date
+
+---
+
+## 📤 JSON Output Format
+
+Return ONLY this JSON structure with ALL extracted data:
 
 \`\`\`json
 {
-  "cocNumber": "string or null",
-  "cocType": "string or null",
-  "cocIssueDate": "YYYY-MM-DD or null",
+  "cocNumber": "string",
+  "cocType": "Initial Certificate | Supplementary Certificate",
+  "cocIssueDate": "YYYY-MM-DD",
+  "supplementDetails": {
+    "supplementNo": "string or null",
+    "initialCertificateNo": "string or null",
+    "issuedOn": "YYYY-MM-DD or null"
+  },
   "administrativeDetails": {
-    "physicalAddress": "string or null",
+    "physicalAddress": "string",
+    "buildingName": "string or null",
+    "gpsCoordinates": "string or null",
+    "suburb": "string or null",
+    "poleNumber": "string or null",
+    "district": "string or null",
     "erfNumber": "string or null",
-    "registeredPerson": "string or null",
+    "registeredPerson": "string",
+    "idNumber": "string or null",
+    "registrationNumber": "string",
+    "registrationType": "string",
+    "dateOfRegistration": "string or null"
+  },
+  "registeredPersonContact": {
+    "address": "string or null",
+    "telNo": "string or null",
+    "faxNo": "string or null",
+    "cellNo": "string or null",
+    "email": "string or null"
+  },
+  "electricalContractor": {
+    "name": "string or null",
     "idNumber": "string or null",
     "registrationNumber": "string or null",
-    "registrationType": "string or null"
+    "dateOfRegistration": "string or null",
+    "address": "string or null",
+    "telNo": "string or null",
+    "faxNo": "string or null",
+    "cellNo": "string or null",
+    "email": "string or null"
+  },
+  "recipient": {
+    "name": "string or null",
+    "signatureDate": "string or null"
+  },
+  "testReport": {
+    "issueDate": "YYYY-MM-DD",
+    "testReportFor": "string or null",
+    "additionalPages": "Yes | No | null",
+    "numberOfPagesAdded": "string or null"
   },
   "installationDetails": {
-    "supplyType": "string or null",
-    "supplyVoltage": "string or null",
-    "mainSwitchRating": "string or null",
-    "distributionBoardType": "string or null",
-    "numberOfCircuits": "string or null"
+    "physicalAddress": "string",
+    "buildingName": "string or null",
+    "installationType": "Temporary | Permanent | null",
+    "voltage": "230V | 400V | 525V | Other",
+    "numberOfPhases": "One | Two | Three",
+    "phaseRotation": "Clockwise | Anticlockwise | null",
+    "frequency": "50 Hz | Other | d.c.",
+    "mainSwitchType": "string",
+    "numberOfPoles": "string or null",
+    "currentRating": "string",
+    "shortCircuitRating": "string or null",
+    "earthLeakageRating": "string or null",
+    "supplyInstalled": "Yes | No | null",
+    "supplyTested": "Yes | No | null",
+    "supplyOperational": "Yes | No | null"
+  },
+  "inspectionChecks": {
+    "conductorsCorrect": "Yes | No | N/A",
+    "componentsCorrect": "Yes | No | N/A",
+    "disconnectingDevicesCorrect": "Yes | No | N/A"
+  },
+  "testResults": {
+    "continuityOfBonding": "string or null",
+    "earthContinuityResistance": "string or null",
+    "ringCircuitsContinuity": "string or null",
+    "earthLoopImpedance": "string or null",
+    "neutralLoopImpedance": "string or null",
+    "prospectiveShortCircuitCurrent": "string or null",
+    "elevatedVoltage": "string or null",
+    "insulationResistance": "string or null",
+    "voltageNoLoad": "string or null",
+    "voltageFullLoad": "string or null",
+    "earthLeakageOperation": "string or null",
+    "earthLeakageTestButton": "string or null",
+    "phaseRotation": "string or null",
+    "switchingDevices": "string or null"
+  },
+  "comments": "string or null",
+  "responsibility": {
+    "name": "string",
+    "registrationCertNo": "string or null",
+    "registrationType": "string",
+    "telNo": "string or null",
+    "signatureDate": "YYYY-MM-DD"
   },
   "scopeOfWork": "string or null",
-  "testResults": {
-    "earthElectrode": {
-      "resistance": "string or null",
-      "method": "string or null",
-      "result": "string or null"
-    },
-    "insulationResistance": {
-      "phase1ToEarth": "string or null",
-      "phase2ToEarth": "string or null",
-      "phase3ToEarth": "string or null",
-      "phaseToPhase": "string or null",
-      "neutralToEarth": "string or null",
-      "result": "string or null"
-    },
-    "polarity": {
-      "verified": "string or null",
-      "result": "string or null"
-    },
-    "earthContinuity": {
-      "mainBonding": "string or null",
-      "circuitConductors": "string or null",
-      "result": "string or null"
-    },
-    "circuitBreakers": {
-      "ratings": "string or null",
-      "tested": "string or null",
-      "result": "string or null"
-    },
-    "rcdTests": {
-      "ratedCurrent": "string or null",
-      "tripTime": "string or null",
-      "testCurrent": "string or null",
-      "result": "string or null"
-    },
-    "shortCircuitCapacity": {
-      "prospectiveFaultCurrent": "string or null",
-      "verified": "string or null",
-      "result": "string or null"
-    }
-  },
-  "declarationAndSignature": {
-    "certifiedBy": "string or null",
-    "inspectorRegistrationNumber": "string or null",
-    "date": "YYYY-MM-DD or null"
-  },
-  "installationSummary": "string or null",
   "confidence": "high | medium | low",
   "extractionNotes": "string"
 }
 \`\`\`
 
-## ✅ Critical Extraction Rules
+## ✅ Extraction Rules
 
-1. **Process BOTH Pages**: Make sure to extract data from BOTH page 1 (declarations) AND page 2 (test results)
-2. **Extract EVERYTHING**: Don't skip any visible data on either page
-3. **Use null for Missing**: If a field is not visible on the certificate, set to null
-4. **NO Placeholders**: Never use "Not provided", "N/A", "TBD" - use null instead
-5. **Exact Values**: Extract numbers and text EXACTLY as shown
-6. **All 5 Test Sections**: Extract ALL test results from page 2's 5 sections
-7. **Measurements with Units**: Include the measurement values as shown (e.g., "2.5", ">1000", "25ms")
+1. **Extract EVERYTHING from BOTH pages**
+2. **Use null for missing/blank fields**
+3. **NO placeholders**: Never use "Not provided", "N/A" as values - use null instead
+4. **Exact values**: Copy numbers and text EXACTLY as shown
+5. **Date format**: Convert all dates to YYYY-MM-DD (e.g., "18.09.2025" → "2025-09-18")
+6. **Measurements**: Include units in the value (e.g., "0.16Ω", ">240 MΩ", "237V")
+7. **Confidence**: "high" only if both pages are clear and complete
 
-## 🔍 Extraction Process
-1. First, review page 1 for certificate details, administrative info, and declarations
-2. Then, review page 2 for all test results (5 sections)
-3. Cross-reference dates and names between pages for consistency
-4. Ensure confidence is "high" only if BOTH pages are complete and clear
-
-Now extract ALL data from this TWO-PAGE COC document:`;
+Now extract ALL data from this ECA COC document:`;
 
 serve(async (req) => {
   // Handle CORS preflight
