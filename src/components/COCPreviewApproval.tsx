@@ -193,7 +193,10 @@ export function COCPreviewApproval({
     // ALWAYS REQUIRED: Core Certificate Fields
     if (!editedData.cocNumber?.trim()) missing.push("COC Number");
     if (!editedData.cocType?.trim()) missing.push("COC Type");
-    if (!editedData.cocIssueDate?.trim()) missing.push("Issue Date");
+    
+    // Issue Date: Check both cocIssueDate (page 1) and testReport.issueDate (page 2)
+    const hasIssueDate = editedData.cocIssueDate?.trim() || editedData.testReport?.issueDate?.trim();
+    if (!hasIssueDate) missing.push("Issue Date");
     
     // ALWAYS REQUIRED: Key Administrative Details
     if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push("Physical Address");
