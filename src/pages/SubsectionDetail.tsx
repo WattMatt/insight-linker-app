@@ -1242,6 +1242,8 @@ const SubsectionDetail = () => {
   };
 
   const handleDownloadDocument = async (url: string, fileName: string) => {
+    console.log('Download clicked:', { url, fileName });
+    
     if (!url) {
       toast.error("Document URL not available");
       return;
@@ -1255,6 +1257,7 @@ const SubsectionDetail = () => {
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+      console.log('Download initiated successfully');
       toast.success(`Downloading ${fileName}`);
     } catch (error) {
       console.error("Error downloading document:", error);
