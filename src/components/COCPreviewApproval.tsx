@@ -5,8 +5,14 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
-import { CheckCircle2, XCircle, AlertTriangle, FileText, Edit2, Save, X, RefreshCw } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { CheckCircle2, XCircle, AlertTriangle, FileText, Edit2, Save, X, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
+import { Document, Page, pdfjs } from 'react-pdf';
+import 'react-pdf/dist/esm/Page/AnnotationLayer.css';
+import 'react-pdf/dist/esm/Page/TextLayer.css';
+
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface ExtractedData {
   cocNumber?: string;
@@ -22,6 +28,39 @@ interface ExtractedData {
     registrationDate?: string;
   };
   installationSummary?: string;
+  testResults?: {
+    earthElectrode?: {
+      resistance?: string;
+      method?: string;
+      result?: string;
+    };
+    insulationResistance?: {
+      phase1ToEarth?: string;
+      phase2ToEarth?: string;
+      phase3ToEarth?: string;
+      result?: string;
+    };
+    polarity?: {
+      verified?: boolean;
+      result?: string;
+    };
+    circuitBreakers?: {
+      ratings?: string;
+      tested?: boolean;
+      result?: string;
+    };
+    rcdTests?: {
+      ratedCurrent?: string;
+      tripTime?: string;
+      result?: string;
+    };
+  };
+  scopeOfWork?: string;
+  declarationAndSignature?: {
+    certifiedBy?: string;
+    date?: string;
+    signature?: string;
+  };
   confidence?: 'high' | 'medium' | 'low';
 }
 
@@ -44,15 +83,29 @@ export function COCPreviewApproval({
   isProcessing = false,
   onExtract
 }: COCPreviewApprovalProps) {
-  const [isEditing, setIsEditing] = useState(!extractedData); // Auto-enable editing if no data
+  const [isEditing, setIsEditing] = useState(!extractedData);
   const [editedData, setEditedData] = useState<ExtractedData>(extractedData || {
     cocNumber: '',
     cocIssueDate: '',
     cocType: '',
     administrativeDetails: {},
     installationSummary: '',
+    testResults: {
+      earthElectrode: {},
+      insulationResistance: {},
+      polarity: {},
+      circuitBreakers: {},
+      rcdTests: {}
+    },
+    scopeOfWork: '',
+    declarationAndSignature: {},
     confidence: 'low'
   });
+
+  // PDF viewer state
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState<number>(1);
+  const [scale, setScale] = useState<number>(1.0);
 
   const handleSaveEdits = () => {
     setIsEditing(false);
@@ -61,6 +114,15 @@ export function COCPreviewApproval({
   const handleApprove = () => {
     onApprove(editedData);
   };
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+  };
+
+  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3.0));
+  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
+  const handlePrevPage = () => setPageNumber(prev => Math.max(prev - 1, 1));
+  const handleNextPage = () => setPageNumber(prev => Math.min(prev + 1, numPages));
 
   const getConfidenceBadge = (confidence?: string) => {
     switch (confidence) {
@@ -109,19 +171,65 @@ export function COCPreviewApproval({
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Side - Document Preview */}
           <div className="space-y-2">
-            <Label>Document Preview</Label>
-            <div className="border rounded-lg overflow-hidden bg-muted h-[600px]">
-              <object
-                data={`${documentUrl}#toolbar=0&navpanes=0&scrollbar=0`}
-                type="application/pdf"
-                className="w-full h-full"
-              >
-                <embed
-                  src={`${documentUrl}#toolbar=0`}
-                  type="application/pdf"
-                  className="w-full h-full"
-                />
-              </object>
+            <div className="flex items-center justify-between">
+              <Label>Document Preview</Label>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={handleZoomOut}>
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+                  {Math.round(scale * 100)}%
+                </span>
+                <Button variant="outline" size="sm" onClick={handleZoomIn}>
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+            <div className="border rounded-lg overflow-auto bg-muted h-[600px] flex flex-col">
+              <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
+                <Document
+                  file={documentUrl}
+                  onLoadSuccess={onDocumentLoadSuccess}
+                  loading={
+                    <div className="flex items-center justify-center h-full">
+                      <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                    </div>
+                  }
+                >
+                  <Page
+                    pageNumber={pageNumber}
+                    scale={scale}
+                    loading={
+                      <div className="flex items-center justify-center">
+                        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                      </div>
+                    }
+                  />
+                </Document>
+              </div>
+              {numPages > 1 && (
+                <div className="border-t bg-background p-2 flex items-center justify-center gap-2">
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handlePrevPage}
+                    disabled={pageNumber === 1}
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </Button>
+                  <span className="text-sm text-muted-foreground min-w-[100px] text-center">
+                    Page {pageNumber} of {numPages}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    onClick={handleNextPage}
+                    disabled={pageNumber === numPages}
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
             </div>
           </div>
 
@@ -387,18 +495,296 @@ export function COCPreviewApproval({
             </>
           )}
 
-          {/* Installation Summary */}
-          {editedData.installationSummary && (
-            <>
-              <Separator className="my-6" />
-              <div className="space-y-2">
-                <Label>Installation Summary</Label>
-                <div className="p-3 bg-muted rounded-md text-sm">
-                  {editedData.installationSummary}
-                </div>
+          {/* Scope of Work */}
+          <Separator className="my-6" />
+          <div className="space-y-2">
+            <Label htmlFor="scopeOfWork">Scope of Work / Installation Details</Label>
+            {isEditing ? (
+              <Textarea
+                id="scopeOfWork"
+                value={editedData.scopeOfWork || ''}
+                onChange={(e) => setEditedData({ ...editedData, scopeOfWork: e.target.value })}
+                placeholder="Describe the electrical installation work performed..."
+                rows={4}
+              />
+            ) : (
+              <div className="p-3 bg-muted rounded-md text-sm whitespace-pre-wrap">
+                {editedData.scopeOfWork || <span className="text-muted-foreground">Not extracted</span>}
               </div>
-            </>
-          )}
+            )}
+          </div>
+
+          {/* Test Results Section */}
+          <Separator className="my-6" />
+          <h3 className="text-lg font-semibold">Test Results & Measurements</h3>
+          
+          {/* Earth Electrode Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">Earth Electrode System</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="earthResistance">Resistance (Ohms)</Label>
+                {isEditing ? (
+                  <Input
+                    id="earthResistance"
+                    value={editedData.testResults?.earthElectrode?.resistance || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        earthElectrode: {
+                          ...editedData.testResults?.earthElectrode,
+                          resistance: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., 2.5"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.earthElectrode?.resistance || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="earthMethod">Test Method</Label>
+                {isEditing ? (
+                  <Input
+                    id="earthMethod"
+                    value={editedData.testResults?.earthElectrode?.method || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        earthElectrode: {
+                          ...editedData.testResults?.earthElectrode,
+                          method: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., 3-point method"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.earthElectrode?.method || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Insulation Resistance Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">Insulation Resistance (MΩ)</h4>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="phase1ToEarth">Phase 1 to Earth</Label>
+                {isEditing ? (
+                  <Input
+                    id="phase1ToEarth"
+                    value={editedData.testResults?.insulationResistance?.phase1ToEarth || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        insulationResistance: {
+                          ...editedData.testResults?.insulationResistance,
+                          phase1ToEarth: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., >1000"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.insulationResistance?.phase1ToEarth || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phase2ToEarth">Phase 2 to Earth</Label>
+                {isEditing ? (
+                  <Input
+                    id="phase2ToEarth"
+                    value={editedData.testResults?.insulationResistance?.phase2ToEarth || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        insulationResistance: {
+                          ...editedData.testResults?.insulationResistance,
+                          phase2ToEarth: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., >1000"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.insulationResistance?.phase2ToEarth || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="phase3ToEarth">Phase 3 to Earth</Label>
+                {isEditing ? (
+                  <Input
+                    id="phase3ToEarth"
+                    value={editedData.testResults?.insulationResistance?.phase3ToEarth || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        insulationResistance: {
+                          ...editedData.testResults?.insulationResistance,
+                          phase3ToEarth: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., >1000"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.insulationResistance?.phase3ToEarth || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Circuit Breaker Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">Circuit Breakers</h4>
+            <div className="grid grid-cols-1 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="cbRatings">Ratings & Details</Label>
+                {isEditing ? (
+                  <Input
+                    id="cbRatings"
+                    value={editedData.testResults?.circuitBreakers?.ratings || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        circuitBreakers: {
+                          ...editedData.testResults?.circuitBreakers,
+                          ratings: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., Main: 80A, Sub: 20A, 16A, 10A"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md">
+                    {editedData.testResults?.circuitBreakers?.ratings || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* RCD Tests */}
+          <div className="space-y-4 border rounded-lg p-4 bg-muted/30">
+            <h4 className="font-semibold text-sm">RCD (Residual Current Device) Tests</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="rcdCurrent">Rated Current (mA)</Label>
+                {isEditing ? (
+                  <Input
+                    id="rcdCurrent"
+                    value={editedData.testResults?.rcdTests?.ratedCurrent || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        rcdTests: {
+                          ...editedData.testResults?.rcdTests,
+                          ratedCurrent: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., 30"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.rcdTests?.ratedCurrent || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="rcdTripTime">Trip Time (ms)</Label>
+                {isEditing ? (
+                  <Input
+                    id="rcdTripTime"
+                    value={editedData.testResults?.rcdTests?.tripTime || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      testResults: {
+                        ...editedData.testResults,
+                        rcdTests: {
+                          ...editedData.testResults?.rcdTests,
+                          tripTime: e.target.value
+                        }
+                      }
+                    })}
+                    placeholder="e.g., 25"
+                  />
+                ) : (
+                  <div className="p-2 bg-background rounded-md font-mono">
+                    {editedData.testResults?.rcdTests?.tripTime || <span className="text-muted-foreground">Not extracted</span>}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Declaration & Signature */}
+          <Separator className="my-6" />
+          <h3 className="text-lg font-semibold">Declaration & Certification</h3>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="certifiedBy">Certified By</Label>
+              {isEditing ? (
+                <Input
+                  id="certifiedBy"
+                  value={editedData.declarationAndSignature?.certifiedBy || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    declarationAndSignature: {
+                      ...editedData.declarationAndSignature,
+                      certifiedBy: e.target.value
+                    }
+                  })}
+                  placeholder="Name of certifying person"
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.declarationAndSignature?.certifiedBy || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="certDate">Certification Date</Label>
+              {isEditing ? (
+                <Input
+                  id="certDate"
+                  type="date"
+                  value={editedData.declarationAndSignature?.date || ''}
+                  onChange={(e) => setEditedData({
+                    ...editedData,
+                    declarationAndSignature: {
+                      ...editedData.declarationAndSignature,
+                      date: e.target.value
+                    }
+                  })}
+                />
+              ) : (
+                <div className="p-2 bg-muted rounded-md">
+                  {editedData.declarationAndSignature?.date || <span className="text-muted-foreground">Not extracted</span>}
+                </div>
+              )}
+            </div>
+          </div>
             </div>
           </div>
         </div>
