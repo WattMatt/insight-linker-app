@@ -639,7 +639,7 @@ export function COCPreviewApproval({
               {/* Installation Details */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  Installation Details (Page 2)
+                  Installation Details (Section 2)
                 </h3>
                 <div className="grid grid-cols-3 gap-3">
                   <div className="space-y-1">
@@ -673,6 +673,21 @@ export function COCPreviewApproval({
                     />
                   </div>
                   <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Phase Rotation</Label>
+                    <Input
+                      value={editedData.installationDetails?.phaseRotation || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        installationDetails: {
+                          ...editedData.installationDetails,
+                          phaseRotation: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Clockwise"
+                    />
+                  </div>
+                  <div className="space-y-1">
                     <Label className="text-xs font-semibold">Frequency</Label>
                     <Input
                       value={editedData.installationDetails?.frequency || ''}
@@ -703,6 +718,21 @@ export function COCPreviewApproval({
                     />
                   </div>
                   <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Number of Poles</Label>
+                    <Input
+                      value={editedData.installationDetails?.numberOfPoles || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        installationDetails: {
+                          ...editedData.installationDetails,
+                          numberOfPoles: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="3"
+                    />
+                  </div>
+                  <div className="space-y-1">
                     <Label className="text-xs font-semibold">Current Rating</Label>
                     <Input
                       value={editedData.installationDetails?.currentRating || ''}
@@ -730,6 +760,125 @@ export function COCPreviewApproval({
                       })}
                       className="h-8 text-sm"
                       placeholder="6 KA"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs font-semibold">Earth Leakage Rating</Label>
+                    <Input
+                      value={editedData.installationDetails?.earthLeakageRating || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        installationDetails: {
+                          ...editedData.installationDetails,
+                          earthLeakageRating: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="N/A or 30mA"
+                    />
+                  </div>
+                </div>
+                <div className="border-t pt-3 mt-3">
+                  <h4 className="text-xs font-semibold mb-2">Connection to Supply</h4>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Installed?</Label>
+                      <Input
+                        value={editedData.installationDetails?.supplyInstalled || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            supplyInstalled: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Tested?</Label>
+                      <Input
+                        value={editedData.installationDetails?.supplyTested || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            supplyTested: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Operational?</Label>
+                      <Input
+                        value={editedData.installationDetails?.supplyOperational || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          installationDetails: {
+                            ...editedData.installationDetails,
+                            supplyOperational: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="Yes/No"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Inspection Checks */}
+              <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
+                <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
+                  Section 4 - Inspection Checks
+                </h3>
+                <div className="space-y-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">1. Conductors are of correct rating and current-carrying capacity</Label>
+                    <Input
+                      value={editedData.inspectionChecks?.conductorsCorrect || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        inspectionChecks: {
+                          ...editedData.inspectionChecks,
+                          conductorsCorrect: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Yes/No/N/A"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">2. Components have been correctly selected and installed</Label>
+                    <Input
+                      value={editedData.inspectionChecks?.componentsCorrect || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        inspectionChecks: {
+                          ...editedData.inspectionChecks,
+                          componentsCorrect: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Yes/No/N/A"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">3. Disconnecting devices are correctly located</Label>
+                    <Input
+                      value={editedData.inspectionChecks?.disconnectingDevicesCorrect || ''}
+                      onChange={(e) => setEditedData({
+                        ...editedData,
+                        inspectionChecks: {
+                          ...editedData.inspectionChecks,
+                          disconnectingDevicesCorrect: e.target.value
+                        }
+                      })}
+                      className="h-8 text-sm"
+                      placeholder="Yes/No/N/A"
                     />
                   </div>
                 </div>
@@ -959,7 +1108,7 @@ export function COCPreviewApproval({
               {/* Responsibility */}
               <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
                 <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
-                  Responsibility (Section 5)
+                  Section 5 - Responsibility
                 </h3>
                 <div className="space-y-3">
                   <div className="space-y-1">
@@ -978,6 +1127,20 @@ export function COCPreviewApproval({
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Registration Certificate No.</Label>
+                      <Input
+                        value={editedData.responsibility?.registrationCertNo || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          responsibility: {
+                            ...editedData.responsibility,
+                            registrationCertNo: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-xs font-semibold">Registration Type</Label>
                       <Input
                         value={editedData.responsibility?.registrationType || ''}
@@ -992,7 +1155,21 @@ export function COCPreviewApproval({
                       />
                     </div>
                     <div className="space-y-1">
-                      <Label className="text-xs font-semibold">Date</Label>
+                      <Label className="text-xs font-semibold">Tel No.</Label>
+                      <Input
+                        value={editedData.responsibility?.telNo || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          responsibility: {
+                            ...editedData.responsibility,
+                            telNo: e.target.value
+                          }
+                        })}
+                        className="h-9"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs font-semibold">Signature Date</Label>
                       <Input
                         type="date"
                         value={editedData.responsibility?.signatureDate || ''}
@@ -1007,6 +1184,25 @@ export function COCPreviewApproval({
                       />
                     </div>
                   </div>
+                </div>
+              </div>
+
+              {/* Comments */}
+              <div className="border-2 rounded p-4 space-y-3 bg-muted/20">
+                <h3 className="font-bold text-sm uppercase tracking-wide border-b pb-2">
+                  Comments
+                </h3>
+                <div className="space-y-1">
+                  <Label className="text-xs">Comments on parts of installation not covered by this report</Label>
+                  <Textarea
+                    value={editedData.comments || ''}
+                    onChange={(e) => setEditedData({
+                      ...editedData,
+                      comments: e.target.value
+                    })}
+                    className="min-h-[80px] text-sm"
+                    placeholder="Enter any additional comments..."
+                  />
                 </div>
               </div>
 
