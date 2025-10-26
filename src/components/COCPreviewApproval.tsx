@@ -773,6 +773,21 @@ export function COCPreviewApproval({
                       />
                     </div>
                     <div className="space-y-1">
+                      <Label className="text-xs">Ring Circuits Continuity</Label>
+                      <Input
+                        value={editedData.testResults?.ringCircuitsContinuity || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            ringCircuitsContinuity: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="N/A"
+                      />
+                    </div>
+                    <div className="space-y-1">
                       <Label className="text-xs">Earth Loop Impedance (Ω)</Label>
                       <Input
                         value={editedData.testResults?.earthLoopImpedance || ''}
@@ -784,7 +799,7 @@ export function COCPreviewApproval({
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="0.16"
+                        placeholder="0.16Ω"
                       />
                     </div>
                     <div className="space-y-1">
@@ -799,7 +814,37 @@ export function COCPreviewApproval({
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="0.165"
+                        placeholder="0.16Ω"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Prospective Short Circuit Current</Label>
+                      <Input
+                        value={editedData.testResults?.prospectiveShortCircuitCurrent || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            prospectiveShortCircuitCurrent: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="1.44kA"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Elevated Voltage (V)</Label>
+                      <Input
+                        value={editedData.testResults?.elevatedVoltage || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            elevatedVoltage: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="0V"
                       />
                     </div>
                     <div className="space-y-1">
@@ -814,21 +859,7 @@ export function COCPreviewApproval({
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder=">240"
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label className="text-xs">PSCC (KA)</Label>
-                      <Input
-                        value={editedData.testResults?.prospectiveShortCircuitCurrent || ''}
-                        onChange={(e) => setEditedData({
-                          ...editedData,
-                          testResults: {
-                            ...editedData.testResults,
-                            prospectiveShortCircuitCurrent: e.target.value
-                          }
-                        })}
-                        className="h-8 text-sm"
+                        placeholder=">90 MΩ"
                       />
                     </div>
                     <div className="space-y-1">
@@ -843,7 +874,22 @@ export function COCPreviewApproval({
                           }
                         })}
                         className="h-8 text-sm"
-                        placeholder="237"
+                        placeholder="237V, 237V, 237V"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Voltage Full Load (V)</Label>
+                      <Input
+                        value={editedData.testResults?.voltageFullLoad || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            voltageFullLoad: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="240V, 240V, 237V"
                       />
                     </div>
                     <div className="space-y-1">
@@ -859,6 +905,51 @@ export function COCPreviewApproval({
                         })}
                         className="h-8 text-sm"
                         placeholder="N/A or correct"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Earth Leakage Test Button</Label>
+                      <Input
+                        value={editedData.testResults?.earthLeakageTestButton || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            earthLeakageTestButton: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="correct"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Phase Rotation</Label>
+                      <Input
+                        value={editedData.testResults?.phaseRotation || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            phaseRotation: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="correct"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Switching Devices</Label>
+                      <Input
+                        value={editedData.testResults?.switchingDevices || ''}
+                        onChange={(e) => setEditedData({
+                          ...editedData,
+                          testResults: {
+                            ...editedData.testResults,
+                            switchingDevices: e.target.value
+                          }
+                        })}
+                        className="h-8 text-sm"
+                        placeholder="correct"
                       />
                     </div>
                   </div>
