@@ -173,7 +173,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         category,
         description,
         sections: sections as any,  // Save as array
-        tenants: tenants.length > 0 ? tenants as any : undefined,
+        tenants: (category === "Low Voltage" && tenants.length > 0) ? tenants as any : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
         updated_at: new Date().toISOString(),
@@ -254,9 +254,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
       </Card>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className={`grid w-full max-w-md ${category === "Low Voltage" ? "grid-cols-2" : "grid-cols-1"}`}>
           <TabsTrigger value="structure">Template Structure</TabsTrigger>
-          <TabsTrigger value="tenants">Tenants</TabsTrigger>
+          {category === "Low Voltage" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6 mt-6">
@@ -370,14 +370,15 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
           ))}
         </TabsContent>
 
-        <TabsContent value="tenants" className="space-y-6 mt-6">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold">Tenant Information</h3>
-            <Button onClick={addTenant} variant="outline" size="sm">
-              <Plus className="mr-2 h-4 w-4" />
-              Add Tenant
-            </Button>
-          </div>
+        {category === "Low Voltage" && (
+          <TabsContent value="tenants" className="space-y-6 mt-6">
+            <div className="flex items-center justify-between">
+              <h3 className="text-lg font-semibold">Tenant Information</h3>
+              <Button onClick={addTenant} variant="outline" size="sm">
+                <Plus className="mr-2 h-4 w-4" />
+                Add Tenant
+              </Button>
+            </div>
 
           {tenants.length === 0 && (
             <Card>
@@ -463,7 +464,8 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
               </CardContent>
             </Card>
           ))}
-        </TabsContent>
+          </TabsContent>
+        )}
       </Tabs>
 
       <div className="flex justify-end gap-3 pt-6 border-t">
