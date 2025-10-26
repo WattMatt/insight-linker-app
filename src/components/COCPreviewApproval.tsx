@@ -104,6 +104,9 @@ export function COCPreviewApproval({
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState<number>(1);
   const [scale, setScale] = useState<number>(1.0);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
   const handleSaveEdits = () => {
     setIsEditing(false);
@@ -121,6 +124,36 @@ export function COCPreviewApproval({
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
   const handlePrevPage = () => setPageNumber(prev => Math.max(prev - 1, 1));
   const handleNextPage = () => setPageNumber(prev => Math.min(prev + 1, numPages));
+
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale(prev => Math.max(0.5, Math.min(3.0, prev + delta)));
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (isDragging) {
+      setPan({
+        x: e.clientX - dragStart.x,
+        y: e.clientY - dragStart.y
+      });
+    }
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  const handleMouseLeave = () => {
+    setIsDragging(false);
+  };
 
   const getConfidenceBadge = (confidence?: string) => {
     switch (confidence) {
@@ -183,27 +216,44 @@ export function COCPreviewApproval({
                 </Button>
               </div>
             </div>
-            <div className="border rounded-lg overflow-auto bg-muted h-[600px] flex flex-col">
-              <div className="flex-1 overflow-auto p-4 flex items-center justify-center">
-                <Document
-                  file={documentUrl}
-                  onLoadSuccess={onDocumentLoadSuccess}
-                  loading={
-                    <div className="flex items-center justify-center h-full">
-                      <RefreshCw className="h-8 w-8 animate-spin text-primary" />
-                    </div>
-                  }
+            <div 
+              className="border rounded-lg overflow-auto bg-muted h-[600px] flex flex-col"
+              onWheel={handleWheel}
+            >
+              <div 
+                className="flex-1 overflow-hidden p-4 flex items-center justify-center relative"
+                style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
+                onMouseDown={handleMouseDown}
+                onMouseMove={handleMouseMove}
+                onMouseUp={handleMouseUp}
+                onMouseLeave={handleMouseLeave}
+              >
+                <div 
+                  style={{ 
+                    transform: `translate(${pan.x}px, ${pan.y}px)`,
+                    transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+                  }}
                 >
-                  <Page
-                    pageNumber={pageNumber}
-                    scale={scale}
+                  <Document
+                    file={documentUrl}
+                    onLoadSuccess={onDocumentLoadSuccess}
                     loading={
-                      <div className="flex items-center justify-center">
-                        <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                      <div className="flex items-center justify-center h-full">
+                        <RefreshCw className="h-8 w-8 animate-spin text-primary" />
                       </div>
                     }
-                  />
-                </Document>
+                  >
+                    <Page
+                      pageNumber={pageNumber}
+                      scale={scale}
+                      loading={
+                        <div className="flex items-center justify-center">
+                          <RefreshCw className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                      }
+                    />
+                  </Document>
+                </div>
               </div>
               {numPages > 1 && (
                 <div className="border-t bg-background p-2 flex items-center justify-center gap-2">
