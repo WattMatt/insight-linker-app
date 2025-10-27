@@ -120,6 +120,8 @@ export const FloorPlanPinModal = ({
   };
 
   const handleSave = async () => {
+    console.log("handleSave called", { formData, photoPreview, initialData });
+    
     if (!formData.title.trim()) {
       toast.error("Please enter a title");
       return;
@@ -132,6 +134,7 @@ export const FloorPlanPinModal = ({
 
     setIsSaving(true);
     try {
+      console.log("Calling onSave with:", formData);
       await onSave(formData, photoFile || undefined);
       onClose();
     } catch (error) {
