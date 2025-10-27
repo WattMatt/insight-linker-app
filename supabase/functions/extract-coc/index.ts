@@ -357,15 +357,45 @@ serve(async (req) => {
     console.log('Starting COC data extraction for:', fileName);
     console.log('Downloading document from URL:', documentUrl.substring(0, 100) + '...');
     
-    // Download the document using fetch (works for both signed URLs and public URLs)
-    const docResponse = await fetch(documentUrl);
+    // Extract the storage path from the URL
+    // URL format: https://PROJECT.supabase.co/storage/v1/object/public/documents/PATH
+    let fileData: Blob;
     
-    if (!docResponse.ok) {
-      console.error('Failed to fetch document:', docResponse.status, docResponse.statusText);
-      throw new Error(`Failed to download document: ${docResponse.statusText}`);
+    try {
+      // Try to extract path from URL
+      const urlParts = documentUrl.split('/documents/');
+      if (urlParts.length === 2) {
+        const filePath = decodeURIComponent(urlParts[1]);
+        console.log('Downloading from storage path:', filePath);
+        
+        // Use Supabase client to download from private bucket
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .download(filePath);
+        
+        if (error) {
+          console.error('Supabase storage download error:', error);
+          throw new Error(`Failed to download from storage: ${error.message}`);
+        }
+        
+        fileData = data;
+        console.log('Document downloaded successfully from storage');
+      } else {
+        // Fallback to direct fetch for other URL formats
+        console.log('Using direct fetch for URL');
+        const docResponse = await fetch(documentUrl);
+        
+        if (!docResponse.ok) {
+          console.error('Failed to fetch document:', docResponse.status, docResponse.statusText);
+          throw new Error(`Failed to download document: ${docResponse.statusText}`);
+        }
+        
+        fileData = await docResponse.blob();
+      }
+    } catch (downloadError: any) {
+      console.error('Download error:', downloadError);
+      throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
     }
-    
-    const fileData = await docResponse.blob();
 
     // Check if this is a PDF file
     const isPDF = fileName?.toLowerCase().endsWith('.pdf');
