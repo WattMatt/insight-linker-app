@@ -302,6 +302,13 @@ const SubsectionDetail = () => {
         if (isValidDate(cocIssueDateExtracted)) {
           updateData.coc_issue_date = cocIssueDateExtracted;
         }
+        
+        // Automatically set coc_status to 'Approved' if validation passed
+        if (result.overallStatus === 'Pass' || result.status === 'Pass') {
+          updateData.coc_status = 'Approved';
+        } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
+          updateData.coc_status = 'Failed';
+        }
 
         if (Object.keys(updateData).length > 0) {
           try {
@@ -320,7 +327,8 @@ const SubsectionDetail = () => {
                 setSubsection({
                   ...subsection,
                   cocNumber: cocNumberExtracted || subsection.cocNumber,
-                  cocIssueDate: cocIssueDateExtracted || subsection.cocIssueDate
+                  cocIssueDate: cocIssueDateExtracted || subsection.cocIssueDate,
+                  cocStatus: updateData.coc_status || subsection.cocStatus
                 });
               }
             }
