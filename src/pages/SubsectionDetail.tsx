@@ -813,6 +813,7 @@ const SubsectionDetail = () => {
       
       if (meterSerialNumber) {
         updateData.meter_serial_number = meterSerialNumber;
+        updateData.metering_status = 'Installed'; // Update status when meter serial is provided
       }
       if (ctRatio) {
         updateData.ct_ratio = ctRatio;
