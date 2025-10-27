@@ -2560,23 +2560,23 @@ const SubsectionDetail = () => {
                                 <input
                                   type="radio"
                                   name={`cocStatus-${doc.id}`}
-                                  value="Pass"
-                                  checked={cocStatus === 'Pass'}
+                                  value="Approved"
+                                  checked={cocStatus === 'Approved'}
                                   onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
-                                <span className="text-sm">Pass</span>
+                                <span className="text-sm">✅ Approved</span>
                               </label>
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`cocStatus-${doc.id}`}
-                                  value="Fail"
-                                  checked={cocStatus === 'Fail'}
+                                  value="Failed"
+                                  checked={cocStatus === 'Failed'}
                                   onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
-                                <span className="text-sm">Fail</span>
+                                <span className="text-sm">❌ Failed</span>
                               </label>
                             </div>
                           </div>
@@ -2721,23 +2721,23 @@ const SubsectionDetail = () => {
                                 <input
                                   type="radio"
                                   name={`cocStatus-${idx}`}
-                                  value="Pass"
-                                  checked={cocStatus === 'Pass'}
+                                  value="Approved"
+                                  checked={cocStatus === 'Approved'}
                                   onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
-                                <span className="text-sm">Pass</span>
+                                <span className="text-sm">✅ Approved</span>
                               </label>
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
                                   name={`cocStatus-${idx}`}
-                                  value="Fail"
-                                  checked={cocStatus === 'Fail'}
+                                  value="Failed"
+                                  checked={cocStatus === 'Failed'}
                                   onChange={(e) => setCocStatus(e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
-                                <span className="text-sm">Fail</span>
+                                <span className="text-sm">❌ Failed</span>
                               </label>
                             </div>
                           </div>
@@ -2856,23 +2856,23 @@ const SubsectionDetail = () => {
                             <input
                               type="radio"
                               name="cocStatus"
-                              value="Pass"
-                              checked={cocStatus === 'Pass'}
+                              value="Approved"
+                              checked={cocStatus === 'Approved'}
                               onChange={(e) => setCocStatus(e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
-                            <span className="text-sm">Pass</span>
+                            <span className="text-sm">✅ Approved</span>
                           </label>
                           <label className="flex items-center gap-2 cursor-pointer">
                             <input
                               type="radio"
                               name="cocStatus"
-                              value="Fail"
-                              checked={cocStatus === 'Fail'}
+                              value="Failed"
+                              checked={cocStatus === 'Failed'}
                               onChange={(e) => setCocStatus(e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
-                            <span className="text-sm">Fail</span>
+                            <span className="text-sm">❌ Failed</span>
                           </label>
                         </div>
                       </div>
