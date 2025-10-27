@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye, Calendar as CalendarIcon } from "lucide-react";
 import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
@@ -20,6 +20,8 @@ import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { COCValidationReport } from "@/components/COCValidationReport";
 import { ValidationChat } from "@/components/ValidationChat";
@@ -2485,12 +2487,30 @@ const SubsectionDetail = () => {
                             </div>
                             <div>
                               <Label>Issue Date</Label>
-                              <Input
-                                type="date"
-                                value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
-                                onChange={(e) => setCocIssueDate(e.target.value)}
-                                className="mt-1"
-                              />
+                              <Popover>
+                                <PopoverTrigger asChild>
+                                  <Button
+                                    variant="outline"
+                                    className="w-full justify-start text-left font-normal mt-1"
+                                  >
+                                    <CalendarIcon className="mr-2 h-4 w-4" />
+                                    {cocIssueDate || subsection.cocIssueDate ? (
+                                      format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                    ) : (
+                                      <span>Pick a date</span>
+                                    )}
+                                  </Button>
+                                </PopoverTrigger>
+                                <PopoverContent className="w-auto p-0" align="start">
+                                  <Calendar
+                                    mode="single"
+                                    selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
+                                    onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                    initialFocus
+                                    className="pointer-events-auto"
+                                  />
+                                </PopoverContent>
+                              </Popover>
                             </div>
                           </div>
 
@@ -2628,12 +2648,30 @@ const SubsectionDetail = () => {
                         </div>
                         <div>
                           <Label>Issue Date</Label>
-                          <Input
-                            type="date"
-                            value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
-                            onChange={(e) => setCocIssueDate(e.target.value)}
-                            className="mt-1"
-                          />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-start text-left font-normal mt-1"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {cocIssueDate || subsection.cocIssueDate ? (
+                                  format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
+                                onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                initialFocus
+                                className="pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </div>
 
@@ -2745,12 +2783,30 @@ const SubsectionDetail = () => {
                         </div>
                         <div>
                           <Label>Issue Date</Label>
-                          <Input
-                            type="date"
-                            value={cocIssueDate || (subsection.cocIssueDate ? format(new Date(subsection.cocIssueDate), 'yyyy-MM-dd') : '')}
-                            onChange={(e) => setCocIssueDate(e.target.value)}
-                            className="mt-1"
-                          />
+                          <Popover>
+                            <PopoverTrigger asChild>
+                              <Button
+                                variant="outline"
+                                className="w-full justify-start text-left font-normal mt-1"
+                              >
+                                <CalendarIcon className="mr-2 h-4 w-4" />
+                                {cocIssueDate || subsection.cocIssueDate ? (
+                                  format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                ) : (
+                                  <span>Pick a date</span>
+                                )}
+                              </Button>
+                            </PopoverTrigger>
+                            <PopoverContent className="w-auto p-0" align="start">
+                              <Calendar
+                                mode="single"
+                                selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
+                                onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                initialFocus
+                                className="pointer-events-auto"
+                              />
+                            </PopoverContent>
+                          </Popover>
                         </div>
                       </div>
 
