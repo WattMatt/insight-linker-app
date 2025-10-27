@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { FileText, Save } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
@@ -15,6 +15,7 @@ interface SiteSummaryReportProps {
 
 export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryReportProps) => {
   const [generating, setGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const drawHealthCard = (
     doc: jsPDF,
@@ -768,15 +769,274 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     return snags;
   };
 
+  const saveToDocuments = async () => {
+    try {
+      setSaving(true);
+      toast.info("Generating and saving report to documents...");
+
+      // Fetch all necessary data including COC validations
+      const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes] = await Promise.all([
+        supabase.from("sites").select("*, clients(name)").eq("id", siteId).single(),
+        supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
+        supabase.from("inspections").select("*").eq("site_id", siteId),
+        supabase.from("site_documents").select("*").eq("site_id", siteId),
+        supabase.from("subsection_documents").select("subsection_id, file_name, category_id")
+      ]);
+
+      if (siteRes.error) throw siteRes.error;
+      
+      const site = siteRes.data;
+      const subsections = subsectionsRes.data || [];
+      const allInspections = inspectionsRes.data || [];
+      const siteDocuments = docsRes.data || [];
+      const subsectionDocuments = subsectionDocsRes.data || [];
+      
+      // Get COC validations for subsections on this site
+      const subsectionIds = subsections.map(s => s.id);
+      const cocValidationsQuery = await supabase
+        .from("coc_validations")
+        .select("*")
+        .in("subsection_id", subsectionIds)
+        .order("validated_at", { ascending: false });
+      
+      const cocValidations = cocValidationsQuery.data || [];
+
+      // Generate the PDF document (reusing logic from generateReport)
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+
+      // ===== TITLE PAGE =====
+      doc.setFillColor(44, 62, 80);
+      doc.rect(0, 0, pageWidth, 30, 'F');
+      
+      doc.setTextColor(255, 255, 255);
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text(clientName.toUpperCase(), pageWidth / 2, 20, { align: 'center' });
+      
+      doc.setFillColor(245, 245, 245);
+      doc.rect(0, 30, pageWidth, pageHeight - 30, 'F');
+      
+      doc.setTextColor(33, 33, 33);
+      doc.setFontSize(48);
+      doc.setFont(undefined, 'bold');
+      doc.text(siteName, pageWidth / 2, 120, { align: 'center' });
+      
+      doc.setFontSize(20);
+      doc.setTextColor(128, 128, 128);
+      doc.setFont(undefined, 'normal');
+      doc.text("Site Summary Report", pageWidth / 2, 140, { align: 'center' });
+      
+      doc.setDrawColor(200, 200, 200);
+      doc.setLineWidth(0.5);
+      doc.line(60, 160, pageWidth - 60, 160);
+      
+      doc.setFontSize(11);
+      doc.setTextColor(100, 100, 100);
+      doc.text("Date of Report", 70, 180);
+      doc.setTextColor(33, 33, 33);
+      const reportDate = new Date().toLocaleDateString('en-ZA').replace(/\//g, '/');
+      doc.text(reportDate, pageWidth - 70, 180, { align: 'right' });
+      
+      doc.setTextColor(100, 100, 100);
+      doc.text("Total Subsections", 70, 195);
+      doc.setTextColor(33, 33, 33);
+      doc.text(subsections.length.toString(), pageWidth - 70, 195, { align: 'right' });
+      
+      doc.setFontSize(9);
+      doc.setTextColor(150, 150, 150);
+      doc.text(`${siteName} - Site Summary Report`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+      // ===== HEALTH OVERVIEW PAGE =====
+      doc.addPage();
+      doc.setFillColor(245, 245, 245);
+      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      
+      doc.setTextColor(63, 81, 181);
+      doc.setFontSize(18);
+      doc.setFont(undefined, 'bold');
+      doc.text("Site Health Overview", 20, 25);
+      doc.setDrawColor(63, 81, 181);
+      doc.setLineWidth(1);
+      doc.line(20, 28, pageWidth - 20, 28);
+      
+      const cocRequired = subsections.filter(s => s.is_coc_required).length;
+      const cocCompliant = subsections.filter(s => s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass').length;
+      const meteringInstalled = subsections.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length;
+      const compliantCount = subsections.filter(s => s.is_compliant).length;
+      
+      let totalSnags = 0;
+      const subsectionsWithSnags = new Set<string>();
+      allInspections.forEach(insp => {
+        const snags = extractSnags(insp.json_data);
+        if (snags.length > 0 && insp.subsection_id) {
+          subsectionsWithSnags.add(insp.subsection_id);
+          totalSnags += snags.length;
+        }
+      });
+      
+      const overallHealth = Math.round((compliantCount / subsections.length) * 100) || 0;
+      const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
+      const meteringData = Math.round((meteringInstalled / subsections.length) * 100) || 0;
+      const snagsPercentage = Math.round((subsectionsWithSnags.size / subsections.length) * 100) || 0;
+      
+      const cardWidth = 46;
+      const cardHeight = 58;
+      const cardSpacing = 4;
+      const startX = 12;
+      let cardY = 45;
+      
+      drawHealthCard(doc, startX, cardY, cardWidth, cardHeight, "OVERALL HEALTH", overallHealth, "", 46, 125, 50);
+      drawHealthCard(doc, startX + cardWidth + cardSpacing, cardY, cardWidth, cardHeight, "COC COMPLIANCE", cocCompliance, `${cocCompliant} of ${cocRequired} required`, 255, 152, 0);
+      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 2, cardY, cardWidth, cardHeight, "METERING DATA", meteringData, `${meteringInstalled} of ${subsections.length} installed`, 33, 150, 243);
+      drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 3, cardY, cardWidth, cardHeight, "OPEN SNAGS", 100 - snagsPercentage, `${totalSnags} total snags`, 244, 67, 54);
+      
+      cardY = 118;
+      doc.setTextColor(63, 81, 181);
+      doc.setFontSize(16);
+      doc.setFont(undefined, 'bold');
+      doc.text("Health by Category", 20, cardY);
+      doc.setDrawColor(220, 220, 220);
+      doc.setLineWidth(0.5);
+      doc.line(20, cardY + 3, pageWidth - 20, cardY + 3);
+      
+      cardY = 133;
+      
+      const categoryGroups = subsections.reduce((acc, sub) => {
+        const cat = sub.category || 'Uncategorized';
+        if (!acc[cat]) acc[cat] = { total: 0, compliant: 0 };
+        acc[cat].total++;
+        if (sub.is_compliant) acc[cat].compliant++;
+        return acc;
+      }, {} as Record<string, { total: number; compliant: number }>);
+      
+      const categories = Object.keys(categoryGroups).slice(0, 4);
+      categories.forEach((cat, idx) => {
+        const data = categoryGroups[cat];
+        const percentage = Math.round((data.compliant / data.total) * 100) || 0;
+        const xPos = startX + (cardWidth + cardSpacing) * idx;
+        const abbrev = getCategoryAbbreviation(cat);
+        const color = percentage >= 80 ? [46, 125, 50] : percentage >= 60 ? [255, 152, 0] : [244, 67, 54];
+        drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant}/${data.total} compliant`, color[0], color[1], color[2]);
+      });
+      
+      doc.setFontSize(9);
+      doc.setTextColor(150, 150, 150);
+      doc.text("Page 1", pageWidth / 2, pageHeight - 10, { align: 'center' });
+
+      // ===== SUBSECTION DETAIL PAGES =====
+      let pageNumber = 2;
+      
+      for (let i = 0; i < subsections.length; i += 2) {
+        doc.addPage();
+        doc.setFillColor(245, 245, 245);
+        doc.rect(0, 0, pageWidth, pageHeight, 'F');
+        
+        const isFirstCompliant = calculateSubsectionCompliance(subsections[i], allInspections, subsectionDocuments);
+        renderSubsectionCard(doc, subsections[i], 15, allInspections, subsectionDocuments, isFirstCompliant);
+        
+        if (i + 1 < subsections.length) {
+          const isSecondCompliant = calculateSubsectionCompliance(subsections[i + 1], allInspections, subsectionDocuments);
+          renderSubsectionCard(doc, subsections[i + 1], 140, allInspections, subsectionDocuments, isSecondCompliant);
+        }
+        
+        doc.setFontSize(9);
+        doc.setTextColor(150, 150, 150);
+        doc.text(`Page ${pageNumber}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+        pageNumber++;
+      }
+
+      // Generate PDF as blob
+      const pdfBlob = doc.output('blob');
+      
+      // Find or create "Site Summary Reports" category
+      const { data: existingCategories } = await supabase
+        .from('site_document_categories')
+        .select('*')
+        .eq('site_id', siteId)
+        .eq('name', 'Site Summary Reports');
+
+      let categoryId: string;
+      
+      if (existingCategories && existingCategories.length > 0) {
+        categoryId = existingCategories[0].id;
+      } else {
+        // Create new category
+        const { data: newCategory, error: categoryError } = await supabase
+          .from('site_document_categories')
+          .insert({
+            site_id: siteId,
+            name: 'Site Summary Reports',
+            order_index: 999 // Put it at the end
+          })
+          .select()
+          .single();
+
+        if (categoryError) throw categoryError;
+        categoryId = newCategory.id;
+      }
+
+      // Upload PDF to storage
+      const timestamp = Date.now();
+      const fileName = `${siteId}/Site Summary Reports/${timestamp}-${siteName.replace(/[^a-zA-Z0-9]/g, '_')}_Summary_Report.pdf`;
+      
+      const { data: uploadData, error: uploadError } = await supabase.storage
+        .from('documents')
+        .upload(fileName, pdfBlob, {
+          contentType: 'application/pdf'
+        });
+
+      if (uploadError) throw uploadError;
+
+      // Get public URL
+      const { data: urlData } = supabase.storage
+        .from('documents')
+        .getPublicUrl(uploadData.path);
+
+      // Insert document record
+      const reportDateFormatted = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
+      const { error: insertError } = await supabase
+        .from('site_documents')
+        .insert({
+          site_id: siteId,
+          category_id: categoryId,
+          file_name: `${siteName} - Site Summary Report - ${reportDateFormatted}.pdf`,
+          file_url: urlData.publicUrl,
+          category: 'Site Summary Reports',
+        });
+
+      if (insertError) throw insertError;
+
+      toast.success("Site summary report saved to documents!");
+    } catch (error) {
+      console.error('Error saving report:', error);
+      toast.error('Failed to save report to documents');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Button 
-      onClick={generateReport} 
-      disabled={generating}
-      variant="outline"
-      className="gap-2"
-    >
-      <FileText className="h-4 w-4" />
-      {generating ? "Generating..." : "Generate Site Summary"}
-    </Button>
+    <div className="flex gap-2">
+      <Button 
+        onClick={generateReport} 
+        disabled={generating || saving}
+        variant="outline"
+        className="gap-2"
+      >
+        <FileText className="h-4 w-4" />
+        {generating ? "Generating..." : "Generate & Download"}
+      </Button>
+      <Button 
+        onClick={saveToDocuments} 
+        disabled={generating || saving}
+        variant="default"
+        className="gap-2"
+      >
+        <Save className="h-4 w-4" />
+        {saving ? "Saving..." : "Save to Documents"}
+      </Button>
+    </div>
   );
 };
