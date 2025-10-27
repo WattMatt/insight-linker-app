@@ -2753,12 +2753,14 @@ const SubsectionDetail = () => {
             <Card className="border-red-200">
               <CardHeader>
                 <CardTitle>Metering Details & Documents</CardTitle>
-                <Alert className="mt-2 bg-red-50 border-red-200">
-                  <AlertCircle className="h-4 w-4 text-red-600" />
-                  <AlertDescription className="text-red-600">
-                    This information is a requirement for the subsection to pass compliance checks.
-                  </AlertDescription>
-                </Alert>
+                {(!subsection?.meterSerialNumber && !meterSerialNumber) && (
+                  <Alert className="mt-2 bg-red-50 border-red-200">
+                    <AlertCircle className="h-4 w-4 text-red-600" />
+                    <AlertDescription className="text-red-600">
+                      This information is a requirement for the subsection to pass compliance checks.
+                    </AlertDescription>
+                  </Alert>
+                )}
               </CardHeader>
               <CardContent className="space-y-6">
                 <div className="grid md:grid-cols-2 gap-4">
