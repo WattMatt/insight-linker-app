@@ -204,22 +204,42 @@ export const FloorPlanPinModal = ({
           </div>
         ) : (
           <div className="space-y-4">
-            {/* Type Badge */}
-            {!initialData && (
-              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
-                <span className="font-medium">
-                  {formData.pin_type === 'snag' ? '⚠️ Snag' : '👁️ Observation'}
-                </span>
+            {/* Type Selector - Always visible and prominent */}
+            <div>
+              <Label className="text-base font-semibold mb-3 block">Type</Label>
+              <div className="grid grid-cols-2 gap-3">
                 <Button
                   type="button"
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setStep('type')}
+                  size="lg"
+                  className="h-24 flex flex-col gap-2"
+                  variant={formData.pin_type === 'snag' ? 'default' : 'outline'}
+                  onClick={() => setFormData({ ...formData, pin_type: 'snag' })}
                 >
-                  Change
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    formData.pin_type === 'snag' ? 'bg-white/20' : 'bg-destructive/20'
+                  }`}>
+                    <span className="text-xl">⚠️</span>
+                  </div>
+                  <span className="font-bold">Snag</span>
+                  <span className="text-xs opacity-70">Issue to fix</span>
+                </Button>
+                <Button
+                  type="button"
+                  size="lg"
+                  className="h-24 flex flex-col gap-2"
+                  variant={formData.pin_type === 'observation' ? 'default' : 'outline'}
+                  onClick={() => setFormData({ ...formData, pin_type: 'observation' })}
+                >
+                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                    formData.pin_type === 'observation' ? 'bg-white/20' : 'bg-primary/20'
+                  }`}>
+                    <span className="text-xl">👁️</span>
+                  </div>
+                  <span className="font-bold">Observation</span>
+                  <span className="text-xs opacity-70">Note only</span>
                 </Button>
               </div>
-            )}
+            </div>
 
             {/* Photo - Featured prominently */}
             <div className="border-2 border-dashed rounded-lg p-4">
