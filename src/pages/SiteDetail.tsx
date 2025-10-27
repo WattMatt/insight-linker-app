@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
@@ -1408,31 +1408,55 @@ const SiteDetail = () => {
                   </div>
                 ) : site.site_image_url ? (
                   <div className="relative group w-fit">
-                    <img
-                      key={site.site_image_url}
-                      src={site.site_image_url}
-                      alt="Site main image"
-                      className="w-64 h-48 object-cover rounded border bg-muted"
-                      crossOrigin="anonymous"
-                      onError={(e) => {
-                        e.currentTarget.src = '/placeholder.svg';
-                        e.currentTarget.alt = 'Image preview unavailable';
-                      }}
-                    />
-                    {site.site_image_url.includes('firebasestorage.googleapis.com') && (
-                      <Badge variant="secondary" className="absolute top-2 left-2">
-                        Legacy
-                      </Badge>
-                    )}
-                    {site.site_image_url.includes('supabase.co/storage') && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setDeleteImageType('site_image')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
+                      <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
+                        <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
+                        <p className="text-sm font-medium text-center mb-2">Legacy Firebase Image</p>
+                        <p className="text-xs text-center mb-3">This image is no longer accessible</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await supabase
+                                .from('sites')
+                                .update({ site_image_url: null })
+                                .eq('id', siteId);
+                              toast.success("Legacy URL removed. Please upload a new image.");
+                              fetchSiteData();
+                            } catch (error) {
+                              toast.error("Failed to clear legacy URL");
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Clear & Upload New
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <img
+                          key={site.site_image_url}
+                          src={site.site_image_url}
+                          alt="Site main image"
+                          className="w-64 h-48 object-cover rounded border bg-muted"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder.svg';
+                            e.currentTarget.alt = 'Image preview unavailable';
+                          }}
+                        />
+                        {site.site_image_url.includes('supabase.co/storage') && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setDeleteImageType('site_image')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
@@ -1507,31 +1531,55 @@ const SiteDetail = () => {
                   </div>
                 ) : site.client_logo_url ? (
                   <div className="relative group w-fit">
-                    <img
-                      key={site.client_logo_url}
-                      src={site.client_logo_url}
-                      alt="Client logo"
-                      className="w-48 h-32 object-contain rounded border p-2 bg-muted"
-                      crossOrigin="anonymous"
-                      onError={(e) => {
-                        e.currentTarget.src = '/placeholder.svg';
-                        e.currentTarget.alt = 'Image preview unavailable';
-                      }}
-                    />
-                    {site.client_logo_url.includes('firebasestorage.googleapis.com') && (
-                      <Badge variant="secondary" className="absolute top-2 left-2">
-                        Legacy
-                      </Badge>
-                    )}
-                    {site.client_logo_url.includes('supabase.co/storage') && (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setDeleteImageType('client_logo')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
+                    {site.client_logo_url.includes('firebasestorage.googleapis.com') ? (
+                      <div className="w-48 h-32 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
+                        <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
+                        <p className="text-xs font-medium text-center mb-2">Legacy Firebase Logo</p>
+                        <p className="text-xs text-center mb-3">No longer accessible</p>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={async () => {
+                            try {
+                              await supabase
+                                .from('sites')
+                                .update({ client_logo_url: null })
+                                .eq('id', siteId);
+                              toast.success("Legacy URL removed. Please upload a new logo.");
+                              fetchSiteData();
+                            } catch (error) {
+                              toast.error("Failed to clear legacy URL");
+                            }
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3 mr-1" />
+                          Clear & Upload New
+                        </Button>
+                      </div>
+                    ) : (
+                      <>
+                        <img
+                          key={site.client_logo_url}
+                          src={site.client_logo_url}
+                          alt="Client logo"
+                          className="w-48 h-32 object-contain rounded border p-2 bg-muted"
+                          crossOrigin="anonymous"
+                          onError={(e) => {
+                            e.currentTarget.src = '/placeholder.svg';
+                            e.currentTarget.alt = 'Image preview unavailable';
+                          }}
+                        />
+                        {site.client_logo_url.includes('supabase.co/storage') && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                            onClick={() => setDeleteImageType('client_logo')}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        )}
+                      </>
                     )}
                   </div>
                 ) : (
