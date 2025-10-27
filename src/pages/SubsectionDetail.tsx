@@ -1694,24 +1694,26 @@ const SubsectionDetail = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Badge 
-                        variant="outline"
-                        className={
-                          (() => {
-                            if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
-                            if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
-                            if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
-                            return "bg-green-500/10 text-green-500";
-                          })()
-                        }
-                      >
-                        {(() => {
-                          if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
-                          if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
-                          if (openSnagsCount > 0) return "Fail";
-                          return "Pass";
-                        })()}
-                      </Badge>
+                      <span className="inline-block cursor-help">
+                        <Badge 
+                          variant="outline"
+                          className={
+                            (() => {
+                              if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
+                              if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
+                              if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
+                              return "bg-green-500/10 text-green-500";
+                            })()
+                          }
+                        >
+                          {(() => {
+                            if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
+                            if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
+                            if (openSnagsCount > 0) return "Fail";
+                            return "Pass";
+                          })()}
+                        </Badge>
+                      </span>
                     </TooltipTrigger>
                     <TooltipContent className="max-w-xs">
                       {(() => {
