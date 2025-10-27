@@ -244,6 +244,71 @@ export type Database = {
         }
         Relationships: []
       }
+      floor_plan_pins: {
+        Row: {
+          assigned_contractor: string | null
+          created_at: string | null
+          created_by: string | null
+          due_date: string | null
+          floor_plan_id: string
+          id: string
+          notes: string | null
+          photo_url: string | null
+          pin_number: number
+          pin_type: string
+          priority: string | null
+          status: string
+          title: string | null
+          updated_at: string | null
+          x_position: number
+          y_position: number
+        }
+        Insert: {
+          assigned_contractor?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          floor_plan_id: string
+          id?: string
+          notes?: string | null
+          photo_url?: string | null
+          pin_number: number
+          pin_type: string
+          priority?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+          x_position: number
+          y_position: number
+        }
+        Update: {
+          assigned_contractor?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          due_date?: string | null
+          floor_plan_id?: string
+          id?: string
+          notes?: string | null
+          photo_url?: string | null
+          pin_number?: number
+          pin_type?: string
+          priority?: string | null
+          status?: string
+          title?: string | null
+          updated_at?: string | null
+          x_position?: number
+          y_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_plan_pins_floor_plan_id_fkey"
+            columns: ["floor_plan_id"]
+            isOneToOne: false
+            referencedRelation: "subsection_floor_plans"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspection_items: {
         Row: {
           created_at: string
@@ -1049,6 +1114,44 @@ export type Database = {
           },
           {
             foreignKeyName: "subsection_documents_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      subsection_floor_plans: {
+        Row: {
+          created_at: string | null
+          file_name: string
+          file_url: string
+          id: string
+          subsection_id: string
+          updated_at: string | null
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          file_name: string
+          file_url: string
+          id?: string
+          subsection_id: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          file_name?: string
+          file_url?: string
+          id?: string
+          subsection_id?: string
+          updated_at?: string | null
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "subsection_floor_plans_subsection_id_fkey"
             columns: ["subsection_id"]
             isOneToOne: false
             referencedRelation: "subsections"

@@ -26,6 +26,7 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { COCValidationReport } from "@/components/COCValidationReport";
 import { ValidationChat } from "@/components/ValidationChat";
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
+import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 
 interface SubsectionData {
   name: string;
@@ -1707,6 +1708,7 @@ const SubsectionDetail = () => {
         <TabsList>
           <TabsTrigger value="overview">Overview</TabsTrigger>
           <TabsTrigger value="inspections">Inspections</TabsTrigger>
+          <TabsTrigger value="floor-plan">Floor Plan</TabsTrigger>
           <TabsTrigger value="documents">Documents</TabsTrigger>
           <TabsTrigger value="coc-metering">COC Docs & Metering Data</TabsTrigger>
         </TabsList>
@@ -2366,6 +2368,16 @@ const SubsectionDetail = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+        </TabsContent>
+
+        {/* Floor Plan Tab */}
+        <TabsContent value="floor-plan" className="space-y-4">
+          <InteractiveFloorPlan
+            subsectionId={subsectionId || ''}
+            projectName={siteData?.clientInfo || 'Unknown Client'}
+            siteName={siteData?.siteName || 'Unknown Site'}
+            subsectionName={subsection?.name || 'Unknown Subsection'}
+          />
         </TabsContent>
 
         {/* COC Docs & Metering Data Tab */}
