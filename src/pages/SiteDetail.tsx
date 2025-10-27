@@ -1919,14 +1919,16 @@ const SiteDetail = () => {
                                       <Badge
                                         variant="outline"
                                         className={
-                                          sub.metering_status === "Installed"
+                                          sub.metering_status === "Installed" || sub.meter_serial_number
                                             ? "bg-green-500/10 text-green-500"
                                             : sub.is_coc_required
                                             ? "bg-red-500/10 text-red-500"
                                             : "bg-gray-500/10 text-gray-500"
                                         }
                                       >
-                                        {sub.is_coc_required ? sub.metering_status : "N/A"}
+                                        {sub.is_coc_required 
+                                          ? (sub.metering_status === "Installed" || sub.meter_serial_number ? "Installed" : sub.metering_status)
+                                          : "N/A"}
                                       </Badge>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
