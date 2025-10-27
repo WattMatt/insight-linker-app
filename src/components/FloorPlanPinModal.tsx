@@ -51,7 +51,9 @@ export const FloorPlanPinModal = ({
   pinNumber,
 }: FloorPlanPinModalProps) => {
   const { takePicture } = useCamera();
-  const [step, setStep] = useState<'type' | 'details'>(initialData ? 'details' : 'type');
+  // Show type selection for new pins (no title) or if explicitly in type mode
+  const isNewPin = !initialData?.title;
+  const [step, setStep] = useState<'type' | 'details'>(isNewPin ? 'type' : 'details');
   const [formData, setFormData] = useState<PinData>({
     pin_type: 'snag',
     title: '',
@@ -65,7 +67,9 @@ export const FloorPlanPinModal = ({
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
-      setStep('details');
+      // Show type selection for new pins (those without a title)
+      const isNewPin = !initialData.title;
+      setStep(isNewPin ? 'type' : 'details');
       if (initialData.photo_url) {
         setPhotoPreview(initialData.photo_url);
       }
