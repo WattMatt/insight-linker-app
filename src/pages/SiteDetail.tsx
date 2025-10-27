@@ -791,11 +791,32 @@ const SiteDetail = () => {
 
       if (updateError) throw updateError;
 
+      // Clear preview so the actual uploaded image is shown
+      setImagePreview(prev => {
+        const newPreview = { ...prev };
+        if (imageType === 'site_image') {
+          delete newPreview.site_image;
+        } else {
+          delete newPreview.client_logo;
+        }
+        return newPreview;
+      });
+
       toast.success("Image uploaded successfully!");
       await fetchSiteData();
     } catch (error) {
       console.error("Error uploading image:", error);
       toast.error("Failed to upload image");
+      // Clear preview on error too
+      setImagePreview(prev => {
+        const newPreview = { ...prev };
+        if (imageType === 'site_image') {
+          delete newPreview.site_image;
+        } else {
+          delete newPreview.client_logo;
+        }
+        return newPreview;
+      });
     } finally {
       setUploadingImage(null);
     }
@@ -1439,13 +1460,19 @@ const SiteDetail = () => {
                           const result = await previewPromise;
                           setImagePreview(prev => ({ ...prev, site_image: result }));
                           
-                          // Upload image - preview will be replaced by actual image when site data refreshes
+                          // Upload image - handleImageUpload will clear preview on success
                           await handleImageUpload(file, 'site_image');
                         } catch (error) {
                           console.error('Upload error:', error);
-                          setImagePreview(prev => ({ ...prev, site_image: undefined }));
+                          setImagePreview(prev => {
+                            const newPreview = { ...prev };
+                            delete newPreview.site_image;
+                            return newPreview;
+                          });
                         }
                       }
+                      // Reset input so same file can be selected again
+                      e.target.value = '';
                     }}
                   />
                   <Button
@@ -1532,13 +1559,19 @@ const SiteDetail = () => {
                           const result = await previewPromise;
                           setImagePreview(prev => ({ ...prev, client_logo: result }));
                           
-                          // Upload image - preview will be replaced by actual image when site data refreshes
+                          // Upload image - handleImageUpload will clear preview on success
                           await handleImageUpload(file, 'client_logo');
                         } catch (error) {
                           console.error('Logo upload error:', error);
-                          setImagePreview(prev => ({ ...prev, client_logo: undefined }));
+                          setImagePreview(prev => {
+                            const newPreview = { ...prev };
+                            delete newPreview.client_logo;
+                            return newPreview;
+                          });
                         }
                       }
+                      // Reset input so same file can be selected again
+                      e.target.value = '';
                     }}
                   />
                   <Button
