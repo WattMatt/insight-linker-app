@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from "react";
-import * as pdfjsLib from "pdfjs-dist";
+import { Document, Page, pdfjs } from "react-pdf";
 import { Button } from "./ui/button";
-import { ZoomIn, ZoomOut, Maximize2, Move, MapPin } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import 'react-pdf/dist/Page/AnnotationLayer.css';
+import 'react-pdf/dist/Page/TextLayer.css';
 
-// Set up PDF.js worker - use unpkg for better reliability
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface Pin {
   id: string;
@@ -31,31 +33,16 @@ export const FloorPlanViewer = ({
   pins,
   onAddPin,
   onPinClick,
-  addMode,
-  onAddModeChange,
 }: FloorPlanViewerProps) => {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [numPages, setNumPages] = useState<number>(0);
   const [scale, setScale] = useState(1);
   const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [pdfPage, setPdfPage] = useState<any>(null);
-  const [isLoading, setIsLoading] = useState(true);
   const [isShiftPressed, setIsShiftPressed] = useState(false);
-
-  useEffect(() => {
-    console.log("FloorPlanViewer: pdfUrl changed:", pdfUrl);
-    if (pdfUrl) {
-      loadPdf();
-    }
-  }, [pdfUrl]);
-
-  useEffect(() => {
-    if (pdfPage) {
-      renderPage();
-    }
-  }, [pdfPage, scale, panOffset, pins]);
+  const [pageWidth, setPageWidth] = useState(800);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -74,102 +61,47 @@ export const FloorPlanViewer = ({
     };
   }, []);
 
-  const loadPdf = async () => {
-    if (!canvasRef.current || !pdfUrl) {
-      console.log("Cannot load PDF - missing canvas or URL:", { canvas: !!canvasRef.current, pdfUrl });
-      return;
-    }
-
-    try {
-      setIsLoading(true);
-      console.log("Loading PDF from:", pdfUrl);
-      
-      const loadingTask = pdfjsLib.getDocument({
-        url: pdfUrl,
-        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
-        cMapPacked: true,
-      });
-      
-      const pdf = await loadingTask.promise;
-      console.log("PDF loaded, pages:", pdf.numPages);
-      
-      const page = await pdf.getPage(1);
-      setPdfPage(page);
-      setIsLoading(false);
-      toast.success("Floor plan loaded successfully");
-    } catch (error) {
-      console.error("Error loading PDF:", error);
-      toast.error(`Failed to load floor plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
-      setIsLoading(false);
-    }
-  };
-
-  const renderPage = () => {
-    if (!pdfPage || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const context = canvas.getContext("2d");
-    if (!context) return;
-
-    const viewport = pdfPage.getViewport({ scale });
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-
-    const renderContext = {
-      canvasContext: context,
-      viewport: viewport,
+  useEffect(() => {
+    const updateWidth = () => {
+      if (containerRef.current) {
+        const width = containerRef.current.offsetWidth - 48; // Account for padding
+        setPageWidth(Math.max(width, 600));
+      }
     };
 
-    pdfPage.render(renderContext).promise.then(() => {
-      // Draw pins on top of the PDF
-      pins.forEach((pin) => {
-        drawPin(context, pin);
-      });
-    });
+    updateWidth();
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, []);
+
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    toast.success("Floor plan loaded successfully");
   };
 
-  const drawPin = (context: CanvasRenderingContext2D, pin: Pin) => {
-    const x = pin.x_position * scale + panOffset.x;
-    const y = pin.y_position * scale + panOffset.y;
-
-    // Pin color based on type and status
-    let color = pin.pin_type === 'snag' ? '#ef4444' : '#3b82f6';
-    if (pin.status === 'resolved') color = '#9ca3af';
-    if (pin.priority === 'critical') color = '#dc2626';
-
-    // Draw pin circle
-    context.beginPath();
-    context.arc(x, y, 20, 0, 2 * Math.PI);
-    context.fillStyle = color;
-    context.fill();
-    context.strokeStyle = '#fff';
-    context.lineWidth = 3;
-    context.stroke();
-
-    // Draw pin number
-    context.fillStyle = '#fff';
-    context.font = 'bold 14px sans-serif';
-    context.textAlign = 'center';
-    context.textBaseline = 'middle';
-    context.fillText(pin.pin_number.toString(), x, y);
+  const onDocumentLoadError = (error: Error) => {
+    console.error("Error loading PDF:", error);
+    toast.error("Failed to load floor plan. Please try again.");
   };
 
-  const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current || isPanning) return;
+  const handlePageClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isPanning || isShiftPressed) return;
+    
+    const rect = pageRef.current?.getBoundingClientRect();
+    if (!rect) return;
 
-    const rect = canvasRef.current.getBoundingClientRect();
-    const x = (e.clientX - rect.left - panOffset.x) / scale;
-    const y = (e.clientY - rect.top - panOffset.y) / scale;
+    // Calculate click position relative to the PDF page
+    const x = ((e.clientX - rect.left) / rect.width) * 100;
+    const y = ((e.clientY - rect.top) / rect.height) * 100;
 
     // Check if clicking on existing pin
     const clickedPin = pins.find((pin) => {
-      const pinX = pin.x_position * scale + panOffset.x;
-      const pinY = pin.y_position * scale + panOffset.y;
+      const pinX = pin.x_position;
+      const pinY = pin.y_position;
       const distance = Math.sqrt(
-        Math.pow(e.clientX - rect.left - pinX, 2) +
-        Math.pow(e.clientY - rect.top - pinY, 2)
+        Math.pow(x - pinX, 2) + Math.pow(y - pinY, 2)
       );
-      return distance < 20;
+      return distance < 3; // 3% radius for click detection
     });
 
     if (clickedPin) {
@@ -177,12 +109,11 @@ export const FloorPlanViewer = ({
       return;
     }
 
-    // Add new pin with single click (no mode needed)
+    // Add new pin
     onAddPin(x, y);
   };
 
-  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    // Only pan when shift is held or right mouse button
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (isShiftPressed || e.button === 2) {
       e.preventDefault();
       setIsPanning(true);
@@ -190,7 +121,7 @@ export const FloorPlanViewer = ({
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isPanning) return;
     setPanOffset({
       x: e.clientX - panStart.x,
@@ -213,6 +144,12 @@ export const FloorPlanViewer = ({
   const handleResetView = () => {
     setScale(1);
     setPanOffset({ x: 0, y: 0 });
+  };
+
+  const getPinColor = (pin: Pin) => {
+    if (pin.status === 'resolved') return '#9ca3af';
+    if (pin.priority === 'critical') return '#dc2626';
+    return pin.pin_type === 'snag' ? '#ef4444' : '#3b82f6';
   };
 
   return (
@@ -239,31 +176,100 @@ export const FloorPlanViewer = ({
         </Button>
       </div>
 
-      {/* Canvas Container */}
+      {/* PDF Viewer */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-hidden relative bg-card"
+        className="flex-1 overflow-auto relative bg-card"
         style={{ cursor: isPanning ? 'grabbing' : isShiftPressed ? 'grab' : 'crosshair' }}
+        onMouseDown={handleMouseDown}
+        onMouseMove={handleMouseMove}
+        onMouseUp={handleMouseUp}
+        onMouseLeave={handleMouseUp}
+        onContextMenu={(e) => e.preventDefault()}
       >
-        {isLoading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-muted-foreground">Loading floor plan...</div>
-          </div>
-        ) : (
-          <canvas
-            ref={canvasRef}
-            onClick={handleCanvasClick}
-            onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
-            onMouseLeave={handleMouseUp}
-            onContextMenu={(e) => e.preventDefault()}
-            className="max-w-none"
-            style={{
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
-            }}
-          />
-        )}
+        <div 
+          ref={pageRef}
+          style={{
+            transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
+            transformOrigin: 'top left',
+            width: 'fit-content',
+            margin: '24px',
+            position: 'relative',
+          }}
+          onClick={handlePageClick}
+        >
+          <Document
+            file={pdfUrl}
+            onLoadSuccess={onDocumentLoadSuccess}
+            onLoadError={onDocumentLoadError}
+            loading={
+              <div className="flex items-center justify-center h-96">
+                <div className="flex flex-col items-center gap-2">
+                  <Loader2 className="w-8 h-8 animate-spin text-primary" />
+                  <span className="text-sm text-muted-foreground">Loading floor plan...</span>
+                </div>
+              </div>
+            }
+            error={
+              <div className="flex items-center justify-center h-96">
+                <div className="text-center">
+                  <p className="text-destructive font-semibold mb-2">Failed to load PDF</p>
+                  <p className="text-sm text-muted-foreground">Please check the file and try again</p>
+                </div>
+              </div>
+            }
+          >
+            <Page
+              pageNumber={1}
+              width={pageWidth}
+              renderTextLayer={false}
+              renderAnnotationLayer={false}
+            />
+          </Document>
+
+          {/* Render pins on top of PDF */}
+          {pins.map((pin) => (
+            <div
+              key={pin.id}
+              style={{
+                position: 'absolute',
+                left: `${pin.x_position}%`,
+                top: `${pin.y_position}%`,
+                transform: 'translate(-50%, -50%)',
+                width: '40px',
+                height: '40px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                zIndex: 10,
+              }}
+              onClick={(e) => {
+                e.stopPropagation();
+                onPinClick(pin);
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  borderRadius: '50%',
+                  backgroundColor: getPinColor(pin),
+                  border: '3px solid white',
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: 'white',
+                  fontWeight: 'bold',
+                  fontSize: '14px',
+                }}
+              >
+                {pin.pin_number}
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
