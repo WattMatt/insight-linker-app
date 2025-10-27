@@ -480,8 +480,8 @@ const SiteDetail = () => {
           return; // Not compliant
         }
         
-        // Rule 2: If COC required, metering must not be missing
-        if (sub.is_coc_required && sub.metering_status === 'Missing') {
+        // Rule 2: If COC required, metering must not be missing (unless meter serial exists)
+        if (sub.is_coc_required && sub.metering_status === 'Missing' && !sub.meter_serial_number) {
           console.log(`  ❌ Failed Rule 2: Metering missing`);
           return; // Not compliant
         }
@@ -1113,8 +1113,8 @@ const SiteDetail = () => {
       return false;
     }
     
-    // Rule 2: If COC is required, metering must not be missing
-    if (subsection.is_coc_required && subsection.metering_status === 'Missing') {
+    // Rule 2: If COC is required, metering must not be missing (unless meter serial exists)
+    if (subsection.is_coc_required && subsection.metering_status === 'Missing' && !subsection.meter_serial_number) {
       return false;
     }
     
