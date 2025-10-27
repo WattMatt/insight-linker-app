@@ -839,6 +839,7 @@ export type Database = {
           notes: string | null
           section_name: string
           site_id: string
+          status: string | null
           updated_at: string | null
         }
         Insert: {
@@ -852,6 +853,7 @@ export type Database = {
           notes?: string | null
           section_name: string
           site_id: string
+          status?: string | null
           updated_at?: string | null
         }
         Update: {
@@ -865,6 +867,7 @@ export type Database = {
           notes?: string | null
           section_name?: string
           site_id?: string
+          status?: string | null
           updated_at?: string | null
         }
         Relationships: [

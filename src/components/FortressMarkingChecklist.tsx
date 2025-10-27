@@ -18,6 +18,7 @@ interface ChecklistItem {
   is_checked: boolean;
   checked_at: string | null;
   notes: string | null;
+  status: 'pending' | 'completed' | 'not_applicable';
 }
 
 interface FortressMarkingChecklistProps {
@@ -64,6 +65,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
               is_checked: existingItem?.is_checked || false,
               checked_at: existingItem?.checked_at || null,
               notes: existingItem?.notes || null,
+              status: (existingItem?.status as 'pending' | 'completed' | 'not_applicable') || 'pending',
             });
           }
         });
@@ -89,6 +91,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       if (!item) return;
 
       const newState = !currentState;
+      const newStatus = newState ? 'completed' : 'pending';
 
       // Upsert the checklist item
       const { error } = await supabase
@@ -101,6 +104,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
           is_checked: newState,
           checked_by: newState ? user.id : null,
           checked_at: newState ? new Date().toISOString() : null,
+          status: newStatus,
         }, {
           onConflict: 'site_id,item_id'
         });
@@ -111,7 +115,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       setChecklistItems(items =>
         items.map(i =>
           i.item_id === itemId
-            ? { ...i, is_checked: newState, checked_at: newState ? new Date().toISOString() : null }
+            ? { ...i, is_checked: newState, checked_at: newState ? new Date().toISOString() : null, status: newStatus }
             : i
         )
       );
@@ -119,6 +123,54 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       toast.success(newState ? 'Item marked complete' : 'Item unmarked');
     } catch (error) {
       console.error('Error updating checkbox:', error);
+      toast.error('Failed to update item');
+    } finally {
+      setUpdating(null);
+    }
+  };
+
+  const toggleNotApplicable = async (itemId: string) => {
+    try {
+      setUpdating(itemId);
+      
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error('User not authenticated');
+
+      const item = checklistItems.find(i => i.item_id === itemId);
+      if (!item) return;
+
+      const newStatus = item.status === 'not_applicable' ? 'pending' : 'not_applicable';
+
+      // Upsert the checklist item
+      const { error } = await supabase
+        .from('site_marking_checklist')
+        .upsert({
+          site_id: siteId,
+          item_id: itemId,
+          item_name: item.item_name,
+          section_name: item.section_name,
+          is_checked: false,
+          checked_by: null,
+          checked_at: null,
+          status: newStatus,
+        }, {
+          onConflict: 'site_id,item_id'
+        });
+
+      if (error) throw error;
+
+      // Update local state
+      setChecklistItems(items =>
+        items.map(i =>
+          i.item_id === itemId
+            ? { ...i, is_checked: false, checked_at: null, status: newStatus }
+            : i
+        )
+      );
+
+      toast.success(newStatus === 'not_applicable' ? 'Item marked N/A' : 'N/A removed');
+    } catch (error) {
+      console.error('Error updating status:', error);
       toast.error('Failed to update item');
     } finally {
       setUpdating(null);
@@ -139,7 +191,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       if (error) throw error;
 
       setChecklistItems(items =>
-        items.map(i => ({ ...i, is_checked: false, checked_at: null }))
+        items.map(i => ({ ...i, is_checked: false, checked_at: null, status: 'pending' }))
       );
 
       toast.success('All items cleared');
@@ -167,9 +219,10 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
       // Generate table data for each section
       Object.entries(sections).forEach(([sectionName, items]) => {
-        const sectionChecked = items.filter(i => i.is_checked).length;
-        const sectionTotal = items.length;
-        const sectionProgress = Math.round((sectionChecked / sectionTotal) * 100);
+        const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
+        const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
+        const sectionTotal = sectionApplicable.length;
+        const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
 
         // Section header
         if (yPosition > 250) {
@@ -184,9 +237,9 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
         // Section items table
         const tableData = items.map(item => [
-          item.is_checked ? '✓' : '☐',
+          item.status === 'not_applicable' ? 'N/A' : (item.is_checked ? '✓' : '☐'),
           item.item_name,
-          item.is_checked ? 'Complete' : 'Pending'
+          item.status === 'not_applicable' ? 'Not Applicable' : (item.is_checked ? 'Complete' : 'Pending')
         ]);
 
         autoTable(doc, {
@@ -226,8 +279,10 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     );
   }
 
-  const totalItems = checklistItems.length;
-  const checkedItems = checklistItems.filter(i => i.is_checked).length;
+  const applicableItems = checklistItems.filter(i => i.status !== 'not_applicable');
+  const totalItems = applicableItems.length;
+  const checkedItems = applicableItems.filter(i => i.is_checked).length;
+  const notApplicableCount = checklistItems.filter(i => i.status === 'not_applicable').length;
   const completionPercentage = totalItems > 0 ? Math.round((checkedItems / totalItems) * 100) : 0;
 
   // Group items by section
@@ -248,6 +303,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
               <CardTitle>Fortress Site Close-Out Checklist</CardTitle>
               <p className="text-sm text-muted-foreground">
                 {checkedItems} of {totalItems} items completed ({completionPercentage}%)
+                {notApplicableCount > 0 && ` • ${notApplicableCount} marked N/A`}
               </p>
             </div>
             <div className="flex gap-2">
@@ -274,9 +330,10 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
           <div className="space-y-8">
             {Object.entries(sections).map(([sectionName, items], sectionIndex) => {
-              const sectionChecked = items.filter(i => i.is_checked).length;
-              const sectionTotal = items.length;
-              const sectionProgress = Math.round((sectionChecked / sectionTotal) * 100);
+              const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
+              const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
+              const sectionTotal = sectionApplicable.length;
+              const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
 
               return (
                 <div key={sectionIndex} className="space-y-4">
@@ -291,26 +348,46 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
                     {items.map((item, itemIndex) => (
                       <div
                         key={item.item_id}
-                        className="flex items-start gap-3 p-3 rounded-lg hover:bg-accent/50 transition-colors"
+                        className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
+                          item.status === 'not_applicable' 
+                            ? 'bg-muted/50' 
+                            : 'hover:bg-accent/50'
+                        }`}
                       >
                         <Checkbox
                           id={item.item_id}
                           checked={item.is_checked}
                           onCheckedChange={() => toggleCheckbox(item.item_id, item.is_checked)}
-                          disabled={updating === item.item_id}
+                          disabled={updating === item.item_id || item.status === 'not_applicable'}
                           className="mt-0.5"
                         />
                         <label
                           htmlFor={item.item_id}
                           className={`flex-1 cursor-pointer text-sm leading-relaxed ${
                             item.is_checked ? 'text-muted-foreground line-through' : ''
+                          } ${
+                            item.status === 'not_applicable' ? 'text-muted-foreground italic' : ''
                           }`}
                         >
                           {item.item_name}
+                          {item.status === 'not_applicable' && (
+                            <span className="ml-2 text-xs">(N/A)</span>
+                          )}
                         </label>
-                        {item.is_checked && (
-                          <CheckCircle2 className="h-4 w-4 text-green-600 flex-shrink-0" />
-                        )}
+                        <div className="flex items-center gap-2 flex-shrink-0">
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => toggleNotApplicable(item.item_id)}
+                            disabled={updating === item.item_id}
+                            className="h-6 px-2 text-xs"
+                          >
+                            {item.status === 'not_applicable' ? 'Undo N/A' : 'N/A'}
+                          </Button>
+                          {item.is_checked && item.status !== 'not_applicable' && (
+                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                          )}
+                        </div>
                       </div>
                     ))}
                   </div>
