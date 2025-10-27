@@ -713,69 +713,33 @@ export type Database = {
       }
       settings: {
         Row: {
-          auto_backup_enabled: boolean | null
-          backup_frequency: string | null
           company_logo_url: string | null
           company_name: string | null
           created_at: string | null
-          dropbox_access_token: string | null
-          dropbox_connected: boolean | null
-          dropbox_refresh_token: string | null
-          dropbox_token_expiry: string | null
-          google_drive_access_token: string | null
-          google_drive_connected: boolean | null
-          google_drive_refresh_token: string | null
-          google_drive_token_expiry: string | null
           id: string
-          last_backup_at: string | null
           login_hero_image_url: string | null
           primary_color: string | null
           qr_base_url: string | null
-          sync_enabled: boolean | null
           updated_at: string | null
         }
         Insert: {
-          auto_backup_enabled?: boolean | null
-          backup_frequency?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
-          dropbox_access_token?: string | null
-          dropbox_connected?: boolean | null
-          dropbox_refresh_token?: string | null
-          dropbox_token_expiry?: string | null
-          google_drive_access_token?: string | null
-          google_drive_connected?: boolean | null
-          google_drive_refresh_token?: string | null
-          google_drive_token_expiry?: string | null
           id?: string
-          last_backup_at?: string | null
           login_hero_image_url?: string | null
           primary_color?: string | null
           qr_base_url?: string | null
-          sync_enabled?: boolean | null
           updated_at?: string | null
         }
         Update: {
-          auto_backup_enabled?: boolean | null
-          backup_frequency?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
-          dropbox_access_token?: string | null
-          dropbox_connected?: boolean | null
-          dropbox_refresh_token?: string | null
-          dropbox_token_expiry?: string | null
-          google_drive_access_token?: string | null
-          google_drive_connected?: boolean | null
-          google_drive_refresh_token?: string | null
-          google_drive_token_expiry?: string | null
           id?: string
-          last_backup_at?: string | null
           login_hero_image_url?: string | null
           primary_color?: string | null
           qr_base_url?: string | null
-          sync_enabled?: boolean | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1222,6 +1186,54 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      user_storage_connections: {
+        Row: {
+          access_token: string | null
+          account_email: string | null
+          auto_backup_enabled: boolean | null
+          connected_at: string | null
+          created_at: string | null
+          id: string
+          last_synced_at: string | null
+          provider: string
+          refresh_token: string | null
+          sync_enabled: boolean | null
+          token_expiry: string | null
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          access_token?: string | null
+          account_email?: string | null
+          auto_backup_enabled?: boolean | null
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          provider: string
+          refresh_token?: string | null
+          sync_enabled?: boolean | null
+          token_expiry?: string | null
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          access_token?: string | null
+          account_email?: string | null
+          auto_backup_enabled?: boolean | null
+          connected_at?: string | null
+          created_at?: string | null
+          id?: string
+          last_synced_at?: string | null
+          provider?: string
+          refresh_token?: string | null
+          sync_enabled?: boolean | null
+          token_expiry?: string | null
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
       }
       validation_conversations: {
         Row: {
