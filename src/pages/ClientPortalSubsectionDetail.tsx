@@ -45,6 +45,23 @@ const ClientPortalSubsectionDetail = () => {
     },
   });
 
+  const handleDownload = async (url: string, fileName: string) => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      const blobUrl = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = blobUrl;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      console.error("Error downloading document:", error);
+    }
+  };
+
   if (subsectionLoading) {
     return (
       <div className="space-y-6">
@@ -197,17 +214,15 @@ const ClientPortalSubsectionDetail = () => {
                       </div>
                     </div>
                   </div>
-                  <a 
-                    href={doc.file_url} 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    download
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="gap-2"
+                    onClick={() => handleDownload(doc.file_url, doc.file_name)}
                   >
-                    <Button variant="ghost" size="sm" className="gap-2">
-                      <Download className="h-4 w-4" />
-                      Download
-                    </Button>
-                  </a>
+                    <Download className="h-4 w-4" />
+                    Download
+                  </Button>
                 </div>
               ))}
             </div>
