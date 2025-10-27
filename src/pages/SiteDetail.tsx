@@ -1255,10 +1255,12 @@ const SiteDetail = () => {
                   </div>
                 ) : site.site_image_url ? (
                   <div className="relative group w-fit">
-                    {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
+                    {(site.site_image_url.includes('firebasestorage.googleapis.com') || 
+                      site.site_image_url.includes('storage.googleapis.com') ||
+                      !site.site_image_url.includes('supabase.co/storage')) ? (
                       <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
                         <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
-                        <p className="text-sm text-center mb-3">Legacy Firebase URL detected</p>
+                        <p className="text-sm text-center mb-3">Legacy image URL detected</p>
                         <Button 
                           size="sm" 
                           variant="outline"
@@ -1275,19 +1277,25 @@ const SiteDetail = () => {
                         </Button>
                       </div>
                     ) : (
-                      <img
-                        key={site.site_image_url}
-                        src={site.site_image_url}
-                        alt="Site main image"
-                        className="w-64 h-48 object-cover rounded border bg-muted"
-                      crossOrigin="anonymous"
-                      onError={(e) => {
-                        e.currentTarget.src = '/placeholder.svg';
-                        e.currentTarget.alt = 'Image preview unavailable';
-                        }}
-                      />
+                      <>
+                        <img
+                          key={site.site_image_url}
+                          src={site.site_image_url}
+                          alt="Site main image"
+                          className="w-64 h-48 object-cover rounded border bg-muted"
+                        />
+                        <Button
+                          size="sm"
+                          variant="destructive"
+                          className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setDeleteImageType('site_image')}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </>
                     )}
-                    {site.site_image_url.includes('supabase.co/storage') && (
+                  </div>
+                ) : (
                       <Button
                         size="sm"
                         variant="destructive"
@@ -2268,10 +2276,12 @@ const SiteDetail = () => {
                     </div>
                   ) : site.site_image_url && !siteImageFile ? (
                     <div className="relative group w-fit mb-2">
-                      {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
+                      {(site.site_image_url.includes('firebasestorage.googleapis.com') || 
+                        site.site_image_url.includes('storage.googleapis.com') ||
+                        !site.site_image_url.includes('supabase.co/storage')) ? (
                         <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
                           <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
-                          <p className="text-sm text-center mb-3">Legacy Firebase URL</p>
+                          <p className="text-sm text-center mb-3">Legacy image URL detected</p>
                           <Button 
                             size="sm" 
                             variant="outline"
@@ -2288,27 +2298,11 @@ const SiteDetail = () => {
                           </Button>
                         </div>
                       ) : (
-                        <>
-                          <img
-                            src={site.site_image_url}
-                            alt="Current site image"
-                            className="w-64 h-48 object-cover rounded border"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder.svg';
-                              e.currentTarget.alt = 'Image preview unavailable';
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="mt-2"
-                            onClick={handleDeleteSiteImage}
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" />
-                            Delete Image
-                          </Button>
-                        </>
+                        <img
+                          src={site.site_image_url}
+                          alt="Current site image"
+                          className="w-64 h-48 object-cover rounded border"
+                        />
                       )}
                     </div>
                   ) : null}
