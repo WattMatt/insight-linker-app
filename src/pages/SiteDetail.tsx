@@ -1296,17 +1296,6 @@ const SiteDetail = () => {
                     )}
                   </div>
                 ) : (
-                      <Button
-                        size="sm"
-                        variant="destructive"
-                        className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => setDeleteImageType('site_image')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    )}
-                  </div>
-                ) : (
                   <div className="w-64 h-48 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
                     No image
                   </div>
