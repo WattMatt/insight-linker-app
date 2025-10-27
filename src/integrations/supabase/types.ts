@@ -208,6 +208,42 @@ export type Database = {
           },
         ]
       }
+      file_sync_logs: {
+        Row: {
+          created_at: string | null
+          error_message: string | null
+          file_name: string
+          file_path: string
+          id: string
+          service: string
+          status: string
+          sync_type: string
+          synced_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          error_message?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          service: string
+          status?: string
+          sync_type: string
+          synced_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          error_message?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          service?: string
+          status?: string
+          sync_type?: string
+          synced_at?: string | null
+        }
+        Relationships: []
+      }
       inspection_items: {
         Row: {
           created_at: string
@@ -677,36 +713,69 @@ export type Database = {
       }
       settings: {
         Row: {
+          auto_backup_enabled: boolean | null
+          backup_frequency: string | null
           company_logo_url: string | null
           company_name: string | null
           created_at: string | null
+          dropbox_access_token: string | null
+          dropbox_connected: boolean | null
+          dropbox_refresh_token: string | null
+          dropbox_token_expiry: string | null
+          google_drive_access_token: string | null
           google_drive_connected: boolean | null
+          google_drive_refresh_token: string | null
+          google_drive_token_expiry: string | null
           id: string
+          last_backup_at: string | null
           login_hero_image_url: string | null
           primary_color: string | null
           qr_base_url: string | null
+          sync_enabled: boolean | null
           updated_at: string | null
         }
         Insert: {
+          auto_backup_enabled?: boolean | null
+          backup_frequency?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
+          dropbox_access_token?: string | null
+          dropbox_connected?: boolean | null
+          dropbox_refresh_token?: string | null
+          dropbox_token_expiry?: string | null
+          google_drive_access_token?: string | null
           google_drive_connected?: boolean | null
+          google_drive_refresh_token?: string | null
+          google_drive_token_expiry?: string | null
           id?: string
+          last_backup_at?: string | null
           login_hero_image_url?: string | null
           primary_color?: string | null
           qr_base_url?: string | null
+          sync_enabled?: boolean | null
           updated_at?: string | null
         }
         Update: {
+          auto_backup_enabled?: boolean | null
+          backup_frequency?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
+          dropbox_access_token?: string | null
+          dropbox_connected?: boolean | null
+          dropbox_refresh_token?: string | null
+          dropbox_token_expiry?: string | null
+          google_drive_access_token?: string | null
           google_drive_connected?: boolean | null
+          google_drive_refresh_token?: string | null
+          google_drive_token_expiry?: string | null
           id?: string
+          last_backup_at?: string | null
           login_hero_image_url?: string | null
           primary_color?: string | null
           qr_base_url?: string | null
+          sync_enabled?: boolean | null
           updated_at?: string | null
         }
         Relationships: []
@@ -1314,14 +1383,8 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
-      cleanup_old_pending_invites: {
-        Args: Record<PropertyKey, never>
-        Returns: number
-      }
-      get_user_client_id: {
-        Args: Record<PropertyKey, never>
-        Returns: string
-      }
+      cleanup_old_pending_invites: { Args: never; Returns: number }
+      get_user_client_id: { Args: never; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
