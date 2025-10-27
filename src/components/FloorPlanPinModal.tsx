@@ -430,7 +430,7 @@ export const FloorPlanPinModal = ({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button onClick={handleSave} disabled={isSaving || !photoPreview}>
+            <Button onClick={handleSave} disabled={isSaving || (!photoPreview && !initialData?.photo_url)}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
