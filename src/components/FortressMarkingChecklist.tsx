@@ -5,8 +5,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { CheckCircle2, Circle } from "lucide-react";
+import { CheckCircle2, Circle, FileDown } from "lucide-react";
 import { generateFortressTemplate } from "@/lib/fortressTemplate";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 interface ChecklistItem {
   id: string;
@@ -147,6 +149,71 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     }
   };
 
+  const exportToPDF = async () => {
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      
+      // Title
+      doc.setFontSize(18);
+      doc.text('Fortress Site Close-Out Checklist', pageWidth / 2, 20, { align: 'center' });
+      
+      // Summary
+      doc.setFontSize(12);
+      doc.text(`Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`, 14, 35);
+      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+
+      let yPosition = 52;
+
+      // Generate table data for each section
+      Object.entries(sections).forEach(([sectionName, items]) => {
+        const sectionChecked = items.filter(i => i.is_checked).length;
+        const sectionTotal = items.length;
+        const sectionProgress = Math.round((sectionChecked / sectionTotal) * 100);
+
+        // Section header
+        if (yPosition > 250) {
+          doc.addPage();
+          yPosition = 20;
+        }
+
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.text(`${sectionName} (${sectionProgress}%)`, 14, yPosition);
+        yPosition += 8;
+
+        // Section items table
+        const tableData = items.map(item => [
+          item.is_checked ? '✓' : '☐',
+          item.item_name,
+          item.is_checked ? 'Complete' : 'Pending'
+        ]);
+
+        autoTable(doc, {
+          startY: yPosition,
+          head: [['Status', 'Item', 'Progress']],
+          body: tableData,
+          theme: 'grid',
+          headStyles: { fillColor: [59, 130, 246] },
+          columnStyles: {
+            0: { cellWidth: 15, halign: 'center' },
+            1: { cellWidth: 130 },
+            2: { cellWidth: 30, halign: 'center' }
+          },
+          styles: { fontSize: 9 },
+        });
+
+        yPosition = (doc as any).lastAutoTable.finalY + 10;
+      });
+
+      doc.save(`fortress-checklist-${new Date().getTime()}.pdf`);
+      toast.success('PDF exported successfully');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      toast.error('Failed to export PDF');
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -183,13 +250,23 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
                 {checkedItems} of {totalItems} items completed ({completionPercentage}%)
               </p>
             </div>
-            <Button 
-              variant="outline" 
-              size="sm"
-              onClick={clearAllChecks}
-            >
-              Clear All
-            </Button>
+            <div className="flex gap-2">
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={exportToPDF}
+              >
+                <FileDown className="h-4 w-4 mr-2" />
+                Export PDF
+              </Button>
+              <Button 
+                variant="outline" 
+                size="sm"
+                onClick={clearAllChecks}
+              >
+                Clear All
+              </Button>
+            </div>
           </div>
         </CardHeader>
         <CardContent>
