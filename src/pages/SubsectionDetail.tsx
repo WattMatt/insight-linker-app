@@ -7,6 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye } from "lucide-react";
 import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
@@ -1690,24 +1691,59 @@ const SubsectionDetail = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Overall Status</p>
-                <Badge 
-                  variant="outline"
-                  className={
-                    (() => {
-                      if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
-                      if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
-                      if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
-                      return "bg-green-500/10 text-green-500";
-                    })()
-                  }
-                >
-                  {(() => {
-                    if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
-                    if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
-                    if (openSnagsCount > 0) return "Fail";
-                    return "Pass";
-                  })()}
-                </Badge>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge 
+                        variant="outline"
+                        className={
+                          (() => {
+                            if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
+                            if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
+                            if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
+                            return "bg-green-500/10 text-green-500";
+                          })()
+                        }
+                      >
+                        {(() => {
+                          if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
+                          if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
+                          if (openSnagsCount > 0) return "Fail";
+                          return "Pass";
+                        })()}
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs">
+                      {(() => {
+                        const reasons = [];
+                        if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') {
+                          reasons.push(`CoC status is "${subsection.cocStatus || 'Missing'}" (needs "Approved")`);
+                        }
+                        if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) {
+                          reasons.push('Metering data is missing');
+                        }
+                        if (openSnagsCount > 0) {
+                          reasons.push(`Has ${openSnagsCount} open snag${openSnagsCount > 1 ? 's' : ''}`);
+                        }
+                        
+                        if (reasons.length === 0) {
+                          return <p className="text-sm">All compliance requirements met ✓</p>;
+                        }
+                        
+                        return (
+                          <div>
+                            <p className="font-semibold mb-1">Failing because:</p>
+                            <ul className="text-xs space-y-1">
+                              {reasons.map((reason, idx) => (
+                                <li key={idx}>• {reason}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        );
+                      })()}
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
