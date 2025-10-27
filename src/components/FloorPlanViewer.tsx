@@ -4,8 +4,8 @@ import { Button } from "./ui/button";
 import { ZoomIn, ZoomOut, Maximize2, Move, MapPin } from "lucide-react";
 import { toast } from "sonner";
 
-// Set up PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+// Set up PDF.js worker - use unpkg for better reliability
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.min.mjs`;
 
 interface Pin {
   id: string;
@@ -45,7 +45,10 @@ export const FloorPlanViewer = ({
   const [isShiftPressed, setIsShiftPressed] = useState(false);
 
   useEffect(() => {
-    loadPdf();
+    console.log("FloorPlanViewer: pdfUrl changed:", pdfUrl);
+    if (pdfUrl) {
+      loadPdf();
+    }
   }, [pdfUrl]);
 
   useEffect(() => {
@@ -72,19 +75,31 @@ export const FloorPlanViewer = ({
   }, []);
 
   const loadPdf = async () => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || !pdfUrl) {
+      console.log("Cannot load PDF - missing canvas or URL:", { canvas: !!canvasRef.current, pdfUrl });
+      return;
+    }
 
     try {
       setIsLoading(true);
-      const loadingTask = pdfjsLib.getDocument(pdfUrl);
+      console.log("Loading PDF from:", pdfUrl);
+      
+      const loadingTask = pdfjsLib.getDocument({
+        url: pdfUrl,
+        cMapUrl: 'https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/cmaps/',
+        cMapPacked: true,
+      });
+      
       const pdf = await loadingTask.promise;
+      console.log("PDF loaded, pages:", pdf.numPages);
+      
       const page = await pdf.getPage(1);
       setPdfPage(page);
       setIsLoading(false);
       toast.success("Floor plan loaded successfully");
     } catch (error) {
       console.error("Error loading PDF:", error);
-      toast.error("Failed to load floor plan");
+      toast.error(`Failed to load floor plan: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsLoading(false);
     }
   };

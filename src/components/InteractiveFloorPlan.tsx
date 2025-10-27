@@ -34,6 +34,12 @@ export const InteractiveFloorPlan = ({
     loadFloorPlan();
   }, [subsectionId]);
 
+  useEffect(() => {
+    if (floorPlan) {
+      console.log("Floor plan state updated, file_url:", floorPlan.file_url);
+    }
+  }, [floorPlan]);
+
   const loadFloorPlan = async () => {
     try {
       setIsLoading(true);
@@ -50,6 +56,7 @@ export const InteractiveFloorPlan = ({
       if (floorPlanError) throw floorPlanError;
 
       setFloorPlan(floorPlanData);
+      console.log("Floor plan loaded:", floorPlanData);
 
       if (floorPlanData) {
         // Fetch pins for this floor plan
@@ -113,6 +120,7 @@ export const InteractiveFloorPlan = ({
 
       setFloorPlan(newFloorPlan);
       setPins([]);
+      console.log("Floor plan uploaded successfully:", newFloorPlan);
       toast.success("Floor plan uploaded successfully");
     } catch (error) {
       console.error("Error uploading floor plan:", error);
@@ -341,7 +349,7 @@ export const InteractiveFloorPlan = ({
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[700px]">
         <div className="lg:col-span-2">
           <FloorPlanViewer
-            pdfUrl={floorPlan.file_url}
+            pdfUrl={floorPlan?.file_url || ""}
             pins={pins}
             onAddPin={handleAddPin}
             onPinClick={(pin) => {
