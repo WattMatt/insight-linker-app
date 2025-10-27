@@ -33,6 +33,7 @@ interface SubsectionData {
   cocStatus?: string;
   cocIssueDate?: string;
   meterSerialNumber?: string;
+  meteringStatus?: string;
   ctRatio?: string;
   isCocRequired: boolean;
   inspections?: Record<string, any>;
@@ -604,7 +605,9 @@ const SubsectionDetail = () => {
         cocNumber: fullSubsection.coc_number,
         cocIssueDate: fullSubsection.coc_issue_date,
         cocType: fullSubsection.coc_type,
+        cocStatus: fullSubsection.coc_status,
         meterSerialNumber: fullSubsection.meter_serial_number,
+        meteringStatus: fullSubsection.metering_status,
         ctRatio: fullSubsection.ct_ratio,
         isCocRequired: fullSubsection.is_coc_required ?? true,
         inspections: inspectionsObj
@@ -1683,6 +1686,68 @@ const SubsectionDetail = () => {
                 <p className="text-sm text-muted-foreground mb-1">COC Required</p>
                 <Badge variant={subsection.isCocRequired ? "default" : "secondary"}>
                   {subsection.isCocRequired ? "Yes" : "No"}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Overall Status</p>
+                <Badge 
+                  variant="outline"
+                  className={
+                    (() => {
+                      if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
+                      if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
+                      if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
+                      return "bg-green-500/10 text-green-500";
+                    })()
+                  }
+                >
+                  {(() => {
+                    if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
+                    if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
+                    if (openSnagsCount > 0) return "Fail";
+                    return "Pass";
+                  })()}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
+                <Badge
+                  variant="outline"
+                  className={
+                    subsection.cocStatus === "Approved"
+                      ? "bg-green-500/10 text-green-500"
+                      : subsection.isCocRequired
+                      ? "bg-red-500/10 text-red-500"
+                      : "bg-gray-500/10 text-gray-500"
+                  }
+                >
+                  {subsection.isCocRequired ? (subsection.cocStatus || "Missing") : "N/A"}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Metering Status</p>
+                <Badge
+                  variant="outline"
+                  className={
+                    subsection.meteringStatus === "Installed" || subsection.meterSerialNumber
+                      ? "bg-green-500/10 text-green-500"
+                      : subsection.isCocRequired
+                      ? "bg-red-500/10 text-red-500"
+                      : "bg-gray-500/10 text-gray-500"
+                  }
+                >
+                  {subsection.isCocRequired 
+                    ? (subsection.meteringStatus === "Installed" || subsection.meterSerialNumber ? "Installed" : subsection.meteringStatus || "Missing")
+                    : "N/A"}
+                </Badge>
+              </div>
+              <div>
+                <p className="text-sm text-muted-foreground mb-1">Open Snags</p>
+                <Badge 
+                  variant="outline"
+                  className={openSnagsCount > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
+                >
+                  {openSnagsCount}
                 </Badge>
               </div>
             </CardContent>
