@@ -329,18 +329,66 @@ const SubsectionDetail = () => {
           }
         }
         
+        // Create a validation report document entry
+        try {
+          // Find the COC category (usually "01 COC")
+          const cocCategory = documentCategories.find(cat => 
+            cat.name.toLowerCase().includes('coc') || cat.name === '01 COC'
+          );
+
+          if (cocCategory) {
+            // Create a JSON file with the validation report
+            const reportContent = JSON.stringify(result, null, 2);
+            const reportBlob = new Blob([reportContent], { type: 'application/json' });
+            const reportFileName = `Validation_Report_${cocNumberExtracted || 'Unknown'}_${new Date().toISOString().split('T')[0]}.json`;
+            
+            // Upload to storage
+            const reportPath = `${subsectionId}/${cocCategory.name}/${Date.now()}-${reportFileName}`;
+            const { data: uploadData, error: uploadError } = await supabase.storage
+              .from('documents')
+              .upload(reportPath, reportBlob, {
+                contentType: 'application/json',
+                upsert: false
+              });
+
+            if (!uploadError && uploadData) {
+              // Get public URL
+              const { data: urlData } = supabase.storage
+                .from('documents')
+                .getPublicUrl(reportPath);
+
+              // Insert document record
+              await supabase
+                .from('subsection_documents')
+                .insert({
+                  subsection_id: subsectionId,
+                  category_id: cocCategory.id,
+                  file_name: reportFileName,
+                  file_url: urlData.publicUrl,
+                  uploaded_by: session.user.id
+                });
+
+              console.log('Validation report document created successfully');
+            }
+          }
+        } catch (docError) {
+          console.error('Error creating validation report document:', docError);
+          // Don't fail the validation if document creation fails
+        }
+
         if (result.overallStatus === 'Pass' || result.status === 'Pass') {
-          toast.success('✅ COC validation passed!' + (cocNumberExtracted ? ` COC #${cocNumberExtracted} extracted.` : ''));
+          toast.success('✅ COC validation passed! Report saved to documents.' + (cocNumberExtracted ? ` COC #${cocNumberExtracted} extracted.` : ''));
         } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
-          toast.error(`❌ COC validation failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found`);
+          toast.error(`❌ COC validation failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found. Report saved to documents.`);
         } else {
-          toast.warning(`⚠️ COC validation incomplete`);
+          toast.warning(`⚠️ COC validation incomplete. Report saved to documents.`);
         }
         
-        // Refresh validations and subsection data to show updated results
+        // Refresh validations, documents, and subsection data to show updated results
         await Promise.all([
           fetchCocValidations(),
-          fetchSubsectionData()
+          fetchSubsectionData(),
+          fetchSupabaseDocuments()
         ]);
       } else {
         toast.error('No validation result returned');
