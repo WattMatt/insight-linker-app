@@ -18,8 +18,6 @@ interface Client {
   phone: string | null;
   company_name?: string | null;
   logo_url?: string | null;
-  source?: 'firebase' | 'supabase';
-  firebaseId?: string;
 }
 
 interface Site {
@@ -27,7 +25,6 @@ interface Site {
   name: string;
   address: string | null;
   site_type: string | null;
-  source?: 'firebase' | 'supabase';
   subsections?: Subsection[];
   inspections?: Inspection[];
 }
@@ -61,9 +58,6 @@ const ClientDetail = () => {
   const [client, setClient] = useState<Client | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
-  const [migrating, setMigrating] = useState(false);
-  const [isFirebaseClient, setIsFirebaseClient] = useState(false);
-  const [firebaseData, setFirebaseData] = useState<any>(null);
 
   useEffect(() => {
     if (clientId) {
@@ -87,18 +81,16 @@ const ClientDetail = () => {
         return;
       }
 
-      // It's a Supabase client
-      setClient({ ...supabaseClient, source: 'supabase' });
+      // Set client data
+      setClient(supabaseClient);
       
       // Process sites with nested data
       const processedSites = (supabaseClient.sites || []).map((site: any) => ({
         ...site,
-        source: 'supabase',
         subsections: site.subsections || [],
         inspections: site.inspections || [],
       })).sort((a, b) => a.name.localeCompare(b.name));
       setSites(processedSites);
-      setIsFirebaseClient(false);
     } catch (error) {
       console.error("Error fetching client data:", error);
       toast.error("Failed to fetch client data");
@@ -146,13 +138,7 @@ const ClientDetail = () => {
             <ArrowLeft className="h-4 w-4" />
           </Button>
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
-              <Badge variant={client.source === 'firebase' ? 'secondary' : 'default'}>
-                <Database className="h-3 w-3 mr-1" />
-                {client.source === 'firebase' ? 'Firebase' : 'Supabase'}
-              </Badge>
-            </div>
+            <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
             <p className="text-muted-foreground mt-1">
               {sites.length} sites • {totalSubsections} subsections • {totalInspections} inspections • {totalDocuments} documents
             </p>
@@ -233,7 +219,7 @@ const ClientDetail = () => {
             <div className="space-y-4">
               {sites.map((site) => (
                 <Card key={site.id} className="border-2">
-                  <CardHeader className="cursor-pointer hover:bg-accent" onClick={() => !isFirebaseClient && navigate(`/sites/${site.id}`)}>
+                  <CardHeader className="cursor-pointer hover:bg-accent" onClick={() => navigate(`/sites/${site.id}`)}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Building2 className="h-5 w-5 text-primary" />

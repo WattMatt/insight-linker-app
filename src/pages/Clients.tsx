@@ -24,9 +24,6 @@ interface Client {
   company_name: string | null;
   primary_contact_email: string | null;
   created_at: string;
-  source?: 'firebase' | 'supabase';
-  firebaseId?: string;
-  _rawData?: any;
   sitesCount?: number;
 }
 
@@ -307,12 +304,6 @@ const Clients = () => {
 
   const handleDeleteLogo = async () => {
     if (!editingClient?.logo_url) return;
-
-    // Only allow deletion of Supabase images
-    if (!editingClient.logo_url.includes('supabase.co/storage')) {
-      toast.error("Firebase logos cannot be deleted. Please upload a new logo to Supabase first.");
-      return;
-    }
 
     try {
       // Extract file path from URL and delete from storage
@@ -661,22 +652,15 @@ const Clients = () => {
                             className="max-w-full max-h-full object-contain"
                           />
                         </div>
-                        {editingClient.logo_url.includes('firebasestorage.googleapis.com') && (
-                          <Badge variant="secondary" className="absolute top-2 left-2">
-                            Legacy
-                          </Badge>
-                        )}
-                        {editingClient.logo_url.includes('supabase.co/storage') && (
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="destructive"
-                            className="absolute -top-2 -right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setDeleteLogoConfirm(true)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="destructive"
+                          className="absolute -top-2 -right-2 h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          onClick={() => setDeleteLogoConfirm(true)}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
                       </div>
                     </div>
                   )}

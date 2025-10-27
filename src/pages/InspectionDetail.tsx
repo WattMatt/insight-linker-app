@@ -11,7 +11,6 @@ import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
-// Firebase imports removed - now using Supabase
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
 import { SiteDrawingReport } from "@/components/SiteDrawingReport";
@@ -193,9 +192,6 @@ const InspectionDetail = () => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       
-      // Check if inspectionId is a valid UUID (not a Firebase ID)
-      const isValidUUID = inspectionId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId);
-      
       const snagData: any = {
         subsection_id: subsectionId,
         title: newSnag.title,
@@ -207,11 +203,6 @@ const InspectionDetail = () => {
         status: 'Open',
         created_by: user?.id
       };
-      
-      // Only add inspection_id if it's a valid UUID
-      if (isValidUUID) {
-        snagData.inspection_id = inspectionId;
-      }
       
       const { error } = await supabase
         .from('snags')
@@ -486,57 +477,25 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
-      // Determine if inspectionId is a UUID or Firebase ID
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId || '');
-      
-      // Fetch inspection - use appropriate column based on ID format
-      let inspData, inspError;
-      
-      if (isUUID) {
-        // Query by UUID
-        const result = await supabase
-          .from('inspections')
-          .select(`
-            *,
-            sites (
-              id,
-              name,
-              address,
-              site_image_url,
-              client_logo_url
-            ),
-            subsections (
-              id,
-              name
-            )
-          `)
-          .eq('id', inspectionId)
-          .maybeSingle();
-        inspData = result.data;
-        inspError = result.error;
-      } else {
-        // Query by firebase_id
-        const result = await supabase
-          .from('inspections')
-          .select(`
-            *,
-            sites (
-              id,
-              name,
-              address,
-              site_image_url,
-              client_logo_url
-            ),
-            subsections (
-              id,
-              name
-            )
-          `)
-          .eq('firebase_id', inspectionId)
-          .maybeSingle();
-        inspData = result.data;
-        inspError = result.error;
-      }
+      // Fetch inspection
+      const { data: inspData, error: inspError } = await supabase
+        .from('inspections')
+        .select(`
+          *,
+          sites (
+            id,
+            name,
+            address,
+            site_image_url,
+            client_logo_url
+          ),
+          subsections (
+            id,
+            name
+          )
+        `)
+        .eq('id', inspectionId)
+        .maybeSingle();
 
       if (inspError || !inspData) {
         console.error("Error fetching inspection:", inspError);
@@ -1015,75 +974,7 @@ const InspectionDetail = () => {
     }
   };
 
-  const handleMigrateImage = async (sectionKey: string, itemKey: string, firebaseUrl: string, index: number) => {
-    const migrateKey = `${sectionKey}-${itemKey}-${index}`;
-    setMigratingImages(prev => new Set(prev).add(migrateKey));
-
-    try {
-      // Download image from Firebase
-      const response = await fetch(firebaseUrl);
-      const blob = await response.blob();
-      
-      // Create a file from the blob
-      const fileExt = firebaseUrl.split('.').pop()?.split('?')[0] || 'jpg';
-      const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}.${fileExt}`;
-      
-      // Upload to Supabase
-      const { data, error } = await supabase.storage
-        .from('inspection-photos')
-        .upload(fileName, blob);
-
-      if (error) throw error;
-
-      const { data: urlData } = supabase.storage
-        .from('inspection-photos')
-        .getPublicUrl(data.path);
-
-      // Replace Firebase URL with Supabase URL
-      setInspection(prev => {
-        if (!prev) return null;
-
-        const jsonData = prev.jsonData || {};
-        const sectionData = jsonData[sectionKey] || {};
-        const itemData = sectionData[itemKey] || {};
-        const photos = itemData.photos || [];
-        const updatedPhotos = [...photos];
-        updatedPhotos[index] = urlData.publicUrl;
-
-        return {
-          ...prev,
-          jsonData: {
-            ...jsonData,
-            [sectionKey]: {
-              ...sectionData,
-              [itemKey]: {
-                ...itemData,
-                photos: updatedPhotos
-              }
-            }
-          }
-        };
-      });
-
-      toast.success("Image migrated successfully");
-    } catch (error) {
-      console.error("Error migrating image:", error);
-      toast.error("Failed to migrate image");
-    } finally {
-      setMigratingImages(prev => {
-        const newSet = new Set(prev);
-        newSet.delete(migrateKey);
-        return newSet;
-      });
-    }
-  };
-
   const handleDeleteImage = async (sectionKey: string, itemKey: string, photoUrl: string, index: number) => {
-    // Only allow deletion of Supabase images
-    if (!photoUrl.includes('supabase.co/storage')) {
-      toast.error("Firebase images cannot be deleted. Please migrate to Supabase first.");
-      return;
-    }
 
     try {
       // Extract file path from URL
@@ -1136,16 +1027,13 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Determine if inspectionId is a UUID or Firebase ID
-      const isUUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(inspectionId || '');
-      
       // Include tenants in json_data
       const jsonDataWithTenants = {
         ...inspection.jsonData,
         tenants: tenants
       } as any;
 
-      // Update inspection - use appropriate column based on ID format
+      // Update inspection
       const { error } = await supabase
         .from('inspections')
         .update({
@@ -1164,7 +1052,7 @@ const InspectionDetail = () => {
           json_data: jsonDataWithTenants,
           updated_at: new Date().toISOString()
         })
-        .eq(isUUID ? 'id' : 'firebase_id', inspectionId);
+        .eq('id', inspectionId);
 
       if (error) throw error;
 
@@ -1317,7 +1205,7 @@ const InspectionDetail = () => {
     const imagesData = inspection?.jsonData?.[sectionKey] || {};
     const images: Array<{ url: string; name: string; id: string }> = [];
     
-    // Extract images from Firebase structure
+    // Extract images from object structure
     if (typeof imagesData === 'object' && !Array.isArray(imagesData)) {
       Object.entries(imagesData).forEach(([imgId, imgData]: [string, any]) => {
         if (imgData && (imgData.url || imgData.path)) {
@@ -1341,25 +1229,18 @@ const InspectionDetail = () => {
         <CardContent>
           {images.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-              {images.map((img, index) => {
-                const isFirebaseUrl = img.url.includes('firebasestorage.googleapis.com');
-                const migrateKey = `${sectionKey}-${img.id}`;
-                const isMigrating = migratingImages.has(migrateKey);
-                
-                return (
-                  <div key={img.id} className="relative group">
-                    <img
-                      src={img.url}
-                      alt={img.name}
-                      className="w-full h-48 object-cover rounded border"
-                    />
-                    <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-xs truncate opacity-0 group-hover:opacity-100 transition-opacity">
-                      {img.name}
-                    </div>
-                    {/* Firebase migration button hidden from UI */}
+              {images.map((img) => (
+                <div key={img.id} className="relative group">
+                  <img
+                    src={img.url}
+                    alt={img.name}
+                    className="w-full h-48 object-cover rounded border"
+                  />
+                  <div className="absolute bottom-0 left-0 right-0 bg-black/70 text-white p-2 text-xs truncate opacity-0 group-hover:opacity-100 transition-opacity">
+                    {img.name}
                   </div>
-                );
-              })}
+                </div>
+              ))}
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">No images in this category</p>
@@ -1372,14 +1253,8 @@ const InspectionDetail = () => {
   const renderInspectionItem = (sectionKey: string, itemKey: string, item: any) => {
     const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
     
-    // Handle both Firebase structure (images as objects) and Supabase structure (photos as array)
-    let photos: string[] = [];
-    if (itemData.photos && Array.isArray(itemData.photos)) {
-      photos = itemData.photos;
-    } else if (itemData.images && typeof itemData.images === 'object') {
-      // Firebase structure: images is an object with image IDs as keys
-      photos = Object.values(itemData.images).map((img: any) => img?.url).filter(Boolean);
-    }
+    // Get photos array
+    const photos: string[] = itemData.photos || [];
     
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
@@ -1423,37 +1298,23 @@ const InspectionDetail = () => {
             <div className="mt-2 space-y-3">
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
-                  {photos.map((photo: string, index: number) => {
-                    const isFirebaseUrl = photo.includes('firebasestorage.googleapis.com');
-                    const isSupabaseImage = photo.includes('supabase.co/storage');
-                    const migrateKey = `${sectionKey}-${itemKey}-${index}`;
-                    const isMigrating = migratingImages.has(migrateKey);
-                    
-                    return (
-                      <div key={index} className="relative group">
-                        <img
-                          src={photo}
-                          alt={`Photo ${index + 1}`}
-                          className="w-full h-32 object-cover rounded border"
-                        />
-                        {isFirebaseUrl && (
-                          <Badge variant="secondary" className="absolute top-1 left-1 text-xs">
-                            Legacy
-                          </Badge>
-                        )}
-                        {isSupabaseImage && (
-                          <Button
-                            size="icon"
-                            variant="destructive"
-                            className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    );
-                  })}
+                  {photos.map((photo: string, index: number) => (
+                    <div key={index} className="relative group">
+                      <img
+                        src={photo}
+                        alt={`Photo ${index + 1}`}
+                        className="w-full h-32 object-cover rounded border"
+                      />
+                      <Button
+                        size="icon"
+                        variant="destructive"
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                        onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
+                      >
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
+                  ))}
                 </div>
               )}
               

@@ -294,18 +294,6 @@ const Settings = () => {
             </Button>
           </div>
 
-          <div className="flex items-center justify-between p-4 border rounded-lg">
-            <div>
-              <h4 className="font-semibold">Backup to Google Drive</h4>
-              <p className="text-sm text-muted-foreground">
-                Backup all files from Firebase Storage to a folder in your Google Drive.
-              </p>
-            </div>
-            <Button onClick={handleBackupToGoogleDrive}>
-              <Upload className="mr-2 h-4 w-4" />
-              Start Backup
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>

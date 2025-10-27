@@ -66,14 +66,6 @@ interface SiteDocument {
   file_count: number;
 }
 
-interface FirebaseDocument {
-  name: string;
-  url: string;
-  category: string;
-  fbKey: string;
-  alreadyMigrated?: boolean;
-}
-
 interface Inspection {
   id: string;
   subsection_id: string | null;
@@ -98,10 +90,8 @@ const SiteDetail = () => {
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [documents, setDocuments] = useState<SiteDocument[]>([]);
-  const [firebaseDocuments, setFirebaseDocuments] = useState<FirebaseDocument[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
-  const [migrating, setMigrating] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string, category_id: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
@@ -401,67 +391,7 @@ const SiteDetail = () => {
       
       setDocuments(aggregated);
 
-      // Firebase document fetching removed - only using Supabase now
-      if (false) {
-        try {
-          if (false) {
-            const fbSiteData = null;
-            if (fbSiteData) {
-              const fbDocs: FirebaseDocument[] = [];
-              const siteDocuments = fbSiteData.siteDocuments || fbSiteData.documents || fbSiteData.Documents || fbSiteData.files || fbSiteData.Files;
-              
-              if (siteDocuments && typeof siteDocuments === 'object') {
-                Object.entries(siteDocuments).forEach(([categoryName, categoryDocs]: [string, any]) => {
-                  if (categoryDocs && typeof categoryDocs === 'object') {
-                    // Iterate through each entry in the category
-                    Object.entries(categoryDocs).forEach(([docKey, docData]: [string, any]) => {
-                      if (docData && typeof docData === 'object') {
-                        // Check if this is a direct document (has url property)
-                        if (docData.url && typeof docData.url === 'string') {
-                          fbDocs.push({
-                            name: docData.name || docKey,
-                            url: docData.url,
-                            category: categoryName,
-                            fbKey: docKey
-                          });
-                        }
-                        // Check if this is a "files" nested object containing more documents
-                        else if (docKey === 'files' && typeof docData === 'object') {
-                          Object.entries(docData).forEach(([fileId, fileData]: [string, any]) => {
-                            if (fileData && typeof fileData === 'object' && fileData.url) {
-                              fbDocs.push({
-                                name: fileData.name || fileId,
-                                url: fileData.url,
-                                category: categoryName,
-                                fbKey: fileId
-                              });
-                            }
-                          });
-                        }
-                      }
-                    });
-                  }
-                });
-              }
-              
-              // Check which documents are already migrated
-              if (fbDocs.length > 0 && docsRes.data) {
-                const migratedUrls = new Set(docsRes.data.map((d: any) => d.file_url));
-                fbDocs.forEach(doc => {
-                  doc.alreadyMigrated = migratedUrls.has(doc.url);
-                });
-              }
-              
-              console.log(`Found ${fbDocs.length} Firebase documents for site (${fbDocs.filter(d => d.alreadyMigrated).length} already migrated)`);
-              setFirebaseDocuments(fbDocs);
-            }
-          }
-        } catch (fbError) {
-          console.error("Error fetching Firebase documents:", fbError);
-        }
-      }
-
-      // Calculate stats from inspection data with Firebase rules
+      // Calculate stats from inspection data
       const totalSubsections = subs.length;
       
       // Calculate compliant count using Firebase rules
@@ -556,79 +486,6 @@ const SiteDetail = () => {
       toast.error("Failed to fetch site data");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const migrateDocument = async (doc: FirebaseDocument) => {
-    if (!site) return;
-    
-    setMigrating(doc.fbKey);
-    try {
-      // Check if already migrated
-      const { data: existing } = await supabase
-        .from('site_documents')
-        .select('id')
-        .eq('site_id', site.id)
-        .eq('file_url', doc.url)
-        .maybeSingle();
-
-      if (existing) {
-        toast.info("Document already migrated");
-        setMigrating(null);
-        return;
-      }
-
-      // Find or create matching category
-      let categoryId: string | null = null;
-      
-      // Try to find existing category that matches Firebase category name
-      const { data: existingCategory } = await supabase
-        .from('site_document_categories')
-        .select('id, name')
-        .eq('site_id', site.id)
-        .eq('name', doc.category)
-        .maybeSingle();
-
-      if (existingCategory) {
-        categoryId = existingCategory.id;
-      } else {
-        // Create new category if it doesn't exist
-        const { data: newCategory, error: categoryError } = await supabase
-          .from('site_document_categories')
-          .insert({
-            site_id: site.id,
-            name: doc.category,
-            order_index: documentCategories.length + 1
-          })
-          .select('id')
-          .single();
-
-        if (categoryError) throw categoryError;
-        categoryId = newCategory.id;
-        
-        // Refresh categories list
-        await fetchDocumentCategories();
-      }
-
-      // Insert site document record with category_id
-      const { error: insertError } = await supabase.from('site_documents').insert([{
-        site_id: site.id,
-        category: doc.category,
-        category_id: categoryId,
-        file_name: doc.name,
-        file_url: doc.url,
-      }]);
-
-      if (insertError) throw insertError;
-
-      toast.success(`Migrated: ${doc.name}`);
-      await fetchSiteData(); // Refresh data
-      await fetchSiteDocuments();
-    } catch (error) {
-      console.error("Migration error:", error);
-      toast.error("Failed to migrate document");
-    } finally {
-      setMigrating(null);
     }
   };
 
@@ -888,12 +745,6 @@ const SiteDetail = () => {
   const handleDeleteSiteImage = async () => {
     if (!site?.site_image_url) return;
 
-    // Only allow deletion of Supabase images
-    if (!site.site_image_url.includes('supabase.co/storage')) {
-      toast.error("Firebase images cannot be deleted. Please upload a new image to Supabase first.");
-      return;
-    }
-
     try {
       const url = new URL(site.site_image_url);
       const pathParts = url.pathname.split('/');
@@ -995,9 +846,6 @@ const SiteDetail = () => {
         inspectionTitle = `${site?.name || 'Site'} - ${template.category} - ${formattedDate}`;
       }
       
-      // Generate a unique firebase-style ID for backwards compatibility
-      const firebaseId = `-${Date.now().toString(36)}${Math.random().toString(36).substr(2, 9)}`;
-      
       // Create inspection in Supabase - site level (no subsection_id)
       const { data: newInspection, error } = await supabase
         .from('inspections')
@@ -1005,7 +853,6 @@ const SiteDetail = () => {
           site_id: siteId,
           subsection_id: null, // Site-level inspection
           template_id: selectedTemplateId,
-          firebase_id: firebaseId,
           title: inspectionTitle,
           inspection_date: newInspectionDate,
           status: 'Pending',
@@ -1128,7 +975,7 @@ const SiteDetail = () => {
     );
   }
 
-  // Calculate compliance based on Firebase rules
+  // Calculate compliance
   const calculateCompliance = (subsection: Subsection) => {
     // Rule 1: If COC is required, must have approved COC
     if (subsection.is_coc_required && subsection.coc_status !== 'Approved') {
@@ -1408,56 +1255,25 @@ const SiteDetail = () => {
                   </div>
                 ) : site.site_image_url ? (
                   <div className="relative group w-fit">
-                    {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
-                      <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
-                        <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
-                        <p className="text-sm font-medium text-center mb-2">Legacy Firebase Image</p>
-                        <p className="text-xs text-center mb-3">This image is no longer accessible</p>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={async () => {
-                            try {
-                              await supabase
-                                .from('sites')
-                                .update({ site_image_url: null })
-                                .eq('id', siteId);
-                              toast.success("Legacy URL removed. Please upload a new image.");
-                              fetchSiteData();
-                            } catch (error) {
-                              toast.error("Failed to clear legacy URL");
-                            }
-                          }}
-                        >
-                          <Trash2 className="h-3 w-3 mr-1" />
-                          Clear & Upload New
-                        </Button>
-                      </div>
-                    ) : (
-                      <>
-                        <img
-                          key={site.site_image_url}
-                          src={site.site_image_url}
-                          alt="Site main image"
-                          className="w-64 h-48 object-cover rounded border bg-muted"
-                          crossOrigin="anonymous"
-                          onError={(e) => {
-                            e.currentTarget.src = '/placeholder.svg';
-                            e.currentTarget.alt = 'Image preview unavailable';
-                          }}
-                        />
-                        {site.site_image_url.includes('supabase.co/storage') && (
-                          <Button
-                            size="sm"
-                            variant="destructive"
-                            className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
-                            onClick={() => setDeleteImageType('site_image')}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
-                        )}
-                      </>
-                    )}
+                    <img
+                      key={site.site_image_url}
+                      src={site.site_image_url}
+                      alt="Site main image"
+                      className="w-64 h-48 object-cover rounded border bg-muted"
+                      crossOrigin="anonymous"
+                      onError={(e) => {
+                        e.currentTarget.src = '/placeholder.svg';
+                        e.currentTarget.alt = 'Image preview unavailable';
+                      }}
+                    />
+                    <Button
+                      size="sm"
+                      variant="destructive"
+                      className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setDeleteImageType('site_image')}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </div>
                 ) : (
                   <div className="w-64 h-48 border-2 border-dashed rounded flex items-center justify-center text-muted-foreground">
@@ -1658,87 +1474,6 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-4">
-          {/* Firebase Documents - Legacy */}
-          {firebaseDocuments.length > 0 && (
-            <Card className="border-amber-500/50">
-              <CardHeader>
-                <div className="flex items-center justify-between">
-                  <div>
-                    <CardTitle className="flex items-center gap-2">
-                      Firebase Documents (Legacy)
-                      <Badge variant="secondary">Migration Required</Badge>
-                    </CardTitle>
-                    <CardDescription>
-                      These documents exist in Firebase and need to be migrated to Supabase
-                    </CardDescription>
-                  </div>
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-3">
-                  {Object.entries(
-                    firebaseDocuments.reduce((acc, doc) => {
-                      if (!acc[doc.category]) acc[doc.category] = [];
-                      acc[doc.category].push(doc);
-                      return acc;
-                    }, {} as Record<string, FirebaseDocument[]>)
-                  ).map(([category, docs]) => (
-                    <div key={category} className="border rounded-lg p-4">
-                      <div className="flex items-center justify-between mb-3">
-                        <h4 className="font-medium flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-amber-500" />
-                          {category}
-                        </h4>
-                        <Badge variant="outline" className="bg-amber-500/10">
-                          {docs.length} files
-                        </Badge>
-                      </div>
-                      <div className="space-y-2">
-                        {docs.map((doc) => (
-                          <div
-                            key={doc.fbKey}
-                            className={`flex items-center justify-between p-2 rounded ${
-                              doc.alreadyMigrated ? 'bg-green-500/10' : 'bg-muted/50'
-                            }`}
-                          >
-                            <div className="flex items-center gap-2 flex-1">
-                              <div className={`w-2 h-2 rounded-full ${
-                                doc.alreadyMigrated ? 'bg-green-500' : 'bg-amber-500'
-                              }`} />
-                              <span className="text-sm">{doc.name}</span>
-                              {doc.alreadyMigrated && (
-                                <Badge variant="outline" className="bg-green-500/20 text-green-700 border-green-500/30">
-                                  Migrated
-                                </Badge>
-                              )}
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => window.open(doc.url, '_blank')}
-                              >
-                                <Download className="h-4 w-4" />
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => migrateDocument(doc)}
-                                disabled={migrating === doc.fbKey || doc.alreadyMigrated}
-                              >
-                                {doc.alreadyMigrated ? 'Already Migrated' : migrating === doc.fbKey ? 'Migrating...' : 'Migrate'}
-                              </Button>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          )}
-
           {/* Site Documents */}
           <Card>
             <CardHeader>
@@ -2510,57 +2245,25 @@ const SiteDetail = () => {
                     </div>
                   ) : site.site_image_url && !siteImageFile ? (
                     <div className="relative group w-fit mb-2">
-                      {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
-                        <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
-                          <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
-                          <p className="text-sm font-medium text-center mb-2">Legacy Firebase Image</p>
-                          <p className="text-xs text-center mb-3">This image is no longer accessible</p>
-                          <Button
-                            type="button"
-                            size="sm"
-                            variant="outline"
-                            onClick={async () => {
-                              try {
-                                await supabase
-                                  .from('sites')
-                                  .update({ site_image_url: null })
-                                  .eq('id', siteId);
-                                toast.success("Legacy URL removed. Please upload a new image.");
-                                fetchSiteData();
-                              } catch (error) {
-                                toast.error("Failed to clear legacy URL");
-                              }
-                            }}
-                          >
-                            <Trash2 className="h-3 w-3 mr-1" />
-                            Clear Legacy URL
-                          </Button>
-                        </div>
-                      ) : (
-                        <>
-                          <img
-                            src={site.site_image_url}
-                            alt="Current site image"
-                            className="w-64 h-48 object-cover rounded border"
-                            onError={(e) => {
-                              e.currentTarget.src = '/placeholder.svg';
-                              e.currentTarget.alt = 'Image preview unavailable';
-                            }}
-                          />
-                          {site.site_image_url.includes('supabase.co/storage') && (
-                            <Button
-                              type="button"
-                              size="sm"
-                              variant="destructive"
-                              className="mt-2"
-                              onClick={handleDeleteSiteImage}
-                            >
-                              <Trash2 className="h-4 w-4 mr-2" />
-                              Delete Image
-                            </Button>
-                          )}
-                        </>
-                      )}
+                      <img
+                        src={site.site_image_url}
+                        alt="Current site image"
+                        className="w-64 h-48 object-cover rounded border"
+                        onError={(e) => {
+                          e.currentTarget.src = '/placeholder.svg';
+                          e.currentTarget.alt = 'Image preview unavailable';
+                        }}
+                      />
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="destructive"
+                        className="mt-2"
+                        onClick={handleDeleteSiteImage}
+                      >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete Image
+                      </Button>
                     </div>
                   ) : null}
                   <div className="flex items-center gap-2">
