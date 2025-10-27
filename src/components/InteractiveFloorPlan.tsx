@@ -26,7 +26,6 @@ export const InteractiveFloorPlan = ({
   const [pins, setPins] = useState<any[]>([]);
   const [selectedPin, setSelectedPin] = useState<any>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [addMode, setAddMode] = useState<'snag' | 'observation' | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
@@ -124,7 +123,7 @@ export const InteractiveFloorPlan = ({
   };
 
   const handleAddPin = async (x: number, y: number) => {
-    if (!floorPlan || !addMode) return;
+    if (!floorPlan) return;
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -139,7 +138,7 @@ export const InteractiveFloorPlan = ({
           pin_number: newPinNumber,
           x_position: x,
           y_position: y,
-          pin_type: addMode,
+          pin_type: 'snag', // Default to snag, user can change in modal
           created_by: user.id,
         })
         .select()
@@ -179,10 +178,17 @@ export const InteractiveFloorPlan = ({
         photoUrl = publicUrl;
       }
 
+      // Update the pin with all data including pin_type
       const { error } = await supabase
         .from("floor_plan_pins")
         .update({
-          ...pinData,
+          pin_type: pinData.pin_type,
+          title: pinData.title,
+          notes: pinData.notes,
+          priority: pinData.priority,
+          status: pinData.status,
+          assigned_contractor: pinData.assigned_contractor,
+          due_date: pinData.due_date,
           photo_url: photoUrl,
         })
         .eq("id", selectedPin.id);
@@ -191,6 +197,8 @@ export const InteractiveFloorPlan = ({
 
       // Refresh pins
       await loadFloorPlan();
+      setIsModalOpen(false);
+      setSelectedPin(null);
       toast.success("Pin saved successfully");
     } catch (error) {
       console.error("Error saving pin:", error);
@@ -330,7 +338,7 @@ export const InteractiveFloorPlan = ({
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[600px]">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[700px]">
         <div className="lg:col-span-2">
           <FloorPlanViewer
             pdfUrl={floorPlan.file_url}
@@ -340,8 +348,8 @@ export const InteractiveFloorPlan = ({
               setSelectedPin(pin);
               setIsModalOpen(true);
             }}
-            addMode={addMode}
-            onAddModeChange={setAddMode}
+            addMode={null}
+            onAddModeChange={() => {}}
           />
         </div>
         <div>

@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Camera, Trash2, Save } from "lucide-react";
+import { Camera, Trash2, Save, Upload } from "lucide-react";
 import { useCamera } from "@/hooks/useCamera";
 import { toast } from "sonner";
 
@@ -51,6 +51,7 @@ export const FloorPlanPinModal = ({
   pinNumber,
 }: FloorPlanPinModalProps) => {
   const { takePicture } = useCamera();
+  const [step, setStep] = useState<'type' | 'details'>(initialData ? 'details' : 'type');
   const [formData, setFormData] = useState<PinData>({
     pin_type: 'snag',
     title: '',
@@ -64,6 +65,7 @@ export const FloorPlanPinModal = ({
   useEffect(() => {
     if (initialData) {
       setFormData(initialData);
+      setStep('details');
       if (initialData.photo_url) {
         setPhotoPreview(initialData.photo_url);
       }
@@ -74,10 +76,16 @@ export const FloorPlanPinModal = ({
         notes: '',
         status: 'open',
       });
+      setStep('type');
       setPhotoFile(null);
       setPhotoPreview(null);
     }
   }, [initialData, isOpen]);
+
+  const handleTypeSelect = (type: 'snag' | 'observation') => {
+    setFormData({ ...formData, pin_type: type });
+    setStep('details');
+  };
 
   const handlePhotoCapture = async () => {
     try {
@@ -108,6 +116,11 @@ export const FloorPlanPinModal = ({
   const handleSave = async () => {
     if (!formData.title.trim()) {
       toast.error("Please enter a title");
+      return;
+    }
+
+    if (!photoPreview && !initialData?.photo_url) {
+      toast.error("Please add a photo");
       return;
     }
 
@@ -142,203 +155,250 @@ export const FloorPlanPinModal = ({
       <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {initialData ? `Edit Item #${pinNumber}` : `New Item #${pinNumber}`}
+            Pin #{pinNumber} {initialData && `• ${formData.pin_type === 'snag' ? 'Snag' : 'Observation'}`}
           </DialogTitle>
+          <p className="text-sm text-muted-foreground sr-only">
+            {step === 'type' ? 'Select whether this is a snag or an observation' : 'Add details about this pin'}
+          </p>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Type Toggle */}
-          <div className="flex gap-2">
-            <Button
-              type="button"
-              variant={formData.pin_type === 'snag' ? 'default' : 'outline'}
-              className="flex-1"
-              onClick={() => setFormData({ ...formData, pin_type: 'snag' })}
-            >
-              Snag
-            </Button>
-            <Button
-              type="button"
-              variant={formData.pin_type === 'observation' ? 'default' : 'outline'}
-              className="flex-1"
-              onClick={() => setFormData({ ...formData, pin_type: 'observation' })}
-            >
-              Observation
-            </Button>
-          </div>
-
-          {/* Photo */}
-          <div>
-            <Label>Photo</Label>
-            <div className="mt-2 space-y-2">
-              {photoPreview ? (
-                <div className="relative">
-                  <img
-                    src={photoPreview}
-                    alt="Preview"
-                    className="w-full h-64 object-cover rounded-lg border"
-                  />
-                  <Button
-                    type="button"
-                    variant="destructive"
-                    size="icon"
-                    className="absolute top-2 right-2"
-                    onClick={handleRemovePhoto}
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
+        {step === 'type' ? (
+          <div className="space-y-4 py-4">
+            <p className="text-center text-lg font-medium">What did you find?</p>
+            <div className="grid grid-cols-2 gap-4">
+              <Button
+                type="button"
+                size="lg"
+                className="h-32 flex flex-col gap-2"
+                variant="outline"
+                onClick={() => handleTypeSelect('snag')}
+              >
+                <div className="w-12 h-12 rounded-full bg-destructive/20 flex items-center justify-center">
+                  <span className="text-2xl">⚠️</span>
                 </div>
-              ) : (
-                <div className="flex gap-2">
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="flex-1"
-                    onClick={handlePhotoCapture}
-                  >
-                    <Camera className="w-4 h-4 mr-2" />
-                    Take Photo
-                  </Button>
-                  <label className="flex-1">
-                    <Button type="button" variant="outline" className="w-full" asChild>
-                      <span>Upload File</span>
-                    </Button>
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={handleFileUpload}
-                    />
-                  </label>
+                <div className="text-center">
+                  <div className="font-bold text-lg">Snag</div>
+                  <div className="text-xs text-muted-foreground">Issue that needs fixing</div>
                 </div>
-              )}
+              </Button>
+              <Button
+                type="button"
+                size="lg"
+                className="h-32 flex flex-col gap-2"
+                variant="outline"
+                onClick={() => handleTypeSelect('observation')}
+              >
+                <div className="w-12 h-12 rounded-full bg-primary/20 flex items-center justify-center">
+                  <span className="text-2xl">👁️</span>
+                </div>
+                <div className="text-center">
+                  <div className="font-bold text-lg">Observation</div>
+                  <div className="text-xs text-muted-foreground">Note for reference</div>
+                </div>
+              </Button>
             </div>
           </div>
+        ) : (
+          <div className="space-y-4">
+            {/* Type Badge */}
+            {!initialData && (
+              <div className="flex items-center justify-between p-3 bg-muted rounded-lg">
+                <span className="font-medium">
+                  {formData.pin_type === 'snag' ? '⚠️ Snag' : '👁️ Observation'}
+                </span>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setStep('type')}
+                >
+                  Change
+                </Button>
+              </div>
+            )}
 
-          {/* Title */}
-          <div>
-            <Label htmlFor="title">Title *</Label>
-            <Input
-              id="title"
-              value={formData.title}
-              onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-              placeholder="Brief description"
-            />
-          </div>
+            {/* Photo - Featured prominently */}
+            <div className="border-2 border-dashed rounded-lg p-4">
+              <Label className="text-base font-semibold">Photo {!photoPreview && "(Required)"}</Label>
+              <div className="mt-3 space-y-2">
+                {photoPreview ? (
+                  <div className="relative">
+                    <img
+                      src={photoPreview}
+                      alt="Preview"
+                      className="w-full h-64 object-cover rounded-lg border"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2"
+                      onClick={handleRemovePhoto}
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-2">
+                    <Button
+                      type="button"
+                      size="lg"
+                      variant="default"
+                      className="h-20"
+                      onClick={handlePhotoCapture}
+                    >
+                      <Camera className="w-6 h-6 mr-2" />
+                      Take Photo
+                    </Button>
+                    <label>
+                      <Button type="button" size="lg" variant="outline" className="w-full h-20" asChild>
+                        <span>
+                          <Upload className="w-6 h-6 mr-2" />
+                          Upload
+                        </span>
+                      </Button>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleFileUpload}
+                      />
+                    </label>
+                  </div>
+                )}
+              </div>
+            </div>
 
-          {/* Notes */}
-          <div>
-            <Label htmlFor="notes">Notes</Label>
-            <Textarea
-              id="notes"
-              value={formData.notes}
-              onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-              placeholder="Detailed description..."
-              rows={4}
-            />
-          </div>
+            {/* Title */}
+            <div>
+              <Label htmlFor="title" className="text-base">Title *</Label>
+              <Input
+                id="title"
+                value={formData.title}
+                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                placeholder="What's the issue?"
+                className="text-base"
+              />
+            </div>
 
-          {/* Snag-specific fields */}
-          {formData.pin_type === 'snag' && (
-            <>
-              <div className="grid grid-cols-2 gap-4">
-                {/* Priority */}
+            {/* Notes */}
+            <div>
+              <Label htmlFor="notes" className="text-base">Details</Label>
+              <Textarea
+                id="notes"
+                value={formData.notes}
+                onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                placeholder="Add more information..."
+                rows={3}
+              />
+            </div>
+
+            {/* Snag-specific fields */}
+            {formData.pin_type === 'snag' && (
+              <div className="space-y-4 pt-4 border-t">
+                <h3 className="font-semibold text-sm text-muted-foreground">Snag Details</h3>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Priority */}
+                  <div>
+                    <Label htmlFor="priority">Priority</Label>
+                    <Select
+                      value={formData.priority || ''}
+                      onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                    >
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="low">🟢 Low</SelectItem>
+                        <SelectItem value="medium">🟡 Medium</SelectItem>
+                        <SelectItem value="high">🟠 High</SelectItem>
+                        <SelectItem value="critical">🔴 Critical</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {/* Due Date */}
+                  <div>
+                    <Label htmlFor="due_date">Due Date</Label>
+                    <Input
+                      id="due_date"
+                      type="date"
+                      value={formData.due_date || ''}
+                      onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
+                    />
+                  </div>
+                </div>
+
+                {/* Assigned Contractor */}
                 <div>
-                  <Label htmlFor="priority">Priority</Label>
+                  <Label htmlFor="contractor">Assigned To</Label>
                   <Select
-                    value={formData.priority || ''}
-                    onValueChange={(value) => setFormData({ ...formData, priority: value })}
+                    value={formData.assigned_contractor || ''}
+                    onValueChange={(value) => setFormData({ ...formData, assigned_contractor: value })}
                   >
                     <SelectTrigger>
-                      <SelectValue placeholder="Select priority" />
+                      <SelectValue placeholder="Select contractor" />
                     </SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="low">Low</SelectItem>
-                      <SelectItem value="medium">Medium</SelectItem>
-                      <SelectItem value="high">High</SelectItem>
-                      <SelectItem value="critical">Critical</SelectItem>
+                      {CONTRACTORS.map((contractor) => (
+                        <SelectItem key={contractor} value={contractor}>
+                          {contractor}
+                        </SelectItem>
+                      ))}
                     </SelectContent>
                   </Select>
                 </div>
-
-                {/* Due Date */}
-                <div>
-                  <Label htmlFor="due_date">Due Date</Label>
-                  <Input
-                    id="due_date"
-                    type="date"
-                    value={formData.due_date || ''}
-                    onChange={(e) => setFormData({ ...formData, due_date: e.target.value })}
-                  />
-                </div>
               </div>
+            )}
 
-              {/* Assigned Contractor */}
-              <div>
-                <Label htmlFor="contractor">Assigned Contractor</Label>
-                <Select
-                  value={formData.assigned_contractor || ''}
-                  onValueChange={(value) => setFormData({ ...formData, assigned_contractor: value })}
+            {/* Status */}
+            <div className="pt-4 border-t">
+              <Label>Status</Label>
+              <div className="flex gap-2 mt-2">
+                <Button
+                  type="button"
+                  variant={formData.status === 'open' ? 'default' : 'outline'}
+                  className="flex-1"
+                  onClick={() => setFormData({ ...formData, status: 'open' })}
                 >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Select contractor" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CONTRACTORS.map((contractor) => (
-                      <SelectItem key={contractor} value={contractor}>
-                        {contractor}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
+                  Open
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.status === 'resolved' ? 'default' : 'outline'}
+                  className="flex-1"
+                  onClick={() => setFormData({ ...formData, status: 'resolved' })}
+                >
+                  ✓ Resolved
+                </Button>
               </div>
-            </>
-          )}
-
-          {/* Status */}
-          <div>
-            <Label>Status</Label>
-            <div className="flex gap-2 mt-2">
-              <Button
-                type="button"
-                variant={formData.status === 'open' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setFormData({ ...formData, status: 'open' })}
-              >
-                Open
-              </Button>
-              <Button
-                type="button"
-                variant={formData.status === 'resolved' ? 'default' : 'outline'}
-                className="flex-1"
-                onClick={() => setFormData({ ...formData, status: 'resolved' })}
-              >
-                Resolved
-              </Button>
             </div>
           </div>
-        </div>
+        )}
 
-        <DialogFooter className="gap-2">
-          {initialData && onDelete && (
-            <Button
-              type="button"
-              variant="destructive"
-              onClick={handleDelete}
-              className="mr-auto"
-            >
-              <Trash2 className="w-4 h-4 mr-2" />
-              Delete
+        {step === 'details' && (
+          <DialogFooter className="gap-2">
+            {initialData && onDelete && (
+              <Button
+                type="button"
+                variant="destructive"
+                onClick={handleDelete}
+                className="mr-auto"
+              >
+                <Trash2 className="w-4 h-4 mr-2" />
+                Delete
+              </Button>
+            )}
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
             </Button>
-          )}
-          <Button type="button" variant="outline" onClick={onClose}>
-            Cancel
-          </Button>
-          <Button onClick={handleSave} disabled={isSaving}>
-            <Save className="w-4 h-4 mr-2" />
-            {isSaving ? 'Saving...' : 'Save'}
-          </Button>
-        </DialogFooter>
+            <Button onClick={handleSave} disabled={isSaving || !photoPreview}>
+              <Save className="w-4 h-4 mr-2" />
+              {isSaving ? 'Saving...' : 'Save'}
+            </Button>
+          </DialogFooter>
+        )}
       </DialogContent>
     </Dialog>
   );

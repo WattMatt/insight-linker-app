@@ -42,6 +42,7 @@ export const FloorPlanViewer = ({
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [pdfPage, setPdfPage] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
 
   useEffect(() => {
     loadPdf();
@@ -52,6 +53,23 @@ export const FloorPlanViewer = ({
       renderPage();
     }
   }, [pdfPage, scale, panOffset, pins]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftPressed(true);
+    };
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftPressed(false);
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
   const loadPdf = async () => {
     if (!canvasRef.current) return;
@@ -122,7 +140,7 @@ export const FloorPlanViewer = ({
   };
 
   const handleCanvasClick = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!canvasRef.current) return;
+    if (!canvasRef.current || isPanning) return;
 
     const rect = canvasRef.current.getBoundingClientRect();
     const x = (e.clientX - rect.left - panOffset.x) / scale;
@@ -144,21 +162,21 @@ export const FloorPlanViewer = ({
       return;
     }
 
-    // Add new pin if in add mode
-    if (addMode) {
-      onAddPin(x, y);
-      onAddModeChange(null);
-    }
+    // Add new pin with single click (no mode needed)
+    onAddPin(x, y);
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (addMode) return; // Don't pan in add mode
-    setIsPanning(true);
-    setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    // Only pan when shift is held or right mouse button
+    if (isShiftPressed || e.button === 2) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
+    }
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
-    if (!isPanning || addMode) return;
+    if (!isPanning) return;
     setPanOffset({
       x: e.clientX - panStart.x,
       y: e.clientY - panStart.y,
@@ -186,30 +204,22 @@ export const FloorPlanViewer = ({
     <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-muted/10">
       {/* Toolbar */}
       <div className="flex items-center gap-2 p-3 border-b bg-card">
-        <Button
-          variant={addMode === 'snag' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => onAddModeChange(addMode === 'snag' ? null : 'snag')}
-        >
-          <MapPin className="w-4 h-4 mr-2" />
-          Add Snag
-        </Button>
-        <Button
-          variant={addMode === 'observation' ? 'default' : 'outline'}
-          size="sm"
-          onClick={() => onAddModeChange(addMode === 'observation' ? null : 'observation')}
-        >
-          <MapPin className="w-4 h-4 mr-2" />
-          Add Observation
-        </Button>
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <MapPin className="w-4 h-4" />
+          <span>Click to add pin</span>
+          <span className="text-xs">• Hold Shift to pan</span>
+        </div>
         <div className="flex-1" />
         <Button variant="outline" size="icon" onClick={handleZoomOut}>
           <ZoomOut className="w-4 h-4" />
         </Button>
+        <span className="text-sm text-muted-foreground min-w-12 text-center">
+          {Math.round(scale * 100)}%
+        </span>
         <Button variant="outline" size="icon" onClick={handleZoomIn}>
           <ZoomIn className="w-4 h-4" />
         </Button>
-        <Button variant="outline" size="icon" onClick={handleResetView}>
+        <Button variant="outline" size="icon" onClick={handleResetView} title="Reset view">
           <Maximize2 className="w-4 h-4" />
         </Button>
       </div>
@@ -217,8 +227,8 @@ export const FloorPlanViewer = ({
       {/* Canvas Container */}
       <div
         ref={containerRef}
-        className="flex-1 overflow-auto relative"
-        style={{ cursor: addMode ? 'crosshair' : isPanning ? 'grabbing' : 'grab' }}
+        className="flex-1 overflow-hidden relative bg-card"
+        style={{ cursor: isPanning ? 'grabbing' : isShiftPressed ? 'grab' : 'crosshair' }}
       >
         {isLoading ? (
           <div className="flex items-center justify-center h-full">
@@ -232,6 +242,7 @@ export const FloorPlanViewer = ({
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
+            onContextMenu={(e) => e.preventDefault()}
             className="max-w-none"
             style={{
               transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
@@ -239,12 +250,6 @@ export const FloorPlanViewer = ({
           />
         )}
       </div>
-
-      {addMode && (
-        <div className="p-3 bg-primary/10 border-t text-center text-sm">
-          Click anywhere on the floor plan to add a {addMode}
-        </div>
-      )}
     </div>
   );
 };
