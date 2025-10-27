@@ -2510,27 +2510,56 @@ const SiteDetail = () => {
                     </div>
                   ) : site.site_image_url && !siteImageFile ? (
                     <div className="relative group w-fit mb-2">
-                      <img
-                        src={site.site_image_url}
-                        alt="Current site image"
-                        className="w-64 h-48 object-cover rounded border"
-                      />
-                      {site.site_image_url.includes('firebasestorage.googleapis.com') && (
-                        <Badge variant="secondary" className="absolute top-2 left-2">
-                          Legacy
-                        </Badge>
-                      )}
-                      {site.site_image_url.includes('supabase.co/storage') && (
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="destructive"
-                          className="mt-2"
-                          onClick={handleDeleteSiteImage}
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" />
-                          Delete Image
-                        </Button>
+                      {site.site_image_url.includes('firebasestorage.googleapis.com') ? (
+                        <div className="w-64 h-48 border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
+                          <AlertCircle className="h-8 w-8 text-amber-500 mb-2" />
+                          <p className="text-sm font-medium text-center mb-2">Legacy Firebase Image</p>
+                          <p className="text-xs text-center mb-3">This image is no longer accessible</p>
+                          <Button
+                            type="button"
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              try {
+                                await supabase
+                                  .from('sites')
+                                  .update({ site_image_url: null })
+                                  .eq('id', siteId);
+                                toast.success("Legacy URL removed. Please upload a new image.");
+                                fetchSiteData();
+                              } catch (error) {
+                                toast.error("Failed to clear legacy URL");
+                              }
+                            }}
+                          >
+                            <Trash2 className="h-3 w-3 mr-1" />
+                            Clear Legacy URL
+                          </Button>
+                        </div>
+                      ) : (
+                        <>
+                          <img
+                            src={site.site_image_url}
+                            alt="Current site image"
+                            className="w-64 h-48 object-cover rounded border"
+                            onError={(e) => {
+                              e.currentTarget.src = '/placeholder.svg';
+                              e.currentTarget.alt = 'Image preview unavailable';
+                            }}
+                          />
+                          {site.site_image_url.includes('supabase.co/storage') && (
+                            <Button
+                              type="button"
+                              size="sm"
+                              variant="destructive"
+                              className="mt-2"
+                              onClick={handleDeleteSiteImage}
+                            >
+                              <Trash2 className="h-4 w-4 mr-2" />
+                              Delete Image
+                            </Button>
+                          )}
+                        </>
                       )}
                     </div>
                   ) : null}
