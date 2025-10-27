@@ -719,21 +719,19 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     inspections: any[],
     documents: any[]
   ): boolean => {
-    // Rule 1: If COC is required, must have at least one COC document
-    if (subsection.is_coc_required) {
-      const hasCocDoc = documents.some(
-        doc => doc.subsection_id === subsection.id && 
-        (doc.file_name?.toLowerCase().includes('coc') || 
-         doc.file_name?.toLowerCase().includes('certificate'))
-      );
-      if (!hasCocDoc) return false;
+    // Rule 1: If COC required, must be approved/valid/pass
+    if (subsection.is_coc_required && 
+        subsection.coc_status !== 'Approved' && 
+        subsection.coc_status !== 'Valid' && 
+        subsection.coc_status !== 'Pass') {
+      return false;
     }
 
-    // Rule 2: If COC is required, must have metering details
-    if (subsection.is_coc_required) {
-      if (!subsection.meter_serial_number || !subsection.ct_ratio) {
-        return false;
-      }
+    // Rule 2: If COC required, metering must not be missing (unless meter serial exists)
+    if (subsection.is_coc_required && 
+        subsection.metering_status === 'Missing' && 
+        !subsection.meter_serial_number) {
+      return false;
     }
 
     // Rule 3: Must not have any open snags from latest inspection
