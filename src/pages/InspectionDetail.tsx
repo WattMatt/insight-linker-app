@@ -14,7 +14,7 @@ import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
 import { SiteDrawingReport } from "@/components/SiteDrawingReport";
-import { SiteDrawingInspection } from "@/components/SiteDrawingInspection";
+import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -1460,26 +1460,14 @@ const InspectionDetail = () => {
 
         {templateCategory === "Site Drawing" ? (
           <TabsContent value={Object.keys(template.sections || {})[0] || "general"} className="space-y-4">
-            <SiteDrawingInspection
-              inspectionId={inspectionId!}
-              initialPdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf}
-              initialPins={(inspection?.jsonData as any)?.siteDrawingPins || []}
-              initialCanvasData={(inspection?.jsonData as any)?.siteDrawingCanvas}
-              onDataChange={(pdfUrl, pins, canvasData) => {
-                setInspection(prev => {
-                  if (!prev) return null;
-                  return {
-                    ...prev,
-                    jsonData: {
-                      ...prev.jsonData,
-                      siteDrawingPdf: pdfUrl,
-                      siteDrawingPins: pins,
-                      siteDrawingCanvas: canvasData
-                    } as any
-                  };
-                });
-              }}
-            />
+            {subsectionId && (
+              <InteractiveFloorPlan
+                subsectionId={subsectionId}
+                projectName={inspection?.projectName || siteData?.siteName || "Site Drawing"}
+                siteName={siteData?.siteName || ""}
+                subsectionName={subsectionData?.name || "Drawing"}
+              />
+            )}
           </TabsContent>
         ) : (
           <>
