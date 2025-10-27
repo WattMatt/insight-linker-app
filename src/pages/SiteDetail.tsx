@@ -19,6 +19,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
@@ -1890,16 +1891,38 @@ const SiteDetail = () => {
                                     <TableCell className="font-medium">{sub.name}</TableCell>
                                     <TableCell>{sub.tenant_name || "—"}</TableCell>
                                     <TableCell>
-                                      <Badge
-                                        variant="outline"
-                                        className={
-                                          isCompliant
-                                            ? "bg-green-500/10 text-green-500"
-                                            : "bg-red-500/10 text-red-500"
-                                        }
-                                      >
-                                        {isCompliant ? "Pass" : "Fail"}
-                                      </Badge>
+                                      <TooltipProvider>
+                                        <Tooltip>
+                                          <TooltipTrigger asChild>
+                                            <Badge
+                                              variant="outline"
+                                              className={
+                                                isCompliant
+                                                  ? "bg-green-500/10 text-green-500"
+                                                  : "bg-red-500/10 text-red-500"
+                                              }
+                                            >
+                                              {isCompliant ? "Pass" : "Fail"}
+                                            </Badge>
+                                          </TooltipTrigger>
+                                          {!isCompliant && (
+                                            <TooltipContent className="max-w-xs">
+                                              <p className="font-semibold mb-1">Failing because:</p>
+                                              <ul className="text-xs space-y-1">
+                                                {sub.is_coc_required && sub.coc_status !== 'Approved' && (
+                                                  <li>• CoC status is "{sub.coc_status}" (needs "Approved")</li>
+                                                )}
+                                                {sub.is_coc_required && sub.metering_status === 'Missing' && !sub.meter_serial_number && (
+                                                  <li>• Metering data is missing</li>
+                                                )}
+                                                {openSnags > 0 && (
+                                                  <li>• Has {openSnags} open snag{openSnags > 1 ? 's' : ''}</li>
+                                                )}
+                                              </ul>
+                                            </TooltipContent>
+                                          )}
+                                        </Tooltip>
+                                      </TooltipProvider>
                                     </TableCell>
                                     <TableCell>
                                       <Badge
