@@ -643,11 +643,10 @@ const SubsectionDetail = () => {
         console.error("Error fetching inspections:", inspectionsError);
       }
 
-      // Convert inspections to object format
+      // Convert inspections to object format - use UUID id as key
       const inspectionsObj: Record<string, any> = {};
       inspectionsData?.forEach(inspection => {
-        const key = inspection.firebase_id || inspection.id;
-        inspectionsObj[key] = {
+        inspectionsObj[inspection.id] = {
           templateId: inspection.template_id,
           date: inspection.inspection_date,
           status: inspection.status,
