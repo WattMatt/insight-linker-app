@@ -29,6 +29,7 @@ export const InteractiveFloorPlan = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [moveMode, setMoveMode] = useState<string | null>(null); // Pin ID being moved
 
   useEffect(() => {
     loadFloorPlan();
@@ -133,6 +134,30 @@ export const InteractiveFloorPlan = ({
   const handleAddPin = async (x: number, y: number) => {
     if (!floorPlan) return;
 
+    // If in move mode, update existing pin position
+    if (moveMode) {
+      try {
+        const { error } = await supabase
+          .from("floor_plan_pins")
+          .update({
+            x_position: x,
+            y_position: y,
+          })
+          .eq("id", moveMode);
+
+        if (error) throw error;
+
+        await loadFloorPlan();
+        setMoveMode(null);
+        toast.success("Pin moved successfully");
+      } catch (error) {
+        console.error("Error moving pin:", error);
+        toast.error("Failed to move pin");
+      }
+      return;
+    }
+
+    // Otherwise, create new pin
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("Not authenticated");
@@ -216,6 +241,12 @@ export const InteractiveFloorPlan = ({
   };
 
   const handleDeletePin = async () => {
+    if (!selectedPin?.id) return;
+    
+    if (!confirm(`Are you sure you want to delete Pin #${selectedPin.pin_number}?`)) {
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from("floor_plan_pins")
@@ -233,6 +264,12 @@ export const InteractiveFloorPlan = ({
       toast.error("Failed to delete pin");
       throw error;
     }
+  };
+
+  const handleMovePin = () => {
+    setMoveMode(selectedPin.id);
+    setIsModalOpen(false);
+    toast.info("Click on the floor plan to move this pin");
   };
 
   const handleGenerateReport = async () => {
@@ -347,12 +384,30 @@ export const InteractiveFloorPlan = ({
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[700px]">
-        <div className="lg:col-span-2">
+        <div className="lg:col-span-2 relative">
+          {moveMode && (
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
+              <span className="font-medium">
+                Click on the floor plan to move Pin #{pins.find(p => p.id === moveMode)?.pin_number}
+              </span>
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => {
+                  setMoveMode(null);
+                  toast.info("Move cancelled");
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          )}
           <FloorPlanViewer
             pdfUrl={floorPlan?.file_url || ""}
             pins={pins}
             onAddPin={handleAddPin}
             onPinClick={(pin) => {
+              if (moveMode) return; // Don't open modal in move mode
               setSelectedPin(pin);
               setIsModalOpen(true);
             }}
@@ -381,6 +436,7 @@ export const InteractiveFloorPlan = ({
           }}
           onSave={handleSavePin}
           onDelete={selectedPin?.id ? handleDeletePin : undefined}
+          onMove={handleMovePin}
           initialData={selectedPin}
           pinNumber={selectedPin.pin_number}
         />

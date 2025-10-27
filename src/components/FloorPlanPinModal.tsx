@@ -5,7 +5,7 @@ import { Input } from "./ui/input";
 import { Label } from "./ui/label";
 import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
-import { Camera, Trash2, Save, Upload } from "lucide-react";
+import { Camera, Trash2, Save, Upload, MapPin } from "lucide-react";
 import { useCamera } from "@/hooks/useCamera";
 import { toast } from "sonner";
 
@@ -26,6 +26,7 @@ interface FloorPlanPinModalProps {
   onClose: () => void;
   onSave: (data: PinData, photo?: File) => Promise<void>;
   onDelete?: () => Promise<void>;
+  onMove?: () => void;
   initialData?: PinData;
   pinNumber: number;
 }
@@ -47,6 +48,7 @@ export const FloorPlanPinModal = ({
   onClose,
   onSave,
   onDelete,
+  onMove,
   initialData,
   pinNumber,
 }: FloorPlanPinModalProps) => {
@@ -403,17 +405,28 @@ export const FloorPlanPinModal = ({
 
         {step === 'details' && (
           <DialogFooter className="gap-2">
-            {initialData && onDelete && (
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={handleDelete}
-                className="mr-auto"
-              >
-                <Trash2 className="w-4 h-4 mr-2" />
-                Delete
-              </Button>
-            )}
+            <div className="flex gap-2 mr-auto">
+              {initialData && onMove && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={onMove}
+                >
+                  <MapPin className="w-4 h-4 mr-2" />
+                  Move Pin
+                </Button>
+              )}
+              {initialData && onDelete && (
+                <Button
+                  type="button"
+                  variant="destructive"
+                  onClick={handleDelete}
+                >
+                  <Trash2 className="w-4 h-4 mr-2" />
+                  Delete
+                </Button>
+              )}
+            </div>
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
