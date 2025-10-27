@@ -357,8 +357,29 @@ const SubsectionDetail = () => {
       setValidatingDocId(documentId);
       toast.info("Extracting COC information...");
 
-      // For public documents, use the URL directly
-      const signedUrl = documentUrl;
+      // Extract storage path and create signed URL for private documents
+      let signedUrl = documentUrl;
+      
+      // Check if this is a storage URL that needs a signed URL
+      if (documentUrl.includes('/storage/v1/object/')) {
+        const urlParts = documentUrl.split('/documents/');
+        if (urlParts.length === 2) {
+          const filePath = decodeURIComponent(urlParts[1]);
+          console.log('Creating signed URL for path:', filePath);
+          
+          const { data: signedData, error: signError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(filePath, 3600); // 1 hour expiry
+          
+          if (signError) {
+            console.error('Error creating signed URL:', signError);
+            toast.error('Failed to access document');
+            return;
+          }
+          
+          signedUrl = signedData.signedUrl;
+        }
+      }
 
       const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
         body: {

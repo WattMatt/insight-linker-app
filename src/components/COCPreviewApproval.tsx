@@ -222,6 +222,7 @@ export function COCPreviewApproval({
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
 
   // Validation: Check if minimum required fields are filled
   const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
@@ -254,6 +255,12 @@ export function COCPreviewApproval({
 
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
+    setPdfLoadError(null);
+  };
+
+  const onDocumentLoadError = (error: Error) => {
+    console.error('PDF load error:', error);
+    setPdfLoadError('Failed to load PDF. The document may be inaccessible or corrupted.');
   };
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3.0));
@@ -371,9 +378,18 @@ export function COCPreviewApproval({
                   <Document
                     file={documentUrl}
                     onLoadSuccess={onDocumentLoadSuccess}
+                    onLoadError={onDocumentLoadError}
                     loading={
                       <div className="flex items-center justify-center h-full">
                         <RefreshCw className="h-8 w-8 animate-spin text-primary" />
+                      </div>
+                    }
+                    error={
+                      <div className="flex flex-col items-center justify-center h-full p-4">
+                        <XCircle className="h-12 w-12 text-destructive mb-2" />
+                        <p className="text-sm text-destructive text-center">
+                          {pdfLoadError || 'Failed to load PDF document'}
+                        </p>
                       </div>
                     }
                   >
