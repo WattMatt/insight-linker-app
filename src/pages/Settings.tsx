@@ -13,7 +13,6 @@ interface Settings {
   login_hero_image_url: string | null;
   company_name: string;
   primary_color: string;
-  google_drive_connected: boolean;
   qr_base_url: string | null;
 }
 
