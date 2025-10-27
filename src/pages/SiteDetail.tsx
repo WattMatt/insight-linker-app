@@ -7,9 +7,10 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
@@ -1047,7 +1048,7 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-6">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Overview</span>
@@ -1067,6 +1068,10 @@ const SiteDetail = () => {
           <TabsTrigger value="qr-analytics" className="gap-2">
             <QrCode className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">QR Codes</span>
+          </TabsTrigger>
+          <TabsTrigger value="fortress-checklist" className="gap-2">
+            <ClipboardCheck className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Fortress Checklist</span>
           </TabsTrigger>
           <TabsTrigger value="export" className="gap-2">
             <FileDown className="h-4 w-4 shrink-0" />
@@ -2131,6 +2136,10 @@ const SiteDetail = () => {
               )}
             </CardContent>
           </Card>
+        </TabsContent>
+
+        <TabsContent value="fortress-checklist" className="space-y-4">
+          <FortressMarkingChecklist siteId={siteId!} />
         </TabsContent>
 
         <TabsContent value="export" className="space-y-4">

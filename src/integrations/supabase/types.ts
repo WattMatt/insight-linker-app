@@ -827,6 +827,56 @@ export type Database = {
           },
         ]
       }
+      site_marking_checklist: {
+        Row: {
+          checked_at: string | null
+          checked_by: string | null
+          created_at: string | null
+          id: string
+          is_checked: boolean | null
+          item_id: string
+          item_name: string
+          notes: string | null
+          section_name: string
+          site_id: string
+          updated_at: string | null
+        }
+        Insert: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string | null
+          id?: string
+          is_checked?: boolean | null
+          item_id: string
+          item_name: string
+          notes?: string | null
+          section_name: string
+          site_id: string
+          updated_at?: string | null
+        }
+        Update: {
+          checked_at?: string | null
+          checked_by?: string | null
+          created_at?: string | null
+          id?: string
+          is_checked?: boolean | null
+          item_id?: string
+          item_name?: string
+          notes?: string | null
+          section_name?: string
+          site_id?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_marking_checklist_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       sites: {
         Row: {
           address: string | null
