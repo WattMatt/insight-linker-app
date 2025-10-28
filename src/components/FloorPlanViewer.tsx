@@ -74,6 +74,33 @@ export const FloorPlanViewer = ({
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
 
+  // Handle mouse wheel zoom
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        // Browser's native zoom, don't interfere
+        return;
+      }
+      
+      e.preventDefault();
+      
+      const delta = -e.deltaY;
+      const zoomSpeed = 0.001;
+      const zoomChange = delta * zoomSpeed;
+      
+      setScale((prev) => {
+        const newScale = prev + zoomChange;
+        return Math.max(0.5, Math.min(3, newScale));
+      });
+    };
+
+    const container = containerRef.current;
+    if (container) {
+      container.addEventListener('wheel', handleWheel, { passive: false });
+      return () => container.removeEventListener('wheel', handleWheel);
+    }
+  }, []);
+
   const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     toast.success("Floor plan loaded successfully");
