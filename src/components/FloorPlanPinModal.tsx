@@ -72,7 +72,11 @@ export const FloorPlanPinModal = ({
 
   useEffect(() => {
     if (initialData) {
-      setFormData(initialData);
+      setFormData({
+        ...initialData,
+        title: initialData.title || '',
+        notes: initialData.notes || '',
+      });
       // Show type selection for new pins (those without a title)
       const isNewPin = !initialData.title;
       setStep(isNewPin ? 'type' : 'details');
@@ -126,7 +130,7 @@ export const FloorPlanPinModal = ({
   const handleSave = async () => {
     console.log("handleSave called", { formData, photoPreview, initialData });
     
-    if (!formData.title.trim()) {
+    if (!formData.title?.trim()) {
       toast.error("Please enter a title");
       return;
     }
@@ -434,7 +438,7 @@ export const FloorPlanPinModal = ({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSave} disabled={isSaving || !formData.title.trim()}>
+            <Button type="button" onClick={handleSave} disabled={isSaving || !formData.title?.trim()}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
