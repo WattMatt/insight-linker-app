@@ -43,6 +43,7 @@ import ContractorPortal from "./pages/ContractorPortal";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
+import Suggestions from "./pages/Suggestions";
 import QRCodes from "./pages/QRCodes";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
@@ -278,6 +279,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <IssueReports />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/suggestions"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <Suggestions />
                 </DashboardLayout>
               </ProtectedRoute>
             }

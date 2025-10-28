@@ -14,7 +14,8 @@ import {
   Eye,
   Briefcase,
   AlertCircle,
-  QrCode
+  QrCode,
+  Lightbulb
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -44,6 +45,7 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "Issue Reports", url: "/issue-reports", icon: AlertCircle, adminOnly: true },
+  { title: "Suggestions", url: "/suggestions", icon: Lightbulb, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
   { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
   { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase, adminOnly: true },

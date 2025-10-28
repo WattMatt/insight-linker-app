@@ -1243,6 +1243,66 @@ export type Database = {
           },
         ]
       }
+      suggestions: {
+        Row: {
+          admin_notes: string | null
+          browser_info: Json | null
+          category: string
+          created_at: string
+          description: string
+          id: string
+          page_url: string
+          priority: string
+          reported_by: string | null
+          resolved_at: string | null
+          resolved_by: string | null
+          screenshot_url: string | null
+          status: string
+          title: string
+          updated_at: string
+          user_email: string
+          user_name: string | null
+        }
+        Insert: {
+          admin_notes?: string | null
+          browser_info?: Json | null
+          category?: string
+          created_at?: string
+          description: string
+          id?: string
+          page_url: string
+          priority?: string
+          reported_by?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          status?: string
+          title: string
+          updated_at?: string
+          user_email: string
+          user_name?: string | null
+        }
+        Update: {
+          admin_notes?: string | null
+          browser_info?: Json | null
+          category?: string
+          created_at?: string
+          description?: string
+          id?: string
+          page_url?: string
+          priority?: string
+          reported_by?: string | null
+          resolved_at?: string | null
+          resolved_by?: string | null
+          screenshot_url?: string | null
+          status?: string
+          title?: string
+          updated_at?: string
+          user_email?: string
+          user_name?: string | null
+        }
+        Relationships: []
+      }
       temp_import: {
         Row: {
           data: Json | null
