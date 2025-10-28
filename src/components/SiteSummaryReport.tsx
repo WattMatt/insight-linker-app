@@ -223,7 +223,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const cocRequired = subsections.filter(s => s.is_coc_required).length;
       const cocCompliant = subsections.filter(s => s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass').length;
       const meteringInstalled = subsections.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length;
-      const compliantCount = subsections.filter(s => s.is_compliant).length;
+      const compliantCount = subsections.filter(s => calculateSubsectionCompliance(s, allInspections, subsectionDocuments)).length;
       
       // Extract all snags
       let totalSnags = 0;
@@ -864,7 +864,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const cocRequired = subsections.filter(s => s.is_coc_required).length;
       const cocCompliant = subsections.filter(s => s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass').length;
       const meteringInstalled = subsections.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length;
-      const compliantCount = subsections.filter(s => s.is_compliant).length;
+      const compliantCount = subsections.filter(s => calculateSubsectionCompliance(s, allInspections, subsectionDocuments)).length;
       
       let totalSnags = 0;
       const subsectionsWithSnags = new Set<string>();
