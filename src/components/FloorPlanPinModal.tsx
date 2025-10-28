@@ -7,6 +7,7 @@ import { Textarea } from "./ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Camera, Trash2, Save, Upload, MapPin } from "lucide-react";
 import { useCamera } from "@/hooks/useCamera";
+import { useUserRole } from "@/hooks/useUserRole";
 import { toast } from "sonner";
 
 interface PinData {
@@ -53,6 +54,9 @@ export const FloorPlanPinModal = ({
   pinNumber,
 }: FloorPlanPinModalProps) => {
   const { takePicture } = useCamera();
+  const { data: userRole } = useUserRole();
+  const isAdmin = userRole === "Admin";
+  
   // Show type selection for new pins (no title) or if explicitly in type mode
   const isNewPin = !initialData?.title;
   const [step, setStep] = useState<'type' | 'details'>(isNewPin ? 'type' : 'details');
@@ -124,11 +128,6 @@ export const FloorPlanPinModal = ({
     
     if (!formData.title.trim()) {
       toast.error("Please enter a title");
-      return;
-    }
-
-    if (!photoPreview && !initialData?.photo_url) {
-      toast.error("Please add a photo");
       return;
     }
 
@@ -248,7 +247,7 @@ export const FloorPlanPinModal = ({
 
             {/* Photo - Featured prominently */}
             <div className="border-2 border-dashed rounded-lg p-4">
-              <Label className="text-base font-semibold">Photo {!photoPreview && "(Required)"}</Label>
+              <Label className="text-base font-semibold">Photo</Label>
               <div className="mt-3 space-y-2">
                 {photoPreview ? (
                   <div className="relative">
@@ -398,6 +397,8 @@ export const FloorPlanPinModal = ({
                   variant={formData.status === 'resolved' ? 'default' : 'outline'}
                   className="flex-1"
                   onClick={() => setFormData({ ...formData, status: 'resolved' })}
+                  disabled={!isAdmin}
+                  title={!isAdmin ? "Only admins can mark as resolved" : ""}
                 >
                   ✓ Resolved
                 </Button>
@@ -433,7 +434,7 @@ export const FloorPlanPinModal = ({
             <Button type="button" variant="outline" onClick={onClose}>
               Cancel
             </Button>
-            <Button type="button" onClick={handleSave} disabled={isSaving || (!photoPreview && !initialData?.photo_url)}>
+            <Button type="button" onClick={handleSave} disabled={isSaving || !formData.title.trim()}>
               <Save className="w-4 h-4 mr-2" />
               {isSaving ? 'Saving...' : 'Save'}
             </Button>
