@@ -255,47 +255,54 @@ export const FloorPlanViewer = ({
           </Document>
 
           {/* Render pins on top of PDF */}
-          {pins.map((pin) => (
-            <div
-              key={pin.id}
-              style={{
-                position: 'absolute',
-                left: `${pin.x_position}%`,
-                top: `${pin.y_position}%`,
-                transform: 'translate(-50%, -50%)',
-                width: '40px',
-                height: '40px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                zIndex: 10,
-              }}
-              onClick={(e) => {
-                e.stopPropagation();
-                onPinClick(pin);
-              }}
-            >
+          {pins.map((pin) => {
+            // Calculate inverse scale so pins get smaller when zoomed in
+            const pinSize = 40 / scale;
+            const fontSize = 14 / scale;
+            const borderWidth = 3 / scale;
+            
+            return (
               <div
+                key={pin.id}
                 style={{
-                  width: '100%',
-                  height: '100%',
-                  borderRadius: '50%',
-                  backgroundColor: getPinColor(pin),
-                  border: '3px solid white',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                  position: 'absolute',
+                  left: `${pin.x_position}%`,
+                  top: `${pin.y_position}%`,
+                  transform: 'translate(-50%, -50%)',
+                  width: `${pinSize}px`,
+                  height: `${pinSize}px`,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  color: 'white',
-                  fontWeight: 'bold',
-                  fontSize: '14px',
+                  cursor: 'pointer',
+                  zIndex: 10,
+                }}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onPinClick(pin);
                 }}
               >
-                {pin.pin_number}
+                <div
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    borderRadius: '50%',
+                    backgroundColor: getPinColor(pin),
+                    border: `${borderWidth}px solid white`,
+                    boxShadow: `0 ${2 / scale}px ${8 / scale}px rgba(0,0,0,0.3)`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    color: 'white',
+                    fontWeight: 'bold',
+                    fontSize: `${fontSize}px`,
+                  }}
+                >
+                  {pin.pin_number}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     </div>
