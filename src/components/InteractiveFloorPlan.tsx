@@ -189,6 +189,14 @@ export const InteractiveFloorPlan = ({
   };
 
   const handleSavePin = async (pinData: any, photo?: File) => {
+    console.log("handleSavePin called with:", { pinData, photo, selectedPin });
+    
+    if (!selectedPin?.id) {
+      console.error("No selectedPin.id found");
+      toast.error("Cannot save: Pin ID is missing");
+      return;
+    }
+
     try {
       let photoUrl = pinData.photo_url;
 
@@ -212,6 +220,17 @@ export const InteractiveFloorPlan = ({
       }
 
       // Update the pin with all data including pin_type
+      console.log("Updating pin with:", {
+        pin_type: pinData.pin_type,
+        title: pinData.title,
+        notes: pinData.notes,
+        priority: pinData.priority,
+        status: pinData.status,
+        assigned_contractor: pinData.assigned_contractor,
+        due_date: pinData.due_date,
+        photo_url: photoUrl,
+      });
+
       const { error } = await supabase
         .from("floor_plan_pins")
         .update({
@@ -226,6 +245,7 @@ export const InteractiveFloorPlan = ({
         })
         .eq("id", selectedPin.id);
 
+      console.log("Update result:", { error });
       if (error) throw error;
 
       // Refresh pins
