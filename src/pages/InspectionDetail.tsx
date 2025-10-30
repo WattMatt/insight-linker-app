@@ -19,6 +19,8 @@ import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useCamera } from "@/hooks/useCamera";
+import { useImageUpload } from "@/hooks/useImageUpload";
+import { RobustImage } from "@/components/RobustImage";
 
 interface InspectionTemplate {
   name: string;
@@ -90,6 +92,7 @@ const InspectionDetail = () => {
   const previewSiteId = searchParams.get("preview");
   const isContractorPortal = !clientId && !siteId && !subsectionId;
   const { isNative, takePicture, selectImages } = useCamera();
+  const { uploadImage, deleteImage, getPathFromUrl } = useImageUpload();
   const [template, setTemplate] = useState<InspectionTemplate | null>(null);
   const [templateCategory, setTemplateCategory] = useState<string>("");
   const [inspection, setInspection] = useState<InspectionData | null>(null);
@@ -318,20 +321,19 @@ const InspectionDetail = () => {
       const file = files[0];
       const fileExt = file.name.split('.').pop();
       const timestamp = Date.now();
-      const fileName = `${inspectionId}/tenants/${tenantId}/${field}/${timestamp}.${fileExt}`;
+      const filePath = `${inspectionId}/tenants/${tenantId}/${field}/${timestamp}.${fileExt}`;
 
-      const { data, error } = await supabase.storage
-        .from('inspection-photos')
-        .upload(fileName, file);
+      // Use the robust upload with retry logic
+      const result = await uploadImage(file, 'inspection-photos', filePath);
 
-      if (error) throw error;
+      if (!result) {
+        throw new Error('Failed to upload image');
+      }
 
-      const { data: urlData } = supabase.storage
-        .from('inspection-photos')
-        .getPublicUrl(data.path);
+      console.log('Image uploaded successfully, URL:', result.url);
 
       const updatedTenants = tenants.map(t => 
-        t.id === tenantId ? { ...t, [field]: urlData.publicUrl } : t
+        t.id === tenantId ? { ...t, [field]: result.url } : t
       );
       
       setTenants(updatedTenants);
@@ -381,7 +383,7 @@ const InspectionDetail = () => {
           }, 2000);
         }
       } else {
-        toast.error("Failed to upload image");
+        toast.error("Failed to upload image: " + (error?.message || "Unknown error"));
       }
     } finally {
       setUploadingTenantImages(prev => {
@@ -405,23 +407,52 @@ const InspectionDetail = () => {
     const imageUrl = tenant[field];
     if (!imageUrl) return;
 
-    if (!imageUrl.includes('supabase.co/storage')) {
-      toast.error("Only Supabase images can be deleted");
-      return;
-    }
+    if (!confirm('Are you sure you want to delete this image?')) return;
 
     try {
-      const urlParts = imageUrl.split('/inspection-photos/');
-      if (urlParts.length > 1) {
-        const filePath = urlParts[1].split('?')[0];
-        await supabase.storage.from('inspection-photos').remove([filePath]);
+      // Extract path from URL
+      const path = getPathFromUrl(imageUrl, 'inspection-photos');
+      
+      if (path) {
+        // Delete from storage
+        const success = await deleteImage('inspection-photos', path);
+        if (!success) {
+          throw new Error('Failed to delete image from storage');
+        }
       }
 
-      setTenants(tenants.map(t => 
+      // Update state
+      const updatedTenants = tenants.map(t => 
         t.id === tenantId ? { ...t, [field]: '' } : t
-      ));
+      );
+      
+      setTenants(updatedTenants);
 
-      toast.success("Image deleted successfully");
+      // Auto-save to database
+      if (inspection) {
+        const jsonDataWithTenants = {
+          ...inspection.jsonData,
+          tenants: updatedTenants
+        } as any;
+
+        const { error: saveError } = await supabase
+          .from('inspections')
+          .update({
+            json_data: jsonDataWithTenants,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', inspectionId);
+
+        if (saveError) {
+          console.error("Error auto-saving after image deletion:", saveError);
+          toast.warning("Image deleted but auto-save failed. Please click Save to persist changes.");
+        } else {
+          setInspection(prev => prev ? { ...prev, jsonData: jsonDataWithTenants } : null);
+          toast.success("Image deleted successfully");
+        }
+      } else {
+        toast.success("Image deleted successfully");
+      }
     } catch (error) {
       console.error("Error deleting tenant image:", error);
       toast.error("Failed to delete image");
@@ -1673,7 +1704,7 @@ const InspectionDetail = () => {
                                 <Label>Breaker Image</Label>
                                 {tenant.breakerImage ? (
                                   <div className="relative group">
-                                    <img
+                                    <RobustImage
                                       src={tenant.breakerImage}
                                       alt="Breaker"
                                       className="w-full h-48 object-cover rounded border"
@@ -1725,7 +1756,7 @@ const InspectionDetail = () => {
                                 <Label>CT Ratio Image</Label>
                                 {tenant.ctRatioImage ? (
                                   <div className="relative group">
-                                    <img
+                                    <RobustImage
                                       src={tenant.ctRatioImage}
                                       alt="CT Ratio"
                                       className="w-full h-48 object-cover rounded border"
@@ -1788,7 +1819,7 @@ const InspectionDetail = () => {
                               <Label>Meter Image</Label>
                               {tenant.meterImage ? (
                                 <div className="relative group">
-                                  <img
+                                  <RobustImage
                                     src={tenant.meterImage}
                                     alt="Meter"
                                     className="w-full h-48 object-cover rounded border"
