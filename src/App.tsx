@@ -50,6 +50,7 @@ import Install from "./pages/Install";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 import { NotificationListener } from "./components/NotificationListener";
+import { GlobalSearch } from "./components/GlobalSearch";
 
 const queryClient = new QueryClient();
 
@@ -61,6 +62,9 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
         <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6">
           <SidebarTrigger className="h-10 w-10" />
           <h1 className="text-lg font-semibold md:text-xl">Electrical Compliance</h1>
+          <div className="flex-1 flex justify-end">
+            <GlobalSearch />
+          </div>
         </header>
         <div className="flex-1 p-3 md:p-4 lg:p-6 overflow-x-hidden">
           {children}
