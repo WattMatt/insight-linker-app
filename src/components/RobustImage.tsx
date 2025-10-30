@@ -69,7 +69,7 @@ export const RobustImage = ({
   return (
     <div className={`relative ${className}`}>
       {imageState === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded z-10">
           <div className="flex flex-col items-center">
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-2"></div>
             {retries > 0 && (
@@ -84,7 +84,7 @@ export const RobustImage = ({
         className={className}
         onLoad={handleLoad}
         onError={handleError}
-        style={{ display: imageState === 'loaded' ? 'block' : 'none' }}
+        style={{ opacity: imageState === 'loaded' ? 1 : 0 }}
       />
     </div>
   );
