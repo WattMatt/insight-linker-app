@@ -904,7 +904,7 @@ const InspectionDetail = () => {
   };
 
   // Handler for tenant image camera capture
-  const handleTenantCameraCapture = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage') => {
+  const handleTenantCameraCapture = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage' | 'meterImage') => {
     const uploadKey = `${tenantId}-${field}`;
     const input = tenantImageInputRefs.current[uploadKey];
     
@@ -1745,6 +1745,68 @@ const InspectionDetail = () => {
                                   )}
                                 </Button>
                               </div>
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label htmlFor={`meter-serial-${tenant.id}`}>Meter Serial Number</Label>
+                              <Input
+                                id={`meter-serial-${tenant.id}`}
+                                value={tenant.meterSerialNumber || ''}
+                                onChange={(e) => handleTenantFieldChange(tenant.id, 'meterSerialNumber', e.target.value)}
+                                placeholder="Enter meter serial number"
+                              />
+                            </div>
+
+                            <div className="space-y-2">
+                              <Label>Meter Image</Label>
+                              {tenant.meterImage ? (
+                                <div className="relative group">
+                                  <img
+                                    src={tenant.meterImage}
+                                    alt="Meter"
+                                    className="w-full h-48 object-cover rounded border"
+                                  />
+                                  <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <Button
+                                      type="button"
+                                      variant="destructive"
+                                      size="sm"
+                                      onClick={() => handleDeleteTenantImage(tenant.id, 'meterImage')}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+                              ) : (
+                                <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center bg-gray-50">
+                                  <Camera className="h-8 w-8 text-gray-400 mx-auto mb-2" />
+                                  <p className="text-xs text-gray-500">No meter image</p>
+                                </div>
+                              )}
+                              <input
+                                ref={(el) => (tenantImageInputRefs.current[`${tenant.id}-meterImage`] = el)}
+                                type="file"
+                                accept="image/*"
+                                capture="environment"
+                                className="hidden"
+                                onChange={(e) => handleTenantImageUpload(tenant.id, 'meterImage', e.target.files)}
+                              />
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="w-full"
+                                onClick={() => handleTenantCameraCapture(tenant.id, 'meterImage')}
+                                disabled={uploadingTenantImages.has(`${tenant.id}-meterImage`)}
+                              >
+                                {uploadingTenantImages.has(`${tenant.id}-meterImage`) ? (
+                                  <>Uploading...</>
+                                ) : (
+                                  <>
+                                    <Upload className="mr-2 h-4 w-4" />
+                                    {tenant.meterImage ? 'Replace Image' : 'Upload Image'}
+                                  </>
+                                )}
+                              </Button>
                             </div>
                           </CardContent>
                         </Card>
