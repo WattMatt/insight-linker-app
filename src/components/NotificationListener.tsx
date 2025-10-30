@@ -22,20 +22,29 @@ export function NotificationListener() {
   const { data: notifications } = useQuery({
     queryKey: ['unread-notifications'],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return [];
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (!user) return [];
 
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .eq('read', false)
-        .order('created_at', { ascending: false });
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .eq('read', false)
+          .order('created_at', { ascending: false });
 
-      if (error) throw error;
-      return data as Notification[];
+        if (error) {
+          console.error('Error fetching notifications:', error);
+          return [];
+        }
+        return data as Notification[];
+      } catch (error) {
+        console.error('Error in notification query:', error);
+        return [];
+      }
     },
     refetchInterval: 30000, // Check every 30 seconds
+    retry: false,
   });
 
   const markAsReadMutation = useMutation({
