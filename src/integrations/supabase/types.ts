@@ -593,6 +593,44 @@ export type Database = {
         }
         Relationships: []
       }
+      notifications: {
+        Row: {
+          created_at: string | null
+          id: string
+          issue_report_id: string | null
+          message: string
+          read: boolean | null
+          type: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          issue_report_id?: string | null
+          message: string
+          read?: boolean | null
+          type?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          issue_report_id?: string | null
+          message?: string
+          read?: boolean | null
+          type?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_issue_report_id_fkey"
+            columns: ["issue_report_id"]
+            isOneToOne: false
+            referencedRelation: "issue_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pending_user_invites: {
         Row: {
           created_at: string

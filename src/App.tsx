@@ -47,6 +47,7 @@ import Suggestions from "./pages/Suggestions";
 import QRCodes from "./pages/QRCodes";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
+import { NotificationListener } from "./components/NotificationListener";
 
 const queryClient = new QueryClient();
 
@@ -73,6 +74,7 @@ const App = () => (
       <Toaster />
       <Sonner />
       <HelpButton />
+      <NotificationListener />
       <BrowserRouter>
         <DoubleSlashRedirect>
           <Routes>

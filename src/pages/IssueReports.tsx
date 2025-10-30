@@ -84,6 +84,24 @@ export default function IssueReports() {
         .eq('id', id);
 
       if (error) throw error;
+
+      // Create notification if status changed to resolved
+      if (status === 'resolved') {
+        const { data: issue } = await supabase
+          .from('issue_reports')
+          .select('reported_by, description')
+          .eq('id', id)
+          .single();
+        
+        if (issue?.reported_by) {
+          await supabase.from('notifications').insert({
+            user_id: issue.reported_by,
+            issue_report_id: id,
+            message: `Your issue report "${issue.description.substring(0, 50)}..." has been resolved!`,
+            type: 'issue_resolved'
+          });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
