@@ -330,11 +330,38 @@ const InspectionDetail = () => {
         .from('inspection-photos')
         .getPublicUrl(data.path);
 
-      setTenants(tenants.map(t => 
+      const updatedTenants = tenants.map(t => 
         t.id === tenantId ? { ...t, [field]: urlData.publicUrl } : t
-      ));
+      );
+      
+      setTenants(updatedTenants);
 
-      toast.success("Image uploaded successfully");
+      // Auto-save to database immediately
+      if (inspection) {
+        const jsonDataWithTenants = {
+          ...inspection.jsonData,
+          tenants: updatedTenants
+        } as any;
+
+        const { error: saveError } = await supabase
+          .from('inspections')
+          .update({
+            json_data: jsonDataWithTenants,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', inspectionId);
+
+        if (saveError) {
+          console.error("Error auto-saving tenant image:", saveError);
+          toast.warning("Image uploaded but auto-save failed. Please click Save to persist changes.");
+        } else {
+          // Update local inspection state to keep in sync
+          setInspection(prev => prev ? { ...prev, jsonData: jsonDataWithTenants } : null);
+          toast.success("Image uploaded and saved successfully");
+        }
+      } else {
+        toast.success("Image uploaded successfully");
+      }
     } catch (error: any) {
       console.error("Error uploading tenant image:", error);
       
