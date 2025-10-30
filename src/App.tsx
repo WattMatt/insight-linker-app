@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
+import { OfflineIndicator } from "@/components/OfflineIndicator";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
@@ -45,6 +46,7 @@ import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
 import Suggestions from "./pages/Suggestions";
 import QRCodes from "./pages/QRCodes";
+import Install from "./pages/Install";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 import { NotificationListener } from "./components/NotificationListener";
@@ -75,11 +77,13 @@ const App = () => (
       <Sonner />
       <HelpButton />
       <NotificationListener />
+      <OfflineIndicator />
       <BrowserRouter>
         <DoubleSlashRedirect>
           <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
+          <Route path="/install" element={<Install />} />
           
           {/* Public QR Code Landing Pages - both patterns supported */}
           <Route path="/public/subsections/:subsectionId" element={<PublicSubsection />} />

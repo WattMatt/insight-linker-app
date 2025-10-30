@@ -189,49 +189,49 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
   }
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
+    <div className="container mx-auto p-4 md:p-6 space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-3xl font-bold">Issue Reports</h1>
-        <p className="text-muted-foreground">
+        <h1 className="text-2xl md:text-3xl font-bold">Issue Reports</h1>
+        <p className="text-sm md:text-base text-muted-foreground">
           Manage and resolve user-reported issues
         </p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Total Reports</CardTitle>
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-xs md:text-sm font-medium">Total</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{issues?.length || 0}</div>
+          <CardContent className="pb-3">
+            <div className="text-xl md:text-2xl font-bold">{issues?.length || 0}</div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">New</CardTitle>
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-xs md:text-sm font-medium">New</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-blue-500">
+          <CardContent className="pb-3">
+            <div className="text-xl md:text-2xl font-bold text-blue-500">
               {issues?.filter(i => i.status === 'new').length || 0}
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">In Progress</CardTitle>
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-xs md:text-sm font-medium">Progress</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-yellow-500">
+          <CardContent className="pb-3">
+            <div className="text-xl md:text-2xl font-bold text-yellow-500">
               {issues?.filter(i => i.status === 'in-progress').length || 0}
             </div>
           </CardContent>
         </Card>
         <Card>
-          <CardHeader className="pb-3">
-            <CardTitle className="text-sm font-medium">Resolved</CardTitle>
+          <CardHeader className="pb-2 md:pb-3">
+            <CardTitle className="text-xs md:text-sm font-medium">Resolved</CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-green-500">
+          <CardContent className="pb-3">
+            <div className="text-xl md:text-2xl font-bold text-green-500">
               {issues?.filter(i => i.status === 'resolved').length || 0}
             </div>
           </CardContent>
@@ -240,71 +240,105 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
 
       <Card>
         <CardHeader>
-          <CardTitle>All Reports</CardTitle>
-          <CardDescription>
-            Click on any report to view details and take action
+          <CardTitle className="text-lg md:text-xl">All Reports</CardTitle>
+          <CardDescription className="text-sm">
+            Click on any report to view details
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Date</TableHead>
-                <TableHead>User</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Category</TableHead>
-                <TableHead>Severity</TableHead>
-                <TableHead>Status</TableHead>
-                <TableHead>Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {issues?.map((issue) => (
-                <TableRow key={issue.id}>
-                  <TableCell>
-                    {format(new Date(issue.created_at), 'MMM d, yyyy HH:mm')}
-                  </TableCell>
-                  <TableCell>
-                    <div className="space-y-1">
-                      <div className="font-medium">{issue.user_name}</div>
-                      <div className="text-xs text-muted-foreground">{issue.user_email}</div>
-                    </div>
-                  </TableCell>
-                  <TableCell className="max-w-xs truncate">
-                    {issue.description}
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant="outline">{issue.category}</Badge>
-                  </TableCell>
-                  <TableCell>
-                    <Badge variant={getSeverityColor(issue.severity) as any}>
-                      {issue.severity}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>
-                    <div className="flex items-center gap-2">
+        <CardContent className="p-0 md:p-6">
+          {/* Mobile Card View */}
+          <div className="md:hidden divide-y">
+            {issues?.map((issue) => (
+              <div
+                key={issue.id}
+                onClick={() => handleViewDetails(issue)}
+                className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
                       {getStatusIcon(issue.status)}
-                      <span className="capitalize">{issue.status}</span>
+                      <span className="text-xs font-medium capitalize">{issue.status}</span>
                     </div>
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => handleViewDetails(issue)}
-                    >
-                      <Eye className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
+                    <p className="text-sm font-medium truncate">{issue.user_name}</p>
+                  </div>
+                  <Badge variant={getSeverityColor(issue.severity) as any} className="text-xs">
+                    {issue.severity}
+                  </Badge>
+                </div>
+                <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                  {issue.description}
+                </p>
+                <div className="flex items-center justify-between text-xs text-muted-foreground">
+                  <span>{format(new Date(issue.created_at), 'MMM d, yyyy')}</span>
+                  <Badge variant="outline" className="text-xs">{issue.category}</Badge>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Desktop Table View */}
+          <div className="hidden md:block overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Date</TableHead>
+                  <TableHead>User</TableHead>
+                  <TableHead>Description</TableHead>
+                  <TableHead>Category</TableHead>
+                  <TableHead>Severity</TableHead>
+                  <TableHead>Status</TableHead>
+                  <TableHead>Actions</TableHead>
                 </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+              </TableHeader>
+              <TableBody>
+                {issues?.map((issue) => (
+                  <TableRow key={issue.id}>
+                    <TableCell>
+                      {format(new Date(issue.created_at), 'MMM d, yyyy HH:mm')}
+                    </TableCell>
+                    <TableCell>
+                      <div className="space-y-1">
+                        <div className="font-medium">{issue.user_name}</div>
+                        <div className="text-xs text-muted-foreground">{issue.user_email}</div>
+                      </div>
+                    </TableCell>
+                    <TableCell className="max-w-xs truncate">
+                      {issue.description}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline">{issue.category}</Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant={getSeverityColor(issue.severity) as any}>
+                        {issue.severity}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <div className="flex items-center gap-2">
+                        {getStatusIcon(issue.status)}
+                        <span className="capitalize">{issue.status}</span>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => handleViewDetails(issue)}
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
         </CardContent>
       </Card>
 
       <Dialog open={!!selectedIssue} onOpenChange={() => setSelectedIssue(null)}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto w-[95vw] md:w-full">
           <DialogHeader>
             <DialogTitle>Issue Report Details</DialogTitle>
             <DialogDescription>
@@ -314,7 +348,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
 
           {selectedIssue && (
             <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium mb-1">Reported By</h4>
                   <p className="text-sm">{selectedIssue.user_name}</p>
@@ -328,7 +362,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <h4 className="text-sm font-medium mb-1">Category</h4>
                   <Badge variant="outline">{selectedIssue.category}</Badge>
@@ -414,8 +448,12 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
             </div>
           )}
 
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={() => setSelectedIssue(null)}>
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button 
+              variant="outline" 
+              onClick={() => setSelectedIssue(null)}
+              className="w-full sm:w-auto"
+            >
               Cancel
             </Button>
             {selectedIssue?.status !== 'resolved' && (
@@ -430,15 +468,21 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                   });
                 }}
                 disabled={updateIssueMutation.isPending}
+                className="w-full sm:w-auto"
               >
                 {updateIssueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
                 <CheckCircle className="mr-2 h-4 w-4" />
-                Mark as Resolved
+                <span className="hidden sm:inline">Mark as Resolved</span>
+                <span className="sm:hidden">Resolve</span>
               </Button>
             )}
-            <Button onClick={handleUpdateIssue} disabled={updateIssueMutation.isPending}>
+            <Button 
+              onClick={handleUpdateIssue} 
+              disabled={updateIssueMutation.isPending}
+              className="w-full sm:w-auto"
+            >
               {updateIssueMutation.isPending && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-              Save Changes
+              Save
             </Button>
           </DialogFooter>
         </DialogContent>
