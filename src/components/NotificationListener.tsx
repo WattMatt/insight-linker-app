@@ -4,7 +4,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { CheckCircle, ExternalLink } from "lucide-react";
-import { useNavigate } from "react-router-dom";
 
 interface Notification {
   id: string;
@@ -17,7 +16,6 @@ interface Notification {
 export function NotificationListener() {
   const [currentNotification, setCurrentNotification] = useState<Notification | null>(null);
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const { data: notifications } = useQuery({
     queryKey: ['unread-notifications'],
