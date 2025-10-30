@@ -45,6 +45,8 @@ interface Tenant {
   ctSizeAndRatio: string;
   ctRatioImage: string;
   controlStatus48V?: string;
+  meterSerialNumber?: string;
+  meterImage?: string;
 }
 
 interface InspectionData {
@@ -124,7 +126,9 @@ const InspectionDetail = () => {
     breakerImage: '',
     ctSizeAndRatio: '',
     ctRatioImage: '',
-    controlStatus48V: ''
+    controlStatus48V: '',
+    meterSerialNumber: '',
+    meterImage: ''
   });
   const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
@@ -267,7 +271,9 @@ const InspectionDetail = () => {
       breakerImage: '',
       ctSizeAndRatio: '',
       ctRatioImage: '',
-      controlStatus48V: ''
+      controlStatus48V: '',
+      meterSerialNumber: '',
+      meterImage: ''
     });
     setTenantDialogOpen(true);
   };
@@ -302,7 +308,7 @@ const InspectionDetail = () => {
     toast.success("Tenant deleted successfully");
   };
 
-  const handleTenantImageUpload = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage', files: FileList | null) => {
+  const handleTenantImageUpload = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage' | 'meterImage', files: FileList | null) => {
     if (!files || files.length === 0) return;
 
     const uploadKey = `${tenantId}-${field}`;
@@ -365,7 +371,7 @@ const InspectionDetail = () => {
     ));
   };
 
-  const handleDeleteTenantImage = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage') => {
+  const handleDeleteTenantImage = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage' | 'meterImage') => {
     const tenant = tenants.find(t => t.id === tenantId);
     if (!tenant) return;
 
@@ -1948,6 +1954,56 @@ const InspectionDetail = () => {
                   className="mt-2 w-full h-48 object-cover rounded border"
                 />
               )}
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="meter-serial">Meter Serial Number</Label>
+              <Input
+                id="meter-serial"
+                value={newTenant.meterSerialNumber || ''}
+                onChange={(e) => setNewTenant({ ...newTenant, meterSerialNumber: e.target.value })}
+                placeholder="Enter meter serial number"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label>Meter Image</Label>
+              {newTenant.meterImage && (
+                <div className="relative group">
+                  <img
+                    src={newTenant.meterImage}
+                    alt="Meter preview"
+                    className="w-full h-48 object-cover rounded border"
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="sm"
+                    className="absolute top-2 right-2 h-8 w-8 p-0 bg-black/50 hover:bg-black/70 text-white"
+                    onClick={() => setNewTenant({ ...newTenant, meterImage: '' })}
+                  >
+                    <X className="h-4 w-4" />
+                  </Button>
+                </div>
+              )}
+              <input
+                type="file"
+                accept="image/*"
+                capture="environment"
+                className="hidden"
+                id="meter-image-upload"
+                onChange={(e) => handleTenantImageUpload(newTenant.id, 'meterImage' as any, e.target.files)}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full"
+                onClick={() => document.getElementById('meter-image-upload')?.click()}
+                disabled={uploadingTenantImages.has(`${newTenant.id}-meterImage`)}
+              >
+                <Camera className="mr-2 h-4 w-4" />
+                {uploadingTenantImages.has(`${newTenant.id}-meterImage`) ? 'Uploading...' : 'Capture Meter Photo'}
+              </Button>
             </div>
           </div>
           <DialogFooter>
