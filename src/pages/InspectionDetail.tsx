@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useCamera } from "@/hooks/useCamera";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { RobustImage } from "@/components/RobustImage";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 interface InspectionTemplate {
   name: string;
@@ -1450,22 +1451,47 @@ const InspectionDetail = () => {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs 
+        items={[
+          { 
+            label: "Sites", 
+            href: isContractorPortal 
+              ? `/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}` 
+              : clientId 
+                ? `/clients/${clientId}/sites` 
+                : "/sites"
+          },
+          { 
+            label: siteData?.siteName || 'Site', 
+            href: isContractorPortal
+              ? `/contractor/sites/${siteId}${previewSiteId ? `?preview=${previewSiteId}` : ''}`
+              : clientId 
+                ? `/clients/${clientId}/sites/${siteId}` 
+                : `/sites/${siteId}`
+          },
+          { 
+            label: subsectionData?.name || 'Subsection', 
+            href: isContractorPortal
+              ? `/contractor/sites/${siteId}/subsections/${subsectionId}${previewSiteId ? `?preview=${previewSiteId}` : ''}`
+              : clientId 
+                ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}` 
+                : `/sites/${siteId}/subsections/${subsectionId}`
+          },
+          { label: template?.name || 'Inspection' }
+        ]}
+      />
+      
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <Button 
-            variant="ghost" 
-            size="icon" 
-            onClick={() => navigate(-1)}
-          >
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold">Edit Inspection</h1>
-            <p className="text-sm text-muted-foreground">
-              Site: {siteData?.siteName || 'Unknown'} | Subsection: {subsectionData?.name || 'Unknown'}
-            </p>
-          </div>
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">
+            {template?.name || 'Edit Inspection'}
+          </h1>
+          <p className="text-muted-foreground mt-1">
+            {inspection?.projectName || siteData?.siteName} • {subsectionData?.name}
+            {inspection?.date && ` • ${format(new Date(inspection.date), 'MMM dd, yyyy')}`}
+          </p>
         </div>
         <div className="flex gap-2">
           {templateCategory === "Site Drawing" ? (
