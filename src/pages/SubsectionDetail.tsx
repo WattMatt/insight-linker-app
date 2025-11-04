@@ -2161,7 +2161,11 @@ const SubsectionDetail = () => {
                   <p>No document categories yet. Create one to get started.</p>
                 </div>
               ) : (
-                <Accordion type="multiple" className="w-full">
+                <Accordion 
+                  type="multiple" 
+                  className="w-full"
+                  defaultValue={documentCategories.map(cat => cat.id)}
+                >
                   {documentCategories.map((category) => {
                     const categoryDocs = supabaseDocuments.filter(doc => doc.category_id === category.id);
                     
