@@ -764,12 +764,8 @@ const InspectionDetail = () => {
             name: 'Inspection Template',
             sections
           });
-          const firstSection = Object.keys(sections)[0];
-          if (firstSection) {
-            setActiveTab(firstSection);
-          } else {
-            setActiveTab('general');
-          }
+          // Always default to general tab for non-Site Drawing templates
+          setActiveTab('general');
         } else {
           console.warn("No template or inspection data found");
           setActiveTab('general');
