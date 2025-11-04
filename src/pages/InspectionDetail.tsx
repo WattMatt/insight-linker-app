@@ -136,6 +136,7 @@ const InspectionDetail = () => {
   });
   const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
+  const [viewingImage, setViewingImage] = useState<string | null>(null);
 
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
@@ -1436,13 +1437,17 @@ const InspectionDetail = () => {
                       <img
                         src={photo}
                         alt={`Photo ${index + 1}`}
-                        className="w-full h-32 object-cover rounded border"
+                        className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setViewingImage(photo)}
                       />
                       <Button
                         size="icon"
                         variant="destructive"
-                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={() => handleDeleteImage(sectionKey, itemKey, photo, index)}
+                        className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity z-10"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDeleteImage(sectionKey, itemKey, photo, index);
+                        }}
                       >
                         <X className="h-3 w-3" />
                       </Button>
@@ -2065,7 +2070,8 @@ const InspectionDetail = () => {
                                     key={index}
                                     src={photo}
                                     alt={`Snag photo ${index + 1}`}
-                                    className="w-full h-24 object-cover rounded border"
+                                    className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                                    onClick={() => setViewingImage(photo)}
                                   />
                                 ))}
                               </div>
@@ -2312,17 +2318,21 @@ const InspectionDetail = () => {
                         <img
                           src={photo}
                           alt={`Snag photo ${index + 1}`}
-                          className="w-full h-24 object-cover rounded border"
+                          className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                          onClick={() => setViewingImage(photo)}
                         />
                         <Button
                           type="button"
                           variant="ghost"
                           size="sm"
-                          className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100"
-                          onClick={() => setNewSnag(prev => ({
-                            ...prev,
-                            photos: prev.photos.filter((_, i) => i !== index)
-                          }))}
+                          className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100 z-10"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setNewSnag(prev => ({
+                              ...prev,
+                              photos: prev.photos.filter((_, i) => i !== index)
+                            }));
+                          }}
                         >
                           <X className="h-4 w-4" />
                         </Button>
@@ -2360,6 +2370,29 @@ const InspectionDetail = () => {
               </Button>
             </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Full Screen Image Viewer */}
+      <Dialog open={!!viewingImage} onOpenChange={() => setViewingImage(null)}>
+        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0">
+          <div className="relative w-full h-[95vh] flex items-center justify-center bg-black/95">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="absolute top-2 right-2 text-white hover:bg-white/20 z-10"
+              onClick={() => setViewingImage(null)}
+            >
+              <X className="h-6 w-6" />
+            </Button>
+            {viewingImage && (
+              <img
+                src={viewingImage}
+                alt="Full size view"
+                className="max-w-full max-h-full object-contain"
+              />
+            )}
+          </div>
         </DialogContent>
       </Dialog>
     </div>
