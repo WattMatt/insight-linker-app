@@ -633,9 +633,74 @@ const InspectionDetail = () => {
 
       // Set template if available
       if (templateData && templateData.sections) {
+        // Convert template sections to ensure items are objects, not arrays
+        const normalizedSections: any = {};
+        
+        if (Array.isArray(templateData.sections)) {
+          // Template has sections as an array
+          templateData.sections.forEach((section: any) => {
+            const sectionKey = section.id || section.name?.toLowerCase().replace(/\s+/g, '_');
+            const items: any = {};
+            
+            if (Array.isArray(section.items)) {
+              // Convert items array to object with item.id as key
+              section.items.forEach((item: any) => {
+                const itemKey = item.id || item.name;
+                items[itemKey] = {
+                  ...item,
+                  name: item.name || itemKey
+                };
+              });
+            } else if (section.items && typeof section.items === 'object') {
+              // Items is already an object
+              Object.keys(section.items).forEach(itemKey => {
+                items[itemKey] = {
+                  ...section.items[itemKey],
+                  name: section.items[itemKey].name || itemKey
+                };
+              });
+            }
+            
+            normalizedSections[sectionKey] = {
+              ...section,
+              items
+            };
+          });
+        } else {
+          // Template has sections as an object
+          Object.keys(templateData.sections).forEach(sectionKey => {
+            const section = templateData.sections[sectionKey];
+            const items: any = {};
+            
+            if (Array.isArray(section.items)) {
+              // Convert items array to object
+              section.items.forEach((item: any) => {
+                const itemKey = item.id || item.name;
+                items[itemKey] = {
+                  ...item,
+                  name: item.name || itemKey
+                };
+              });
+            } else if (section.items && typeof section.items === 'object') {
+              // Items is already an object
+              Object.keys(section.items).forEach(itemKey => {
+                items[itemKey] = {
+                  ...section.items[itemKey],
+                  name: section.items[itemKey].name || itemKey
+                };
+              });
+            }
+            
+            normalizedSections[sectionKey] = {
+              ...section,
+              items
+            };
+          });
+        }
+        
         setTemplate({
           name: templateData.name,
-          sections: templateData.sections as any
+          sections: normalizedSections
         });
         
         // Set active tab - default to general for non-Site Drawing templates
@@ -1324,9 +1389,12 @@ const InspectionDetail = () => {
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
 
+    // Use item.name if available, otherwise fall back to itemKey
+    const displayName = item.name || itemKey;
+
     return (
       <div key={itemKey} className="border-b pb-6 mb-6 last:border-b-0">
-        <h4 className="font-medium mb-4">{itemKey}. {item.name}</h4>
+        <h4 className="font-medium mb-4">{displayName}</h4>
         
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-4">
