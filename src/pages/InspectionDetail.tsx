@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus } from "lucide-react";
+import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus, Edit } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
@@ -111,6 +111,7 @@ const InspectionDetail = () => {
   const [snags, setSnags] = useState<any[]>([]);
   const [loadingSnags, setLoadingSnags] = useState(false);
   const [snagDialogOpen, setSnagDialogOpen] = useState(false);
+  const [editingSnag, setEditingSnag] = useState<any>(null);
   const [newSnag, setNewSnag] = useState({
     title: '',
     description: '',
@@ -239,6 +240,53 @@ const InspectionDetail = () => {
       console.error("Error creating snag:", error);
       toast.error("Failed to create snag");
     }
+  };
+
+  const handleEditSnag = (snag: any) => {
+    setEditingSnag({
+      ...snag,
+      photos: snag.photos || []
+    });
+    setSnagDialogOpen(true);
+  };
+
+  const handleUpdateSnag = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!editingSnag?.title?.trim()) {
+      toast.error("Please enter a title");
+      return;
+    }
+
+    try {
+      const { error } = await supabase
+        .from('snags')
+        .update({
+          title: editingSnag.title,
+          description: editingSnag.description || null,
+          notes: editingSnag.notes || null,
+          photos: editingSnag.photos.length > 0 ? editingSnag.photos : null,
+          risk_level: editingSnag.risk_level || null,
+          estimated_cost: editingSnag.estimated_cost ? parseFloat(editingSnag.estimated_cost) : null
+        })
+        .eq('id', editingSnag.id);
+      
+      if (error) throw error;
+      
+      toast.success("Snag updated successfully");
+      setSnagDialogOpen(false);
+      setEditingSnag(null);
+      fetchSnags();
+    } catch (error) {
+      console.error("Error updating snag:", error);
+      toast.error("Failed to update snag");
+    }
+  };
+
+  const handleCloseSnagDialog = () => {
+    setSnagDialogOpen(false);
+    setEditingSnag(null);
+    setNewSnag({ title: '', description: '', notes: '', photos: [], risk_level: '', estimated_cost: '' });
   };
 
   const handleToggleSnagStatus = async (snagId: string, currentStatus: string) => {
@@ -523,7 +571,11 @@ const InspectionDetail = () => {
         uploadedUrls.push(urlData.publicUrl);
       }
       
-      setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
+      if (editingSnag) {
+        setEditingSnag(prev => ({ ...prev, photos: [...(prev?.photos || []), ...uploadedUrls] }));
+      } else {
+        setNewSnag(prev => ({ ...prev, photos: [...prev.photos, ...uploadedUrls] }));
+      }
       toast.success(`${uploadedUrls.length} photo(s) uploaded`);
     } catch (error: any) {
       console.error("Error uploading snag photos:", error);
@@ -2058,6 +2110,14 @@ const InspectionDetail = () => {
                                 <Button
                                   variant="outline"
                                   size="sm"
+                                  onClick={() => handleEditSnag(snag)}
+                                >
+                                  <Edit className="h-4 w-4 mr-1" />
+                                  Edit
+                                </Button>
+                                <Button
+                                  variant="outline"
+                                  size="sm"
                                   onClick={() => handleToggleSnagStatus(snag.id, snag.status)}
                                 >
                                   {snag.status === 'Open' ? 'Close' : 'Reopen'}
@@ -2245,16 +2305,16 @@ const InspectionDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Snag Creation Dialog */}
-      <Dialog open={snagDialogOpen} onOpenChange={setSnagDialogOpen}>
+      {/* Snag Creation/Edit Dialog */}
+      <Dialog open={snagDialogOpen} onOpenChange={handleCloseSnagDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Create New Snag</DialogTitle>
+            <DialogTitle>{editingSnag ? 'Edit Snag' : 'Create New Snag'}</DialogTitle>
             <DialogDescription>
-              Document an issue or defect found during this inspection
+              {editingSnag ? 'Update the snag details' : 'Document an issue or defect found during this inspection'}
             </DialogDescription>
           </DialogHeader>
-          <form onSubmit={handleCreateSnag}>
+          <form onSubmit={editingSnag ? handleUpdateSnag : handleCreateSnag}>
             <div className="space-y-4 py-4">
               <div className="space-y-2">
                 <Label htmlFor="snag-title">Title *</Label>
