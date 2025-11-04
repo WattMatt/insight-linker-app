@@ -138,6 +138,18 @@ const InspectionDetail = () => {
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [viewingImage, setViewingImage] = useState<string | null>(null);
 
+  // Utility function to convert camelCase to Title Case with spaces
+  const formatTabLabel = (text: string): string => {
+    if (!text) return text;
+    // Insert space before capital letters and capitalize first letter of each word
+    return text
+      .replace(/([A-Z])/g, ' $1')
+      .trim()
+      .split(' ')
+      .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+      .join(' ');
+  };
+
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
     if (inspectionId) {
@@ -1614,7 +1626,7 @@ const InspectionDetail = () => {
             })
             .map(([key, section]) => (
               <TabsTrigger key={key} value={key}>
-                {section.name}
+                {formatTabLabel(section.name)}
               </TabsTrigger>
             ))}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
