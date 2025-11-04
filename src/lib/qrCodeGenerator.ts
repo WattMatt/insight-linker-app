@@ -158,6 +158,13 @@ export async function generateAndUploadQRCode({
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error generating QR code:', error);
+    console.error('Details:', {
+      subsectionId,
+      siteName,
+      subsectionName,
+      hasLogo: !!logoUrl,
+      errorMessage: error instanceof Error ? error.message : 'Unknown error'
+    });
     return null;
   }
 }

@@ -1855,15 +1855,22 @@ const SiteDetail = () => {
                       
                       for (const subsection of subsections) {
                         try {
-                          await generateAndUploadQRCode({
+                          console.log(`Generating QR code for: ${subsection.name} (${subsection.category || 'No category'})`);
+                          const result = await generateAndUploadQRCode({
                             subsectionId: subsection.id,
                             siteName: site.name,
                             subsectionName: subsection.name,
                             logoUrl: companyLogo || undefined
                           });
-                          successCount++;
+                          if (result) {
+                            console.log(`✓ Generated QR for ${subsection.name}`);
+                            successCount++;
+                          } else {
+                            console.error(`✗ Failed to generate QR for ${subsection.name}: No URL returned`);
+                            failCount++;
+                          }
                         } catch (error) {
-                          console.error(`Failed to generate QR for ${subsection.name}:`, error);
+                          console.error(`✗ Failed to generate QR for ${subsection.name}:`, error);
                           failCount++;
                         }
                       }
@@ -2111,17 +2118,25 @@ const SiteDetail = () => {
                             className="w-full"
                             onClick={async () => {
                               toast.info("Generating QR code...");
-                              const url = await generateAndUploadQRCode({
-                                subsectionId: subsection.id,
-                                siteName: site.name,
-                                subsectionName: subsection.name,
-                                logoUrl: companyLogo || undefined
-                              });
-                              if (url) {
-                                toast.success("QR code generated!");
-                                fetchSiteData(); // Refresh to show the new QR code
-                              } else {
-                                toast.error("Failed to generate QR code");
+                              try {
+                                console.log(`Generating QR for ${subsection.name} (${subsection.category || 'No category'})`);
+                                const url = await generateAndUploadQRCode({
+                                  subsectionId: subsection.id,
+                                  siteName: site.name,
+                                  subsectionName: subsection.name,
+                                  logoUrl: companyLogo || undefined
+                                });
+                                if (url) {
+                                  console.log(`✓ QR generated successfully: ${url}`);
+                                  toast.success("QR code generated!");
+                                  fetchSiteData(); // Refresh to show the new QR code
+                                } else {
+                                  console.error(`✗ QR generation returned null for ${subsection.name}`);
+                                  toast.error("Failed to generate QR code. Check console for details.");
+                                }
+                              } catch (error) {
+                                console.error(`✗ Error generating QR for ${subsection.name}:`, error);
+                                toast.error(`Failed to generate QR code: ${error instanceof Error ? error.message : 'Unknown error'}`);
                               }
                             }}
                           >
