@@ -5,6 +5,7 @@ import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle 
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
+import { VerificationDashboardWidget } from "@/components/VerificationDashboardWidget";
 
 interface DashboardStats {
   totalClients: number;
@@ -318,6 +319,9 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Verification Feedback Widget */}
+        <VerificationDashboardWidget />
       </div>
     </div>
   );
