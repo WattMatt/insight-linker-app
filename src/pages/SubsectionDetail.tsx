@@ -1446,7 +1446,7 @@ const SubsectionDetail = () => {
         const { data: inspection, error: fetchError } = await supabase
           .from('inspections')
           .select('quality_rating')
-          .eq('firebase_id', inspectionId)
+          .eq('id', inspectionId)
           .single();
         
         if (fetchError) throw fetchError;
@@ -1457,15 +1457,16 @@ const SubsectionDetail = () => {
         }
       }
       
-      // Update using firebase_id (since inspectionId from the list is the firebase_id)
+      // Update using UUID id (the primary key from inspections table)
       const { error } = await supabase
         .from('inspections')
         .update({ status: newStatus })
-        .eq('firebase_id', inspectionId);
+        .eq('id', inspectionId);
 
       if (error) throw error;
 
       toast.success("Inspection status updated");
+      // Real-time subscription will auto-refresh, but call fetchSubsectionData as fallback
       fetchSubsectionData();
     } catch (error) {
       console.error("Error updating inspection:", error);
@@ -1477,11 +1478,11 @@ const SubsectionDetail = () => {
     if (!deleteInspectionId) return;
 
     try {
-      // Delete using firebase_id (since deleteInspectionId is the firebase_id)
+      // Delete using UUID id
       const { error } = await supabase
         .from('inspections')
         .delete()
-        .eq('firebase_id', deleteInspectionId);
+        .eq('id', deleteInspectionId);
 
       if (error) throw error;
 
@@ -1691,8 +1692,23 @@ const SubsectionDetail = () => {
   const inspections = subsection.inspections || {};
   const inspectionArray = Object.entries(inspections);
   const hasSnags = openSnagsCount > 0;
-  const hasIncompleteInspections = inspectionArray.some(([_, insp]) => insp.status !== 'Completed');
+  
+  // More robust check for incomplete inspections - handles null/undefined statuses
+  const hasIncompleteInspections = inspectionArray.length > 0 && inspectionArray.some(([_, insp]) => {
+    const status = insp?.status;
+    return !status || status !== 'Completed';
+  });
+  
   const isNotCompliant = hasSnags || hasIncompleteInspections;
+
+  // Debug logging to help diagnose issues
+  console.log('Compliance Check:', {
+    totalInspections: inspectionArray.length,
+    inspectionStatuses: inspectionArray.map(([id, insp]) => ({ id, status: insp?.status })),
+    hasIncompleteInspections,
+    hasSnags,
+    openSnagsCount
+  });
 
   return (
     <div className="space-y-6">
@@ -1766,7 +1782,16 @@ const SubsectionDetail = () => {
                 This status is determined by open snags, COC validation, and inspection completion status. The following issues were found:
                 <ul className="list-disc list-inside mt-2">
                   {hasSnags && <li>{openSnagsCount} open snag{openSnagsCount !== 1 ? 's' : ''} requiring attention</li>}
-                  {hasIncompleteInspections && <li>Not all inspections have been marked as completed.</li>}
+                  {hasIncompleteInspections && (
+                    <li>
+                      Not all inspections have been marked as completed.
+                      {inspectionArray.length > 0 && (
+                        <span className="text-sm block ml-4 mt-1">
+                          ({inspectionArray.filter(([_, insp]) => !insp?.status || insp.status !== 'Completed').length} of {inspectionArray.length} incomplete)
+                        </span>
+                      )}
+                    </li>
+                  )}
                 </ul>
               </AlertDescription>
             </Alert>
@@ -1797,7 +1822,7 @@ const SubsectionDetail = () => {
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <span className="inline-block cursor-help">
+                       <span className="inline-block cursor-help">
                         <Badge 
                           variant="outline"
                           className={
@@ -1805,6 +1830,7 @@ const SubsectionDetail = () => {
                               if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
                               if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
                               if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
+                              if (hasIncompleteInspections) return "bg-red-500/10 text-red-500";
                               return "bg-green-500/10 text-green-500";
                             })()
                           }
@@ -1813,6 +1839,7 @@ const SubsectionDetail = () => {
                             if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
                             if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
                             if (openSnagsCount > 0) return "Fail";
+                            if (hasIncompleteInspections) return "Fail";
                             return "Pass";
                           })()}
                         </Badge>
@@ -1829,6 +1856,10 @@ const SubsectionDetail = () => {
                         }
                         if (openSnagsCount > 0) {
                           reasons.push(`Has ${openSnagsCount} open snag${openSnagsCount > 1 ? 's' : ''}`);
+                        }
+                        if (hasIncompleteInspections) {
+                          const incompleteCount = inspectionArray.filter(([_, insp]) => !insp?.status || insp.status !== 'Completed').length;
+                          reasons.push(`${incompleteCount} of ${inspectionArray.length} inspection${inspectionArray.length > 1 ? 's' : ''} not completed`);
                         }
                         
                         if (reasons.length === 0) {
