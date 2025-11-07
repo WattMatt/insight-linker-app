@@ -544,7 +544,10 @@ export type Database = {
           created_at: string
           description: string
           id: string
+          needs_user_verification: boolean | null
           page_url: string
+          rejection_reason: string | null
+          rejection_screenshot_url: string | null
           reported_by: string | null
           resolved_at: string | null
           resolved_by: string | null
@@ -554,6 +557,9 @@ export type Database = {
           updated_at: string
           user_email: string
           user_name: string | null
+          verification_status: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           admin_notes?: string | null
@@ -562,7 +568,10 @@ export type Database = {
           created_at?: string
           description: string
           id?: string
+          needs_user_verification?: boolean | null
           page_url: string
+          rejection_reason?: string | null
+          rejection_screenshot_url?: string | null
           reported_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -572,6 +581,9 @@ export type Database = {
           updated_at?: string
           user_email: string
           user_name?: string | null
+          verification_status?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           admin_notes?: string | null
@@ -580,7 +592,10 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          needs_user_verification?: boolean | null
           page_url?: string
+          rejection_reason?: string | null
+          rejection_screenshot_url?: string | null
           reported_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -590,6 +605,9 @@ export type Database = {
           updated_at?: string
           user_email?: string
           user_name?: string | null
+          verification_status?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }
@@ -1289,8 +1307,11 @@ export type Database = {
           created_at: string
           description: string
           id: string
+          needs_user_verification: boolean | null
           page_url: string
           priority: string
+          rejection_reason: string | null
+          rejection_screenshot_url: string | null
           reported_by: string | null
           resolved_at: string | null
           resolved_by: string | null
@@ -1300,6 +1321,9 @@ export type Database = {
           updated_at: string
           user_email: string
           user_name: string | null
+          verification_status: string | null
+          verified_at: string | null
+          verified_by: string | null
         }
         Insert: {
           admin_notes?: string | null
@@ -1308,8 +1332,11 @@ export type Database = {
           created_at?: string
           description: string
           id?: string
+          needs_user_verification?: boolean | null
           page_url: string
           priority?: string
+          rejection_reason?: string | null
+          rejection_screenshot_url?: string | null
           reported_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -1319,6 +1346,9 @@ export type Database = {
           updated_at?: string
           user_email: string
           user_name?: string | null
+          verification_status?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Update: {
           admin_notes?: string | null
@@ -1327,8 +1357,11 @@ export type Database = {
           created_at?: string
           description?: string
           id?: string
+          needs_user_verification?: boolean | null
           page_url?: string
           priority?: string
+          rejection_reason?: string | null
+          rejection_screenshot_url?: string | null
           reported_by?: string | null
           resolved_at?: string | null
           resolved_by?: string | null
@@ -1338,6 +1371,9 @@ export type Database = {
           updated_at?: string
           user_email?: string
           user_name?: string | null
+          verification_status?: string | null
+          verified_at?: string | null
+          verified_by?: string | null
         }
         Relationships: []
       }
@@ -1650,6 +1686,16 @@ export type Database = {
     }
     Functions: {
       cleanup_old_pending_invites: { Args: never; Returns: number }
+      get_pending_verifications: {
+        Args: { user_uuid: string }
+        Returns: {
+          description: string
+          id: string
+          resolved_at: string
+          title: string
+          type: string
+        }[]
+      }
       get_user_client_id: { Args: never; Returns: string }
       has_role: {
         Args: {

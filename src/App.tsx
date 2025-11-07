@@ -50,6 +50,7 @@ import Install from "./pages/Install";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 import { NotificationListener } from "./components/NotificationListener";
+import { VerificationListener } from "./components/VerificationListener";
 import { GlobalSearch } from "./components/GlobalSearch";
 
 const queryClient = new QueryClient();
@@ -81,6 +82,7 @@ const App = () => (
       <Sonner />
       <HelpButton />
       <NotificationListener />
+      <VerificationListener />
       <OfflineIndicator />
       <BrowserRouter>
         <DoubleSlashRedirect>

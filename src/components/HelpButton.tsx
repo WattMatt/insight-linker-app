@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { HelpCircle, Bug, Lightbulb } from "lucide-react";
+import { usePendingVerifications } from "@/hooks/usePendingVerifications";
+import { cn } from "@/lib/utils";
 import { IssueReportDialog } from "@/components/IssueReportDialog";
 import { SuggestionDialog } from "@/components/SuggestionDialog";
 import {
@@ -17,6 +19,9 @@ export function HelpButton() {
   const [suggestionDialogOpen, setSuggestionDialogOpen] = useState(false);
   const [screenshot, setScreenshot] = useState<string | null>(null);
   const [isCapturing, setIsCapturing] = useState(false);
+  const { data: pendingVerifications } = usePendingVerifications();
+  
+  const hasPendingVerifications = (pendingVerifications?.length || 0) > 0;
 
   const captureScreenshot = async (type: 'issue' | 'suggestion') => {
     setIsCapturing(true);
@@ -78,10 +83,16 @@ export function HelpButton() {
           <Button
             data-help-button
             disabled={isCapturing}
-            className="fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 hover:scale-110 transition-transform"
+            className={cn(
+              "fixed bottom-6 right-6 h-14 w-14 rounded-full shadow-lg z-50 hover:scale-110 transition-transform",
+              hasPendingVerifications && "bg-destructive hover:bg-destructive/90 animate-pulse"
+            )}
             size="icon"
           >
             <HelpCircle className="h-6 w-6" />
+            {hasPendingVerifications && (
+              <span className="absolute -top-1 -right-1 h-4 w-4 bg-destructive border-2 border-background rounded-full" />
+            )}
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end" className="w-56">

@@ -27,6 +27,11 @@ interface IssueReport {
   page_url: string;
   browser_info: any;
   admin_notes: string | null;
+  needs_user_verification: boolean;
+  verification_status: string;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  rejection_screenshot_url: string | null;
 }
 
 export default function IssueReports() {
@@ -77,6 +82,8 @@ export default function IssueReports() {
         const { data: { user } } = await supabase.auth.getUser();
         updates.resolved_at = new Date().toISOString();
         updates.resolved_by = user?.id;
+        updates.needs_user_verification = true;
+        updates.verification_status = 'pending';
       }
 
       const { error } = await supabase
@@ -289,6 +296,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                   <TableHead>Category</TableHead>
                   <TableHead>Severity</TableHead>
                   <TableHead>Status</TableHead>
+                  <TableHead>Verification</TableHead>
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -320,6 +328,18 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                         {getStatusIcon(issue.status)}
                         <span className="capitalize">{issue.status}</span>
                       </div>
+                    </TableCell>
+                    <TableCell>
+                      {issue.status === 'resolved' && issue.needs_user_verification && (
+                        <Badge variant={issue.verification_status === 'verified' ? 'default' : issue.verification_status === 'rejected' ? 'destructive' : 'secondary'}>
+                          {issue.verification_status === 'verified' ? '✓ Verified' : 
+                           issue.verification_status === 'rejected' ? '✗ Rejected' : 
+                           '⏳ Pending'}
+                        </Badge>
+                      )}
+                      {issue.status === 'resolved' && !issue.needs_user_verification && issue.verified_at && (
+                        <Badge variant="default">✓ Verified</Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       <Button

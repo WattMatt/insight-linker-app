@@ -65,6 +65,11 @@ interface Suggestion {
   admin_notes: string | null;
   resolved_by: string | null;
   resolved_at: string | null;
+  needs_user_verification: boolean;
+  verification_status: string;
+  verified_at: string | null;
+  rejection_reason: string | null;
+  rejection_screenshot_url: string | null;
 }
 
 export default function Suggestions() {
@@ -122,6 +127,12 @@ export default function Suggestions() {
         const { data: { user } } = await supabase.auth.getUser();
         updates.resolved_by = user?.id;
         updates.resolved_at = new Date().toISOString();
+        
+        // Request user verification for implemented suggestions
+        if (status === "implemented") {
+          updates.needs_user_verification = true;
+          updates.verification_status = 'pending';
+        }
       }
 
       const { error } = await supabase
@@ -299,6 +310,7 @@ ${suggestion.screenshot_url ? `📸 Screenshot: ${imageUrl}` : ""}
                 <TableHead>Category</TableHead>
                 <TableHead>Priority</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Verification</TableHead>
                 <TableHead>Actions</TableHead>
               </TableRow>
             </TableHeader>
@@ -334,6 +346,18 @@ ${suggestion.screenshot_url ? `📸 Screenshot: ${imageUrl}` : ""}
                         {suggestion.status.replace("_", " ")}
                       </span>
                     </div>
+                  </TableCell>
+                  <TableCell>
+                    {suggestion.status === 'implemented' && suggestion.needs_user_verification && (
+                      <Badge variant={suggestion.verification_status === 'verified' ? 'default' : suggestion.verification_status === 'rejected' ? 'destructive' : 'secondary'}>
+                        {suggestion.verification_status === 'verified' ? '✓ Verified' : 
+                         suggestion.verification_status === 'rejected' ? '✗ Rejected' : 
+                         '⏳ Pending'}
+                      </Badge>
+                    )}
+                    {suggestion.status === 'implemented' && !suggestion.needs_user_verification && suggestion.verified_at && (
+                      <Badge variant="default">✓ Verified</Badge>
+                    )}
                   </TableCell>
                   <TableCell>
                     <div className="flex gap-2">
