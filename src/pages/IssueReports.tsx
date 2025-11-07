@@ -12,6 +12,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
+import { RobustImage } from "@/components/RobustImage";
 
 interface IssueReport {
   id: string;
@@ -402,7 +403,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 <div>
                   <h4 className="text-sm font-medium mb-2">Screenshot</h4>
                   {imageUrl ? (
-                    <img
+                    <RobustImage
                       src={imageUrl}
                       alt="Issue screenshot"
                       className="w-full border rounded-lg"
