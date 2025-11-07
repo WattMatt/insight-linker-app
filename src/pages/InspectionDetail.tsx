@@ -1421,8 +1421,8 @@ const InspectionDetail = () => {
           {images.length > 0 ? (
             <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
               {images.map((img) => (
-                <div key={img.id} className="relative group">
-                  <img
+                <div key={img.id} className="relative group cursor-pointer" onClick={() => setViewingImage(img.url)}>
+                  <RobustImage
                     src={img.url}
                     alt={img.name}
                     className="w-full h-48 object-cover rounded border"
@@ -1493,12 +1493,11 @@ const InspectionDetail = () => {
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                   {photos.map((photo: string, index: number) => (
-                    <div key={index} className="relative group">
-                      <img
+                    <div key={index} className="relative group cursor-pointer" onClick={() => setViewingImage(photo)}>
+                      <RobustImage
                         src={photo}
                         alt={`Photo ${index + 1}`}
-                        className="w-full h-32 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
-                        onClick={() => setViewingImage(photo)}
+                        className="w-full h-32 object-cover rounded border hover:opacity-90 transition-opacity"
                       />
                       <Button
                         size="icon"
