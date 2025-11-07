@@ -1,5 +1,5 @@
 import { useParams, Link, useSearchParams } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FileText, Download, ArrowLeft, Info } from "lucide-react";
@@ -8,12 +8,14 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
+import { useEffect } from "react";
 
 const ClientPortalSubsectionDetail = () => {
   const { subsectionId } = useParams();
   const [searchParams] = useSearchParams();
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
+  const queryClient = useQueryClient();
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
     queryKey: ["client-subsection", subsectionId],
@@ -44,6 +46,50 @@ const ClientPortalSubsectionDetail = () => {
       return data;
     },
   });
+
+  // Set up real-time subscriptions
+  useEffect(() => {
+    if (!subsectionId) return;
+
+    // Subscribe to subsection changes
+    const subsectionChannel = supabase
+      .channel(`client-subsection-${subsectionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subsections',
+          filter: `id=eq.${subsectionId}`
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["client-subsection", subsectionId] });
+        }
+      )
+      .subscribe();
+
+    // Subscribe to document changes
+    const documentsChannel = supabase
+      .channel(`client-subsection-docs-${subsectionId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subsection_documents',
+          filter: `subsection_id=eq.${subsectionId}`
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ["client-subsection-documents", subsectionId] });
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(subsectionChannel);
+      supabase.removeChannel(documentsChannel);
+    };
+  }, [subsectionId, queryClient]);
 
   const handleDownload = async (url: string, fileName: string) => {
     try {

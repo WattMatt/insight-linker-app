@@ -131,8 +131,27 @@ const SubsectionDetail = () => {
         )
         .subscribe();
 
+      // Set up real-time subscription for inspections
+      const inspectionsChannel = supabase
+        .channel(`inspections-${subsectionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'inspections',
+            filter: `subsection_id=eq.${subsectionId}`
+          },
+          (payload) => {
+            console.log('Inspection change detected:', payload);
+            fetchSubsectionData();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(snagsChannel);
+        supabase.removeChannel(inspectionsChannel);
       };
     } else if (subsectionId === "new") {
       // For new subsections, just load templates and set loading to false
