@@ -45,6 +45,7 @@ import AdminContractorPreview from "./pages/AdminContractorPreview";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
 import Suggestions from "./pages/Suggestions";
+import VerificationManagement from "./pages/VerificationManagement";
 import QRCodes from "./pages/QRCodes";
 import Install from "./pages/Install";
 import { HelpButton } from "./components/HelpButton";
@@ -301,6 +302,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Suggestions />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/verification-management"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <VerificationManagement />
                 </DashboardLayout>
               </ProtectedRoute>
             }
