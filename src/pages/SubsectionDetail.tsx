@@ -112,6 +112,28 @@ const SubsectionDetail = () => {
       fetchSupabaseDocuments();
       fetchSnags();
       fetchCocValidations();
+
+      // Set up real-time subscription for snags
+      const snagsChannel = supabase
+        .channel(`snags-${subsectionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'snags',
+            filter: `subsection_id=eq.${subsectionId}`
+          },
+          (payload) => {
+            console.log('Snag change detected:', payload);
+            fetchSnags();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(snagsChannel);
+      };
     } else if (subsectionId === "new") {
       // For new subsections, just load templates and set loading to false
       setLoading(false);
