@@ -657,13 +657,53 @@ const InspectionDetail = () => {
         }
       }
 
-      // Use json_data directly - no mapping needed
-      // The data is ALREADY in the correct format (mix of string keys like "componentImages" 
-      // and numeric keys "0", "1" for different sections)
+      // Two-level mapping: Convert numeric DB keys to string template keys
       const rawJsonData = inspData.json_data as any;
+      const templateSections = templateData?.sections || {};
       
       console.log('🔍 RAW DATABASE json_data keys:', Object.keys(rawJsonData || {}));
-      console.log('🔍 Template sections:', Object.keys(templateData?.template_data?.sections || {}));
+      console.log('🔍 Template sections:', Object.keys(templateSections));
+      
+      // Create mapped jsonData with string keys
+      const mappedJsonData: any = {};
+      const sectionKeys = Object.keys(templateSections);
+      
+      sectionKeys.forEach((sectionKey, sectionIndex) => {
+        const section = templateSections[sectionKey];
+        const itemKeys = Object.keys(section.items || {});
+        
+        // Initialize section in mapped data
+        mappedJsonData[sectionKey] = {};
+        
+        itemKeys.forEach((itemKey, itemIndex) => {
+          // Try to find data using numeric index first, then string key
+          const numericSectionData = rawJsonData?.[sectionIndex.toString()];
+          const stringSectionData = rawJsonData?.[sectionKey];
+          
+          let itemData = null;
+          
+          // Check numeric path: json_data["0"]["0"]
+          if (numericSectionData) {
+            itemData = numericSectionData[itemIndex.toString()] || numericSectionData[itemKey];
+          }
+          
+          // Check string path: json_data["normalBoardImages"]["boardOpen"]
+          if (!itemData && stringSectionData) {
+            itemData = stringSectionData[itemKey] || stringSectionData[itemIndex.toString()];
+          }
+          
+          // Store data with string key
+          if (itemData) {
+            mappedJsonData[sectionKey][itemKey] = itemData;
+            console.log(`✅ Mapped [${sectionIndex}][${itemIndex}] → [${sectionKey}][${itemKey}]`, itemData);
+          } else {
+            // Initialize empty data structure
+            mappedJsonData[sectionKey][itemKey] = {};
+          }
+        });
+      });
+      
+      console.log('🔍 MAPPED jsonData structure:', JSON.stringify(mappedJsonData, null, 2));
 
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
@@ -679,10 +719,8 @@ const InspectionDetail = () => {
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
         tenants: rawJsonData?.tenants || [],
-        jsonData: rawJsonData || {}
+        jsonData: mappedJsonData || {}
       };
-      
-      console.log('🔍 MAPPED inspection.jsonData:', JSON.stringify(mappedInspection.jsonData, null, 2));
 
       setInspection(mappedInspection);
       setTenants((inspData.json_data as any)?.tenants || []);
