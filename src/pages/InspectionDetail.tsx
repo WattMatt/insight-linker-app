@@ -657,7 +657,7 @@ const InspectionDetail = () => {
         }
       }
 
-      // Create mapping bridge: numeric DB keys → template string keys
+      // Create TWO-LEVEL mapping bridge: numeric DB keys → template string keys
       let mappedJsonData: InspectionData['jsonData'] = {};
       const rawJsonData = inspData.json_data as any;
       
@@ -674,7 +674,7 @@ const InspectionDetail = () => {
         
         console.log('🔍 Template section keys (ordered):', sectionKeys);
         
-        // Map numeric DB keys to template string keys
+        // Map BOTH section keys AND item keys within each section
         Object.keys(rawJsonData).forEach(dbKey => {
           if (dbKey === 'tenants') {
             return; // Skip tenants, handled separately
@@ -682,12 +682,31 @@ const InspectionDetail = () => {
           
           const numericIndex = parseInt(dbKey);
           if (!isNaN(numericIndex) && numericIndex < sectionKeys.length) {
-            // Map: numeric key → template string key by index
-            const templateKey = sectionKeys[numericIndex];
-            mappedJsonData[templateKey] = rawJsonData[dbKey];
-            console.log(`✅ Mapped DB key "${dbKey}" → Template key "${templateKey}"`, rawJsonData[dbKey]);
+            // LEVEL 1: Map section key (numeric → string)
+            const templateSectionKey = sectionKeys[numericIndex];
+            const templateSection = templateData.template_data.sections[templateSectionKey];
+            const dbSectionData = rawJsonData[dbKey];
+            
+            // LEVEL 2: Map item keys within this section
+            const mappedSection: any = {};
+            const itemKeys = Object.keys(templateSection.items || {});
+            
+            Object.keys(dbSectionData || {}).forEach(dbItemKey => {
+              const itemNumericIndex = parseInt(dbItemKey);
+              if (!isNaN(itemNumericIndex) && itemNumericIndex < itemKeys.length) {
+                // Map item key: numeric → string
+                const templateItemKey = itemKeys[itemNumericIndex];
+                mappedSection[templateItemKey] = dbSectionData[dbItemKey];
+                console.log(`✅ Mapped "${dbKey}.${dbItemKey}" → "${templateSectionKey}.${templateItemKey}"`);
+              } else {
+                // Preserve non-numeric item keys
+                mappedSection[dbItemKey] = dbSectionData[dbItemKey];
+              }
+            });
+            
+            mappedJsonData[templateSectionKey] = mappedSection;
           } else {
-            // Preserve non-numeric keys as-is
+            // Preserve non-numeric section keys as-is
             mappedJsonData[dbKey] = rawJsonData[dbKey];
             console.log(`ℹ️ Preserved key "${dbKey}" as-is`);
           }
