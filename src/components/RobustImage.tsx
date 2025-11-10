@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { AlertCircle, ImageIcon } from 'lucide-react';
+import { AlertCircle } from 'lucide-react';
 
 interface RobustImageProps {
   src: string;
@@ -27,53 +27,49 @@ export const RobustImage = ({
     // Reset state when src changes
     setImageState('loading');
     setRetries(0);
-    // Add cache busting parameter
-    const cacheBuster = `cb=${Date.now()}`;
-    const separator = src.includes('?') ? '&' : '?';
-    setImageSrc(`${src}${separator}${cacheBuster}`);
+    setImageSrc(src);
   }, [src]);
 
   const handleError = () => {
-    console.error('Image failed to load:', imageSrc);
+    console.error('Image failed to load:', imageSrc, 'Retries:', retries);
     
     if (retries < retryCount) {
       // Retry with exponential backoff
       setTimeout(() => {
-        console.log(`Retrying image load (attempt ${retries + 1}/${retryCount})`);
+        console.log(`Retrying image load (attempt ${retries + 1}/${retryCount}):`, src);
         setRetries(prev => prev + 1);
-        const cacheBuster = `cb=${Date.now()}_retry${retries + 1}`;
-        const separator = src.includes('?') ? '&' : '?';
-        setImageSrc(`${src}${separator}${cacheBuster}`);
+        setImageSrc(`${src}?retry=${retries + 1}&t=${Date.now()}`);
         setImageState('loading');
       }, Math.pow(2, retries) * 500);
     } else {
+      console.error('Image failed after all retries:', src);
       setImageState('error');
       onError?.();
     }
   };
 
   const handleLoad = () => {
-    console.log('Image loaded successfully:', imageSrc);
+    console.log('Image loaded successfully:', src);
     setImageState('loaded');
   };
 
   if (imageState === 'error') {
     return (
-      <div className={`flex flex-col items-center justify-center bg-gray-100 rounded ${className}`}>
-        <AlertCircle className="h-8 w-8 text-gray-400 mb-2" />
-        <p className="text-xs text-gray-500 text-center px-2">Failed to load image</p>
+      <div className={`flex flex-col items-center justify-center bg-muted ${className}`}>
+        <AlertCircle className="h-8 w-8 text-muted-foreground mb-2" />
+        <p className="text-xs text-muted-foreground text-center px-2">Failed to load</p>
       </div>
     );
   }
 
   return (
-    <div className={`relative ${className}`}>
+    <>
       {imageState === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-gray-100 rounded z-10">
-          <div className="flex flex-col items-center">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mb-2"></div>
+        <div className={`flex items-center justify-center bg-muted ${className}`}>
+          <div className="flex flex-col items-center gap-2">
+            <div className="h-6 w-6 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
             {retries > 0 && (
-              <p className="text-xs text-gray-500">Retry {retries}/{retryCount}</p>
+              <p className="text-xs text-muted-foreground">Retry {retries}</p>
             )}
           </div>
         </div>
@@ -84,8 +80,8 @@ export const RobustImage = ({
         className={className}
         onLoad={handleLoad}
         onError={handleError}
-        style={{ opacity: imageState === 'loaded' ? 1 : 0 }}
+        style={{ display: imageState === 'loaded' ? 'block' : 'none' }}
       />
-    </div>
+    </>
   );
 };
