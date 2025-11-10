@@ -58,10 +58,13 @@ const SubsectionDetail = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
-  const [cocType, setCocType] = useState<string>("");
-  const [cocStatus, setCocStatus] = useState<string>("");
-  const [cocNumber, setCocNumber] = useState<string>("");
-  const [cocIssueDate, setCocIssueDate] = useState<string>("");
+  // Track COC data per document ID to avoid shared state
+  const [cocDataByDocument, setCocDataByDocument] = useState<Record<string, {
+    cocType: string;
+    cocStatus: string;
+    cocNumber: string;
+    cocIssueDate: string;
+  }>>({});
   const [meterSerialNumber, setMeterSerialNumber] = useState<string>("");
   const [ctRatio, setCtRatio] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -712,10 +715,19 @@ const SubsectionDetail = () => {
         isCocRequired: fullSubsection.is_coc_required ?? true,
         inspections: inspectionsObj
       });
-      setCocType(fullSubsection.coc_type || '');
-      setCocStatus(fullSubsection.coc_status || '');
-      setCocNumber(fullSubsection.coc_number || '');
-      setCocIssueDate(fullSubsection.coc_issue_date || '');
+      
+      // Initialize COC data from subsection for existing documents
+      if (fullSubsection.coc_type || fullSubsection.coc_status) {
+        setCocDataByDocument({
+          'subsection-default': {
+            cocType: fullSubsection.coc_type || '',
+            cocStatus: fullSubsection.coc_status || '',
+            cocNumber: fullSubsection.coc_number || '',
+            cocIssueDate: fullSubsection.coc_issue_date || ''
+          }
+        });
+      }
+      
       setMeterSerialNumber(fullSubsection.meter_serial_number || '');
       setCtRatio(fullSubsection.ct_ratio || '');
       
@@ -969,8 +981,14 @@ const SubsectionDetail = () => {
     }
   };
 
-  const handleSaveCocDetails = async () => {
+  const handleSaveCocDetails = async (documentId: string) => {
     if (!subsection) return;
+    
+    const docData = cocDataByDocument[documentId];
+    if (!docData) {
+      toast.error("No data to save for this document");
+      return;
+    }
     
     try {
       setSaving(true);
@@ -994,19 +1012,19 @@ const SubsectionDetail = () => {
         return;
       }
       
-      // Update the subsection with new COC details
+      // Update the subsection with new COC details from this specific document
       const updateData: any = {
-        coc_type: cocType,
-        coc_status: cocStatus,
+        coc_type: docData.cocType,
+        coc_status: docData.cocStatus,
         updated_at: new Date().toISOString()
       };
       
       // Only update COC number and issue date if they have values
-      if (cocNumber) {
-        updateData.coc_number = cocNumber;
+      if (docData.cocNumber) {
+        updateData.coc_number = docData.cocNumber;
       }
-      if (cocIssueDate) {
-        updateData.coc_issue_date = cocIssueDate;
+      if (docData.cocIssueDate) {
+        updateData.coc_issue_date = docData.cocIssueDate;
       }
       
       const { error: updateError } = await supabase
@@ -1022,10 +1040,10 @@ const SubsectionDetail = () => {
       // Update local state
       setSubsection({
         ...subsection,
-        cocType,
-        cocStatus,
-        cocNumber: cocNumber || subsection.cocNumber,
-        cocIssueDate: cocIssueDate || subsection.cocIssueDate
+        cocType: docData.cocType,
+        cocStatus: docData.cocStatus,
+        cocNumber: docData.cocNumber || subsection.cocNumber,
+        cocIssueDate: docData.cocIssueDate || subsection.cocIssueDate
       });
       
       toast.success("COC details saved successfully");
@@ -1035,6 +1053,30 @@ const SubsectionDetail = () => {
     } finally {
       setSaving(false);
     }
+  };
+  
+  // Helper to get or initialize COC data for a document
+  const getDocCocData = (docId: string) => {
+    if (!cocDataByDocument[docId]) {
+      return {
+        cocType: subsection?.cocType || '',
+        cocStatus: subsection?.cocStatus || '',
+        cocNumber: subsection?.cocNumber || '',
+        cocIssueDate: subsection?.cocIssueDate || ''
+      };
+    }
+    return cocDataByDocument[docId];
+  };
+  
+  // Helper to update COC data for a specific document
+  const updateDocCocData = (docId: string, field: string, value: string) => {
+    setCocDataByDocument(prev => ({
+      ...prev,
+      [docId]: {
+        ...getDocCocData(docId),
+        [field]: value
+      }
+    }));
   };
 
   // Helper function to find COC documents
@@ -2569,8 +2611,8 @@ const SubsectionDetail = () => {
                             <div>
                               <Label>COC Number</Label>
                               <Input
-                                value={cocNumber || subsection.cocNumber || ''}
-                                onChange={(e) => setCocNumber(e.target.value)}
+                                value={getDocCocData(doc.id).cocNumber}
+                                onChange={(e) => updateDocCocData(doc.id, 'cocNumber', e.target.value)}
                                 placeholder="ECA 642760"
                                 className="mt-1"
                               />
@@ -2584,8 +2626,8 @@ const SubsectionDetail = () => {
                                     className="w-full justify-start text-left font-normal mt-1"
                                   >
                                     <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {cocIssueDate || subsection.cocIssueDate ? (
-                                      format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                    {getDocCocData(doc.id).cocIssueDate ? (
+                                      format(new Date(getDocCocData(doc.id).cocIssueDate), "PPP")
                                     ) : (
                                       <span>Pick a date</span>
                                     )}
@@ -2594,8 +2636,8 @@ const SubsectionDetail = () => {
                                 <PopoverContent className="w-auto p-0" align="start">
                                   <Calendar
                                     mode="single"
-                                    selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
-                                    onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                    selected={getDocCocData(doc.id).cocIssueDate ? new Date(getDocCocData(doc.id).cocIssueDate) : undefined}
+                                    onSelect={(date) => updateDocCocData(doc.id, 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
                                     initialFocus
                                     className="pointer-events-auto"
                                   />
@@ -2612,8 +2654,8 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${doc.id}`}
                                   value="Initial"
-                                  checked={cocType === 'Initial'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(doc.id).cocType === 'Initial'}
+                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Initial</span>
@@ -2623,8 +2665,8 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${doc.id}`}
                                   value="Temporary"
-                                  checked={cocType === 'Temporary'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(doc.id).cocType === 'Temporary'}
+                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Temporary</span>
@@ -2634,8 +2676,8 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocType-${doc.id}`}
                                   value="Supplementary"
-                                  checked={cocType === 'Supplementary'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(doc.id).cocType === 'Supplementary'}
+                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Supplementary</span>
@@ -2651,8 +2693,8 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocStatus-${doc.id}`}
                                   value="Approved"
-                                  checked={cocStatus === 'Approved'}
-                                  onChange={(e) => setCocStatus(e.target.value)}
+                                  checked={getDocCocData(doc.id).cocStatus === 'Approved'}
+                                  onChange={(e) => updateDocCocData(doc.id, 'cocStatus', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">✅ Approved</span>
@@ -2662,8 +2704,8 @@ const SubsectionDetail = () => {
                                   type="radio"
                                   name={`cocStatus-${doc.id}`}
                                   value="Failed"
-                                  checked={cocStatus === 'Failed'}
-                                  onChange={(e) => setCocStatus(e.target.value)}
+                                  checked={getDocCocData(doc.id).cocStatus === 'Failed'}
+                                  onChange={(e) => updateDocCocData(doc.id, 'cocStatus', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">❌ Failed</span>
@@ -2672,7 +2714,7 @@ const SubsectionDetail = () => {
                           </div>
 
                           <Button
-                            onClick={handleSaveCocDetails} 
+                            onClick={() => handleSaveCocDetails(doc.id)} 
                             disabled={saving}
                             className="mt-4 bg-blue-500 hover:bg-blue-600"
                           >
@@ -2681,8 +2723,10 @@ const SubsectionDetail = () => {
                         </div>
                       ))}
                       
-                      {/* Firebase COC Documents (Legacy) */}
-                      {cocDocs.map((doc, idx) => (
+                      {/* Firebase COC Documents (Legacy) - these don't have doc IDs so use idx */}
+                      {cocDocs.map((doc, idx) => {
+                        const legacyDocId = `legacy-${idx}`;
+                        return (
                         <div key={idx} className="border rounded-lg p-4 bg-muted/30">
                           <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
@@ -2700,38 +2744,13 @@ const SubsectionDetail = () => {
                               <Download className="h-4 w-4" />
                             </Button>
                           </div>
-                        </div>
-                      ))}
-                    </div>
-                  ) : subsection.cocNumber ? (
-                    <div className="space-y-4">
-                      {cocDocs.map((doc, idx) => (
-                        <div key={idx} className="border rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-4">
-                            <div className="flex items-center gap-3">
-                              <FileText className="h-5 w-5 text-muted-foreground" />
-                              <div>
-                                <p className="font-medium">{doc.file_name}</p>
-                                <p className="text-sm text-muted-foreground">
-                                  {new Date(doc.uploaded_at).toLocaleDateString()}
-                                </p>
-                              </div>
-                            </div>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="bg-green-500 text-white hover:bg-green-600 border-green-500"
-                            >
-                              Pass
-                            </Button>
-                          </div>
 
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <Label>COC Number</Label>
                           <Input
-                            value={cocNumber || subsection.cocNumber || ''}
-                            onChange={(e) => setCocNumber(e.target.value)}
+                            value={getDocCocData(legacyDocId).cocNumber}
+                            onChange={(e) => updateDocCocData(legacyDocId, 'cocNumber', e.target.value)}
                             placeholder="ECA 642760"
                             className="mt-1"
                           />
@@ -2745,8 +2764,8 @@ const SubsectionDetail = () => {
                                 className="w-full justify-start text-left font-normal mt-1"
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                {cocIssueDate || subsection.cocIssueDate ? (
-                                  format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                {getDocCocData(legacyDocId).cocIssueDate ? (
+                                  format(new Date(getDocCocData(legacyDocId).cocIssueDate), "PPP")
                                 ) : (
                                   <span>Pick a date</span>
                                 )}
@@ -2755,8 +2774,8 @@ const SubsectionDetail = () => {
                             <PopoverContent className="w-auto p-0" align="start">
                               <Calendar
                                 mode="single"
-                                selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
-                                onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                selected={getDocCocData(legacyDocId).cocIssueDate ? new Date(getDocCocData(legacyDocId).cocIssueDate) : undefined}
+                                onSelect={(date) => updateDocCocData(legacyDocId, 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
                                 initialFocus
                                 className="pointer-events-auto"
                               />
@@ -2771,10 +2790,10 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocType-${idx}`}
+                                  name={`cocType-${legacyDocId}`}
                                   value="Initial"
-                                  checked={cocType === 'Initial'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(legacyDocId).cocType === 'Initial'}
+                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Initial</span>
@@ -2782,10 +2801,10 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocType-${idx}`}
+                                  name={`cocType-${legacyDocId}`}
                                   value="Temporary"
-                                  checked={cocType === 'Temporary'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(legacyDocId).cocType === 'Temporary'}
+                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Temporary</span>
@@ -2793,10 +2812,10 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocType-${idx}`}
+                                  name={`cocType-${legacyDocId}`}
                                   value="Supplementary"
-                                  checked={cocType === 'Supplementary'}
-                                  onChange={(e) => setCocType(e.target.value)}
+                                  checked={getDocCocData(legacyDocId).cocType === 'Supplementary'}
+                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">Supplementary</span>
@@ -2810,10 +2829,10 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocStatus-${idx}`}
+                                  name={`cocStatus-${legacyDocId}`}
                                   value="Approved"
-                                  checked={cocStatus === 'Approved'}
-                                  onChange={(e) => setCocStatus(e.target.value)}
+                                  checked={getDocCocData(legacyDocId).cocStatus === 'Approved'}
+                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocStatus', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">✅ Approved</span>
@@ -2821,10 +2840,10 @@ const SubsectionDetail = () => {
                               <label className="flex items-center gap-2 cursor-pointer">
                                 <input
                                   type="radio"
-                                  name={`cocStatus-${idx}`}
+                                  name={`cocStatus-${legacyDocId}`}
                                   value="Failed"
-                                  checked={cocStatus === 'Failed'}
-                                  onChange={(e) => setCocStatus(e.target.value)}
+                                  checked={getDocCocData(legacyDocId).cocStatus === 'Failed'}
+                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocStatus', e.target.value)}
                                   className="w-4 h-4 text-primary cursor-pointer"
                                 />
                                 <span className="text-sm">❌ Failed</span>
@@ -2833,14 +2852,14 @@ const SubsectionDetail = () => {
                           </div>
 
                           <Button
-                            onClick={handleSaveCocDetails} 
+                            onClick={() => handleSaveCocDetails(legacyDocId)} 
                             disabled={saving}
                             className="mt-4 bg-blue-500 hover:bg-blue-600"
                           >
                             {saving ? "Saving..." : "Save Details"}
                           </Button>
                         </div>
-                      ))}
+                      )})}
                     </div>
                   ) : subsection.cocNumber ? (
                     <div className="border rounded-lg p-4">
@@ -2865,8 +2884,8 @@ const SubsectionDetail = () => {
                         <div>
                           <Label>COC Number</Label>
                           <Input
-                            value={cocNumber || subsection.cocNumber || ''}
-                            onChange={(e) => setCocNumber(e.target.value)}
+                            value={getDocCocData('subsection-default').cocNumber}
+                            onChange={(e) => updateDocCocData('subsection-default', 'cocNumber', e.target.value)}
                             placeholder="ECA 642760"
                             className="mt-1"
                           />
@@ -2880,8 +2899,8 @@ const SubsectionDetail = () => {
                                 className="w-full justify-start text-left font-normal mt-1"
                               >
                                 <CalendarIcon className="mr-2 h-4 w-4" />
-                                {cocIssueDate || subsection.cocIssueDate ? (
-                                  format(new Date(cocIssueDate || subsection.cocIssueDate), "PPP")
+                                {getDocCocData('subsection-default').cocIssueDate ? (
+                                  format(new Date(getDocCocData('subsection-default').cocIssueDate), "PPP")
                                 ) : (
                                   <span>Pick a date</span>
                                 )}
@@ -2890,8 +2909,8 @@ const SubsectionDetail = () => {
                             <PopoverContent className="w-auto p-0" align="start">
                               <Calendar
                                 mode="single"
-                                selected={cocIssueDate || subsection.cocIssueDate ? new Date(cocIssueDate || subsection.cocIssueDate) : undefined}
-                                onSelect={(date) => setCocIssueDate(date ? format(date, 'yyyy-MM-dd') : '')}
+                                selected={getDocCocData('subsection-default').cocIssueDate ? new Date(getDocCocData('subsection-default').cocIssueDate) : undefined}
+                                onSelect={(date) => updateDocCocData('subsection-default', 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
                                 initialFocus
                                 className="pointer-events-auto"
                               />
@@ -2908,8 +2927,8 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Initial"
-                              checked={cocType === 'Initial'}
-                              onChange={(e) => setCocType(e.target.value)}
+                              checked={getDocCocData('subsection-default').cocType === 'Initial'}
+                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Initial</span>
@@ -2919,8 +2938,8 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Temporary"
-                              checked={cocType === 'Temporary'}
-                              onChange={(e) => setCocType(e.target.value)}
+                              checked={getDocCocData('subsection-default').cocType === 'Temporary'}
+                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Temporary</span>
@@ -2930,8 +2949,8 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocType"
                               value="Supplementary"
-                              checked={cocType === 'Supplementary'}
-                              onChange={(e) => setCocType(e.target.value)}
+                              checked={getDocCocData('subsection-default').cocType === 'Supplementary'}
+                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">Supplementary</span>
@@ -2947,8 +2966,8 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocStatus"
                               value="Approved"
-                              checked={cocStatus === 'Approved'}
-                              onChange={(e) => setCocStatus(e.target.value)}
+                              checked={getDocCocData('subsection-default').cocStatus === 'Approved'}
+                              onChange={(e) => updateDocCocData('subsection-default', 'cocStatus', e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">✅ Approved</span>
@@ -2958,8 +2977,8 @@ const SubsectionDetail = () => {
                               type="radio"
                               name="cocStatus"
                               value="Failed"
-                              checked={cocStatus === 'Failed'}
-                              onChange={(e) => setCocStatus(e.target.value)}
+                              checked={getDocCocData('subsection-default').cocStatus === 'Failed'}
+                              onChange={(e) => updateDocCocData('subsection-default', 'cocStatus', e.target.value)}
                               className="w-4 h-4 text-primary cursor-pointer"
                             />
                             <span className="text-sm">❌ Failed</span>
@@ -2968,7 +2987,7 @@ const SubsectionDetail = () => {
                       </div>
 
                       <Button
-                        onClick={handleSaveCocDetails} 
+                        onClick={() => handleSaveCocDetails('subsection-default')} 
                         disabled={saving}
                         className="mt-4 bg-blue-500 hover:bg-blue-600"
                       >
