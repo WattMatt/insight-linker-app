@@ -1501,11 +1501,17 @@ const InspectionDetail = () => {
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                   {photos.map((photo: string, index: number) => (
-                    <div key={index} className="relative group cursor-pointer" onClick={() => setViewingImage(photo)}>
-                      <RobustImage
+                    <div key={index} className="relative group cursor-pointer border rounded overflow-hidden bg-muted" onClick={() => setViewingImage(photo)}>
+                      <img
                         src={photo}
                         alt={`Photo ${index + 1}`}
-                        className="w-full h-32 object-cover rounded border hover:opacity-90 transition-opacity"
+                        className="w-full h-32 object-cover hover:opacity-90 transition-opacity"
+                        onError={(e) => {
+                          console.error('Failed to load image:', photo);
+                          e.currentTarget.style.display = 'none';
+                          e.currentTarget.parentElement!.innerHTML = `<div class="flex items-center justify-center h-32 bg-muted text-muted-foreground text-xs p-2">Failed: ${photo.split('/').pop()}</div>`;
+                        }}
+                        onLoad={() => console.log('Image loaded:', photo)}
                       />
                       <Button
                         size="icon"
