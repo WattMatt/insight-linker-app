@@ -69,7 +69,32 @@ const Sites = () => {
       if (sitesRes.error) throw sitesRes.error;
       if (clientsRes.error) throw clientsRes.error;
 
-      setSites(sitesRes.data || []);
+      // Generate signed URLs for site images (site-images bucket is private)
+      const sitesWithSignedUrls = await Promise.all(
+        (sitesRes.data || []).map(async (site) => {
+          if (site.site_image_url) {
+            try {
+              // Extract path from URL
+              const urlParts = site.site_image_url.split('/site-images/');
+              if (urlParts.length > 1) {
+                const path = urlParts[1].split('?')[0]; // Remove query params
+                const { data: signedData } = await supabase.storage
+                  .from('site-images')
+                  .createSignedUrl(path, 3600); // 1 hour expiry
+                
+                if (signedData?.signedUrl) {
+                  return { ...site, site_image_url: signedData.signedUrl };
+                }
+              }
+            } catch (error) {
+              console.error('Error generating signed URL for site image:', error);
+            }
+          }
+          return site;
+        })
+      );
+
+      setSites(sitesWithSignedUrls);
       setClients(clientsRes.data || []);
 
       // Set current client if filtering by clientId
