@@ -657,7 +657,37 @@ const InspectionDetail = () => {
         }
       }
 
-      // Map inspection data
+      // Map numeric database keys to template string keys
+      let mappedJsonData: InspectionData['jsonData'] = {};
+      const rawJsonData = inspData.json_data as any;
+      
+      if (rawJsonData && templateData?.template_data?.sections) {
+        const sectionKeys = Object.keys(templateData.template_data.sections).filter((key: string) => {
+          const lowerKey = key.toLowerCase();
+          const lowerName = templateData.template_data.sections[key].name?.toLowerCase() || '';
+          return !lowerKey.includes('general') && !lowerName.includes('general') &&
+                 !lowerKey.includes('observation') && !lowerName.includes('observation');
+        });
+        
+        // Map numeric indices to template keys
+        Object.keys(rawJsonData).forEach(dbKey => {
+          if (dbKey === 'tenants') {
+            // Skip tenants, handled separately
+            return;
+          }
+          
+          // If it's a numeric key, map it to the corresponding template key
+          const numericIndex = parseInt(dbKey);
+          if (!isNaN(numericIndex) && numericIndex < sectionKeys.length) {
+            const templateKey = sectionKeys[numericIndex];
+            mappedJsonData[templateKey] = rawJsonData[dbKey];
+          } else {
+            // If it's already a string key, use it as-is
+            mappedJsonData[dbKey] = rawJsonData[dbKey];
+          }
+        });
+      }
+
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
         date: inspData.inspection_date || '',
@@ -671,8 +701,8 @@ const InspectionDetail = () => {
         testingParty: inspData.testing_party || '',
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
-        tenants: (inspData.json_data as any)?.tenants || [],
-        jsonData: (inspData.json_data as InspectionData['jsonData']) || {}
+        tenants: rawJsonData?.tenants || [],
+        jsonData: mappedJsonData
       };
 
       setInspection(mappedInspection);
@@ -1446,14 +1476,6 @@ const InspectionDetail = () => {
     
     // Get photos array
     const photos: string[] = itemData.photos || [];
-    
-    // Debug logging
-    console.log(`Rendering item ${sectionKey}-${itemKey}:`, {
-      hasPhotos: photos.length > 0,
-      photosCount: photos.length,
-      photos: photos,
-      itemData: itemData
-    });
     
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
