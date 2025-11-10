@@ -659,49 +659,43 @@ const InspectionDetail = () => {
 
       // Two-level mapping: Convert numeric DB keys to string template keys
       const rawJsonData = inspData.json_data as any;
-      const templateSections = templateData?.sections || {};
+      const templateSections = templateData?.sections || [];
       
-      console.log('🔍 RAW DATABASE json_data keys:', Object.keys(rawJsonData || {}));
-      console.log('🔍 Template sections:', Object.keys(templateSections));
+      console.log('🔍 RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
+      console.log('🔍 Template sections array:', templateSections);
       
       // Create mapped jsonData with string keys
       const mappedJsonData: any = {};
-      const sectionKeys = Object.keys(templateSections);
       
-      sectionKeys.forEach((sectionKey, sectionIndex) => {
-        const section = templateSections[sectionKey];
-        const itemKeys = Object.keys(section.items || {});
-        
-        // Initialize section in mapped data
-        mappedJsonData[sectionKey] = {};
-        
-        itemKeys.forEach((itemKey, itemIndex) => {
-          // Try to find data using numeric index first, then string key
-          const numericSectionData = rawJsonData?.[sectionIndex.toString()];
-          const stringSectionData = rawJsonData?.[sectionKey];
+      // Template sections is an ARRAY, not an object
+      if (Array.isArray(templateSections)) {
+        templateSections.forEach((section: any, sectionIndex: number) => {
+          const sectionId = section.id; // e.g., "normalBoardImages"
+          const sectionItems = section.items || [];
           
-          let itemData = null;
+          // Initialize section in mapped data
+          mappedJsonData[sectionId] = {};
           
-          // Check numeric path: json_data["0"]["0"]
-          if (numericSectionData) {
-            itemData = numericSectionData[itemIndex.toString()] || numericSectionData[itemKey];
-          }
-          
-          // Check string path: json_data["normalBoardImages"]["boardOpen"]
-          if (!itemData && stringSectionData) {
-            itemData = stringSectionData[itemKey] || stringSectionData[itemIndex.toString()];
-          }
-          
-          // Store data with string key
-          if (itemData) {
-            mappedJsonData[sectionKey][itemKey] = itemData;
-            console.log(`✅ Mapped [${sectionIndex}][${itemIndex}] → [${sectionKey}][${itemKey}]`, itemData);
-          } else {
-            // Initialize empty data structure
-            mappedJsonData[sectionKey][itemKey] = {};
+          // Items is also an ARRAY
+          if (Array.isArray(sectionItems)) {
+            sectionItems.forEach((item: any, itemIndex: number) => {
+              const itemId = item.id; // e.g., "boardOpen"
+              
+              // Look up data using numeric indices: json_data["0"]["0"]
+              const numericSectionData = rawJsonData?.[sectionIndex.toString()];
+              const itemData = numericSectionData?.[itemIndex.toString()];
+              
+              if (itemData) {
+                mappedJsonData[sectionId][itemId] = itemData;
+                console.log(`✅ Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`, itemData);
+              } else {
+                // Initialize empty
+                mappedJsonData[sectionId][itemId] = {};
+              }
+            });
           }
         });
-      });
+      }
       
       console.log('🔍 MAPPED jsonData structure:', JSON.stringify(mappedJsonData, null, 2));
 
