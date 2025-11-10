@@ -1384,7 +1384,7 @@ const InspectionDetail = () => {
           <Label>QR Code</Label>
           <div className="mt-2">
             {qrCodeUrl && (
-              <img src={qrCodeUrl} alt="QR Code" className="w-32 h-32 border rounded" />
+              <RobustImage src={qrCodeUrl} alt="QR Code" className="w-32 h-32 border rounded" />
             )}
           </div>
         </div>
@@ -2133,13 +2133,17 @@ const InspectionDetail = () => {
                             {snag.photos && Array.isArray(snag.photos) && snag.photos.length > 0 && (
                               <div className="grid grid-cols-4 gap-2 mt-3">
                                 {snag.photos.map((photo: string, index: number) => (
-                                  <img
+                                  <div 
                                     key={index}
-                                    src={photo}
-                                    alt={`Snag photo ${index + 1}`}
-                                    className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
+                                    className="cursor-pointer hover:opacity-90 transition-opacity"
                                     onClick={() => setViewingImage(photo)}
-                                  />
+                                  >
+                                    <RobustImage
+                                      src={photo}
+                                      alt={`Snag photo ${index + 1}`}
+                                      className="w-full h-24 object-cover rounded border"
+                                    />
+                                  </div>
                                 ))}
                               </div>
                             )}
@@ -2218,7 +2222,7 @@ const InspectionDetail = () => {
                 placeholder="Paste image URL"
               />
               {newTenant.breakerImage && (
-                <img
+                <RobustImage
                   src={newTenant.breakerImage}
                   alt="Breaker preview"
                   className="mt-2 w-full h-48 object-cover rounded border"
@@ -2235,7 +2239,7 @@ const InspectionDetail = () => {
                 placeholder="Paste image URL"
               />
               {newTenant.ctRatioImage && (
-                <img
+                <RobustImage
                   src={newTenant.ctRatioImage}
                   alt="CT Ratio preview"
                   className="mt-2 w-full h-48 object-cover rounded border"
@@ -2257,7 +2261,7 @@ const InspectionDetail = () => {
               <Label>Meter Image</Label>
               {newTenant.meterImage && (
                 <div className="relative group">
-                  <img
+                  <RobustImage
                     src={newTenant.meterImage}
                     alt="Meter preview"
                     className="w-full h-48 object-cover rounded border"
@@ -2381,12 +2385,15 @@ const InspectionDetail = () => {
                 {newSnag.photos.length > 0 && (
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     {newSnag.photos.map((photo, index) => (
-                      <div key={index} className="relative group">
-                        <img
+                      <div 
+                        key={index} 
+                        className="relative group cursor-pointer hover:opacity-90 transition-opacity"
+                        onClick={() => setViewingImage(photo)}
+                      >
+                        <RobustImage
                           src={photo}
                           alt={`Snag photo ${index + 1}`}
-                          className="w-full h-24 object-cover rounded border cursor-pointer hover:opacity-90 transition-opacity"
-                          onClick={() => setViewingImage(photo)}
+                          className="w-full h-24 object-cover rounded border"
                         />
                         <Button
                           type="button"
@@ -2453,7 +2460,7 @@ const InspectionDetail = () => {
               <X className="h-6 w-6" />
             </Button>
             {viewingImage && (
-              <img
+              <RobustImage
                 src={viewingImage}
                 alt="Full size view"
                 className="max-w-full max-h-full object-contain"
