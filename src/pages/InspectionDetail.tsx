@@ -1447,6 +1447,14 @@ const InspectionDetail = () => {
     // Get photos array
     const photos: string[] = itemData.photos || [];
     
+    // Debug logging
+    console.log(`Rendering item ${sectionKey}-${itemKey}:`, {
+      hasPhotos: photos.length > 0,
+      photosCount: photos.length,
+      photos: photos,
+      itemData: itemData
+    });
+    
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
 
