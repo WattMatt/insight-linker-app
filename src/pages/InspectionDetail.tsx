@@ -657,64 +657,13 @@ const InspectionDetail = () => {
         }
       }
 
-      // Create TWO-LEVEL mapping bridge: numeric DB keys → template string keys
-      let mappedJsonData: InspectionData['jsonData'] = {};
+      // Use json_data directly - no mapping needed
+      // The data is ALREADY in the correct format (mix of string keys like "componentImages" 
+      // and numeric keys "0", "1" for different sections)
       const rawJsonData = inspData.json_data as any;
       
-      console.log('🔍 RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
-      
-      if (rawJsonData && templateData?.template_data?.sections) {
-        // Get ordered section keys (exclude general/observation sections)
-        const sectionKeys = Object.keys(templateData.template_data.sections).filter((key: string) => {
-          const lowerKey = key.toLowerCase();
-          const lowerName = templateData.template_data.sections[key].name?.toLowerCase() || '';
-          return !lowerKey.includes('general') && !lowerName.includes('general') &&
-                 !lowerKey.includes('observation') && !lowerName.includes('observation');
-        });
-        
-        console.log('🔍 Template section keys (ordered):', sectionKeys);
-        
-        // Map BOTH section keys AND item keys within each section
-        Object.keys(rawJsonData).forEach(dbKey => {
-          if (dbKey === 'tenants') {
-            return; // Skip tenants, handled separately
-          }
-          
-          const numericIndex = parseInt(dbKey);
-          if (!isNaN(numericIndex) && numericIndex < sectionKeys.length) {
-            // LEVEL 1: Map section key (numeric → string)
-            const templateSectionKey = sectionKeys[numericIndex];
-            const templateSection = templateData.template_data.sections[templateSectionKey];
-            const dbSectionData = rawJsonData[dbKey];
-            
-            // LEVEL 2: Map item keys within this section
-            const mappedSection: any = {};
-            const itemKeys = Object.keys(templateSection.items || {});
-            
-            Object.keys(dbSectionData || {}).forEach(dbItemKey => {
-              const itemNumericIndex = parseInt(dbItemKey);
-              if (!isNaN(itemNumericIndex) && itemNumericIndex < itemKeys.length) {
-                // Map item key: numeric → string
-                const templateItemKey = itemKeys[itemNumericIndex];
-                mappedSection[templateItemKey] = dbSectionData[dbItemKey];
-                console.log(`✅ Mapped "${dbKey}.${dbItemKey}" → "${templateSectionKey}.${templateItemKey}"`);
-              } else {
-                // Preserve non-numeric item keys
-                mappedSection[dbItemKey] = dbSectionData[dbItemKey];
-              }
-            });
-            
-            mappedJsonData[templateSectionKey] = mappedSection;
-          } else {
-            // Preserve non-numeric section keys as-is
-            mappedJsonData[dbKey] = rawJsonData[dbKey];
-            console.log(`ℹ️ Preserved key "${dbKey}" as-is`);
-          }
-        });
-      } else {
-        // Fallback: use raw data if no template
-        mappedJsonData = rawJsonData || {};
-      }
+      console.log('🔍 RAW DATABASE json_data keys:', Object.keys(rawJsonData || {}));
+      console.log('🔍 Template sections:', Object.keys(templateData?.template_data?.sections || {}));
 
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
@@ -730,7 +679,7 @@ const InspectionDetail = () => {
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
         tenants: rawJsonData?.tenants || [],
-        jsonData: mappedJsonData
+        jsonData: rawJsonData || {}
       };
       
       console.log('🔍 MAPPED inspection.jsonData:', JSON.stringify(mappedInspection.jsonData, null, 2));
@@ -1459,7 +1408,18 @@ const InspectionDetail = () => {
     // Extract images from object structure
     if (typeof imagesData === 'object' && !Array.isArray(imagesData)) {
       Object.entries(imagesData).forEach(([imgId, imgData]: [string, any]) => {
-        if (imgData && (imgData.url || imgData.path)) {
+        // Handle photos array (current format)
+        if (imgData && imgData.photos && Array.isArray(imgData.photos)) {
+          imgData.photos.forEach((photoUrl: string, index: number) => {
+            images.push({
+              id: `${imgId}-${index}`,
+              url: photoUrl,
+              name: `${imgData.name || imgId} - Photo ${index + 1}`
+            });
+          });
+        }
+        // Handle legacy url/path format
+        else if (imgData && (imgData.url || imgData.path)) {
           images.push({
             id: imgId,
             url: imgData.url || imgData.path,
@@ -1472,7 +1432,7 @@ const InspectionDetail = () => {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>{sectionKey.replace('images', '')} Images</CardTitle>
+          <CardTitle>{sectionKey.replace('Images', ' Images').replace('images', ' Images')}</CardTitle>
           <p className="text-sm text-muted-foreground">
             {images.length} image{images.length !== 1 ? 's' : ''} in this category
           </p>
