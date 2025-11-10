@@ -13,6 +13,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { toast } from "sonner";
 import { siteSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
+import { RobustImage } from "@/components/RobustImage";
 
 interface Site {
   id: string;
@@ -301,7 +302,7 @@ const Sites = () => {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         {site.site_image_url ? (
-                          <img 
+                          <RobustImage 
                             src={site.site_image_url} 
                             alt={site.name}
                             className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
