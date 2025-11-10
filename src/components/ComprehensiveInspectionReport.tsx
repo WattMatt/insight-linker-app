@@ -33,7 +33,7 @@ export const ComprehensiveInspectionReport = ({
       const pageHeight = doc.internal.pageSize.getHeight();
 
       // Extract inspection data
-      const jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
+      const rawJsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
       
       // Fetch template if available
       let template: any = null;
@@ -52,6 +52,50 @@ export const ComprehensiveInspectionReport = ({
         setGenerating(false);
         return;
       }
+
+      // Two-level mapping: Convert numeric DB keys to string template keys
+      const templateSections = template?.sections || [];
+      
+      console.log('📄 PDF: RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
+      console.log('📄 PDF: Template sections:', templateSections);
+      
+      // Create mapped jsonData with string keys
+      let jsonData: any = {};
+      
+      // Template sections is an ARRAY, not an object
+      if (Array.isArray(templateSections)) {
+        templateSections.forEach((section: any, sectionIndex: number) => {
+          const sectionId = section.id; // e.g., "normalBoardImages"
+          const sectionItems = section.items || [];
+          
+          // Initialize section in mapped data
+          jsonData[sectionId] = {};
+          
+          // Items is also an ARRAY
+          if (Array.isArray(sectionItems)) {
+            sectionItems.forEach((item: any, itemIndex: number) => {
+              const itemId = item.id; // e.g., "boardOpen"
+              
+              // Look up data using numeric indices: json_data["0"]["0"]
+              const numericSectionData = rawJsonData?.[sectionIndex.toString()];
+              const itemData = numericSectionData?.[itemIndex.toString()];
+              
+              if (itemData) {
+                jsonData[sectionId][itemId] = itemData;
+                console.log(`📄 PDF: Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`, itemData);
+              } else {
+                // Initialize empty
+                jsonData[sectionId][itemId] = {};
+              }
+            });
+          }
+        });
+      } else {
+        // Fallback: if sections is already an object, use rawJsonData as-is
+        jsonData = rawJsonData;
+      }
+      
+      console.log('📄 PDF: MAPPED jsonData structure:', JSON.stringify(jsonData, null, 2));
 
       const date = new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 
