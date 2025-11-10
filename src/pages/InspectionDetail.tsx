@@ -657,11 +657,45 @@ const InspectionDetail = () => {
         }
       }
 
-      // Use json_data directly without any mapping
+      // Create mapping bridge: numeric DB keys → template string keys
+      let mappedJsonData: InspectionData['jsonData'] = {};
       const rawJsonData = inspData.json_data as any;
       
       console.log('🔍 RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
-      console.log('🔍 Template sections:', templateData?.template_data?.sections);
+      
+      if (rawJsonData && templateData?.template_data?.sections) {
+        // Get ordered section keys (exclude general/observation sections)
+        const sectionKeys = Object.keys(templateData.template_data.sections).filter((key: string) => {
+          const lowerKey = key.toLowerCase();
+          const lowerName = templateData.template_data.sections[key].name?.toLowerCase() || '';
+          return !lowerKey.includes('general') && !lowerName.includes('general') &&
+                 !lowerKey.includes('observation') && !lowerName.includes('observation');
+        });
+        
+        console.log('🔍 Template section keys (ordered):', sectionKeys);
+        
+        // Map numeric DB keys to template string keys
+        Object.keys(rawJsonData).forEach(dbKey => {
+          if (dbKey === 'tenants') {
+            return; // Skip tenants, handled separately
+          }
+          
+          const numericIndex = parseInt(dbKey);
+          if (!isNaN(numericIndex) && numericIndex < sectionKeys.length) {
+            // Map: numeric key → template string key by index
+            const templateKey = sectionKeys[numericIndex];
+            mappedJsonData[templateKey] = rawJsonData[dbKey];
+            console.log(`✅ Mapped DB key "${dbKey}" → Template key "${templateKey}"`, rawJsonData[dbKey]);
+          } else {
+            // Preserve non-numeric keys as-is
+            mappedJsonData[dbKey] = rawJsonData[dbKey];
+            console.log(`ℹ️ Preserved key "${dbKey}" as-is`);
+          }
+        });
+      } else {
+        // Fallback: use raw data if no template
+        mappedJsonData = rawJsonData || {};
+      }
 
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
@@ -677,7 +711,7 @@ const InspectionDetail = () => {
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
         tenants: rawJsonData?.tenants || [],
-        jsonData: rawJsonData || {}
+        jsonData: mappedJsonData
       };
       
       console.log('🔍 MAPPED inspection.jsonData:', JSON.stringify(mappedInspection.jsonData, null, 2));
