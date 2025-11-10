@@ -218,12 +218,30 @@ const SubsectionDetail = () => {
     try {
       const { data, error } = await supabase
         .from('subsection_documents')
-        .select('id, file_name, file_url, category_id, uploaded_at')
+        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_type, coc_status')
         .eq('subsection_id', subsectionId)
         .order('uploaded_at', { ascending: false });
       
       if (error) throw error;
       setSupabaseDocuments(data || []);
+      
+      // Initialize COC data from documents
+      if (data && data.length > 0) {
+        const initialCocData: Record<string, any> = {};
+        data.forEach(doc => {
+          if (doc.coc_type || doc.coc_status || doc.coc_number || doc.coc_issue_date) {
+            initialCocData[doc.id] = {
+              cocType: doc.coc_type || '',
+              cocStatus: doc.coc_status || '',
+              cocNumber: doc.coc_number || '',
+              cocIssueDate: doc.coc_issue_date || ''
+            };
+          }
+        });
+        if (Object.keys(initialCocData).length > 0) {
+          setCocDataByDocument(prev => ({ ...prev, ...initialCocData }));
+        }
+      }
     } catch (error) {
       console.error("Error fetching Supabase documents:", error);
     }
@@ -993,30 +1011,10 @@ const SubsectionDetail = () => {
     try {
       setSaving(true);
       
-      // Find the subsection in Supabase by id
-      const { data: supabaseSubsection, error: findError } = await supabase
-        .from('subsections')
-        .select('id, firebase_id')
-        .eq('id', subsectionId)
-        .maybeSingle();
-      
-      if (findError) {
-        console.error("Error finding subsection:", findError);
-        toast.error("Database error: " + findError.message);
-        return;
-      }
-      
-      if (!supabaseSubsection) {
-        console.log("Subsection not found in Supabase. Firebase ID:", subsectionId);
-        toast.error("This subsection hasn't been migrated to the database yet. Please migrate this client first.");
-        return;
-      }
-      
-      // Update the subsection with new COC details from this specific document
+      // Update the document record with COC details
       const updateData: any = {
         coc_type: docData.cocType,
-        coc_status: docData.cocStatus,
-        updated_at: new Date().toISOString()
+        coc_status: docData.cocStatus
       };
       
       // Only update COC number and issue date if they have values
@@ -1028,12 +1026,12 @@ const SubsectionDetail = () => {
       }
       
       const { error: updateError } = await supabase
-        .from('subsections')
+        .from('subsection_documents')
         .update(updateData)
-        .eq('id', supabaseSubsection.id);
+        .eq('id', documentId);
       
       if (updateError) {
-        console.error("Error updating subsection:", updateError);
+        console.error("Error updating document COC details:", updateError);
         throw updateError;
       }
       
@@ -1046,7 +1044,21 @@ const SubsectionDetail = () => {
         cocIssueDate: docData.cocIssueDate || subsection.cocIssueDate
       });
       
+      // Also update the subsection record for backward compatibility
+      const { error: subsectionError } = await supabase
+        .from('subsections')
+        .update(updateData)
+        .eq('id', subsectionId);
+      
+      if (subsectionError) {
+        console.error("Error updating subsection COC details:", subsectionError);
+        // Don't throw - document update succeeded
+      }
+      
       toast.success("COC details saved successfully");
+      
+      // Refetch documents to get updated data
+      await fetchSupabaseDocuments();
     } catch (error) {
       console.error("Error saving COC details:", error);
       toast.error("Failed to save COC details");

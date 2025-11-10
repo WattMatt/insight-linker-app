@@ -1132,6 +1132,10 @@ export type Database = {
       subsection_documents: {
         Row: {
           category_id: string
+          coc_issue_date: string | null
+          coc_number: string | null
+          coc_status: string | null
+          coc_type: string | null
           file_name: string
           file_size: number | null
           file_url: string
@@ -1142,6 +1146,10 @@ export type Database = {
         }
         Insert: {
           category_id: string
+          coc_issue_date?: string | null
+          coc_number?: string | null
+          coc_status?: string | null
+          coc_type?: string | null
           file_name: string
           file_size?: number | null
           file_url: string
@@ -1152,6 +1160,10 @@ export type Database = {
         }
         Update: {
           category_id?: string
+          coc_issue_date?: string | null
+          coc_number?: string | null
+          coc_status?: string | null
+          coc_type?: string | null
           file_name?: string
           file_size?: number | null
           file_url?: string
