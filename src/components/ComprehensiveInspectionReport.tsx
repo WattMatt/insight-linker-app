@@ -33,8 +33,6 @@ export const ComprehensiveInspectionReport = ({
       const pageHeight = doc.internal.pageSize.getHeight();
 
       // Extract inspection data
-      const rawJsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
-      
       // Fetch template if available
       let template: any = null;
       if (templateId) {
@@ -53,48 +51,8 @@ export const ComprehensiveInspectionReport = ({
         return;
       }
 
-      console.log('📄 PDF: RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
-      console.log('📄 PDF: Template sections:', template.sections);
-      
-      // Check if data is already in string key format or numeric format
-      const topLevelKeys = rawJsonData ? Object.keys(rawJsonData) : [];
-      const isNumericFormat = topLevelKeys.some(key => !isNaN(Number(key)));
-      
-      console.log('📄 PDF: Data format:', isNumericFormat ? 'NUMERIC' : 'STRING KEYS');
-      
-      // Map data to string keys if needed
-      let jsonData: any = {};
-      
-      if (isNumericFormat && Array.isArray(template.sections)) {
-        // Data uses numeric indices - map to string keys
-        template.sections.forEach((section: any, sectionIndex: number) => {
-          const sectionId = section.id;
-          const sectionItems = section.items || [];
-          
-          jsonData[sectionId] = {};
-          
-          if (Array.isArray(sectionItems)) {
-            sectionItems.forEach((item: any, itemIndex: number) => {
-              const itemId = item.id;
-              const numericSectionData = rawJsonData?.[sectionIndex.toString()];
-              const itemData = numericSectionData?.[itemIndex.toString()];
-              
-              if (itemData) {
-                jsonData[sectionId][itemId] = itemData;
-                console.log(`📄 PDF: Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`);
-              } else {
-                jsonData[sectionId][itemId] = {};
-              }
-            });
-          }
-        });
-      } else {
-        // Data already uses string keys - use directly
-        jsonData = rawJsonData;
-        console.log('📄 PDF: Using string key data directly');
-      }
-      
-      console.log('📄 PDF: MAPPED jsonData structure:', JSON.stringify(jsonData, null, 2));
+      // All data is now normalized to use string keys (e.g., jsonData["sectionId"]["itemId"])
+      const jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
 
       const date = new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 

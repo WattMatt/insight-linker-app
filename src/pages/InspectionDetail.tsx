@@ -657,51 +657,8 @@ const InspectionDetail = () => {
         }
       }
 
-      // Two-level mapping: Convert numeric DB keys to string template keys
-      const rawJsonData = inspData.json_data as any;
-      const templateSections = templateData?.sections || [];
-      
-      console.log('🔍 RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
-      console.log('🔍 Template sections array:', templateSections);
-      
-      // Check if data is already in string key format or numeric format
-      const isNumericFormat = rawJsonData && Object.keys(rawJsonData).some(key => !isNaN(Number(key)));
-      
-      console.log('🔍 Data format:', isNumericFormat ? 'NUMERIC' : 'STRING KEYS');
-      
-      // Create mapped jsonData with string keys
-      let mappedJsonData: any = {};
-      
-      if (isNumericFormat && Array.isArray(templateSections)) {
-        // Data uses numeric indices - map to string keys
-        templateSections.forEach((section: any, sectionIndex: number) => {
-          const sectionId = section.id;
-          const sectionItems = section.items || [];
-          
-          mappedJsonData[sectionId] = {};
-          
-          if (Array.isArray(sectionItems)) {
-            sectionItems.forEach((item: any, itemIndex: number) => {
-              const itemId = item.id;
-              const numericSectionData = rawJsonData?.[sectionIndex.toString()];
-              const itemData = numericSectionData?.[itemIndex.toString()];
-              
-              if (itemData) {
-                mappedJsonData[sectionId][itemId] = itemData;
-                console.log(`✅ Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`, itemData);
-              } else {
-                mappedJsonData[sectionId][itemId] = {};
-              }
-            });
-          }
-        });
-      } else {
-        // Data already uses string keys - use directly
-        mappedJsonData = rawJsonData || {};
-        console.log('✅ Using string key data directly');
-      }
-      
-      console.log('🔍 MAPPED jsonData structure:', JSON.stringify(mappedJsonData, null, 2));
+      // All data is now normalized to use string keys (e.g., jsonData["sectionId"]["itemId"])
+      const jsonData = inspData.json_data as any;
 
       const mappedInspection: InspectionData = {
         type: inspData.status || '',
@@ -716,12 +673,12 @@ const InspectionDetail = () => {
         testingParty: inspData.testing_party || '',
         location: inspData.location || '',
         quality_rating: inspData.quality_rating || undefined,
-        tenants: rawJsonData?.tenants || [],
-        jsonData: mappedJsonData || {}
+        tenants: jsonData?.tenants || [],
+        jsonData: jsonData || {}
       };
 
       setInspection(mappedInspection);
-      setTenants((inspData.json_data as any)?.tenants || []);
+      setTenants(jsonData?.tenants || []);
       
       // Set site and subsection data
       if (inspData.sites) {
@@ -821,7 +778,7 @@ const InspectionDetail = () => {
           setActiveTab('general');
         }
       } else {
-        // No template - create a basic structure from json_data if it exists
+        // No template - create a basic structure from jsonData if it exists
         if (mappedInspection.jsonData && Object.keys(mappedInspection.jsonData).length > 0) {
           const sections: any = {};
           const imageCategories = ['General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'];
@@ -1502,12 +1459,6 @@ const InspectionDetail = () => {
     
     // Get photos array
     const photos: string[] = itemData.photos || [];
-    
-    console.log(`📸 Item ${sectionKey}.${itemKey}:`, {
-      itemData,
-      hasPhotos: photos.length > 0,
-      photos
-    });
     
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
