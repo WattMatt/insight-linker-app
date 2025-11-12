@@ -53,46 +53,45 @@ export const ComprehensiveInspectionReport = ({
         return;
       }
 
-      // Two-level mapping: Convert numeric DB keys to string template keys
-      const templateSections = template?.sections || [];
-      
       console.log('📄 PDF: RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
-      console.log('📄 PDF: Template sections:', templateSections);
+      console.log('📄 PDF: Template sections:', template.sections);
       
-      // Create mapped jsonData with string keys
+      // Check if data is already in string key format or numeric format
+      const topLevelKeys = rawJsonData ? Object.keys(rawJsonData) : [];
+      const isNumericFormat = topLevelKeys.some(key => !isNaN(Number(key)));
+      
+      console.log('📄 PDF: Data format:', isNumericFormat ? 'NUMERIC' : 'STRING KEYS');
+      
+      // Map data to string keys if needed
       let jsonData: any = {};
       
-      // Template sections is an ARRAY, not an object
-      if (Array.isArray(templateSections)) {
-        templateSections.forEach((section: any, sectionIndex: number) => {
-          const sectionId = section.id; // e.g., "normalBoardImages"
+      if (isNumericFormat && Array.isArray(template.sections)) {
+        // Data uses numeric indices - map to string keys
+        template.sections.forEach((section: any, sectionIndex: number) => {
+          const sectionId = section.id;
           const sectionItems = section.items || [];
           
-          // Initialize section in mapped data
           jsonData[sectionId] = {};
           
-          // Items is also an ARRAY
           if (Array.isArray(sectionItems)) {
             sectionItems.forEach((item: any, itemIndex: number) => {
-              const itemId = item.id; // e.g., "boardOpen"
-              
-              // Look up data using numeric indices: json_data["0"]["0"]
+              const itemId = item.id;
               const numericSectionData = rawJsonData?.[sectionIndex.toString()];
               const itemData = numericSectionData?.[itemIndex.toString()];
               
               if (itemData) {
                 jsonData[sectionId][itemId] = itemData;
-                console.log(`📄 PDF: Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`, itemData);
+                console.log(`📄 PDF: Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`);
               } else {
-                // Initialize empty
                 jsonData[sectionId][itemId] = {};
               }
             });
           }
         });
       } else {
-        // Fallback: if sections is already an object, use rawJsonData as-is
+        // Data already uses string keys - use directly
         jsonData = rawJsonData;
+        console.log('📄 PDF: Using string key data directly');
       }
       
       console.log('📄 PDF: MAPPED jsonData structure:', JSON.stringify(jsonData, null, 2));
