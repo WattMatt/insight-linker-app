@@ -664,24 +664,25 @@ const InspectionDetail = () => {
       console.log('🔍 RAW DATABASE json_data:', JSON.stringify(rawJsonData, null, 2));
       console.log('🔍 Template sections array:', templateSections);
       
-      // Create mapped jsonData with string keys
-      const mappedJsonData: any = {};
+      // Check if data is already in string key format or numeric format
+      const isNumericFormat = rawJsonData && Object.keys(rawJsonData).some(key => !isNaN(Number(key)));
       
-      // Template sections is an ARRAY, not an object
-      if (Array.isArray(templateSections)) {
+      console.log('🔍 Data format:', isNumericFormat ? 'NUMERIC' : 'STRING KEYS');
+      
+      // Create mapped jsonData with string keys
+      let mappedJsonData: any = {};
+      
+      if (isNumericFormat && Array.isArray(templateSections)) {
+        // Data uses numeric indices - map to string keys
         templateSections.forEach((section: any, sectionIndex: number) => {
-          const sectionId = section.id; // e.g., "normalBoardImages"
+          const sectionId = section.id;
           const sectionItems = section.items || [];
           
-          // Initialize section in mapped data
           mappedJsonData[sectionId] = {};
           
-          // Items is also an ARRAY
           if (Array.isArray(sectionItems)) {
             sectionItems.forEach((item: any, itemIndex: number) => {
-              const itemId = item.id; // e.g., "boardOpen"
-              
-              // Look up data using numeric indices: json_data["0"]["0"]
+              const itemId = item.id;
               const numericSectionData = rawJsonData?.[sectionIndex.toString()];
               const itemData = numericSectionData?.[itemIndex.toString()];
               
@@ -689,12 +690,15 @@ const InspectionDetail = () => {
                 mappedJsonData[sectionId][itemId] = itemData;
                 console.log(`✅ Mapped [${sectionIndex}][${itemIndex}] → [${sectionId}][${itemId}]`, itemData);
               } else {
-                // Initialize empty
                 mappedJsonData[sectionId][itemId] = {};
               }
             });
           }
         });
+      } else {
+        // Data already uses string keys - use directly
+        mappedJsonData = rawJsonData || {};
+        console.log('✅ Using string key data directly');
       }
       
       console.log('🔍 MAPPED jsonData structure:', JSON.stringify(mappedJsonData, null, 2));
