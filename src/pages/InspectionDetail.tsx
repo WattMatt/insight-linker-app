@@ -22,6 +22,11 @@ import { useCamera } from "@/hooks/useCamera";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { RobustImage } from "@/components/RobustImage";
 import { Breadcrumbs } from "@/components/Breadcrumb";
+import { 
+  generateInspectionImagePath, 
+  generateTenantImagePath, 
+  renameInspectionImages 
+} from "@/lib/imageNaming";
 
 interface InspectionTemplate {
   name: string;
@@ -107,6 +112,7 @@ const InspectionDetail = () => {
   const fileInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [uploadingImages, setUploadingImages] = useState<Set<string>>(new Set());
   const [migratingImages, setMigratingImages] = useState<Set<string>>(new Set());
+  const [renamingImages, setRenamingImages] = useState(false);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
   const [snags, setSnags] = useState<any[]>([]);
   const [loadingSnags, setLoadingSnags] = useState(false);
@@ -382,8 +388,17 @@ const InspectionDetail = () => {
     try {
       const file = files[0];
       const fileExt = file.name.split('.').pop();
-      const timestamp = Date.now();
-      const filePath = `${inspectionId}/tenants/${tenantId}/${field}/${timestamp}.${fileExt}`;
+      
+      // Generate descriptive file name with client/site/subsection info
+      const filePath = generateTenantImagePath({
+        clientName: siteData?.siteName || 'unknown-client',
+        siteName: siteData?.siteName || 'unknown-site',
+        subsectionName: subsectionData?.name || 'unknown-subsection',
+        inspectionId: inspectionId!,
+        tenantId,
+        field,
+        fileExtension: fileExt || 'jpg'
+      });
 
       // Use the robust upload with retry logic
       const result = await uploadImage(file, 'inspection-photos', filePath);
@@ -961,8 +976,18 @@ const InspectionDetail = () => {
         }
         
         const fileExt = file.name.split('.').pop();
-        const timestamp = Date.now();
-        const fileName = `${inspectionId}/${sectionKey}/${itemKey}/${timestamp}-${i + 1}.${fileExt}`;
+        
+        // Generate descriptive file name with client/site/subsection info
+        const fileName = generateInspectionImagePath({
+          clientName: siteData?.siteName || 'unknown-client',
+          siteName: siteData?.siteName || 'unknown-site',
+          subsectionName: subsectionData?.name || 'unknown-subsection',
+          inspectionId: inspectionId!,
+          sectionKey,
+          itemKey,
+          index: i,
+          fileExtension: fileExt || 'jpg'
+        });
 
         console.log('Uploading to storage:', fileName);
         const { data, error } = await supabase.storage
@@ -1208,6 +1233,46 @@ const InspectionDetail = () => {
     }
   };
 
+  const handleRenameExistingImages = async () => {
+    if (!inspection || !siteData || !subsectionData) {
+      console.log('Missing required data for renaming images');
+      return;
+    }
+
+    try {
+      setRenamingImages(true);
+      toast.info("Optimizing image names...");
+
+      const result = await renameInspectionImages(
+        inspectionId!,
+        siteData.siteName || 'unknown-client',
+        siteData.siteName || 'unknown-site',
+        subsectionData.name || 'unknown-subsection',
+        inspection.jsonData
+      );
+
+      if (result.renamedCount > 0) {
+        // Update inspection with new URLs
+        setInspection(prev => prev ? { ...prev, jsonData: result.updatedJsonData } : null);
+        toast.success(`Optimized ${result.renamedCount} image name(s)`);
+        
+        if (result.failedCount > 0) {
+          toast.warning(`${result.failedCount} image(s) could not be renamed`);
+        }
+      } else {
+        console.log('No images needed renaming');
+      }
+
+      return result.updatedJsonData;
+    } catch (error) {
+      console.error("Error renaming images:", error);
+      toast.error("Failed to optimize image names");
+      return inspection.jsonData;
+    } finally {
+      setRenamingImages(false);
+    }
+  };
+
   const handleSave = async () => {
     if (!inspection) return;
 
@@ -1220,9 +1285,12 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
+      // Rename existing images to new descriptive format
+      const updatedJsonData = await handleRenameExistingImages();
+
       // Include tenants in json_data
       const jsonDataWithTenants = {
-        ...inspection.jsonData,
+        ...(updatedJsonData || inspection.jsonData),
         tenants: tenants
       } as any;
 
@@ -1660,6 +1728,8 @@ const InspectionDetail = () => {
               templateId={templateId}
               subsectionId={subsectionId}
               siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
+              inspectionId={inspectionId}
+              clientName={siteData?.siteName}
             />
           )}
           <Button 
@@ -1669,9 +1739,9 @@ const InspectionDetail = () => {
             <X className="mr-2 h-4 w-4" />
             Exit
           </Button>
-          <Button onClick={handleSave} disabled={saving}>
+          <Button onClick={handleSave} disabled={saving || renamingImages}>
             <Save className="mr-2 h-4 w-4" />
-            {saving ? 'Saving...' : 'Save'}
+            {saving ? 'Saving...' : renamingImages ? 'Optimizing...' : 'Save'}
           </Button>
         </div>
       </div>

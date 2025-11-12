@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
+import { renameInspectionImages } from "@/lib/imageNaming";
 
 interface ComprehensiveInspectionReportProps {
   inspectionData: any;
@@ -13,6 +14,8 @@ interface ComprehensiveInspectionReportProps {
   templateId?: string | null;
   subsectionId?: string;
   siteLogoUrl?: string | null;
+  inspectionId?: string;
+  clientName?: string;
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -22,6 +25,8 @@ export const ComprehensiveInspectionReport = ({
   templateId,
   subsectionId,
   siteLogoUrl,
+  inspectionId,
+  clientName,
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -48,11 +53,27 @@ export const ComprehensiveInspectionReport = ({
       if (!template) {
         toast.error("Cannot generate report without a template");
         setGenerating(false);
-        return;
+        return null;
       }
 
-      // All data is now normalized to use string keys (e.g., jsonData["sectionId"]["itemId"])
-      const jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
+      // Rename images to descriptive format before generating PDF
+      let jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
+      
+      if (inspectionId && clientName) {
+        toast.info("Optimizing image names...");
+        const renameResult = await renameInspectionImages(
+          inspectionId,
+          clientName || siteName,
+          siteName,
+          subsectionName,
+          jsonData
+        );
+        
+        if (renameResult.renamedCount > 0) {
+          jsonData = renameResult.updatedJsonData;
+          console.log(`Renamed ${renameResult.renamedCount} images for PDF`);
+        }
+      }
 
       const date = new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 
