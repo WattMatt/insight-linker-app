@@ -1014,16 +1014,10 @@ const SubsectionDetail = () => {
       // Update the document record with COC details
       const updateData: any = {
         coc_type: docData.cocType,
-        coc_status: docData.cocStatus
+        coc_status: docData.cocStatus,
+        coc_number: docData.cocNumber || null,
+        coc_issue_date: docData.cocIssueDate || null
       };
-      
-      // Only update COC number and issue date if they have values
-      if (docData.cocNumber) {
-        updateData.coc_number = docData.cocNumber;
-      }
-      if (docData.cocIssueDate) {
-        updateData.coc_issue_date = docData.cocIssueDate;
-      }
       
       const { error: updateError } = await supabase
         .from('subsection_documents')
