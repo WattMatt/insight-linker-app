@@ -697,10 +697,31 @@ const InspectionDetail = () => {
       
       // Set site and subsection data
       if (inspData.sites) {
+        let siteImageUrl = inspData.sites.site_image_url;
+        
+        // Generate signed URL for site image if it exists (site-images bucket is private)
+        if (siteImageUrl) {
+          try {
+            const urlParts = siteImageUrl.split('/site-images/');
+            if (urlParts.length > 1) {
+              const path = urlParts[1].split('?')[0];
+              const { data: signedData } = await supabase.storage
+                .from('site-images')
+                .createSignedUrl(path, 3600);
+              
+              if (signedData?.signedUrl) {
+                siteImageUrl = signedData.signedUrl;
+              }
+            }
+          } catch (error) {
+            console.error('Error generating signed URL for site image:', error);
+          }
+        }
+        
         setSiteData({ 
           siteName: inspData.sites.name, 
           physicalAddress: inspData.sites.address,
-          siteImageUrl: inspData.sites.site_image_url,
+          siteImageUrl,
           clientLogoUrl: inspData.sites.client_logo_url
         });
       }

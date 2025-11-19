@@ -351,7 +351,27 @@ const SiteDetail = () => {
       if (subsectionsRes.error) throw subsectionsRes.error;
       if (inspectionsRes.error) throw inspectionsRes.error;
 
-      setSite(siteRes.data);
+      // Generate signed URL for site image if it exists (site-images bucket is private)
+      let siteData = siteRes.data;
+      if (siteData?.site_image_url) {
+        try {
+          const urlParts = siteData.site_image_url.split('/site-images/');
+          if (urlParts.length > 1) {
+            const path = urlParts[1].split('?')[0];
+            const { data: signedData } = await supabase.storage
+              .from('site-images')
+              .createSignedUrl(path, 3600);
+            
+            if (signedData?.signedUrl) {
+              siteData = { ...siteData, site_image_url: signedData.signedUrl };
+            }
+          }
+        } catch (error) {
+          console.error('Error generating signed URL for site image:', error);
+        }
+      }
+      
+      setSite(siteData);
       const subs = subsectionsRes.data || [];
       const insp = inspectionsRes.data || [];
       
