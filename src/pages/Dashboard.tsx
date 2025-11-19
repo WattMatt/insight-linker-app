@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { VerificationDashboardWidget } from "@/components/VerificationDashboardWidget";
+import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
 
 interface DashboardStats {
   totalClients: number;
@@ -319,6 +320,9 @@ const Dashboard = () => {
             )}
           </CardContent>
         </Card>
+
+        {/* Recent Site Assignments */}
+        <RecentAssignmentsWidget />
 
         {/* Verification Feedback Widget */}
         <VerificationDashboardWidget />
