@@ -182,24 +182,25 @@ export const FloorPlanViewer = ({
   return (
     <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-muted/10">
       {/* Toolbar */}
-      <div className="flex items-center gap-2 p-3 border-b bg-card">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <MapPin className="w-4 h-4" />
-          <span>Click to add pin</span>
-          <span className="text-xs">• Hold Shift to pan</span>
+      <div className="flex items-center gap-1 sm:gap-2 p-2 sm:p-3 border-b bg-card">
+        <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
+          <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
+          <span className="hidden sm:inline">Click to add pin</span>
+          <span className="text-[10px] sm:text-xs sm:hidden">• Hold Shift to pan</span>
+          <span className="text-[10px] sm:text-xs hidden sm:inline">• Hold Shift to pan</span>
         </div>
         <div className="flex-1" />
-        <Button variant="outline" size="icon" onClick={handleZoomOut}>
-          <ZoomOut className="w-4 h-4" />
+        <Button variant="outline" size="icon" onClick={handleZoomOut} className="h-8 w-8 sm:h-9 sm:w-9">
+          <ZoomOut className="w-3 h-3 sm:w-4 sm:h-4" />
         </Button>
-        <span className="text-sm text-muted-foreground min-w-12 text-center">
+        <span className="text-xs sm:text-sm text-muted-foreground min-w-8 sm:min-w-12 text-center">
           {Math.round(scale * 100)}%
         </span>
-        <Button variant="outline" size="icon" onClick={handleZoomIn}>
-          <ZoomIn className="w-4 h-4" />
+        <Button variant="outline" size="icon" onClick={handleZoomIn} className="h-8 w-8 sm:h-9 sm:w-9">
+          <ZoomIn className="w-3 h-3 sm:w-4 sm:h-4" />
         </Button>
-        <Button variant="outline" size="icon" onClick={handleResetView} title="Reset view">
-          <Maximize2 className="w-4 h-4" />
+        <Button variant="outline" size="icon" onClick={handleResetView} title="Reset view" className="h-8 w-8 sm:h-9 sm:w-9">
+          <Maximize2 className="w-3 h-3 sm:w-4 sm:h-4" />
         </Button>
       </div>
 
