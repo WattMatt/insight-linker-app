@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Users, Building2 } from "lucide-react";
+import { Loader2, Plus, Trash2, Users, Building2, History, UserPlus, UserMinus } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface Contractor {
@@ -35,6 +35,30 @@ interface Assignment {
     email: string;
     full_name: string | null;
   };
+}
+
+interface HistoryEntry {
+  id: string;
+  user_id: string;
+  site_id: string;
+  action: 'assigned' | 'removed';
+  performed_by: string | null;
+  performed_at: string;
+  user_profile: {
+    email: string;
+    full_name: string | null;
+  } | null;
+  site_info: {
+    name: string;
+    clients: {
+      name: string;
+      company_name: string | null;
+    };
+  } | null;
+  performer_profile: {
+    email: string;
+    full_name: string | null;
+  } | null;
 }
 
 const SiteAssignments = () => {
@@ -115,6 +139,48 @@ const SiteAssignments = () => {
     },
   });
 
+  // Fetch assignment history
+  const { data: history, isLoading: loadingHistory } = useQuery({
+    queryKey: ["site-assignment-history"],
+    queryFn: async () => {
+      const { data: historyData, error } = await supabase
+        .from("user_sites_history")
+        .select("*")
+        .order("performed_at", { ascending: false })
+        .limit(50);
+
+      if (error) throw error;
+      if (!historyData || historyData.length === 0) return [];
+
+      // Fetch all unique user IDs, site IDs, and performer IDs
+      const userIds = [...new Set(historyData.map(h => h.user_id))];
+      const siteIds = [...new Set(historyData.map(h => h.site_id))];
+      const performerIds = [...new Set(historyData.map(h => h.performed_by).filter(Boolean))];
+
+      // Fetch profiles
+      const { data: profiles } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", [...userIds, ...performerIds]);
+
+      // Fetch sites
+      const { data: sites } = await supabase
+        .from("sites")
+        .select("id, name, client_id, clients(name, company_name)")
+        .in("id", siteIds);
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      const siteMap = new Map(sites?.map(s => [s.id, s]) || []);
+
+      return historyData.map(h => ({
+        ...h,
+        user_profile: profileMap.get(h.user_id) || null,
+        site_info: siteMap.get(h.site_id) || null,
+        performer_profile: h.performed_by ? profileMap.get(h.performed_by) || null : null,
+      })) as HistoryEntry[];
+    },
+  });
+
   // Add assignment mutation
   const addAssignment = useMutation({
     mutationFn: async ({ contractorId, siteId }: { contractorId: string; siteId: string }) => {
@@ -173,7 +239,7 @@ const SiteAssignments = () => {
     addAssignment.mutate({ contractorId: selectedContractor, siteId: selectedSite });
   };
 
-  const isLoading = loadingContractors || loadingSites || loadingAssignments;
+  const isLoading = loadingContractors || loadingSites || loadingAssignments || loadingHistory;
 
   if (isLoading) {
     return (
@@ -329,6 +395,70 @@ const SiteAssignments = () => {
               </Card>
             ))}
           </div>
+        )}
+      </div>
+
+      <div className="space-y-4">
+        <h2 className="text-2xl font-semibold flex items-center gap-2">
+          <History className="h-5 w-5" />
+          Assignment History
+        </h2>
+        
+        {!history || history.length === 0 ? (
+          <Card>
+            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+              <History className="h-12 w-12 text-muted-foreground mb-4" />
+              <p className="text-muted-foreground">No assignment history yet</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <div className="space-y-3">
+                {history.map((entry) => (
+                  <div
+                    key={entry.id}
+                    className="flex items-start gap-3 p-4 border rounded-lg bg-card hover:bg-accent/5 transition-colors"
+                  >
+                    <div className={`mt-1 ${entry.action === 'assigned' ? 'text-green-500' : 'text-destructive'}`}>
+                      {entry.action === 'assigned' ? (
+                        <UserPlus className="h-5 w-5" />
+                      ) : (
+                        <UserMinus className="h-5 w-5" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium">
+                            {entry.user_profile?.full_name || entry.user_profile?.email || 'Unknown User'}
+                          </p>
+                          <p className="text-sm text-muted-foreground">
+                            {entry.action === 'assigned' ? 'assigned to' : 'removed from'}{' '}
+                            <span className="font-medium text-foreground">
+                              {entry.site_info?.name || 'Unknown Site'}
+                            </span>
+                            {entry.site_info?.clients && (
+                              <span className="text-muted-foreground">
+                                {' '}• {entry.site_info.clients.company_name || entry.site_info.clients.name}
+                              </span>
+                            )}
+                          </p>
+                          <p className="text-xs text-muted-foreground mt-1">
+                            By {entry.performer_profile?.full_name || entry.performer_profile?.email || 'System'}{' '}
+                            • {new Date(entry.performed_at).toLocaleString()}
+                          </p>
+                        </div>
+                        <Badge variant={entry.action === 'assigned' ? 'default' : 'secondary'}>
+                          {entry.action}
+                        </Badge>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

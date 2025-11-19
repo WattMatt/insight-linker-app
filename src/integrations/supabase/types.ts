@@ -1489,6 +1489,36 @@ export type Database = {
           },
         ]
       }
+      user_sites_history: {
+        Row: {
+          action: string
+          id: string
+          notes: string | null
+          performed_at: string
+          performed_by: string | null
+          site_id: string
+          user_id: string
+        }
+        Insert: {
+          action: string
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          site_id: string
+          user_id: string
+        }
+        Update: {
+          action?: string
+          id?: string
+          notes?: string | null
+          performed_at?: string
+          performed_by?: string | null
+          site_id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_storage_connections: {
         Row: {
           access_token: string | null
