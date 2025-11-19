@@ -1182,6 +1182,19 @@ const SubsectionDetail = () => {
     if (!uploadFile || !uploadCategoryId || !subsectionId) return;
     
     try {
+      // Validation checks
+      if (!uploadFile) {
+        toast.error("No file selected");
+        return;
+      }
+
+      // Check file size (max 50MB)
+      const maxSize = 50 * 1024 * 1024; // 50MB
+      if (uploadFile.size > maxSize) {
+        toast.error(`File size exceeds maximum limit of 50MB. Selected file is ${(uploadFile.size / (1024 * 1024)).toFixed(2)}MB`);
+        return;
+      }
+
       setUploadingFile(true);
       toast.info("Uploading document...");
 
@@ -1201,15 +1214,30 @@ const SubsectionDetail = () => {
         .from('documents')
         .upload(fileName, uploadFile);
 
-      if (uploadError) throw uploadError;
+      if (uploadError) {
+        console.error("Storage upload error:", uploadError);
+        throw new Error(`Upload failed: ${uploadError.message}`);
+      }
+
+      if (!uploadData?.path) {
+        throw new Error("Upload succeeded but no path returned");
+      }
 
       // Get public URL
       const { data: urlData } = supabase.storage
         .from('documents')
         .getPublicUrl(uploadData.path);
 
+      if (!urlData?.publicUrl) {
+        throw new Error("Failed to generate public URL for uploaded file");
+      }
+
       // Get current user
       const { data: { user } } = await supabase.auth.getUser();
+
+      if (!user) {
+        throw new Error("User not authenticated");
+      }
 
       // Insert document record
       const { error: insertError } = await supabase
@@ -1220,18 +1248,35 @@ const SubsectionDetail = () => {
           file_name: uploadFile.name,
           file_url: urlData.publicUrl,
           file_size: uploadFile.size,
-          uploaded_by: user?.id
+          uploaded_by: user.id
         });
 
-      if (insertError) throw insertError;
+      if (insertError) {
+        console.error("Database insert error:", insertError);
+        throw new Error(`Failed to save document record: ${insertError.message}`);
+      }
 
       toast.success("Document uploaded successfully!");
       setUploadCategoryId(null);
       setUploadFile(null);
       fetchSupabaseDocuments();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error uploading document:", error);
-      toast.error("Failed to upload document");
+      
+      // Provide specific error messages
+      let errorMessage = "Failed to upload document";
+      
+      if (error?.message) {
+        errorMessage = error.message;
+      } else if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.error_description) {
+        errorMessage = error.error_description;
+      }
+      
+      toast.error(errorMessage, {
+        duration: 5000,
+      });
     } finally {
       setUploadingFile(false);
     }
@@ -3026,6 +3071,33 @@ const SubsectionDetail = () => {
                             
                             // Auto-trigger upload
                             try {
+                              // Validation checks
+                              if (!file) {
+                                toast.error("No file selected");
+                                return;
+                              }
+
+                              // Check file size (max 50MB)
+                              const maxSize = 50 * 1024 * 1024; // 50MB
+                              if (file.size > maxSize) {
+                                toast.error(`File size exceeds maximum limit of 50MB. Selected file is ${(file.size / (1024 * 1024)).toFixed(2)}MB`);
+                                return;
+                              }
+
+                              // Check file type
+                              const allowedTypes = [
+                                'application/pdf',
+                                'application/msword',
+                                'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                                'image/jpeg',
+                                'image/jpg',
+                                'image/png'
+                              ];
+                              if (!allowedTypes.includes(file.type)) {
+                                toast.error(`Invalid file type. Please upload PDF, DOC, DOCX, JPG, or PNG files only.`);
+                                return;
+                              }
+
                               setUploadingFile(true);
                               toast.info("Uploading COC document...");
 
@@ -3037,13 +3109,28 @@ const SubsectionDetail = () => {
                                 .from('documents')
                                 .upload(fileName, file);
 
-                              if (uploadError) throw uploadError;
+                              if (uploadError) {
+                                console.error("Storage upload error:", uploadError);
+                                throw new Error(`Upload failed: ${uploadError.message}`);
+                              }
+
+                              if (!uploadData?.path) {
+                                throw new Error("Upload succeeded but no path returned");
+                              }
 
                               const { data: urlData } = supabase.storage
                                 .from('documents')
                                 .getPublicUrl(uploadData.path);
 
+                              if (!urlData?.publicUrl) {
+                                throw new Error("Failed to generate public URL for uploaded file");
+                              }
+
                               const { data: { user } } = await supabase.auth.getUser();
+
+                              if (!user) {
+                                throw new Error("User not authenticated");
+                              }
 
                               const { error: insertError, data: newDoc } = await supabase
                                 .from('subsection_documents')
@@ -3053,12 +3140,19 @@ const SubsectionDetail = () => {
                                   file_name: file.name,
                                   file_url: urlData.publicUrl,
                                   file_size: file.size,
-                                  uploaded_by: user?.id
+                                  uploaded_by: user.id
                                 })
                                 .select('id')
                                 .single();
 
-                              if (insertError) throw insertError;
+                              if (insertError) {
+                                console.error("Database insert error:", insertError);
+                                throw new Error(`Failed to save document record: ${insertError.message}`);
+                              }
+
+                              if (!newDoc) {
+                                throw new Error("Document saved but no record returned");
+                              }
 
                               toast.success("COC document uploaded successfully!");
                               
@@ -3085,9 +3179,26 @@ const SubsectionDetail = () => {
                               setUploadFile(null);
                               fetchSupabaseDocuments();
                               e.target.value = ''; // Reset input
-                            } catch (error) {
+                            } catch (error: any) {
                               console.error("Error uploading COC document:", error);
-                              toast.error("Failed to upload COC document");
+                              
+                              // Provide specific error messages
+                              let errorMessage = "Failed to upload COC document";
+                              
+                              if (error?.message) {
+                                errorMessage = error.message;
+                              } else if (typeof error === 'string') {
+                                errorMessage = error;
+                              } else if (error?.error_description) {
+                                errorMessage = error.error_description;
+                              }
+                              
+                              toast.error(errorMessage, {
+                                duration: 5000,
+                              });
+                              
+                              // Reset file input on error
+                              e.target.value = '';
                             } finally {
                               setUploadingFile(false);
                             }
