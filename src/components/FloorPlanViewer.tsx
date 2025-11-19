@@ -354,10 +354,18 @@ export const FloorPlanViewer = ({
                   cursor: 'pointer',
                   zIndex: 10,
                   pointerEvents: 'auto',
+                  transition: 'transform 0.2s ease-out',
                 }}
+                className="group"
                 onClick={(e) => {
                   e.stopPropagation();
                   onPinClick(pin);
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
                 }}
               >
                 <div
@@ -374,7 +382,9 @@ export const FloorPlanViewer = ({
                     color: 'white',
                     fontWeight: 'bold',
                     fontSize: `${fontSize}px`,
+                    transition: 'box-shadow 0.2s ease-out',
                   }}
+                  className="group-hover:shadow-[0_0_20px_rgba(59,130,246,0.6)]"
                 >
                   {pin.pin_number}
                 </div>
