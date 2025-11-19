@@ -371,7 +371,7 @@ export const InteractiveFloorPlan = ({
     <div className="space-y-4">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-xl sm:text-2xl font-bold">Interactive Floor Plan</h2>
+        <h2 className="text-lg sm:text-2xl font-bold">Interactive Floor Plan</h2>
         <div className="flex gap-2">
           <label className="flex-1 sm:flex-initial">
             <Button variant="outline" disabled={isUploading} size="sm" className="w-full sm:w-auto" asChild>

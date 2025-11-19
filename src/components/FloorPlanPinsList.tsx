@@ -45,12 +45,18 @@ export const FloorPlanPinsList = ({ pins, onPinClick }: FloorPlanPinsListProps) 
 
   return (
     <Card className="h-full flex flex-col">
-      <CardHeader>
-        <CardTitle className="text-lg">Items</CardTitle>
-        <div className="flex gap-2 text-sm">
-          <Badge variant="destructive">{openSnags.length} Open Snags</Badge>
-          <Badge variant="secondary">{resolvedSnags.length} Resolved</Badge>
-          <Badge variant="default">{observations.length} Observations</Badge>
+      <CardHeader className="pb-3">
+        <CardTitle className="text-base md:text-lg">Items</CardTitle>
+        <div className="flex flex-wrap gap-2 text-xs md:text-sm">
+          <Badge variant="destructive" className="text-xs whitespace-nowrap">
+            {openSnags.length} Open Snag{openSnags.length !== 1 ? 's' : ''}
+          </Badge>
+          <Badge variant="secondary" className="text-xs whitespace-nowrap">
+            {resolvedSnags.length} Resolved
+          </Badge>
+          <Badge variant="default" className="text-xs whitespace-nowrap">
+            {observations.length} Observation{observations.length !== 1 ? 's' : ''}
+          </Badge>
         </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
