@@ -137,7 +137,7 @@ export function AppSidebar() {
               <Zap className="h-5 w-5 md:h-6 md:w-6 text-primary" />
             </div>
           )}
-          {!collapsed && (
+          {(isMobile || !collapsed) && (
             <span className="text-sm md:text-base font-semibold text-sidebar-foreground">
               {settings?.company_name || "SiteWise"}
             </span>
@@ -165,7 +165,7 @@ export function AppSidebar() {
                         }
                       >
                         <item.icon className="h-5 w-5 md:h-4 md:w-4" />
-                        {!collapsed && <span className="text-base md:text-sm">{item.title}</span>}
+                        {(isMobile || !collapsed) && <span className="text-base md:text-sm">{item.title}</span>}
                       </NavLink>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
@@ -186,7 +186,7 @@ export function AppSidebar() {
                   {getInitials(currentUser.full_name)}
                 </AvatarFallback>
               </Avatar>
-              {!collapsed && (
+              {(isMobile || !collapsed) && (
                 <div className="flex-1 min-w-0">
                   <p className="text-sm md:text-sm font-medium text-sidebar-foreground truncate">
                     {currentUser.full_name || "User"}
@@ -204,7 +204,7 @@ export function AppSidebar() {
             <SidebarMenuItem>
               <SidebarMenuButton onClick={handleLogout} className="h-12 md:h-10">
                 <LogOut className="h-5 w-5 md:h-4 md:w-4" />
-                {!collapsed && <span className="text-base md:text-sm">Logout</span>}
+                {(isMobile || !collapsed) && <span className="text-base md:text-sm">Logout</span>}
               </SidebarMenuButton>
             </SidebarMenuItem>
           </SidebarMenu>
