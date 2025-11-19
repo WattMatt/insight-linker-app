@@ -25,6 +25,7 @@ import TemplateBuilderPage from "./pages/TemplateBuilderPage";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
+import SiteAssignments from "./pages/SiteAssignments";
 import NotFound from "./pages/NotFound";
 import ValidationFeedback from "./pages/ValidationFeedback";
 import AdminClientPreview from "./pages/AdminClientPreview";
@@ -272,6 +273,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <Settings />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/site-assignments"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SiteAssignments />
                 </DashboardLayout>
               </ProtectedRoute>
             }
