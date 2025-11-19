@@ -2,72 +2,97 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { UserPlus, UserMinus, Users } from "lucide-react";
-import { formatDistanceToNow } from "date-fns";
+import { Building2, Users } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-interface HistoryEntry {
-  id: string;
-  user_id: string;
+interface SiteWithContractors {
   site_id: string;
-  action: 'assigned' | 'removed';
-  performed_by: string | null;
-  performed_at: string;
-  user_profile: {
-    email: string;
-    full_name: string | null;
-  } | null;
-  site_info: {
+  site_name: string;
+  client_name: string;
+  client_company: string | null;
+  contractors: Array<{
+    id: string;
     name: string;
-    clients: {
-      name: string;
-      company_name: string | null;
-    };
-  } | null;
-  performer_profile: {
     email: string;
-    full_name: string | null;
-  } | null;
+  }>;
 }
 
 export const RecentAssignmentsWidget = () => {
   const navigate = useNavigate();
 
-  const { data: history, isLoading } = useQuery({
-    queryKey: ["recent-site-assignments"],
+  const { data: sitesData, isLoading } = useQuery({
+    queryKey: ["sites-with-contractors"],
     queryFn: async () => {
-      const { data: historyData, error } = await supabase
-        .from("user_sites_history")
-        .select("*")
-        .order("performed_at", { ascending: false })
-        .limit(10);
+      // Fetch all user_sites assignments
+      const { data: assignments, error: assignmentsError } = await supabase
+        .from("user_sites")
+        .select("user_id, site_id");
 
-      if (error) throw error;
-      if (!historyData || historyData.length === 0) return [];
+      if (assignmentsError) throw assignmentsError;
+      if (!assignments || assignments.length === 0) return [];
 
-      const userIds = [...new Set(historyData.map(h => h.user_id))];
-      const siteIds = [...new Set(historyData.map(h => h.site_id))];
-      const performerIds = [...new Set(historyData.map(h => h.performed_by).filter(Boolean))];
+      // Get unique site IDs and user IDs
+      const siteIds = [...new Set(assignments.map(a => a.site_id))];
+      const userIds = [...new Set(assignments.map(a => a.user_id))];
 
-      const { data: profiles } = await supabase
-        .from("profiles")
-        .select("id, email, full_name")
-        .in("id", [...userIds, ...performerIds]);
-
-      const { data: sites } = await supabase
+      // Fetch sites with client info
+      const { data: sites, error: sitesError } = await supabase
         .from("sites")
         .select("id, name, client_id, clients(name, company_name)")
         .in("id", siteIds);
 
-      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
-      const siteMap = new Map(sites?.map(s => [s.id, s]) || []);
+      if (sitesError) throw sitesError;
 
-      return historyData.map(h => ({
-        ...h,
-        user_profile: profileMap.get(h.user_id) || null,
-        site_info: siteMap.get(h.site_id) || null,
-        performer_profile: h.performed_by ? profileMap.get(h.performed_by) || null : null,
-      })) as HistoryEntry[];
+      // Fetch contractor profiles
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Create maps for easy lookup
+      const siteMap = new Map(sites?.map(s => [s.id, s]) || []);
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+
+      // Group contractors by site
+      const siteContractorsMap = new Map<string, Set<string>>();
+      assignments.forEach(a => {
+        if (!siteContractorsMap.has(a.site_id)) {
+          siteContractorsMap.set(a.site_id, new Set());
+        }
+        siteContractorsMap.get(a.site_id)?.add(a.user_id);
+      });
+
+      // Build result array
+      const result: SiteWithContractors[] = [];
+      siteContractorsMap.forEach((contractorIds, siteId) => {
+        const site = siteMap.get(siteId);
+        if (site) {
+          const contractors = Array.from(contractorIds)
+            .map(userId => {
+              const profile = profileMap.get(userId);
+              return profile ? {
+                id: userId,
+                name: profile.full_name || profile.email,
+                email: profile.email
+              } : null;
+            })
+            .filter(Boolean) as Array<{ id: string; name: string; email: string }>;
+
+          result.push({
+            site_id: siteId,
+            site_name: site.name,
+            client_name: site.clients?.name || 'Unknown Client',
+            client_company: site.clients?.company_name || null,
+            contractors
+          });
+        }
+      });
+
+      // Sort by site name
+      return result.sort((a, b) => a.site_name.localeCompare(b.site_name));
     },
   });
 
