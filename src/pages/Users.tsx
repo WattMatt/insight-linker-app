@@ -42,6 +42,8 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2 } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 interface UserProfile {
   id: string;
@@ -144,6 +146,48 @@ const Users = () => {
         .order("name");
       if (error) throw error;
       return data;
+    },
+  });
+
+  // Fetch all site assignments grouped by site
+  const { data: siteAssignments, isLoading: assignmentsLoading } = useQuery({
+    queryKey: ["site-assignments"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("user_sites")
+        .select(`
+          site_id,
+          user_id,
+          sites (
+            id,
+            name
+          ),
+          profiles:user_id (
+            id,
+            full_name,
+            email
+          )
+        `)
+        .order("site_id");
+      
+      if (error) throw error;
+      
+      // Group by site
+      const grouped = data?.reduce((acc: any, curr: any) => {
+        const siteId = curr.site_id;
+        if (!acc[siteId]) {
+          acc[siteId] = {
+            site: curr.sites,
+            contractors: []
+          };
+        }
+        if (curr.profiles) {
+          acc[siteId].contractors.push(curr.profiles);
+        }
+        return acc;
+      }, {});
+      
+      return Object.values(grouped || {});
     },
   });
 
@@ -1320,6 +1364,64 @@ const Users = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Site Assignments Section */}
+      <Card>
+        <CardHeader>
+          <CardTitle>Site Assignments</CardTitle>
+          <CardDescription>
+            View all sites and their assigned contractors
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <ScrollArea className="h-[600px] w-full">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Site Name</TableHead>
+                  <TableHead>Assigned Contractors</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {assignmentsLoading ? (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                      Loading site assignments...
+                    </TableCell>
+                  </TableRow>
+                ) : siteAssignments && siteAssignments.length > 0 ? (
+                  siteAssignments.map((assignment: any) => (
+                    <TableRow key={assignment.site.id}>
+                      <TableCell className="font-medium">
+                        {assignment.site.name}
+                      </TableCell>
+                      <TableCell>
+                        {assignment.contractors.length > 0 ? (
+                          <div className="flex flex-wrap gap-2">
+                            {assignment.contractors.map((contractor: any) => (
+                              <Badge key={contractor.id} variant="secondary">
+                                {contractor.full_name || contractor.email}
+                              </Badge>
+                            ))}
+                          </div>
+                        ) : (
+                          <span className="text-sm text-muted-foreground">No contractors assigned</span>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  ))
+                ) : (
+                  <TableRow>
+                    <TableCell colSpan={2} className="text-center py-8 text-muted-foreground">
+                      No site assignments found
+                    </TableCell>
+                  </TableRow>
+                )}
+              </TableBody>
+            </Table>
+          </ScrollArea>
+        </CardContent>
+      </Card>
     </div>
   );
 };
