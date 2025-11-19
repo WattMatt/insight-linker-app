@@ -101,8 +101,8 @@ export const RecentAssignmentsWidget = () => {
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
-            <Users className="h-5 w-5" />
-            Recent Site Assignments
+            <Building2 className="h-5 w-5" />
+            Shared Sites & Contractors
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -116,53 +116,56 @@ export const RecentAssignmentsWidget = () => {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
-          <Users className="h-5 w-5" />
-          Recent Site Assignments
+          <Building2 className="h-5 w-5" />
+          Shared Sites & Contractors
         </CardTitle>
         <CardDescription>
-          Latest contractor access changes
+          Sites shared with contractors ({sitesData?.length || 0} total)
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {!history || history.length === 0 ? (
-          <p className="text-sm text-muted-foreground">No recent assignments</p>
+        {!sitesData || sitesData.length === 0 ? (
+          <p className="text-sm text-muted-foreground">No sites shared with contractors yet</p>
         ) : (
-          <div className="space-y-3">
-            {history.map((entry) => (
-              <div
-                key={entry.id}
-                className="flex items-start gap-3 p-3 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
-                onClick={() => navigate('/site-assignments')}
-              >
-                <div className={`mt-0.5 ${entry.action === 'assigned' ? 'text-green-500' : 'text-destructive'}`}>
-                  {entry.action === 'assigned' ? (
-                    <UserPlus className="h-4 w-4" />
-                  ) : (
-                    <UserMinus className="h-4 w-4" />
-                  )}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center justify-between gap-2 mb-1">
-                    <p className="text-sm font-medium truncate">
-                      {entry.user_profile?.full_name || entry.user_profile?.email || 'Unknown User'}
-                    </p>
-                    <Badge variant={entry.action === 'assigned' ? 'default' : 'secondary'} className="text-xs">
-                      {entry.action}
+          <ScrollArea className="h-[400px] pr-4">
+            <div className="space-y-4">
+              {sitesData.map((site) => (
+                <div
+                  key={site.site_id}
+                  className="border rounded-lg p-4 hover:bg-accent/50 transition-colors cursor-pointer"
+                  onClick={() => navigate('/site-assignments')}
+                >
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex-1 min-w-0">
+                      <h4 className="font-medium text-sm mb-1 truncate">{site.site_name}</h4>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {site.client_company || site.client_name}
+                      </p>
+                    </div>
+                    <Badge variant="secondary" className="text-xs flex-shrink-0">
+                      <Users className="h-3 w-3 mr-1" />
+                      {site.contractors.length}
                     </Badge>
                   </div>
-                  <p className="text-xs text-muted-foreground truncate">
-                    {entry.site_info?.name || 'Unknown Site'}
-                    {entry.site_info?.clients && (
-                      <span> • {entry.site_info.clients.company_name || entry.site_info.clients.name}</span>
-                    )}
-                  </p>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {formatDistanceToNow(new Date(entry.performed_at), { addSuffix: true })}
-                  </p>
+                  
+                  <div className="space-y-1">
+                    <p className="text-xs font-medium text-muted-foreground mb-2">Contractors:</p>
+                    <div className="flex flex-wrap gap-1">
+                      {site.contractors.map((contractor) => (
+                        <Badge 
+                          key={contractor.id} 
+                          variant="outline" 
+                          className="text-xs"
+                        >
+                          {contractor.name}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          </ScrollArea>
         )}
       </CardContent>
     </Card>
