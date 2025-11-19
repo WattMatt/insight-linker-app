@@ -61,15 +61,15 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
   <SidebarProvider defaultOpen={false}>
     <div className="flex min-h-screen w-full">
       <AppSidebar />
-      <main className="flex-1 flex flex-col w-full">
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6">
+      <main className="flex-1 flex flex-col w-full max-h-screen overflow-hidden">
+        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b bg-background px-4 lg:px-6 flex-shrink-0">
           <SidebarTrigger className="h-10 w-10" />
           <h1 className="text-lg font-semibold md:text-xl">Electrical Compliance</h1>
           <div className="flex-1 flex justify-end">
             <GlobalSearch />
           </div>
         </header>
-        <div className="flex-1 p-3 md:p-4 lg:p-6 overflow-x-hidden">
+        <div className="flex-1 p-3 md:p-4 lg:p-6 overflow-x-hidden overflow-y-auto overscroll-y-contain" style={{ WebkitOverflowScrolling: 'touch' }}>
           {children}
         </div>
       </main>
