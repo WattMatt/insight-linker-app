@@ -370,14 +370,14 @@ export const InteractiveFloorPlan = ({
   return (
     <div className="space-y-4">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Interactive Floor Plan</h2>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <h2 className="text-xl sm:text-2xl font-bold">Interactive Floor Plan</h2>
         <div className="flex gap-2">
-          <label>
-            <Button variant="outline" disabled={isUploading} asChild>
+          <label className="flex-1 sm:flex-initial">
+            <Button variant="outline" disabled={isUploading} size="sm" className="w-full sm:w-auto" asChild>
               <span>
-                <Upload className="w-4 h-4 mr-2" />
-                Replace Plan
+                <Upload className="w-4 h-4 sm:mr-2" />
+                <span className="hidden sm:inline">Replace Plan</span>
               </span>
             </Button>
             <input
@@ -391,24 +391,26 @@ export const InteractiveFloorPlan = ({
           <Button
             onClick={handleGenerateReport}
             disabled={isGeneratingReport || pins.length === 0}
+            size="sm"
+            className="flex-1 sm:flex-initial"
           >
             {isGeneratingReport ? (
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
             ) : (
-              <FileDown className="w-4 h-4 mr-2" />
+              <FileDown className="w-4 h-4 sm:mr-2" />
             )}
-            Export Report
+            <span className="hidden sm:inline">Export Report</span>
           </Button>
         </div>
       </div>
 
       {/* Main Content */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 h-[700px]">
-        <div className="lg:col-span-2 relative">
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[500px] lg:h-[700px]">
+        <div className="lg:col-span-2 relative min-h-[500px] lg:h-auto">
           {moveMode && (
-            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground px-6 py-3 rounded-lg shadow-lg flex items-center gap-3">
-              <span className="font-medium">
-                Click on the floor plan to move Pin #{pins.find(p => p.id === moveMode)?.pin_number}
+            <div className="absolute top-4 left-1/2 transform -translate-x-1/2 z-10 bg-primary text-primary-foreground px-3 py-2 sm:px-6 sm:py-3 rounded-lg shadow-lg flex flex-col sm:flex-row items-center gap-2 sm:gap-3 max-w-[90%]">
+              <span className="font-medium text-xs sm:text-sm text-center">
+                Click to move Pin #{pins.find(p => p.id === moveMode)?.pin_number}
               </span>
               <Button
                 size="sm"
@@ -417,6 +419,7 @@ export const InteractiveFloorPlan = ({
                   setMoveMode(null);
                   toast.info("Move cancelled");
                 }}
+                className="text-xs"
               >
                 Cancel
               </Button>
