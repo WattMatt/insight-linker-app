@@ -28,7 +28,32 @@ const ClientPortalSites = () => {
         .order("name");
 
       if (error) throw error;
-      return data;
+      
+      // Generate signed URLs for site images (site-images bucket is private)
+      const sitesWithSignedUrls = await Promise.all(
+        (data || []).map(async (site) => {
+          if (site.site_image_url) {
+            try {
+              const urlParts = site.site_image_url.split('/site-images/');
+              if (urlParts.length > 1) {
+                const path = urlParts[1].split('?')[0];
+                const { data: signedData } = await supabase.storage
+                  .from('site-images')
+                  .createSignedUrl(path, 3600);
+                
+                if (signedData?.signedUrl) {
+                  return { ...site, site_image_url: signedData.signedUrl };
+                }
+              }
+            } catch (error) {
+              console.error('Error generating signed URL for site image:', error);
+            }
+          }
+          return site;
+        })
+      );
+      
+      return sitesWithSignedUrls;
     },
   });
 
