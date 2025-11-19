@@ -49,6 +49,7 @@ const menuItems = [
   { title: "Suggestions", url: "/suggestions", icon: Lightbulb, adminOnly: true },
   { title: "Verification Management", url: "/verification-management", icon: CheckSquare, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
+  { title: "Site Assignments", url: "/site-assignments", icon: Briefcase, adminOnly: true },
   { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
   { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
