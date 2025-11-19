@@ -333,10 +333,10 @@ export const FloorPlanViewer = ({
 
           {/* Render pins on top of PDF */}
           {pins.map((pin) => {
-            // Calculate inverse scale so pins get smaller when zoomed in
-            const pinSize = 40 / scale;
-            const fontSize = 14 / scale;
-            const borderWidth = 3 / scale;
+            // Pins scale with the PDF naturally - no inverse scaling needed
+            const pinSize = 40;
+            const fontSize = 14;
+            const borderWidth = 3;
             
             return (
               <div
@@ -353,6 +353,7 @@ export const FloorPlanViewer = ({
                   justifyContent: 'center',
                   cursor: 'pointer',
                   zIndex: 10,
+                  pointerEvents: 'auto',
                 }}
                 onClick={(e) => {
                   e.stopPropagation();
@@ -366,7 +367,7 @@ export const FloorPlanViewer = ({
                     borderRadius: '50%',
                     backgroundColor: getPinColor(pin),
                     border: `${borderWidth}px solid white`,
-                    boxShadow: `0 ${2 / scale}px ${8 / scale}px rgba(0,0,0,0.3)`,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
