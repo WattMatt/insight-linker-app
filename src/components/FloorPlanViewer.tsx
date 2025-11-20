@@ -1,11 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Button } from "./ui/button";
-import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2, Layers } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2, Layers, Map } from "lucide-react";
 import { toast } from "sonner";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 import { clusterPins, isCluster, getClusterColor, type ClusteredPin } from "@/lib/pinClustering";
+import { FloorPlanMiniMap } from "./FloorPlanMiniMap";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -46,9 +47,27 @@ export const FloorPlanViewer = ({
   const [pageWidth, setPageWidth] = useState(800);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; distance?: number } | null>(null);
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
+  const [showMiniMap, setShowMiniMap] = useState(false);
+  const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
 
   // Apply clustering based on current zoom level
   const clusteredItems = clusterPins(pins, scale, expandedClusterId);
+
+  // Track container size for mini-map viewport calculation
+  useEffect(() => {
+    const updateContainerSize = () => {
+      if (containerRef.current) {
+        setContainerSize({
+          width: containerRef.current.offsetWidth,
+          height: containerRef.current.offsetHeight,
+        });
+      }
+    };
+
+    updateContainerSize();
+    window.addEventListener('resize', updateContainerSize);
+    return () => window.removeEventListener('resize', updateContainerSize);
+  }, []);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -272,6 +291,10 @@ export const FloorPlanViewer = ({
     toast.info("Cluster expanded", { duration: 2000 });
   };
 
+  const handleMiniMapNavigate = (x: number, y: number) => {
+    setPanOffset({ x, y });
+  };
+
   return (
     <div className="flex flex-col h-full border rounded-lg overflow-hidden bg-muted/10">
       {/* Toolbar */}
@@ -293,6 +316,15 @@ export const FloorPlanViewer = ({
         </Button>
         <Button variant="outline" size="icon" onClick={handleResetView} title="Reset view" className="h-8 w-8 sm:h-9 sm:w-9">
           <Maximize2 className="w-3 h-3 sm:w-4 sm:h-4" />
+        </Button>
+        <Button 
+          variant={showMiniMap ? "default" : "outline"} 
+          size="icon" 
+          onClick={() => setShowMiniMap(!showMiniMap)} 
+          title="Toggle mini-map" 
+          className="h-8 w-8 sm:h-9 sm:w-9"
+        >
+          <Map className="w-3 h-3 sm:w-4 sm:h-4" />
         </Button>
       </div>
 
@@ -475,6 +507,21 @@ export const FloorPlanViewer = ({
             }
           })}
         </div>
+
+        {/* Mini-Map */}
+        {showMiniMap && (
+          <FloorPlanMiniMap
+            pdfUrl={pdfUrl}
+            pins={pins}
+            scale={scale}
+            panOffset={panOffset}
+            containerWidth={containerSize.width}
+            containerHeight={containerSize.height}
+            pageWidth={pageWidth}
+            onNavigate={handleMiniMapNavigate}
+            onClose={() => setShowMiniMap(false)}
+          />
+        )}
       </div>
     </div>
   );
