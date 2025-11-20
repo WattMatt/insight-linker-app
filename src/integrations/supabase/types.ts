@@ -1439,6 +1439,45 @@ export type Database = {
           },
         ]
       }
+      user_policy_overrides: {
+        Row: {
+          condition: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          operation: string
+          permission_type: string
+          reason: string | null
+          table_name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          condition?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          operation: string
+          permission_type: string
+          reason?: string | null
+          table_name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          condition?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          operation?: string
+          permission_type?: string
+          reason?: string | null
+          table_name?: string
+          updated_at?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_roles: {
         Row: {
           created_at: string | null
