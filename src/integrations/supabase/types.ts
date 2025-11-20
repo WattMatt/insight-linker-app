@@ -1746,6 +1746,15 @@ export type Database = {
         }
         Returns: boolean
       }
+      validate_inspection_templates: {
+        Args: never
+        Returns: {
+          issue_description: string
+          issue_type: string
+          template_id: string
+          template_name: string
+        }[]
+      }
     }
     Enums: {
       app_role: "Admin" | "User" | "Contractor" | "Moderator" | "Client"

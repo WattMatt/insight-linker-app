@@ -510,10 +510,16 @@ const InspectionTemplates = () => {
             {templates.length} reusable templates for common inspection types
           </p>
         </div>
-        <Button onClick={() => navigate("/inspection-templates/new")}>
-          <Plus className="mr-2 h-4 w-4" />
-          Create Template
-        </Button>
+        <div className="flex gap-2">
+          <Button variant="outline" onClick={() => navigate("/inspection-templates/validate")}>
+            <FileText className="mr-2 h-4 w-4" />
+            Validate Templates
+          </Button>
+          <Button onClick={() => navigate("/inspection-templates/new")}>
+            <Plus className="mr-2 h-4 w-4" />
+            Create Template
+          </Button>
+        </div>
       </div>
 
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="space-y-4">

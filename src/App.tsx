@@ -22,6 +22,7 @@ import Inspections from "./pages/Inspections";
 import InspectionDetail from "./pages/InspectionDetail";
 import InspectionTemplates from "./pages/InspectionTemplates";
 import TemplateBuilderPage from "./pages/TemplateBuilderPage";
+import TemplateValidator from "./pages/TemplateValidator";
 import Users from "./pages/Users";
 import Calendar from "./pages/Calendar";
 import Settings from "./pages/Settings";
@@ -243,6 +244,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <TemplateBuilderPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/inspection-templates/validate"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <TemplateValidator />
                 </DashboardLayout>
               </ProtectedRoute>
             }
