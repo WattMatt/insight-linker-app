@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import { Document, Page, pdfjs } from "react-pdf";
 import { Button } from "./ui/button";
-import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2 } from "lucide-react";
+import { ZoomIn, ZoomOut, Maximize2, MapPin, Loader2, Layers } from "lucide-react";
 import { toast } from "sonner";
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
+import { clusterPins, isCluster, getClusterColor, type ClusteredPin } from "@/lib/pinClustering";
 
 // Set up PDF.js worker
 pdfjs.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -15,7 +16,7 @@ interface Pin {
   x_position: number;
   y_position: number;
   pin_type: 'snag' | 'observation';
-  status: 'open' | 'resolved';
+  status: 'open' | 'in_progress' | 'finished' | 'closed' | 'resolved';
   priority?: string;
 }
 
@@ -44,6 +45,10 @@ export const FloorPlanViewer = ({
   const [isShiftPressed, setIsShiftPressed] = useState(false);
   const [pageWidth, setPageWidth] = useState(800);
   const [touchStart, setTouchStart] = useState<{ x: number; y: number; distance?: number } | null>(null);
+  const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
+
+  // Apply clustering based on current zoom level
+  const clusteredItems = clusterPins(pins, scale, expandedClusterId);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -74,6 +79,14 @@ export const FloorPlanViewer = ({
     window.addEventListener('resize', updateWidth);
     return () => window.removeEventListener('resize', updateWidth);
   }, []);
+
+  // Reset expanded cluster when zoom level changes significantly
+  useEffect(() => {
+    // If zoomed in enough (>1.5), clusters don't form anyway, so reset
+    if (scale > 1.5) {
+      setExpandedClusterId(null);
+    }
+  }, [scale]);
 
   // Handle mouse wheel zoom
   useEffect(() => {
@@ -248,9 +261,15 @@ export const FloorPlanViewer = ({
   };
 
   const getPinColor = (pin: Pin) => {
-    if (pin.status === 'resolved') return '#9ca3af';
+    if (pin.status === 'resolved' || pin.status === 'closed' || pin.status === 'finished') return '#9ca3af';
     if (pin.priority === 'critical') return '#dc2626';
     return pin.pin_type === 'snag' ? '#ef4444' : '#3b82f6';
+  };
+
+  const handleClusterClick = (clusterId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setExpandedClusterId(clusterId);
+    toast.info("Cluster expanded", { duration: 2000 });
   };
 
   return (
@@ -331,66 +350,129 @@ export const FloorPlanViewer = ({
             />
           </Document>
 
-          {/* Render pins on top of PDF */}
-          {pins.map((pin) => {
-            // Apply inverse scaling to maintain consistent pin size at all zoom levels
-            const pinSize = 40;
-            const fontSize = 14;
-            const borderWidth = 3;
+          {/* Render pins and clusters on top of PDF */}
+          {clusteredItems.map((item) => {
             const inverseScale = 1 / scale;
             
-            return (
-              <div
-                key={pin.id}
-                style={{
-                  position: 'absolute',
-                  left: `${pin.x_position}%`,
-                  top: `${pin.y_position}%`,
-                  transform: `translate(-50%, -50%) scale(${inverseScale})`,
-                  width: `${pinSize}px`,
-                  height: `${pinSize}px`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  zIndex: 10,
-                  pointerEvents: 'auto',
-                  transition: 'transform 0.2s ease-out',
-                }}
-                className="group"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onPinClick(pin);
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale * 1.15})`;
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale})`;
-                }}
-              >
+            if (isCluster(item)) {
+              // Render cluster
+              const clusterSize = 50;
+              const fontSize = 16;
+              const borderWidth = 3;
+              const clusterColor = getClusterColor(item.pins);
+              
+              return (
                 <div
+                  key={item.id}
                   style={{
-                    width: '100%',
-                    height: '100%',
-                    borderRadius: '50%',
-                    backgroundColor: getPinColor(pin),
-                    border: `${borderWidth}px solid white`,
-                    boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                    position: 'absolute',
+                    left: `${item.x_position}%`,
+                    top: `${item.y_position}%`,
+                    transform: `translate(-50%, -50%) scale(${inverseScale})`,
+                    width: `${clusterSize}px`,
+                    height: `${clusterSize}px`,
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
-                    color: 'white',
-                    fontWeight: 'bold',
-                    fontSize: `${fontSize}px`,
-                    transition: 'box-shadow 0.2s ease-out',
+                    cursor: 'pointer',
+                    zIndex: 15,
+                    pointerEvents: 'auto',
+                    transition: 'transform 0.2s ease-out',
                   }}
-                  className="group-hover:shadow-[0_0_20px_rgba(59,130,246,0.6)]"
+                  className="group"
+                  onClick={(e) => handleClusterClick(item.id, e)}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale * 1.2})`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale})`;
+                  }}
                 >
-                  {pin.pin_number}
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '50%',
+                      backgroundColor: clusterColor,
+                      border: `${borderWidth}px solid white`,
+                      boxShadow: '0 3px 12px rgba(0,0,0,0.4)',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      position: 'relative',
+                      transition: 'box-shadow 0.2s ease-out',
+                    }}
+                    className="group-hover:shadow-[0_0_24px_rgba(59,130,246,0.7)]"
+                  >
+                    <Layers size={fontSize} strokeWidth={2.5} />
+                    <span style={{ fontSize: `${fontSize}px`, marginTop: '-2px' }}>
+                      {item.pins.length}
+                    </span>
+                  </div>
                 </div>
-              </div>
-            );
+              );
+            } else {
+              // Render regular pin
+              const pinSize = 40;
+              const fontSize = 14;
+              const borderWidth = 3;
+              
+              return (
+                <div
+                  key={item.id}
+                  style={{
+                    position: 'absolute',
+                    left: `${item.x_position}%`,
+                    top: `${item.y_position}%`,
+                    transform: `translate(-50%, -50%) scale(${inverseScale})`,
+                    width: `${pinSize}px`,
+                    height: `${pinSize}px`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    cursor: 'pointer',
+                    zIndex: 10,
+                    pointerEvents: 'auto',
+                    transition: 'transform 0.2s ease-out',
+                  }}
+                  className="group"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onPinClick(item);
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale * 1.15})`;
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale})`;
+                  }}
+                >
+                  <div
+                    style={{
+                      width: '100%',
+                      height: '100%',
+                      borderRadius: '50%',
+                      backgroundColor: getPinColor(item),
+                      border: `${borderWidth}px solid white`,
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      color: 'white',
+                      fontWeight: 'bold',
+                      fontSize: `${fontSize}px`,
+                      transition: 'box-shadow 0.2s ease-out',
+                    }}
+                    className="group-hover:shadow-[0_0_20px_rgba(59,130,246,0.6)]"
+                  >
+                    {item.pin_number}
+                  </div>
+                </div>
+              );
+            }
           })}
         </div>
       </div>
