@@ -1316,9 +1316,14 @@ const SubsectionDetail = () => {
 
       if (deleteError) throw deleteError;
 
-      toast.success(`${fileName} deleted successfully`);
-      fetchSupabaseDocuments();
+      // Immediately update local state by filtering out deleted document
+      setSupabaseDocuments(prev => prev.filter(d => d.id !== documentId));
+      
+      // Then refetch to ensure consistency
+      await fetchSupabaseDocuments();
+      
       setDeleteDocumentId(null);
+      toast.success(`${fileName} deleted successfully`);
     } catch (error) {
       console.error("Error deleting document:", error);
       toast.error("Failed to delete document");
