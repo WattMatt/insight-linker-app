@@ -297,7 +297,23 @@ export const InteractiveFloorPlan = ({
 
     try {
       setIsGeneratingReport(true);
-      toast.info("Generating report...");
+      toast.info("Generating comprehensive report...");
+
+      // Fetch comments for all pins
+      const pinsWithComments = await Promise.all(
+        pins.map(async (pin) => {
+          const { data: comments } = await supabase
+            .from('floor_plan_pin_comments')
+            .select('user_name, comment, created_at')
+            .eq('pin_id', pin.id)
+            .order('created_at', { ascending: true });
+          
+          return {
+            ...pin,
+            comments: comments || [],
+          };
+        })
+      );
 
       // Capture canvas with pins
       const canvas = document.querySelector('canvas');
@@ -311,12 +327,12 @@ export const InteractiveFloorPlan = ({
         siteName,
         subsectionName,
         floorPlanUrl: floorPlan.file_url,
-        pins,
+        pins: pinsWithComments,
         canvasDataUrl,
       });
 
       report.save(`floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success("Report generated successfully");
+      toast.success("Professional report generated successfully!");
     } catch (error) {
       console.error("Error generating report:", error);
       toast.error("Failed to generate report");
