@@ -81,6 +81,23 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
   });
   const queryClient = useQueryClient();
 
+  // Fetch policy overrides - must be at top before any conditional returns
+  const { data: overrides, refetch: refetchOverrides } = useQuery({
+    queryKey: ['policy-overrides', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('user_policy_overrides')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as PolicyOverride[];
+    },
+    enabled: !!userId,
+  });
+
   useEffect(() => {
     fetchRLSPolicies();
   }, [selectedRole]);
@@ -183,22 +200,6 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
       </Card>
     );
   }
-
-  const { data: overrides, refetch: refetchOverrides } = useQuery({
-    queryKey: ['policy-overrides', userId],
-    queryFn: async () => {
-      if (!userId) return [];
-      const { data, error } = await supabase
-        .from('user_policy_overrides')
-        .select('*')
-        .eq('user_id', userId)
-        .order('created_at', { ascending: false });
-      
-      if (error) throw error;
-      return data as PolicyOverride[];
-    },
-    enabled: !!userId,
-  });
 
   const addOverride = useMutation({
     mutationFn: async () => {
