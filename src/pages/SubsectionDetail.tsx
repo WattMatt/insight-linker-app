@@ -152,9 +152,28 @@ const SubsectionDetail = () => {
         )
         .subscribe();
 
+      // Set up real-time subscription for documents
+      const documentsChannel = supabase
+        .channel(`documents-${subsectionId}`)
+        .on(
+          'postgres_changes',
+          {
+            event: '*',
+            schema: 'public',
+            table: 'subsection_documents',
+            filter: `subsection_id=eq.${subsectionId}`
+          },
+          (payload) => {
+            console.log('Document change detected:', payload);
+            fetchSupabaseDocuments();
+          }
+        )
+        .subscribe();
+
       return () => {
         supabase.removeChannel(snagsChannel);
         supabase.removeChannel(inspectionsChannel);
+        supabase.removeChannel(documentsChannel);
       };
     } else if (subsectionId === "new") {
       // For new subsections, just load templates and set loading to false
@@ -1291,7 +1310,10 @@ const SubsectionDetail = () => {
         .eq('id', documentId)
         .single();
 
-      if (fetchError) throw fetchError;
+      if (fetchError) {
+        console.error("Error fetching document:", fetchError);
+        throw fetchError;
+      }
 
       // Extract file path from URL and delete from storage
       if (doc?.file_url) {
@@ -1305,28 +1327,44 @@ const SubsectionDetail = () => {
 
         if (storageError) {
           console.error("Error deleting file from storage:", storageError);
+          // Don't throw here - continue to delete database record even if storage fails
         }
       }
 
-      // Delete document record
+      // Delete document record from database
       const { error: deleteError } = await supabase
         .from('subsection_documents')
         .delete()
         .eq('id', documentId);
 
-      if (deleteError) throw deleteError;
+      if (deleteError) {
+        console.error("Database deletion error:", deleteError);
+        throw deleteError;
+      }
 
-      // Immediately update local state by filtering out deleted document
-      setSupabaseDocuments(prev => prev.filter(d => d.id !== documentId));
+      console.log(`Document ${documentId} deleted successfully from database`);
       
-      // Then refetch to ensure consistency
-      await fetchSupabaseDocuments();
+      // Immediately remove from local state for instant UI feedback
+      setSupabaseDocuments(prev => {
+        const filtered = prev.filter(d => d.id !== documentId);
+        console.log(`Filtered documents, remaining count: ${filtered.length}`);
+        return filtered;
+      });
       
       setDeleteDocumentId(null);
       toast.success(`${fileName} deleted successfully`);
-    } catch (error) {
-      console.error("Error deleting document:", error);
-      toast.error("Failed to delete document");
+      
+      // Refetch after a short delay to ensure real-time subscription catches up
+      setTimeout(() => {
+        console.log("Refetching documents after deletion...");
+        fetchSupabaseDocuments();
+      }, 500);
+      
+    } catch (error: any) {
+      console.error("Error in handleDeleteDocument:", error);
+      toast.error(`Failed to delete document: ${error.message || 'Unknown error'}`);
+      // Refetch to ensure UI matches database state
+      fetchSupabaseDocuments();
     }
   };
 
