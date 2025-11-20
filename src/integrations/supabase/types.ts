@@ -1823,6 +1823,10 @@ export type Database = {
     }
     Functions: {
       cleanup_old_pending_invites: { Args: never; Returns: number }
+      contractor_has_site_access: {
+        Args: { _site_id: string; _user_id: string }
+        Returns: boolean
+      }
       get_pending_verifications: {
         Args: { user_uuid: string }
         Returns: {

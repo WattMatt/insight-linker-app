@@ -44,6 +44,7 @@ import ContractorSiteDetail from "./pages/ContractorSiteDetail";
 import ContractorSubsectionDetail from "./pages/ContractorSubsectionDetail";
 import ContractorPortal from "./pages/ContractorPortal";
 import AdminContractorPreview from "./pages/AdminContractorPreview";
+import ContractorAccessSimulator from "./pages/ContractorAccessSimulator";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
 import IssueReports from "./pages/IssueReports";
 import Suggestions from "./pages/Suggestions";
@@ -364,6 +365,16 @@ const App = () => (
               <ProtectedRoute>
                 <DashboardLayout>
                   <AdminContractorPreview />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/admin/contractor-access-simulator"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <ContractorAccessSimulator />
                 </DashboardLayout>
               </ProtectedRoute>
             }
