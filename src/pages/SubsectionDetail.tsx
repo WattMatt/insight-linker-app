@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye, Calendar as CalendarIcon } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye, Calendar as CalendarIcon, Loader2 } from "lucide-react";
 import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
@@ -86,6 +86,7 @@ const SubsectionDetail = () => {
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [deletingDocumentId, setDeletingDocumentId] = useState<string | null>(null);
   const [fixingTemplates, setFixingTemplates] = useState(false);
   const [fixingCategories, setFixingCategories] = useState(false);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
@@ -1302,6 +1303,7 @@ const SubsectionDetail = () => {
   };
 
   const handleDeleteDocument = async (documentId: string, fileName: string) => {
+    setDeletingDocumentId(documentId);
     try {
       // Get document details first to delete from storage
       const { data: doc, error: fetchError } = await supabase
@@ -1365,6 +1367,8 @@ const SubsectionDetail = () => {
       toast.error(`Failed to delete document: ${error.message || 'Unknown error'}`);
       // Refetch to ensure UI matches database state
       fetchSupabaseDocuments();
+    } finally {
+      setDeletingDocumentId(null);
     }
   };
 
@@ -2440,8 +2444,13 @@ const SubsectionDetail = () => {
                                       size="sm"
                                       variant="ghost"
                                       onClick={() => setDeleteDocumentId(doc.id)}
+                                      disabled={deletingDocumentId === doc.id}
                                     >
-                                      <Trash2 className="h-4 w-4 text-destructive" />
+                                      {deletingDocumentId === doc.id ? (
+                                        <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                                      ) : (
+                                        <Trash2 className="h-4 w-4 text-destructive" />
+                                      )}
                                     </Button>
                                   </div>
                                 </div>
@@ -2467,15 +2476,23 @@ const SubsectionDetail = () => {
                 </AlertDialogDescription>
               </AlertDialogHeader>
               <AlertDialogFooter>
-                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogCancel disabled={deletingDocumentId !== null}>Cancel</AlertDialogCancel>
                 <AlertDialogAction 
                   onClick={() => {
                     const doc = supabaseDocuments.find(d => d.id === deleteDocumentId);
                     if (doc) handleDeleteDocument(deleteDocumentId!, doc.file_name);
                   }}
+                  disabled={deletingDocumentId !== null}
                   className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                 >
-                  Delete
+                  {deletingDocumentId !== null ? (
+                    <>
+                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                      Deleting...
+                    </>
+                  ) : (
+                    'Delete'
+                  )}
                 </AlertDialogAction>
               </AlertDialogFooter>
             </AlertDialogContent>
@@ -2695,8 +2712,13 @@ const SubsectionDetail = () => {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => setDeleteDocumentId(doc.id)}
+                                disabled={deletingDocumentId === doc.id}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                {deletingDocumentId === doc.id ? (
+                                  <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                )}
                               </Button>
                             </div>
                           </div>
@@ -3325,8 +3347,13 @@ const SubsectionDetail = () => {
                                 size="sm"
                                 variant="ghost"
                                 onClick={() => setDeleteDocumentId(doc.id)}
+                                disabled={deletingDocumentId === doc.id}
                               >
-                                <Trash2 className="h-4 w-4 text-destructive" />
+                                {deletingDocumentId === doc.id ? (
+                                  <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4 text-destructive" />
+                                )}
                               </Button>
                             </div>
                           </div>
