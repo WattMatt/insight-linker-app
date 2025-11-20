@@ -34,7 +34,62 @@ export const InteractiveFloorPlan = ({
 
   useEffect(() => {
     loadFloorPlan();
-  }, [subsectionId]);
+
+    // Set up real-time subscription for floor plan pins
+    const pinsChannel = supabase
+      .channel('floor-plan-pins-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'floor_plan_pins'
+        },
+        (payload) => {
+          console.log('Floor plan pin changed:', payload);
+          
+          // Reload pins to reflect changes
+          if (floorPlan) {
+            supabase
+              .from("floor_plan_pins")
+              .select("*")
+              .eq("floor_plan_id", floorPlan.id)
+              .order("pin_number", { ascending: true })
+              .then(({ data, error }) => {
+                if (!error && data) {
+                  setPins(data);
+                  toast.success("Floor plan updated", { duration: 2000 });
+                }
+              });
+          }
+        }
+      )
+      .subscribe();
+
+    // Set up real-time subscription for floor plans
+    const floorPlanChannel = supabase
+      .channel('floor-plan-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'subsection_floor_plans',
+          filter: `subsection_id=eq.${subsectionId}`
+        },
+        (payload) => {
+          console.log('Floor plan changed:', payload);
+          loadFloorPlan();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscriptions on unmount
+    return () => {
+      supabase.removeChannel(pinsChannel);
+      supabase.removeChannel(floorPlanChannel);
+    };
+  }, [subsectionId, floorPlan?.id]);
 
   useEffect(() => {
     if (floorPlan) {

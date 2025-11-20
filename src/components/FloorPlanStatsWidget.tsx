@@ -47,6 +47,29 @@ export const FloorPlanStatsWidget = ({ subsectionId }: FloorPlanStatsWidgetProps
 
   useEffect(() => {
     loadStats();
+
+    // Set up real-time subscription for floor plan pins
+    const channel = supabase
+      .channel('floor-plan-stats-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
+          schema: 'public',
+          table: 'floor_plan_pins'
+        },
+        (payload) => {
+          console.log('Floor plan pin changed:', payload);
+          // Reload stats whenever pins change
+          loadStats();
+        }
+      )
+      .subscribe();
+
+    // Cleanup subscription on unmount
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [subsectionId]);
 
   const loadStats = async () => {
