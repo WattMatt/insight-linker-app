@@ -40,10 +40,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Checkbox } from "@/components/ui/checkbox";
-import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2 } from "lucide-react";
+import { UserPlus, Mail, Send, MoreVertical, Edit, Upload, X, Eye, Trash2, Shield } from "lucide-react";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { UserRLSPolicies } from "@/components/UserRLSPolicies";
 
 interface UserProfile {
   id: string;
@@ -107,6 +108,8 @@ const Users = () => {
   const [resendTempPassword, setResendTempPassword] = useState("");
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [userToDelete, setUserToDelete] = useState<UserProfile | null>(null);
+  const [rlsPoliciesOpen, setRlsPoliciesOpen] = useState(false);
+  const [rlsPoliciesUser, setRlsPoliciesUser] = useState<UserProfile | null>(null);
   const queryClient = useQueryClient();
 
   // Fetch pending invites
@@ -928,6 +931,15 @@ const Users = () => {
                         </DropdownMenuItem>
                         <DropdownMenuItem 
                           onClick={() => {
+                            setRlsPoliciesUser(user);
+                            setRlsPoliciesOpen(true);
+                          }}
+                        >
+                          <Shield className="mr-2 h-4 w-4" />
+                          View RLS Policies
+                        </DropdownMenuItem>
+                        <DropdownMenuItem 
+                          onClick={() => {
                             setResendUser(user);
                             setResendOpen(true);
                           }}
@@ -1006,6 +1018,36 @@ const Users = () => {
               disabled={deleteUserMutation.isPending}
             >
               {deleteUserMutation.isPending ? "Deleting..." : "Delete User"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* RLS Policies Dialog */}
+      <Dialog open={rlsPoliciesOpen} onOpenChange={setRlsPoliciesOpen}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
+          <DialogHeader>
+            <DialogTitle>Row-Level Security Policies</DialogTitle>
+            <DialogDescription>
+              View all RLS policies that apply to {rlsPoliciesUser?.full_name || rlsPoliciesUser?.email}'s role
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-hidden">
+            {rlsPoliciesUser && (
+              <UserRLSPolicies 
+                userRole={rlsPoliciesUser.role || 'User'} 
+                userId={rlsPoliciesUser.id}
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button 
+              onClick={() => {
+                setRlsPoliciesOpen(false);
+                setRlsPoliciesUser(null);
+              }}
+            >
+              Close
             </Button>
           </DialogFooter>
         </DialogContent>

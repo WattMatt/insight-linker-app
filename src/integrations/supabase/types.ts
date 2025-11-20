@@ -1738,6 +1738,16 @@ export type Database = {
           type: string
         }[]
       }
+      get_rls_policies_for_role: {
+        Args: { role_name: string }
+        Returns: {
+          command: string
+          policy_name: string
+          table_name: string
+          using_expression: string
+          with_check_expression: string
+        }[]
+      }
       get_user_client_id: { Args: never; Returns: string }
       has_role: {
         Args: {
