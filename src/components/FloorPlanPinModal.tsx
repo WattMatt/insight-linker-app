@@ -15,9 +15,12 @@ interface PinData {
   pin_type: 'snag' | 'observation';
   title: string;
   notes: string;
+  detailed_description?: string;
   priority?: string;
-  status: 'open' | 'resolved';
+  status: 'open' | 'in_progress' | 'finished' | 'closed' | 'resolved';
   assigned_contractor?: string;
+  stakeholders?: string;
+  package?: string;
   due_date?: string;
   photo_url?: string;
 }
@@ -315,12 +318,24 @@ export const FloorPlanPinModal = ({
 
             {/* Notes */}
             <div>
-              <Label htmlFor="notes" className="text-base">Details</Label>
+              <Label htmlFor="notes" className="text-base">Quick Notes</Label>
               <Textarea
                 id="notes"
                 value={formData.notes}
                 onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                placeholder="Add more information..."
+                placeholder="Brief description..."
+                rows={2}
+              />
+            </div>
+
+            {/* Detailed Description */}
+            <div>
+              <Label htmlFor="detailed_description" className="text-base">Detailed Description</Label>
+              <Textarea
+                id="detailed_description"
+                value={formData.detailed_description || ''}
+                onChange={(e) => setFormData({ ...formData, detailed_description: e.target.value })}
+                placeholder="Full details, requirements, specifications..."
                 rows={3}
               />
             </div>
@@ -381,30 +396,68 @@ export const FloorPlanPinModal = ({
                     </SelectContent>
                   </Select>
                 </div>
+
+                {/* Package */}
+                <div>
+                  <Label htmlFor="package">Package</Label>
+                  <Input
+                    id="package"
+                    value={formData.package || ''}
+                    onChange={(e) => setFormData({ ...formData, package: e.target.value })}
+                    placeholder="e.g., Phase 1, Area A..."
+                  />
+                </div>
+
+                {/* Stakeholders */}
+                <div>
+                  <Label htmlFor="stakeholders">Stakeholders</Label>
+                  <Input
+                    id="stakeholders"
+                    value={formData.stakeholders || ''}
+                    onChange={(e) => setFormData({ ...formData, stakeholders: e.target.value })}
+                    placeholder="Comma-separated names..."
+                  />
+                </div>
               </div>
             )}
 
             {/* Status */}
             <div className="pt-4 border-t">
               <Label>Status</Label>
-              <div className="flex gap-2 mt-2">
+              <div className="grid grid-cols-2 gap-2 mt-2">
                 <Button
                   type="button"
                   variant={formData.status === 'open' ? 'default' : 'outline'}
-                  className="flex-1"
+                  size="sm"
                   onClick={() => setFormData({ ...formData, status: 'open' })}
                 >
-                  Open
+                  🔴 Open
                 </Button>
                 <Button
                   type="button"
-                  variant={formData.status === 'resolved' ? 'default' : 'outline'}
-                  className="flex-1"
-                  onClick={() => setFormData({ ...formData, status: 'resolved' })}
-                  disabled={!isAdmin}
-                  title={!isAdmin ? "Only admins can mark as resolved" : ""}
+                  variant={formData.status === 'in_progress' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormData({ ...formData, status: 'in_progress' })}
                 >
-                  ✓ Resolved
+                  🟡 In Progress
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.status === 'finished' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormData({ ...formData, status: 'finished' })}
+                >
+                  🟢 Finished
+                </Button>
+                <Button
+                  type="button"
+                  variant={formData.status === 'closed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setFormData({ ...formData, status: 'closed' })}
+                  disabled={!isAdmin}
+                  title={!isAdmin ? "Only admins can close items" : ""}
+                >
+                  ✓ Closed
                 </Button>
               </div>
             </div>

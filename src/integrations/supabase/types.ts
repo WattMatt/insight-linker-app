@@ -244,19 +244,63 @@ export type Database = {
         }
         Relationships: []
       }
+      floor_plan_pin_comments: {
+        Row: {
+          comment: string
+          created_at: string | null
+          id: string
+          pin_id: string
+          updated_at: string | null
+          user_id: string | null
+          user_name: string | null
+        }
+        Insert: {
+          comment: string
+          created_at?: string | null
+          id?: string
+          pin_id: string
+          updated_at?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Update: {
+          comment?: string
+          created_at?: string | null
+          id?: string
+          pin_id?: string
+          updated_at?: string | null
+          user_id?: string | null
+          user_name?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "floor_plan_pin_comments_pin_id_fkey"
+            columns: ["pin_id"]
+            isOneToOne: false
+            referencedRelation: "floor_plan_pins"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       floor_plan_pins: {
         Row: {
           assigned_contractor: string | null
           created_at: string | null
           created_by: string | null
+          detailed_description: string | null
           due_date: string | null
+          edit_history: Json | null
           floor_plan_id: string
           id: string
+          last_modified_at: string | null
+          last_modified_by: string | null
           notes: string | null
+          package: string | null
           photo_url: string | null
           pin_number: number
           pin_type: string
           priority: string | null
+          stakeholders: string | null
           status: string
           title: string | null
           updated_at: string | null
@@ -267,14 +311,20 @@ export type Database = {
           assigned_contractor?: string | null
           created_at?: string | null
           created_by?: string | null
+          detailed_description?: string | null
           due_date?: string | null
+          edit_history?: Json | null
           floor_plan_id: string
           id?: string
+          last_modified_at?: string | null
+          last_modified_by?: string | null
           notes?: string | null
+          package?: string | null
           photo_url?: string | null
           pin_number: number
           pin_type: string
           priority?: string | null
+          stakeholders?: string | null
           status?: string
           title?: string | null
           updated_at?: string | null
@@ -285,14 +335,20 @@ export type Database = {
           assigned_contractor?: string | null
           created_at?: string | null
           created_by?: string | null
+          detailed_description?: string | null
           due_date?: string | null
+          edit_history?: Json | null
           floor_plan_id?: string
           id?: string
+          last_modified_at?: string | null
+          last_modified_by?: string | null
           notes?: string | null
+          package?: string | null
           photo_url?: string | null
           pin_number?: number
           pin_type?: string
           priority?: string | null
+          stakeholders?: string | null
           status?: string
           title?: string | null
           updated_at?: string | null
