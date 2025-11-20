@@ -134,6 +134,58 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
     },
   });
 
+  const addOverride = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('user_policy_overrides')
+        .insert([{
+          user_id: userId,
+          table_name: newOverride.table_name,
+          operation: newOverride.operation,
+          permission_type: newOverride.permission_type,
+          condition: newOverride.condition || null,
+          reason: newOverride.reason || null,
+        }]);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchOverrides();
+      toast.success("Policy override added successfully");
+      setShowAddOverride(false);
+      setNewOverride({
+        table_name: '',
+        operation: 'SELECT',
+        permission_type: 'GRANT',
+        condition: '',
+        reason: '',
+      });
+    },
+    onError: (error) => {
+      toast.error("Failed to add policy override");
+      console.error(error);
+    },
+  });
+
+  const deleteOverride = useMutation({
+    mutationFn: async (overrideId: string) => {
+      const { error } = await supabase
+        .from('user_policy_overrides')
+        .delete()
+        .eq('id', overrideId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchOverrides();
+      toast.success("Policy override removed successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to remove policy override");
+      console.error(error);
+    },
+  });
+
   const fetchRLSPolicies = async () => {
     try {
       setLoading(true);
@@ -200,58 +252,6 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
       </Card>
     );
   }
-
-  const addOverride = useMutation({
-    mutationFn: async () => {
-      const { error } = await supabase
-        .from('user_policy_overrides')
-        .insert([{
-          user_id: userId,
-          table_name: newOverride.table_name,
-          operation: newOverride.operation,
-          permission_type: newOverride.permission_type,
-          condition: newOverride.condition || null,
-          reason: newOverride.reason || null,
-        }]);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      refetchOverrides();
-      toast.success("Policy override added successfully");
-      setShowAddOverride(false);
-      setNewOverride({
-        table_name: '',
-        operation: 'SELECT',
-        permission_type: 'GRANT',
-        condition: '',
-        reason: '',
-      });
-    },
-    onError: (error) => {
-      toast.error("Failed to add policy override");
-      console.error(error);
-    },
-  });
-
-  const deleteOverride = useMutation({
-    mutationFn: async (overrideId: string) => {
-      const { error } = await supabase
-        .from('user_policy_overrides')
-        .delete()
-        .eq('id', overrideId);
-
-      if (error) throw error;
-    },
-    onSuccess: () => {
-      refetchOverrides();
-      toast.success("Policy override removed successfully");
-    },
-    onError: (error) => {
-      toast.error("Failed to remove policy override");
-      console.error(error);
-    },
-  });
 
   const handleSaveRole = () => {
     updateUserRole.mutate(selectedRole);
