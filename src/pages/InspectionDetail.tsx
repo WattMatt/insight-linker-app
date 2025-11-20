@@ -796,6 +796,7 @@ const InspectionDetail = () => {
             
             normalizedSections[sectionKey] = {
               ...section,
+              name: section.name || formatTabLabel(sectionKey), // Fallback to formatted key if name is missing
               items
             };
           });
@@ -1773,7 +1774,8 @@ const InspectionDetail = () => {
           {templateCategory !== "Site Drawing" && <TabsTrigger value="general">General Info</TabsTrigger>}
           {Object.entries(template.sections || {})
             .filter(([key, section]) => {
-              // Skip generalInfo and observations sections
+              // Skip sections without names, generalInfo and observations sections
+              if (!section.name) return false;
               const lowerKey = key.toLowerCase();
               const lowerName = section.name?.toLowerCase() || '';
               return !lowerKey.includes('general') && !lowerName.includes('general') &&
@@ -1807,7 +1809,8 @@ const InspectionDetail = () => {
 
             {Object.entries(template.sections || {})
               .filter(([key, section]) => {
-                // Skip generalInfo and observations sections
+                // Skip sections without names, generalInfo and observations sections
+                if (!section.name) return false;
                 const lowerKey = key.toLowerCase();
                 const lowerName = section.name?.toLowerCase() || '';
                 return !lowerKey.includes('general') && !lowerName.includes('general') &&
