@@ -1358,7 +1358,8 @@ const SubsectionDetail = () => {
       
       // Refetch after a short delay to ensure real-time subscription catches up
       setTimeout(() => {
-        console.log("Refetching documents after deletion...");
+        console.log("Refetching documents and categories after deletion...");
+        fetchDocumentCategories();
         fetchSupabaseDocuments();
       }, 500);
       
