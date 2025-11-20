@@ -1,16 +1,28 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueryClient, useQuery } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { ChevronDown, Shield, Lock, Eye, Edit, Trash2, Plus, Save } from "lucide-react";
+import { ChevronDown, Shield, Lock, Eye, Edit, Trash2, Plus, Save, Ban, CheckCircle, X } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 interface RLSPolicy {
   table_name: string;
@@ -18,6 +30,18 @@ interface RLSPolicy {
   command: string;
   using_expression: string;
   with_check_expression: string | null;
+}
+
+interface PolicyOverride {
+  id: string;
+  user_id: string;
+  table_name: string;
+  operation: string;
+  permission_type: 'GRANT' | 'DENY';
+  condition: string | null;
+  reason: string | null;
+  created_at: string;
+  created_by: string | null;
 }
 
 interface UserRLSPoliciesProps {
@@ -47,6 +71,14 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
   const [groupedPolicies, setGroupedPolicies] = useState<Record<string, RLSPolicy[]>>({});
   const [selectedRole, setSelectedRole] = useState<string>(userRole);
   const [hasChanges, setHasChanges] = useState(false);
+  const [showAddOverride, setShowAddOverride] = useState(false);
+  const [newOverride, setNewOverride] = useState({
+    table_name: '',
+    operation: 'SELECT',
+    permission_type: 'GRANT' as 'GRANT' | 'DENY',
+    condition: '',
+    reason: '',
+  });
   const queryClient = useQueryClient();
 
   useEffect(() => {
@@ -152,8 +184,84 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
     );
   }
 
+  const { data: overrides, refetch: refetchOverrides } = useQuery({
+    queryKey: ['policy-overrides', userId],
+    queryFn: async () => {
+      if (!userId) return [];
+      const { data, error } = await supabase
+        .from('user_policy_overrides')
+        .select('*')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false });
+      
+      if (error) throw error;
+      return data as PolicyOverride[];
+    },
+    enabled: !!userId,
+  });
+
+  const addOverride = useMutation({
+    mutationFn: async () => {
+      const { error } = await supabase
+        .from('user_policy_overrides')
+        .insert([{
+          user_id: userId,
+          table_name: newOverride.table_name,
+          operation: newOverride.operation,
+          permission_type: newOverride.permission_type,
+          condition: newOverride.condition || null,
+          reason: newOverride.reason || null,
+        }]);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchOverrides();
+      toast.success("Policy override added successfully");
+      setShowAddOverride(false);
+      setNewOverride({
+        table_name: '',
+        operation: 'SELECT',
+        permission_type: 'GRANT',
+        condition: '',
+        reason: '',
+      });
+    },
+    onError: (error) => {
+      toast.error("Failed to add policy override");
+      console.error(error);
+    },
+  });
+
+  const deleteOverride = useMutation({
+    mutationFn: async (overrideId: string) => {
+      const { error } = await supabase
+        .from('user_policy_overrides')
+        .delete()
+        .eq('id', overrideId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      refetchOverrides();
+      toast.success("Policy override removed successfully");
+    },
+    onError: (error) => {
+      toast.error("Failed to remove policy override");
+      console.error(error);
+    },
+  });
+
   const handleSaveRole = () => {
     updateUserRole.mutate(selectedRole);
+  };
+
+  const handleAddOverride = () => {
+    if (!newOverride.table_name) {
+      toast.error("Table name is required");
+      return;
+    }
+    addOverride.mutate();
   };
 
   return (
@@ -206,8 +314,101 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
           )}
         </CardDescription>
       </CardHeader>
-      <CardContent>
-        {Object.keys(groupedPolicies).length === 0 ? (
+      <CardContent className="space-y-6">
+        {/* Policy Overrides Section */}
+        <div className="space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h3 className="text-lg font-semibold flex items-center gap-2">
+                <Shield className="h-5 w-5" />
+                Policy Overrides
+              </h3>
+              <p className="text-sm text-muted-foreground mt-1">
+                Grant or deny specific permissions beyond role-based policies
+              </p>
+            </div>
+            <Button
+              onClick={() => setShowAddOverride(true)}
+              size="sm"
+              className="gap-2"
+            >
+              <Plus className="h-4 w-4" />
+              Add Override
+            </Button>
+          </div>
+
+          {overrides && overrides.length > 0 ? (
+            <div className="space-y-2">
+              {overrides.map((override) => (
+                <div
+                  key={override.id}
+                  className="border rounded-lg p-4 bg-muted/30 space-y-2"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex items-start gap-3 flex-1">
+                      <div className={`p-2 rounded ${
+                        override.permission_type === 'GRANT'
+                          ? 'bg-green-500/10 text-green-700 dark:text-green-400'
+                          : 'bg-red-500/10 text-red-700 dark:text-red-400'
+                      }`}>
+                        {override.permission_type === 'GRANT' ? (
+                          <CheckCircle className="h-4 w-4" />
+                        ) : (
+                          <Ban className="h-4 w-4" />
+                        )}
+                      </div>
+                      <div className="flex-1 space-y-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <Badge variant="outline">{override.table_name}</Badge>
+                          <Badge className={getCommandColor(override.operation)}>
+                            {override.operation}
+                          </Badge>
+                          <Badge variant={override.permission_type === 'GRANT' ? 'default' : 'destructive'}>
+                            {override.permission_type}
+                          </Badge>
+                        </div>
+                        {override.condition && (
+                          <div>
+                            <p className="text-xs font-semibold text-muted-foreground mb-1">
+                              Condition:
+                            </p>
+                            <code className="text-xs bg-background p-2 rounded block">
+                              {override.condition}
+                            </code>
+                          </div>
+                        )}
+                        {override.reason && (
+                          <p className="text-sm text-muted-foreground">
+                            <span className="font-semibold">Reason:</span> {override.reason}
+                          </p>
+                        )}
+                        <p className="text-xs text-muted-foreground">
+                          Added {new Date(override.created_at).toLocaleDateString()}
+                        </p>
+                      </div>
+                    </div>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => deleteOverride.mutate(override.id)}
+                      disabled={deleteOverride.isPending}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-center py-6 text-muted-foreground text-sm border rounded-lg bg-muted/30">
+              No policy overrides configured
+            </div>
+          )}
+        </div>
+
+        <div className="border-t pt-6">
+          <h3 className="text-lg font-semibold mb-4">Role-Based Policies</h3>
+          {Object.keys(groupedPolicies).length === 0 ? (
           <div className="text-center py-8 text-muted-foreground">
             No specific RLS policies found for this role
           </div>
@@ -281,7 +482,104 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
             </div>
           </ScrollArea>
         )}
+        </div>
       </CardContent>
+
+      {/* Add Override Dialog */}
+      <AlertDialog open={showAddOverride} onOpenChange={setShowAddOverride}>
+        <AlertDialogContent className="max-w-2xl">
+          <AlertDialogHeader>
+            <AlertDialogTitle>Add Policy Override</AlertDialogTitle>
+            <AlertDialogDescription>
+              Create a specific permission override for this user beyond their role-based policies.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="table-name">Table Name *</Label>
+              <Input
+                id="table-name"
+                placeholder="e.g., sites, subsections, inspections"
+                value={newOverride.table_name}
+                onChange={(e) => setNewOverride({ ...newOverride, table_name: e.target.value })}
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="operation">Operation *</Label>
+                <Select
+                  value={newOverride.operation}
+                  onValueChange={(value) => setNewOverride({ ...newOverride, operation: value })}
+                >
+                  <SelectTrigger id="operation">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="SELECT">SELECT</SelectItem>
+                    <SelectItem value="INSERT">INSERT</SelectItem>
+                    <SelectItem value="UPDATE">UPDATE</SelectItem>
+                    <SelectItem value="DELETE">DELETE</SelectItem>
+                    <SelectItem value="ALL">ALL</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="permission-type">Permission Type *</Label>
+                <Select
+                  value={newOverride.permission_type}
+                  onValueChange={(value: 'GRANT' | 'DENY') => setNewOverride({ ...newOverride, permission_type: value })}
+                >
+                  <SelectTrigger id="permission-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="GRANT">GRANT</SelectItem>
+                    <SelectItem value="DENY">DENY</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="condition">Condition (SQL WHERE clause)</Label>
+              <Textarea
+                id="condition"
+                placeholder="e.g., site_id = 'abc123' OR client_id IN (...)"
+                value={newOverride.condition}
+                onChange={(e) => setNewOverride({ ...newOverride, condition: e.target.value })}
+                rows={3}
+              />
+              <p className="text-xs text-muted-foreground">
+                Optional SQL condition for when this override applies
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="reason">Reason</Label>
+              <Textarea
+                id="reason"
+                placeholder="Why is this override needed?"
+                value={newOverride.reason}
+                onChange={(e) => setNewOverride({ ...newOverride, reason: e.target.value })}
+                rows={2}
+              />
+            </div>
+          </div>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleAddOverride}
+              disabled={addOverride.isPending || !newOverride.table_name}
+            >
+              {addOverride.isPending ? "Adding..." : "Add Override"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 };
