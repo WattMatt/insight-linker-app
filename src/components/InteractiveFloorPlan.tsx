@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { FloorPlanViewer } from "./FloorPlanViewer";
 import { FloorPlanPinModal } from "./FloorPlanPinModal";
 import { FloorPlanPinsList } from "./FloorPlanPinsList";
+import { FloorPlanStatsWidget } from "./FloorPlanStatsWidget";
 import { Button } from "./ui/button";
 import { Upload, FileDown, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -384,7 +385,7 @@ export const InteractiveFloorPlan = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
         <h2 className="text-lg sm:text-2xl font-bold">Interactive Floor Plan</h2>
@@ -419,6 +420,11 @@ export const InteractiveFloorPlan = ({
           </Button>
         </div>
       </div>
+
+      {/* Statistics Dashboard */}
+      {pins.length > 0 && (
+        <FloorPlanStatsWidget subsectionId={subsectionId} />
+      )}
 
       {/* Main Content */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 min-h-[500px] lg:h-[700px]">
