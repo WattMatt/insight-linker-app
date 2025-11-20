@@ -1,11 +1,16 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { ChevronDown, Shield, Lock, Eye, Edit, Trash2, Plus } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ChevronDown, Shield, Lock, Eye, Edit, Trash2, Plus, Save } from "lucide-react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Label } from "@/components/ui/label";
 
 interface RLSPolicy {
   table_name: string;
@@ -40,10 +45,45 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
   const [policies, setPolicies] = useState<RLSPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [groupedPolicies, setGroupedPolicies] = useState<Record<string, RLSPolicy[]>>({});
+  const [selectedRole, setSelectedRole] = useState<string>(userRole);
+  const [hasChanges, setHasChanges] = useState(false);
+  const queryClient = useQueryClient();
 
   useEffect(() => {
     fetchRLSPolicies();
-  }, [userRole]);
+  }, [selectedRole]);
+
+  useEffect(() => {
+    setHasChanges(selectedRole !== userRole);
+  }, [selectedRole, userRole]);
+
+  const updateUserRole = useMutation({
+    mutationFn: async (newRole: string) => {
+      // Update the user_roles table
+      const { error: deleteError } = await supabase
+        .from('user_roles')
+        .delete()
+        .eq('user_id', userId);
+
+      if (deleteError) throw deleteError;
+
+      const { error: insertError } = await supabase
+        .from('user_roles')
+        .insert([{ user_id: userId, role: newRole as "Admin" | "Client" | "Contractor" | "Moderator" | "User" }]);
+
+      if (insertError) throw insertError;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['users'] });
+      queryClient.invalidateQueries({ queryKey: ['user-role'] });
+      toast.success("User role updated successfully");
+      setHasChanges(false);
+    },
+    onError: (error) => {
+      toast.error("Failed to update user role");
+      console.error(error);
+    },
+  });
 
   const fetchRLSPolicies = async () => {
     try {
@@ -51,7 +91,7 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
       
       // Fetch RLS policies using the database function
       const { data, error } = await supabase.rpc('get_rls_policies_for_role', {
-        role_name: userRole
+        role_name: selectedRole
       });
 
       if (error) {
@@ -112,6 +152,10 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
     );
   }
 
+  const handleSaveRole = () => {
+    updateUserRole.mutate(selectedRole);
+  };
+
   return (
     <Card>
       <CardHeader>
@@ -119,8 +163,47 @@ export const UserRLSPolicies = ({ userRole, userId }: UserRLSPoliciesProps) => {
           <Lock className="h-5 w-5" />
           Row-Level Security Policies
         </CardTitle>
-        <CardDescription>
-          Policies that apply to this user's role: <Badge variant="secondary" className="ml-2">{userRole}</Badge>
+        <CardDescription className="space-y-3">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span>Current role:</span>
+            <Badge variant="outline">{userRole}</Badge>
+          </div>
+          
+          <div className="flex items-center gap-3 pt-2">
+            <Label htmlFor="role-select" className="text-sm font-medium">
+              Change Role:
+            </Label>
+            <Select value={selectedRole} onValueChange={setSelectedRole}>
+              <SelectTrigger id="role-select" className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="Admin">Admin</SelectItem>
+                <SelectItem value="Client">Client</SelectItem>
+                <SelectItem value="Contractor">Contractor</SelectItem>
+                <SelectItem value="User">User</SelectItem>
+                <SelectItem value="Moderator">Moderator</SelectItem>
+              </SelectContent>
+            </Select>
+            
+            {hasChanges && (
+              <Button 
+                onClick={handleSaveRole}
+                disabled={updateUserRole.isPending}
+                size="sm"
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" />
+                {updateUserRole.isPending ? "Saving..." : "Apply Role Change"}
+              </Button>
+            )}
+          </div>
+          
+          {hasChanges && (
+            <div className="text-xs text-muted-foreground bg-muted/50 p-2 rounded">
+              Preview showing policies for: <Badge variant="secondary" className="ml-1">{selectedRole}</Badge>
+            </div>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>
