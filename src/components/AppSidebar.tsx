@@ -16,7 +16,8 @@ import {
   AlertCircle,
   QrCode,
   Lightbulb,
-  CheckSquare
+  CheckSquare,
+  Shield
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +53,7 @@ const menuItems = [
   { title: "Site Assignments", url: "/site-assignments", icon: Briefcase, adminOnly: true },
   { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
   { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase, adminOnly: true },
+  { title: "Contractor Access Simulator", url: "/admin/contractor-access-simulator", icon: Shield, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
   
 ];
