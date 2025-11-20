@@ -333,10 +333,11 @@ export const FloorPlanViewer = ({
 
           {/* Render pins on top of PDF */}
           {pins.map((pin) => {
-            // Pins scale with the PDF naturally - no inverse scaling needed
+            // Apply inverse scaling to maintain consistent pin size at all zoom levels
             const pinSize = 40;
             const fontSize = 14;
             const borderWidth = 3;
+            const inverseScale = 1 / scale;
             
             return (
               <div
@@ -345,7 +346,7 @@ export const FloorPlanViewer = ({
                   position: 'absolute',
                   left: `${pin.x_position}%`,
                   top: `${pin.y_position}%`,
-                  transform: 'translate(-50%, -50%)',
+                  transform: `translate(-50%, -50%) scale(${inverseScale})`,
                   width: `${pinSize}px`,
                   height: `${pinSize}px`,
                   display: 'flex',
@@ -362,10 +363,10 @@ export const FloorPlanViewer = ({
                   onPinClick(pin);
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1.15)';
+                  e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale * 1.15})`;
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = 'translate(-50%, -50%) scale(1)';
+                  e.currentTarget.style.transform = `translate(-50%, -50%) scale(${inverseScale})`;
                 }}
               >
                 <div
