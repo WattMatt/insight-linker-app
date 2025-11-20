@@ -49,6 +49,7 @@ export const FloorPlanViewer = ({
   const [expandedClusterId, setExpandedClusterId] = useState<string | null>(null);
   const [showMiniMap, setShowMiniMap] = useState(false);
   const [containerSize, setContainerSize] = useState({ width: 0, height: 0 });
+  const [isAnimating, setIsAnimating] = useState(false);
 
   // Apply clustering based on current zoom level
   const clusteredItems = clusterPins(pins, scale, expandedClusterId);
@@ -292,7 +293,14 @@ export const FloorPlanViewer = ({
   };
 
   const handleMiniMapNavigate = (x: number, y: number) => {
+    // Enable smooth animation
+    setIsAnimating(true);
     setPanOffset({ x, y });
+    
+    // Disable animation after transition completes
+    setTimeout(() => {
+      setIsAnimating(false);
+    }, 500);
   };
 
   return (
@@ -350,6 +358,7 @@ export const FloorPlanViewer = ({
             width: 'fit-content',
             margin: '24px',
             position: 'relative',
+            transition: isAnimating ? 'transform 0.5s cubic-bezier(0.4, 0.0, 0.2, 1)' : 'none',
           }}
           onClick={handlePageClick}
         >
