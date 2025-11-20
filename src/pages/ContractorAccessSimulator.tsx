@@ -30,18 +30,26 @@ export default function ContractorAccessSimulator() {
   const { data: contractors, isLoading: loadingContractors } = useQuery({
     queryKey: ["contractors"],
     queryFn: async () => {
-      const { data, error } = await supabase
+      // First get contractor user IDs
+      const { data: roleData, error: roleError } = await supabase
         .from("user_roles")
-        .select("user_id, profiles(id, email, full_name)")
+        .select("user_id")
         .eq("role", "Contractor");
 
-      if (error) throw error;
+      if (roleError) throw roleError;
+      if (!roleData || roleData.length === 0) return [];
+
+      const userIds = roleData.map((r) => r.user_id);
+
+      // Then fetch their profiles
+      const { data: profileData, error: profileError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", userIds);
+
+      if (profileError) throw profileError;
       
-      return data.map((item: any) => ({
-        id: item.profiles.id,
-        email: item.profiles.email,
-        full_name: item.profiles.full_name,
-      })) as Contractor[];
+      return profileData as Contractor[];
     },
   });
 
@@ -172,12 +180,18 @@ export default function ContractorAccessSimulator() {
               <SelectTrigger className="w-full">
                 <SelectValue placeholder="Select a contractor..." />
               </SelectTrigger>
-              <SelectContent>
-                {contractors?.map((contractor) => (
-                  <SelectItem key={contractor.id} value={contractor.id}>
-                    {contractor.full_name || contractor.email} ({contractor.email})
-                  </SelectItem>
-                ))}
+              <SelectContent className="bg-background z-50">
+                {contractors && contractors.length > 0 ? (
+                  contractors.map((contractor) => (
+                    <SelectItem key={contractor.id} value={contractor.id}>
+                      {contractor.full_name || contractor.email} ({contractor.email})
+                    </SelectItem>
+                  ))
+                ) : (
+                  <div className="p-4 text-sm text-muted-foreground">
+                    No contractors found. Users need to be assigned the "Contractor" role.
+                  </div>
+                )}
               </SelectContent>
             </Select>
           )}
