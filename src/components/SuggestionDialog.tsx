@@ -98,6 +98,31 @@ export function SuggestionDialog({ open, onOpenChange, screenshot }: SuggestionD
 
       if (insertError) throw insertError;
 
+      // Send email notification to admin
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: 'arno@wmeng.co.za',
+          subject: `💡 New Suggestion: ${title}`,
+          html: `
+            <h2>New Suggestion Submitted</h2>
+            <p><strong>From:</strong> ${profile?.full_name || user.email} (${profile?.email || user.email})</p>
+            <p><strong>Priority:</strong> <span style="color: ${priority === 'high' ? 'red' : priority === 'medium' ? 'orange' : 'gray'}">${priority.toUpperCase()}</span></p>
+            <p><strong>Category:</strong> ${category}</p>
+            <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+              <strong>${title}</strong><br/>
+              <p style="margin-top: 8px;">${description}</p>
+            </div>
+            ${screenshotUrl ? '<p>📸 Screenshot attached</p>' : ''}
+            <p><strong>Page:</strong> ${window.location.href}</p>
+            <p style="margin-top: 20px;">
+              <a href="${window.location.origin}/suggestions" style="background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                View in Admin Panel
+              </a>
+            </p>
+          `,
+        }
+      });
+
       toast.success("Suggestion submitted successfully!");
       
       // Reset form

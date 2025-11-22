@@ -141,6 +141,38 @@ export default function Suggestions() {
         .eq("id", id);
 
       if (error) throw error;
+
+      // Send email notification to user when implemented
+      if (status === "implemented") {
+        const { data: suggestion } = await supabase
+          .from('suggestions')
+          .select('user_email, user_name, title, description')
+          .eq('id', id)
+          .single();
+
+        if (suggestion) {
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: suggestion.user_email,
+              subject: '🎉 Your Suggestion Has Been Implemented!',
+              html: `
+                <h2>Great news, ${suggestion.user_name || 'there'}!</h2>
+                <p>Your suggestion has been implemented and is now live!</p>
+                <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <strong>${suggestion.title}</strong><br/>
+                  <p style="margin-top: 8px;">${suggestion.description}</p>
+                </div>
+                ${admin_notes ? `<p><strong>Admin Notes:</strong> ${admin_notes}</p>` : ''}
+                <p>Please log in to check out the new feature and verify it works as expected.</p>
+                <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                  Thank you for helping us improve!<br/>
+                  The Admin Team
+                </p>
+              `,
+            }
+          });
+        }
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["suggestions"] });

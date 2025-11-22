@@ -89,6 +89,31 @@ export function IssueReportDialog({ open, onOpenChange, screenshot }: IssueRepor
 
       if (error) throw error;
 
+      // Send email notification to admin
+      await supabase.functions.invoke('send-email', {
+        body: {
+          to: 'arno@wmeng.co.za',
+          subject: `🐛 New Issue Report: ${severity.toUpperCase()}`,
+          html: `
+            <h2>New Issue Report</h2>
+            <p><strong>From:</strong> ${profile?.full_name || user.email} (${user.email})</p>
+            <p><strong>Severity:</strong> <span style="color: ${severity === 'critical' ? 'red' : severity === 'high' ? 'orange' : 'gray'}">${severity.toUpperCase()}</span></p>
+            <p><strong>Category:</strong> ${category}</p>
+            <p><strong>Page:</strong> ${window.location.href}</p>
+            <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+              <strong>Description:</strong><br/>
+              ${description.trim()}
+            </div>
+            ${screenshotUrl ? '<p>📸 Screenshot attached</p>' : ''}
+            <p style="margin-top: 20px;">
+              <a href="${window.location.origin}/issue-reports" style="background: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block;">
+                View in Admin Panel
+              </a>
+            </p>
+          `,
+        }
+      });
+
       toast.success("Issue report submitted successfully");
       setDescription("");
       setSeverity("medium");
