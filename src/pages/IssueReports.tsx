@@ -97,7 +97,7 @@ export default function IssueReports() {
       if (status === 'resolved') {
         const { data: issue } = await supabase
           .from('issue_reports')
-          .select('reported_by, description')
+          .select('reported_by, description, user_email, user_name')
           .eq('id', id)
           .single();
         
@@ -107,6 +107,27 @@ export default function IssueReports() {
             issue_report_id: id,
             message: `Your issue report "${issue.description.substring(0, 50)}..." has been resolved!`,
             type: 'issue_resolved'
+          });
+
+          // Send email to user
+          await supabase.functions.invoke('send-email', {
+            body: {
+              to: issue.user_email,
+              subject: '✅ Your Issue Has Been Resolved',
+              html: `
+                <h2>Good news, ${issue.user_name || 'there'}!</h2>
+                <p>Your issue report has been resolved by our team.</p>
+                <div style="background: #f3f4f6; padding: 16px; border-radius: 8px; margin: 20px 0;">
+                  <strong>Issue:</strong> ${issue.description.substring(0, 200)}${issue.description.length > 200 ? '...' : ''}
+                </div>
+                ${notes ? `<p><strong>Admin Notes:</strong> ${notes}</p>` : ''}
+                <p>Please log in to verify the fix and confirm that the issue is resolved.</p>
+                <p style="color: #6b7280; font-size: 14px; margin-top: 20px;">
+                  Thank you for helping us improve!<br/>
+                  The Admin Team
+                </p>
+              `,
+            }
           });
         }
       }
