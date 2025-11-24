@@ -418,14 +418,18 @@ const SiteAssignments = () => {
   return (
     <div className="container mx-auto space-y-8">
       <Tabs defaultValue="contractors" className="space-y-6">
-        <TabsList className="grid w-full max-w-md grid-cols-2">
+        <TabsList className="grid w-full max-w-3xl grid-cols-3">
           <TabsTrigger value="contractors" className="gap-2">
             <Briefcase className="h-4 w-4" />
-            Contractor Sites
+            Contractor → Sites
+          </TabsTrigger>
+          <TabsTrigger value="site-clients" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Sites → Clients
           </TabsTrigger>
           <TabsTrigger value="clients" className="gap-2">
-            <Building2 className="h-4 w-4" />
-            Client Organizations
+            <Users className="h-4 w-4" />
+            Users → Clients
           </TabsTrigger>
         </TabsList>
 
@@ -550,6 +554,73 @@ const SiteAssignments = () => {
                     </CardContent>
                   </Card>
                 ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+
+        <TabsContent value="site-clients" className="space-y-6">
+          <Alert>
+            <Building2 className="h-4 w-4" />
+            <AlertDescription>
+              Manage which client organization owns each site. Sites can only belong to one client organization at a time.
+            </AlertDescription>
+          </Alert>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold">Sites by Client Organization</h2>
+            
+            {!clientOrgs || clientOrgs.length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No client organizations found</p>
+                  <p className="text-sm text-muted-foreground">Create client organizations first</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {clientOrgs.map((client) => {
+                  const clientSites = sites?.filter(s => s.client_id === client.id) || [];
+                  return (
+                    <Card key={client.id}>
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                          <Building2 className="h-5 w-5" />
+                          {client.company_name || client.name}
+                        </CardTitle>
+                        <CardDescription>
+                          {clientSites.length} {clientSites.length === 1 ? 'site' : 'sites'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {clientSites.length === 0 ? (
+                          <p className="text-sm text-muted-foreground">No sites assigned to this organization</p>
+                        ) : (
+                          <div className="grid gap-2">
+                            {clientSites.map((site) => (
+                              <div
+                                key={site.id}
+                                className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                              >
+                                <div className="flex-1">
+                                  <p className="font-medium">{site.name}</p>
+                                  {site.address && (
+                                    <p className="text-sm text-muted-foreground">{site.address}</p>
+                                  )}
+                                </div>
+                                <Badge variant="secondary">
+                                  <Building2 className="h-3 w-3 mr-1" />
+                                  {client.company_name || client.name}
+                                </Badge>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  );
+                })}
               </div>
             )}
           </div>
