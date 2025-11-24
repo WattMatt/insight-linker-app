@@ -23,6 +23,43 @@ export interface OfflineImage {
   synced: boolean;
 }
 
+export interface OfflineSubsection {
+  id: string;
+  name: string;
+  tenant_name: string | null;
+  category: string;
+  site_id: string;
+  coc_number: string | null;
+  coc_type: string | null;
+  coc_status: string | null;
+  coc_issue_date: string | null;
+  meter_serial_number: string | null;
+  metering_status: string | null;
+  ct_ratio: string | null;
+  is_coc_required: boolean;
+  updated_at: string;
+  synced: boolean;
+}
+
+export interface OfflineDocument {
+  id: string;
+  subsection_id: string;
+  file_name: string;
+  blob: Blob;
+  category_id: string;
+  uploaded_at: string;
+  synced: boolean;
+}
+
+export interface OfflineFloorPlan {
+  id: string;
+  subsection_id: string;
+  file_name: string;
+  blob: Blob;
+  uploaded_at: string;
+  synced: boolean;
+}
+
 class OfflineDatabase {
   private db: IDBDatabase | null = null;
 
@@ -57,6 +94,27 @@ class OfflineDatabase {
         if (!db.objectStoreNames.contains('mutations')) {
           const mutationStore = db.createObjectStore('mutations', { keyPath: 'id' });
           mutationStore.createIndex('timestamp', 'timestamp', { unique: false });
+        }
+
+        // Subsections store
+        if (!db.objectStoreNames.contains('subsections')) {
+          const subsectionStore = db.createObjectStore('subsections', { keyPath: 'id' });
+          subsectionStore.createIndex('synced', 'synced', { unique: false });
+          subsectionStore.createIndex('site_id', 'site_id', { unique: false });
+        }
+
+        // Documents store
+        if (!db.objectStoreNames.contains('documents')) {
+          const documentStore = db.createObjectStore('documents', { keyPath: 'id' });
+          documentStore.createIndex('subsection_id', 'subsection_id', { unique: false });
+          documentStore.createIndex('synced', 'synced', { unique: false });
+        }
+
+        // Floor plans store
+        if (!db.objectStoreNames.contains('floor_plans')) {
+          const floorPlanStore = db.createObjectStore('floor_plans', { keyPath: 'id' });
+          floorPlanStore.createIndex('subsection_id', 'subsection_id', { unique: false });
+          floorPlanStore.createIndex('synced', 'synced', { unique: false });
         }
       };
     });
