@@ -29,7 +29,6 @@ const TemplateValidator = lazy(() => import("./pages/TemplateValidator"));
 const Users = lazy(() => import("./pages/Users"));
 const Calendar = lazy(() => import("./pages/Calendar"));
 const Settings = lazy(() => import("./pages/Settings"));
-const SiteAssignments = lazy(() => import("./pages/SiteAssignments"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ValidationFeedback = lazy(() => import("./pages/ValidationFeedback"));
 const PortalManagement = lazy(() => import("./pages/PortalManagement"));
@@ -294,13 +293,7 @@ const App = () => (
           />
           <Route
             path="/site-assignments"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <SiteAssignments />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
+            element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>}
           />
           <Route
           path="/validation-feedback"

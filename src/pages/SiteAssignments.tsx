@@ -266,13 +266,7 @@ const SiteAssignments = () => {
   }, {} as Record<string, { contractor: { email: string; full_name: string | null }; sites: { assignmentId: string; site: Site }[] }>);
 
   return (
-    <div className="container mx-auto py-8 space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Site Assignment Management</h1>
-        <p className="text-muted-foreground">
-          Manage contractor access to sites by assigning or removing site permissions
-        </p>
-      </div>
+    <div className="container mx-auto space-y-8">
 
       <Alert>
         <Users className="h-4 w-4" />
