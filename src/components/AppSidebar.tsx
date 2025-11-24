@@ -48,7 +48,6 @@ const menuItems = [
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
   { title: "Portal Management", url: "/portal-management", icon: Eye, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
-  { title: "Site Assignments", url: "/site-assignments", icon: Briefcase, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
   
 ];
