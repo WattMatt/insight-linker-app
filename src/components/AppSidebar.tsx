@@ -16,7 +16,6 @@ import {
   AlertCircle,
   QrCode,
   Lightbulb,
-  CheckSquare,
   Shield
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
@@ -47,7 +46,6 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
-  { title: "Verification Management", url: "/verification-management", icon: CheckSquare, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
   { title: "Site Assignments", url: "/site-assignments", icon: Briefcase, adminOnly: true },
   { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
