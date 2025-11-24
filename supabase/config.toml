@@ -20,3 +20,6 @@ verify_jwt = true
 
 [functions.send-email]
 verify_jwt = true
+
+[functions.offline-review]
+verify_jwt = false
