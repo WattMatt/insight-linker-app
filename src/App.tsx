@@ -1,3 +1,4 @@
+import { Suspense, lazy } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -6,51 +7,55 @@ import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/AppSidebar";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
+import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { LoadingState } from "@/components/LoadingState";
 import ProtectedRoute from "@/components/ProtectedRoute";
-import Index from "./pages/Index";
-import Auth from "./pages/Auth";
-import Dashboard from "./pages/Dashboard";
-import Clients from "./pages/Clients";
-import ClientDetail from "./pages/ClientDetail";
 
+// Lazy load pages for better performance
+const Index = lazy(() => import("./pages/Index"));
+const Auth = lazy(() => import("./pages/Auth"));
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Clients = lazy(() => import("./pages/Clients"));
+const ClientDetail = lazy(() => import("./pages/ClientDetail"));
+const SiteDetail = lazy(() => import("./pages/SiteDetail"));
+const SubsectionDetail = lazy(() => import("./pages/SubsectionDetail"));
+const PublicSubsection = lazy(() => import("./pages/PublicSubsection"));
+const Sites = lazy(() => import("./pages/Sites"));
+const Inspections = lazy(() => import("./pages/Inspections"));
+const InspectionDetail = lazy(() => import("./pages/InspectionDetail"));
+const InspectionTemplates = lazy(() => import("./pages/InspectionTemplates"));
+const TemplateBuilderPage = lazy(() => import("./pages/TemplateBuilderPage"));
+const TemplateValidator = lazy(() => import("./pages/TemplateValidator"));
+const Users = lazy(() => import("./pages/Users"));
+const Calendar = lazy(() => import("./pages/Calendar"));
+const Settings = lazy(() => import("./pages/Settings"));
+const SiteAssignments = lazy(() => import("./pages/SiteAssignments"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const ValidationFeedback = lazy(() => import("./pages/ValidationFeedback"));
+const AdminClientPreview = lazy(() => import("./pages/AdminClientPreview"));
+const ClientPortalDashboard = lazy(() => import("./pages/ClientPortalDashboard"));
+const ClientPortalSites = lazy(() => import("./pages/ClientPortalSites"));
+const ClientPortalSiteDetail = lazy(() => import("./pages/ClientPortalSiteDetail"));
+const ClientPortalSubsectionDetail = lazy(() => import("./pages/ClientPortalSubsectionDetail"));
+const ClientPortalCalendar = lazy(() => import("./pages/ClientPortalCalendar"));
+const ContractorDashboard = lazy(() => import("./pages/ContractorDashboard"));
+const ContractorSites = lazy(() => import("./pages/ContractorSites"));
+const ContractorSiteDetail = lazy(() => import("./pages/ContractorSiteDetail"));
+const ContractorSubsectionDetail = lazy(() => import("./pages/ContractorSubsectionDetail"));
+const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
+const AdminContractorPreview = lazy(() => import("./pages/AdminContractorPreview"));
+const ContractorAccessSimulator = lazy(() => import("./pages/ContractorAccessSimulator"));
+const IssueReports = lazy(() => import("./pages/IssueReports"));
+const Suggestions = lazy(() => import("./pages/Suggestions"));
+const VerificationManagement = lazy(() => import("./pages/VerificationManagement"));
+const QRCodes = lazy(() => import("./pages/QRCodes"));
+const Install = lazy(() => import("./pages/Install"));
 
-import SiteDetail from "./pages/SiteDetail";
-import SubsectionDetail from "./pages/SubsectionDetail";
-import PublicSubsection from "./pages/PublicSubsection";
-import Sites from "./pages/Sites";
-import Inspections from "./pages/Inspections";
-import InspectionDetail from "./pages/InspectionDetail";
-import InspectionTemplates from "./pages/InspectionTemplates";
-import TemplateBuilderPage from "./pages/TemplateBuilderPage";
-import TemplateValidator from "./pages/TemplateValidator";
-import Users from "./pages/Users";
-import Calendar from "./pages/Calendar";
-import Settings from "./pages/Settings";
-import SiteAssignments from "./pages/SiteAssignments";
-import NotFound from "./pages/NotFound";
-import ValidationFeedback from "./pages/ValidationFeedback";
-import AdminClientPreview from "./pages/AdminClientPreview";
+// Eagerly load components that appear on every page
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
 import { ClientPortalLayout } from "./components/ClientPortalLayout";
-import ClientPortalDashboard from "./pages/ClientPortalDashboard";
-import ClientPortalSites from "./pages/ClientPortalSites";
-import ClientPortalSiteDetail from "./pages/ClientPortalSiteDetail";
-import ClientPortalSubsectionDetail from "./pages/ClientPortalSubsectionDetail";
-import ClientPortalCalendar from "./pages/ClientPortalCalendar";
 import ContractorProtectedRoute from "./components/ContractorProtectedRoute";
-import ContractorDashboard from "./pages/ContractorDashboard";
-import ContractorSites from "./pages/ContractorSites";
-import ContractorSiteDetail from "./pages/ContractorSiteDetail";
-import ContractorSubsectionDetail from "./pages/ContractorSubsectionDetail";
-import ContractorPortal from "./pages/ContractorPortal";
-import AdminContractorPreview from "./pages/AdminContractorPreview";
-import ContractorAccessSimulator from "./pages/ContractorAccessSimulator";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
-import IssueReports from "./pages/IssueReports";
-import Suggestions from "./pages/Suggestions";
-import VerificationManagement from "./pages/VerificationManagement";
-import QRCodes from "./pages/QRCodes";
-import Install from "./pages/Install";
 import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 import { NotificationListener } from "./components/NotificationListener";
@@ -80,17 +85,19 @@ const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
 );
 
 const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <TooltipProvider>
-      <Toaster />
-      <Sonner />
-      <HelpButton />
-      <NotificationListener />
-      <VerificationListener />
-      <OfflineIndicator />
-      <BrowserRouter>
-        <DoubleSlashRedirect>
-          <Routes>
+  <ErrorBoundary>
+    <QueryClientProvider client={queryClient}>
+      <TooltipProvider>
+        <Toaster />
+        <Sonner />
+        <HelpButton />
+        <NotificationListener />
+        <VerificationListener />
+        <OfflineIndicator />
+        <BrowserRouter>
+          <DoubleSlashRedirect>
+            <Suspense fallback={<LoadingState variant="full-page" message="Loading..." />}>
+              <Routes>
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/install" element={<Install />} />
@@ -462,10 +469,12 @@ const App = () => (
           
           <Route path="*" element={<NotFound />} />
         </Routes>
+            </Suspense>
         </DoubleSlashRedirect>
       </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
+  </ErrorBoundary>
 );
 
 export default App;
