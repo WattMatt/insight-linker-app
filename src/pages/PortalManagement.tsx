@@ -1,7 +1,6 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Eye, Shield, Users } from "lucide-react";
-import AdminClientPreview from "./AdminClientPreview";
-import AdminContractorPreview from "./AdminContractorPreview";
+import { Shield, Users } from "lucide-react";
+import ClientAccessSimulator from "./ClientAccessSimulator";
 import ContractorAccessSimulator from "./ContractorAccessSimulator";
 
 export default function PortalManagement() {
@@ -15,30 +14,22 @@ export default function PortalManagement() {
       </div>
 
       <Tabs defaultValue="client" className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
           <TabsTrigger value="client" className="gap-2">
             <Users className="h-4 w-4" />
-            Client Preview
+            Client Simulator
           </TabsTrigger>
           <TabsTrigger value="contractor" className="gap-2">
-            <Eye className="h-4 w-4" />
-            Contractor Preview
-          </TabsTrigger>
-          <TabsTrigger value="simulator" className="gap-2">
             <Shield className="h-4 w-4" />
-            Access Simulator
+            Contractor Simulator
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="client" className="space-y-6">
-          <AdminClientPreview />
+          <ClientAccessSimulator />
         </TabsContent>
 
         <TabsContent value="contractor" className="space-y-6">
-          <AdminContractorPreview />
-        </TabsContent>
-
-        <TabsContent value="simulator" className="space-y-6">
           <ContractorAccessSimulator />
         </TabsContent>
       </Tabs>
