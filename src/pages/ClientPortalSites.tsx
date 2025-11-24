@@ -21,6 +21,8 @@ const ClientPortalSites = () => {
     queryKey: ["client-sites", clientInfo?.client_id],
     enabled: !!clientInfo?.client_id,
     queryFn: async () => {
+      // RLS policy ensures client can only see their own sites
+      // Additional client_id filter for defense in depth
       const { data, error } = await supabase
         .from("sites")
         .select("*")

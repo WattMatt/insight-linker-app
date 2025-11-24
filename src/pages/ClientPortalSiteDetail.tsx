@@ -22,13 +22,15 @@ const ClientPortalSiteDetail = () => {
   const isMobile = useIsMobile();
 
   const { data: site, isLoading: siteLoading } = useQuery({
-    queryKey: ["client-site", siteId],
-    enabled: !!siteId,
+    queryKey: ["client-site", siteId, clientInfo?.client_id],
+    enabled: !!siteId && !!clientInfo?.client_id,
     queryFn: async () => {
+      // Query with both site_id AND client_id to ensure client owns this site
       const { data, error } = await supabase
         .from("sites")
         .select("*")
         .eq("id", siteId!)
+        .eq("client_id", clientInfo!.client_id)
         .single();
 
       if (error) throw error;
