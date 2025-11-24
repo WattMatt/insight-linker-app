@@ -6,13 +6,20 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { toast } from "sonner";
-import { Loader2, Plus, Trash2, Users, Building2, History, UserPlus, UserMinus } from "lucide-react";
+import { Loader2, Plus, Trash2, Users, Building2, History, UserPlus, UserMinus, Briefcase } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-interface Contractor {
+interface User {
   id: string;
   email: string;
   full_name: string | null;
+}
+
+interface Client {
+  id: string;
+  name: string;
+  company_name: string | null;
 }
 
 interface Site {
@@ -64,6 +71,8 @@ interface HistoryEntry {
 const SiteAssignments = () => {
   const [selectedContractor, setSelectedContractor] = useState<string>("");
   const [selectedSite, setSelectedSite] = useState<string>("");
+  const [selectedClientUser, setSelectedClientUser] = useState<string>("");
+  const [selectedClientOrg, setSelectedClientOrg] = useState<string>("");
   const queryClient = useQueryClient();
 
   // Fetch all contractors
@@ -76,7 +85,6 @@ const SiteAssignments = () => {
         .eq("role", "Contractor");
 
       if (rolesError) throw rolesError;
-
       if (!roles || roles.length === 0) return [];
 
       const { data: profiles, error: profilesError } = await supabase
@@ -85,7 +93,43 @@ const SiteAssignments = () => {
         .in("id", roles.map(r => r.user_id));
 
       if (profilesError) throw profilesError;
-      return profiles as Contractor[];
+      return profiles as User[];
+    },
+  });
+
+  // Fetch all client users
+  const { data: clientUsers, isLoading: loadingClientUsers } = useQuery({
+    queryKey: ["client-users"],
+    queryFn: async () => {
+      const { data: roles, error: rolesError } = await supabase
+        .from("user_roles")
+        .select("user_id")
+        .eq("role", "Client");
+
+      if (rolesError) throw rolesError;
+      if (!roles || roles.length === 0) return [];
+
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", roles.map(r => r.user_id));
+
+      if (profilesError) throw profilesError;
+      return profiles as User[];
+    },
+  });
+
+  // Fetch all client organizations
+  const { data: clientOrgs, isLoading: loadingClientOrgs } = useQuery({
+    queryKey: ["client-orgs"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("clients")
+        .select("id, name, company_name")
+        .order("name");
+
+      if (error) throw error;
+      return data as Client[];
     },
   });
 
@@ -139,6 +183,40 @@ const SiteAssignments = () => {
     },
   });
 
+  // Fetch client assignments
+  const { data: clientAssignments, isLoading: loadingClientAssignments } = useQuery({
+    queryKey: ["client-assignments"],
+    queryFn: async () => {
+      const { data: userClients, error } = await supabase
+        .from("user_clients")
+        .select(`
+          id,
+          user_id,
+          client_id,
+          clients(id, name, company_name)
+        `)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      if (!userClients) return [];
+
+      const userIds = [...new Set(userClients.map(uc => uc.user_id))];
+      const { data: profiles, error: profilesError } = await supabase
+        .from("profiles")
+        .select("id, email, full_name")
+        .in("id", userIds);
+
+      if (profilesError) throw profilesError;
+
+      const profileMap = new Map(profiles?.map(p => [p.id, p]) || []);
+      
+      return userClients.map(uc => ({
+        ...uc,
+        profiles: profileMap.get(uc.user_id) || { email: "", full_name: null },
+      }));
+    },
+  });
+
   // Fetch assignment history
   const { data: history, isLoading: loadingHistory } = useQuery({
     queryKey: ["site-assignment-history"],
@@ -181,7 +259,46 @@ const SiteAssignments = () => {
     },
   });
 
-  // Add assignment mutation
+  // Add client assignment mutation
+  const addClientAssignment = useMutation({
+    mutationFn: async ({ userId, clientId }: { userId: string; clientId: string }) => {
+      const { error } = await supabase
+        .from("user_clients")
+        .insert({ user_id: userId, client_id: clientId });
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-assignments"] });
+      toast.success("Client user assigned to organization successfully");
+      setSelectedClientUser("");
+      setSelectedClientOrg("");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to assign client user");
+    },
+  });
+
+  // Remove client assignment mutation
+  const removeClientAssignment = useMutation({
+    mutationFn: async (assignmentId: string) => {
+      const { error } = await supabase
+        .from("user_clients")
+        .delete()
+        .eq("id", assignmentId);
+
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["client-assignments"] });
+      toast.success("Client user access removed successfully");
+    },
+    onError: (error: any) => {
+      toast.error(error.message || "Failed to remove access");
+    },
+  });
+
+  // Add contractor assignment mutation
   const addAssignment = useMutation({
     mutationFn: async ({ contractorId, siteId }: { contractorId: string; siteId: string }) => {
       const { error } = await supabase
@@ -220,13 +337,30 @@ const SiteAssignments = () => {
     },
   });
 
+  const handleAddClientAssignment = () => {
+    if (!selectedClientUser || !selectedClientOrg) {
+      toast.error("Please select both a client user and an organization");
+      return;
+    }
+
+    const exists = clientAssignments?.some(
+      a => a.user_id === selectedClientUser && a.client_id === selectedClientOrg
+    );
+
+    if (exists) {
+      toast.error("This client user is already assigned to this organization");
+      return;
+    }
+
+    addClientAssignment.mutate({ userId: selectedClientUser, clientId: selectedClientOrg });
+  };
+
   const handleAddAssignment = () => {
     if (!selectedContractor || !selectedSite) {
       toast.error("Please select both a contractor and a site");
       return;
     }
 
-    // Check if assignment already exists
     const exists = assignments?.some(
       a => a.user_id === selectedContractor && a.site_id === selectedSite
     );
@@ -239,7 +373,7 @@ const SiteAssignments = () => {
     addAssignment.mutate({ contractorId: selectedContractor, siteId: selectedSite });
   };
 
-  const isLoading = loadingContractors || loadingSites || loadingAssignments || loadingHistory;
+  const isLoading = loadingContractors || loadingSites || loadingAssignments || loadingHistory || loadingClientUsers || loadingClientOrgs || loadingClientAssignments;
 
   if (isLoading) {
     return (
@@ -265,137 +399,292 @@ const SiteAssignments = () => {
     return acc;
   }, {} as Record<string, { contractor: { email: string; full_name: string | null }; sites: { assignmentId: string; site: Site }[] }>);
 
+  // Group client assignments by user
+  const clientAssignmentsByUser = clientAssignments?.reduce((acc, assignment) => {
+    const userId = assignment.user_id;
+    if (!acc[userId]) {
+      acc[userId] = {
+        user: assignment.profiles,
+        clients: [],
+      };
+    }
+    acc[userId].clients.push({
+      assignmentId: assignment.id,
+      client: assignment.clients,
+    });
+    return acc;
+  }, {} as Record<string, { user: { email: string; full_name: string | null }; clients: { assignmentId: string; client: any }[] }>);
+
   return (
     <div className="container mx-auto space-y-8">
+      <Tabs defaultValue="contractors" className="space-y-6">
+        <TabsList className="grid w-full max-w-md grid-cols-2">
+          <TabsTrigger value="contractors" className="gap-2">
+            <Briefcase className="h-4 w-4" />
+            Contractor Sites
+          </TabsTrigger>
+          <TabsTrigger value="clients" className="gap-2">
+            <Building2 className="h-4 w-4" />
+            Client Organizations
+          </TabsTrigger>
+        </TabsList>
 
-      <Alert>
-        <Users className="h-4 w-4" />
-        <AlertDescription>
-          Contractors can only access sites they are explicitly assigned to. Use this interface to manage their access.
-        </AlertDescription>
-      </Alert>
+        <TabsContent value="contractors" className="space-y-6">
+          <Alert>
+            <Users className="h-4 w-4" />
+            <AlertDescription>
+              Contractors can only access sites they are explicitly assigned to. Use this interface to manage their access.
+            </AlertDescription>
+          </Alert>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Assign Contractor to Site</CardTitle>
-          <CardDescription>
-            Select a contractor and a site to grant access
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Select value={selectedContractor} onValueChange={setSelectedContractor}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select contractor" />
-              </SelectTrigger>
-              <SelectContent>
-                {contractors?.map((contractor) => (
-                  <SelectItem key={contractor.id} value={contractor.id}>
-                    {contractor.full_name || contractor.email}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Select value={selectedSite} onValueChange={setSelectedSite}>
-              <SelectTrigger>
-                <SelectValue placeholder="Select site" />
-              </SelectTrigger>
-              <SelectContent>
-                {sites?.map((site) => (
-                  <SelectItem key={site.id} value={site.id}>
-                    {site.name} ({site.clients.company_name || site.clients.name})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-
-            <Button 
-              onClick={handleAddAssignment} 
-              disabled={addAssignment.isPending}
-              className="w-full"
-            >
-              {addAssignment.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin mr-2" />
-              ) : (
-                <Plus className="h-4 w-4 mr-2" />
-              )}
-              Assign Access
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <div className="space-y-4">
-        <h2 className="text-2xl font-semibold">Current Assignments</h2>
-        
-        {!assignmentsByContractor || Object.keys(assignmentsByContractor).length === 0 ? (
           <Card>
-            <CardContent className="flex flex-col items-center justify-center py-12 text-center">
-              <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
-              <p className="text-muted-foreground">No site assignments yet</p>
-              <p className="text-sm text-muted-foreground">Start by assigning contractors to sites above</p>
+            <CardHeader>
+              <CardTitle>Assign Contractor to Site</CardTitle>
+              <CardDescription>
+                Select a contractor and a site to grant access
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Select value={selectedContractor} onValueChange={setSelectedContractor}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select contractor" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {contractors?.map((contractor) => (
+                      <SelectItem key={contractor.id} value={contractor.id}>
+                        {contractor.full_name || contractor.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedSite} onValueChange={setSelectedSite}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select site" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {sites?.map((site) => (
+                      <SelectItem key={site.id} value={site.id}>
+                        {site.name} ({site.clients.company_name || site.clients.name})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button 
+                  onClick={handleAddAssignment} 
+                  disabled={addAssignment.isPending}
+                  className="w-full"
+                >
+                  {addAssignment.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  Assign Access
+                </Button>
+              </div>
             </CardContent>
           </Card>
-        ) : (
-          <div className="grid gap-4">
-            {Object.entries(assignmentsByContractor).map(([contractorId, data]) => (
-              <Card key={contractorId}>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <Users className="h-5 w-5" />
-                    {data.contractor.full_name || data.contractor.email}
-                  </CardTitle>
-                  <CardDescription>
-                    {data.contractor.email}
-                  </CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-2">
-                    <p className="text-sm font-medium mb-3">
-                      Assigned Sites ({data.sites.length})
-                    </p>
-                    <div className="grid gap-2">
-                      {data.sites.map(({ assignmentId, site }) => (
-                        <div
-                          key={assignmentId}
-                          className="flex items-center justify-between p-3 border rounded-lg bg-card"
-                        >
-                          <div className="flex-1">
-                            <p className="font-medium">{site.name}</p>
-                            <p className="text-sm text-muted-foreground">
-                              {site.clients.company_name || site.clients.name}
-                              {site.address && ` • ${site.address}`}
-                            </p>
-                          </div>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => removeAssignment.mutate(assignmentId)}
-                            disabled={removeAssignment.isPending}
-                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                          >
-                            {removeAssignment.isPending ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              <Trash2 className="h-4 w-4" />
-                            )}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold">Current Contractor Assignments</h2>
+            
+            {!assignmentsByContractor || Object.keys(assignmentsByContractor).length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Building2 className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No site assignments yet</p>
+                  <p className="text-sm text-muted-foreground">Start by assigning contractors to sites above</p>
                 </CardContent>
               </Card>
-            ))}
+            ) : (
+              <div className="grid gap-4">
+                {Object.entries(assignmentsByContractor).map(([contractorId, data]) => (
+                  <Card key={contractorId}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        {data.contractor.full_name || data.contractor.email}
+                      </CardTitle>
+                      <CardDescription>
+                        {data.contractor.email}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium mb-3">
+                          Assigned Sites ({data.sites.length})
+                        </p>
+                        <div className="grid gap-2">
+                          {data.sites.map(({ assignmentId, site }) => (
+                            <div
+                              key={assignmentId}
+                              className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium">{site.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  {site.clients.company_name || site.clients.name}
+                                  {site.address && ` • ${site.address}`}
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeAssignment.mutate(assignmentId)}
+                                disabled={removeAssignment.isPending}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                {removeAssignment.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
           </div>
-        )}
-      </div>
+        </TabsContent>
+
+        <TabsContent value="clients" className="space-y-6">
+          <Alert>
+            <Building2 className="h-4 w-4" />
+            <AlertDescription>
+              Client users can access all sites belonging to their assigned organization. Manage client-to-organization assignments here.
+            </AlertDescription>
+          </Alert>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Assign Client User to Organization</CardTitle>
+              <CardDescription>
+                Select a client user and organization to grant access
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <Select value={selectedClientUser} onValueChange={setSelectedClientUser}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select client user" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientUsers?.map((user) => (
+                      <SelectItem key={user.id} value={user.id}>
+                        {user.full_name || user.email}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Select value={selectedClientOrg} onValueChange={setSelectedClientOrg}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="Select organization" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {clientOrgs?.map((org) => (
+                      <SelectItem key={org.id} value={org.id}>
+                        {org.company_name || org.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+
+                <Button 
+                  onClick={handleAddClientAssignment} 
+                  disabled={addClientAssignment.isPending}
+                  className="w-full"
+                >
+                  {addClientAssignment.isPending ? (
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                  ) : (
+                    <Plus className="h-4 w-4 mr-2" />
+                  )}
+                  Assign Access
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-4">
+            <h2 className="text-2xl font-semibold">Current Client Assignments</h2>
+            
+            {!clientAssignmentsByUser || Object.keys(clientAssignmentsByUser).length === 0 ? (
+              <Card>
+                <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+                  <Users className="h-12 w-12 text-muted-foreground mb-4" />
+                  <p className="text-muted-foreground">No client assignments yet</p>
+                  <p className="text-sm text-muted-foreground">Start by assigning client users to organizations above</p>
+                </CardContent>
+              </Card>
+            ) : (
+              <div className="grid gap-4">
+                {Object.entries(clientAssignmentsByUser).map(([userId, data]) => (
+                  <Card key={userId}>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Users className="h-5 w-5" />
+                        {data.user.full_name || data.user.email}
+                      </CardTitle>
+                      <CardDescription>
+                        {data.user.email}
+                      </CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium mb-3">
+                          Assigned Organizations ({data.clients.length})
+                        </p>
+                        <div className="grid gap-2">
+                          {data.clients.map(({ assignmentId, client }) => (
+                            <div
+                              key={assignmentId}
+                              className="flex items-center justify-between p-3 border rounded-lg bg-card"
+                            >
+                              <div className="flex-1">
+                                <p className="font-medium">{client.company_name || client.name}</p>
+                                <p className="text-sm text-muted-foreground">
+                                  Access to all sites in this organization
+                                </p>
+                              </div>
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => removeClientAssignment.mutate(assignmentId)}
+                                disabled={removeClientAssignment.isPending}
+                                className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                              >
+                                {removeClientAssignment.isPending ? (
+                                  <Loader2 className="h-4 w-4 animate-spin" />
+                                ) : (
+                                  <Trash2 className="h-4 w-4" />
+                                )}
+                              </Button>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ))}
+              </div>
+            )}
+          </div>
+        </TabsContent>
+      </Tabs>
 
       <div className="space-y-4">
         <h2 className="text-2xl font-semibold flex items-center gap-2">
           <History className="h-5 w-5" />
-          Assignment History
+          Contractor Assignment History
         </h2>
         
         {!history || history.length === 0 ? (
