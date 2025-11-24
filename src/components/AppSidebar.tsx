@@ -46,11 +46,9 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
+  { title: "Portal Management", url: "/portal-management", icon: Eye, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
   { title: "Site Assignments", url: "/site-assignments", icon: Briefcase, adminOnly: true },
-  { title: "Client Portal Preview", url: "/admin-client-preview", icon: Eye, adminOnly: true },
-  { title: "Contractor Portal Preview", url: "/admin-contractor-preview", icon: Briefcase, adminOnly: true },
-  { title: "Contractor Access Simulator", url: "/admin/contractor-access-simulator", icon: Shield, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
   
 ];
