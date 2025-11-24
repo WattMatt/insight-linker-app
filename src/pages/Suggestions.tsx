@@ -274,15 +274,7 @@ ${suggestion.screenshot_url ? `📸 Screenshot: ${imageUrl}` : ""}
     suggestions?.filter((s) => s.status === "implemented").length || 0;
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">User Suggestions</h1>
-          <p className="text-muted-foreground">
-            Review and manage user feature suggestions
-          </p>
-        </div>
-      </div>
+    <div className="space-y-6">
 
       <div className="grid gap-4 md:grid-cols-3">
         <Card>
