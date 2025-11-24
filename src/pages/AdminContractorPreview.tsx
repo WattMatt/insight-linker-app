@@ -96,7 +96,6 @@ const AdminContractorPreview = () => {
   if (isLoading) {
     return (
       <div className="space-y-6">
-        <Skeleton className="h-10 w-64" />
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           {[1, 2, 3, 4, 5, 6].map((i) => (
             <Skeleton key={i} className="h-64" />
@@ -118,16 +117,6 @@ const AdminContractorPreview = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-3">
-        <Briefcase className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold tracking-tight">Contractor Portal Preview</h1>
-          <p className="text-muted-foreground">
-            Select a site to preview what contractors see for that site
-          </p>
-        </div>
-      </div>
-
       {sites.length > 0 ? (
         <>
           <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">

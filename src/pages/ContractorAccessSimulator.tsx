@@ -149,17 +149,7 @@ export default function ContractorAccessSimulator() {
   };
 
   return (
-    <div className="container mx-auto p-6 space-y-6">
-      <div className="flex items-center gap-3 mb-6">
-        <Shield className="h-8 w-8 text-primary" />
-        <div>
-          <h1 className="text-3xl font-bold">Contractor Access Simulator</h1>
-          <p className="text-muted-foreground">
-            Test and verify what data contractors can access based on their site assignments
-          </p>
-        </div>
-      </div>
-
+    <div className="space-y-6">
       <Alert>
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>

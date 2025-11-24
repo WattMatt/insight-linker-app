@@ -32,7 +32,7 @@ const Settings = lazy(() => import("./pages/Settings"));
 const SiteAssignments = lazy(() => import("./pages/SiteAssignments"));
 const NotFound = lazy(() => import("./pages/NotFound"));
 const ValidationFeedback = lazy(() => import("./pages/ValidationFeedback"));
-const AdminClientPreview = lazy(() => import("./pages/AdminClientPreview"));
+const PortalManagement = lazy(() => import("./pages/PortalManagement"));
 const ClientPortalDashboard = lazy(() => import("./pages/ClientPortalDashboard"));
 const ClientPortalSites = lazy(() => import("./pages/ClientPortalSites"));
 const ClientPortalSiteDetail = lazy(() => import("./pages/ClientPortalSiteDetail"));
@@ -43,8 +43,6 @@ const ContractorSites = lazy(() => import("./pages/ContractorSites"));
 const ContractorSiteDetail = lazy(() => import("./pages/ContractorSiteDetail"));
 const ContractorSubsectionDetail = lazy(() => import("./pages/ContractorSubsectionDetail"));
 const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
-const AdminContractorPreview = lazy(() => import("./pages/AdminContractorPreview"));
-const ContractorAccessSimulator = lazy(() => import("./pages/ContractorAccessSimulator"));
 const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
@@ -339,35 +337,19 @@ const App = () => (
             }
           />
           <Route
-            path="/admin-client-preview"
+            path="/portal-management"
             element={
               <ProtectedRoute>
                 <DashboardLayout>
-                  <AdminClientPreview />
+                  <PortalManagement />
                 </DashboardLayout>
               </ProtectedRoute>
             }
           />
-          <Route
-            path="/admin-contractor-preview"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <AdminContractorPreview />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/admin/contractor-access-simulator"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <ContractorAccessSimulator />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
+          {/* Redirect old portal preview routes to new consolidated page */}
+          <Route path="/admin-client-preview" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/admin-contractor-preview" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
+          <Route path="/admin/contractor-access-simulator" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
           
           {/* Client Portal Routes */}
           <Route

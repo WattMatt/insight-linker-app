@@ -61,21 +61,6 @@ const AdminClientPreview = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold">Client Portal Preview</h1>
-          <p className="text-muted-foreground mt-2">
-            Preview the client portal experience as any client
-          </p>
-        </div>
-        <Link to="/users">
-          <Button variant="outline" className="gap-2">
-            <ArrowLeft className="h-4 w-4" />
-            Back to Users
-          </Button>
-        </Link>
-      </div>
-
       <Alert>
         <Info className="h-4 w-4" />
         <AlertDescription>
