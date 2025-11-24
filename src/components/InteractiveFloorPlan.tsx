@@ -4,11 +4,13 @@ import { FloorPlanPinModal } from "./FloorPlanPinModal";
 import { FloorPlanPinsList } from "./FloorPlanPinsList";
 import { FloorPlanStatsWidget } from "./FloorPlanStatsWidget";
 import { Button } from "./ui/button";
-import { Upload, FileDown, Loader2 } from "lucide-react";
+import { Badge } from "./ui/badge";
+import { Upload, FileDown, Loader2, WifiOff } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { generateFloorPlanReport } from "@/lib/floorPlanReportGenerator";
 import html2canvas from "html2canvas";
+import { useOfflineFloorPlanAnnotations } from "@/hooks/useOfflineFloorPlanAnnotations";
 
 interface InteractiveFloorPlanProps {
   subsectionId: string;
@@ -31,6 +33,14 @@ export const InteractiveFloorPlan = ({
   const [isUploading, setIsUploading] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
   const [moveMode, setMoveMode] = useState<string | null>(null); // Pin ID being moved
+  
+  const {
+    addPin,
+    updatePin,
+    deletePin,
+    getOfflineAnnotations,
+    isOnline,
+  } = useOfflineFloorPlanAnnotations();
 
   useEffect(() => {
     loadFloorPlan();
@@ -117,14 +127,24 @@ export const InteractiveFloorPlan = ({
 
       if (floorPlanData) {
         // Fetch pins for this floor plan
-        const { data: pinsData, error: pinsError } = await supabase
-          .from("floor_plan_pins")
-          .select("*")
-          .eq("floor_plan_id", floorPlanData.id)
-          .order("pin_number", { ascending: true });
+        if (isOnline) {
+          const { data: pinsData, error: pinsError } = await supabase
+            .from("floor_plan_pins")
+            .select("*")
+            .eq("floor_plan_id", floorPlanData.id)
+            .order("pin_number", { ascending: true });
 
-        if (pinsError) throw pinsError;
-        setPins(pinsData || []);
+          if (pinsError) throw pinsError;
+          
+          // Merge with offline pins
+          const offlineData = await getOfflineAnnotations(floorPlanData.id);
+          const allPins = [...(pinsData || []), ...offlineData.pins];
+          setPins(allPins);
+        } else {
+          // Offline - load from IndexedDB only
+          const offlineData = await getOfflineAnnotations(floorPlanData.id);
+          setPins(offlineData.pins as any);
+        }
       }
     } catch (error) {
       console.error("Error loading floor plan:", error);
@@ -193,16 +213,18 @@ export const InteractiveFloorPlan = ({
     // If in move mode, update existing pin position
     if (moveMode) {
       try {
-        const { error } = await supabase
-          .from("floor_plan_pins")
-          .update({
-            x_position: x,
-            y_position: y,
-          })
-          .eq("id", moveMode);
+        if (isOnline) {
+          const { error } = await supabase
+            .from("floor_plan_pins")
+            .update({
+              x_position: x,
+              y_position: y,
+            })
+            .eq("id", moveMode);
 
-        if (error) throw error;
-
+          if (error) throw error;
+        }
+        
         await loadFloorPlan();
         setMoveMode(null);
         toast.success("Pin moved successfully");
@@ -220,22 +242,9 @@ export const InteractiveFloorPlan = ({
 
       const newPinNumber = pins.length > 0 ? Math.max(...pins.map(p => p.pin_number)) + 1 : 1;
 
-      const { data: newPin, error } = await supabase
-        .from("floor_plan_pins")
-        .insert({
-          floor_plan_id: floorPlan.id,
-          pin_number: newPinNumber,
-          x_position: x,
-          y_position: y,
-          pin_type: 'snag', // Default to snag, user can change in modal
-          created_by: user.id,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setPins([...pins, newPin]);
+      const newPin = await addPin(floorPlan.id, x, y, newPinNumber, user.id);
+      
+      setPins([...pins, newPin as any]);
       setSelectedPin(newPin);
       setIsModalOpen(true);
     } catch (error) {
@@ -254,64 +263,14 @@ export const InteractiveFloorPlan = ({
     }
 
     try {
-      let photoUrl = pinData.photo_url;
-
-      // Upload photo if provided
-      if (photo) {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) throw new Error("Not authenticated");
-
-        const fileName = `floor-plan-pins/${floorPlan.id}/${Date.now()}_${photo.name}`;
-        const { error: uploadError } = await supabase.storage
-          .from("inspection-photos")
-          .upload(fileName, photo);
-
-        if (uploadError) throw uploadError;
-
-        const { data: { publicUrl } } = supabase.storage
-          .from("inspection-photos")
-          .getPublicUrl(fileName);
-
-        photoUrl = publicUrl;
-      }
-
-      // Update the pin with all data including pin_type
-      console.log("Updating pin with:", {
-        pin_type: pinData.pin_type,
-        title: pinData.title,
-        notes: pinData.notes,
-        priority: pinData.priority,
-        status: pinData.status,
-        assigned_contractor: pinData.assigned_contractor,
-        due_date: pinData.due_date,
-        photo_url: photoUrl,
-      });
-
-      const { error } = await supabase
-        .from("floor_plan_pins")
-        .update({
-          pin_type: pinData.pin_type,
-          title: pinData.title,
-          notes: pinData.notes,
-          priority: pinData.priority,
-          status: pinData.status,
-          assigned_contractor: pinData.assigned_contractor,
-          due_date: pinData.due_date,
-          photo_url: photoUrl,
-        })
-        .eq("id", selectedPin.id);
-
-      console.log("Update result:", { error });
-      if (error) throw error;
-
+      await updatePin(selectedPin.id, pinData, photo);
+      
       // Refresh pins
       await loadFloorPlan();
       setIsModalOpen(false);
       setSelectedPin(null);
-      toast.success("Pin saved successfully");
     } catch (error) {
       console.error("Error saving pin:", error);
-      toast.error("Failed to save pin");
       throw error;
     }
   };
@@ -324,20 +283,13 @@ export const InteractiveFloorPlan = ({
     }
 
     try {
-      const { error } = await supabase
-        .from("floor_plan_pins")
-        .delete()
-        .eq("id", selectedPin.id);
-
-      if (error) throw error;
-
+      await deletePin(selectedPin.id);
+      
       setPins(pins.filter(p => p.id !== selectedPin.id));
       setSelectedPin(null);
       setIsModalOpen(false);
-      toast.success("Pin deleted successfully");
     } catch (error) {
       console.error("Error deleting pin:", error);
-      toast.error("Failed to delete pin");
       throw error;
     }
   };
@@ -443,7 +395,15 @@ export const InteractiveFloorPlan = ({
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-lg sm:text-2xl font-bold">Interactive Floor Plan</h2>
+        <div className="flex items-center gap-3">
+          <h2 className="text-lg sm:text-2xl font-bold">Interactive Floor Plan</h2>
+          {!isOnline && (
+            <Badge variant="secondary" className="gap-1">
+              <WifiOff className="w-3 h-3" />
+              Offline Mode
+            </Badge>
+          )}
+        </div>
         <div className="flex gap-2">
           <label className="flex-1 sm:flex-initial">
             <Button variant="outline" disabled={isUploading} size="sm" className="w-full sm:w-auto" asChild>

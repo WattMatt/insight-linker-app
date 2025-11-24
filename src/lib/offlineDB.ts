@@ -60,6 +60,54 @@ export interface OfflineFloorPlan {
   synced: boolean;
 }
 
+export interface OfflineFloorPlanPin {
+  id: string;
+  floor_plan_id: string;
+  pin_number: number;
+  x_position: number;
+  y_position: number;
+  pin_type: 'snag' | 'observation';
+  title: string | null;
+  notes: string | null;
+  detailed_description: string | null;
+  priority: string | null;
+  status: string;
+  assigned_contractor: string | null;
+  stakeholders: string | null;
+  package: string | null;
+  due_date: string | null;
+  photo_url: string | null;
+  photo_blob: Blob | null;
+  created_by: string | null;
+  created_at: string;
+  synced: boolean;
+}
+
+export interface OfflineMarkup {
+  id: string;
+  floor_plan_id: string;
+  markup_type: 'line' | 'rectangle' | 'circle' | 'arrow' | 'text' | 'freehand';
+  vector_data: string; // JSON string of shape data
+  color: string;
+  stroke_width: number;
+  created_at: string;
+  synced: boolean;
+}
+
+export interface OfflineMeasurement {
+  id: string;
+  floor_plan_id: string;
+  start_x: number;
+  start_y: number;
+  end_x: number;
+  end_y: number;
+  value: number;
+  unit: string;
+  label: string | null;
+  created_at: string;
+  synced: boolean;
+}
+
 class OfflineDatabase {
   private db: IDBDatabase | null = null;
 
@@ -115,6 +163,27 @@ class OfflineDatabase {
           const floorPlanStore = db.createObjectStore('floor_plans', { keyPath: 'id' });
           floorPlanStore.createIndex('subsection_id', 'subsection_id', { unique: false });
           floorPlanStore.createIndex('synced', 'synced', { unique: false });
+        }
+
+        // Floor plan pins store
+        if (!db.objectStoreNames.contains('floor_plan_pins')) {
+          const pinsStore = db.createObjectStore('floor_plan_pins', { keyPath: 'id' });
+          pinsStore.createIndex('floor_plan_id', 'floor_plan_id', { unique: false });
+          pinsStore.createIndex('synced', 'synced', { unique: false });
+        }
+
+        // Markups store
+        if (!db.objectStoreNames.contains('markups')) {
+          const markupsStore = db.createObjectStore('markups', { keyPath: 'id' });
+          markupsStore.createIndex('floor_plan_id', 'floor_plan_id', { unique: false });
+          markupsStore.createIndex('synced', 'synced', { unique: false });
+        }
+
+        // Measurements store
+        if (!db.objectStoreNames.contains('measurements')) {
+          const measurementsStore = db.createObjectStore('measurements', { keyPath: 'id' });
+          measurementsStore.createIndex('floor_plan_id', 'floor_plan_id', { unique: false });
+          measurementsStore.createIndex('synced', 'synced', { unique: false });
         }
       };
     });
