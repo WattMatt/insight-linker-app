@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye, Calendar as CalendarIcon, Loader2 } from "lucide-react";
+import { ArrowLeft, FileText, AlertCircle, QrCode as QrCodeIcon, Edit, Download, Upload, Trash2, Plus, ExternalLink, RefreshCw, Eye, Calendar as CalendarIcon, Loader2, WifiOff } from "lucide-react";
 import { SUBSECTION_CATEGORIES, getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { toast } from "sonner";
@@ -16,6 +16,8 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
+import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
+import { getSubsectionDocuments, getSubsectionFloorPlans } from "@/lib/offlineDBExtensions";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -106,6 +108,11 @@ const SubsectionDetail = () => {
   const [cocPreviewData, setCocPreviewData] = useState<any>(null);
   const [showCocPreview, setShowCocPreview] = useState(false);
   const [pendingDocumentForVerification, setPendingDocumentForVerification] = useState<{id: string, url: string, name: string} | null>(null);
+  const [offlineDocuments, setOfflineDocuments] = useState<any[]>([]);
+  const [offlineFloorPlans, setOfflineFloorPlans] = useState<any[]>([]);
+
+  // Offline capabilities
+  const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
 
   useEffect(() => {
     if (subsectionId && subsectionId !== "new") {
@@ -116,6 +123,11 @@ const SubsectionDetail = () => {
       fetchSupabaseDocuments();
       fetchSnags();
       fetchCocValidations();
+      
+      // Load offline data if offline
+      if (!isOnline) {
+        loadOfflineData();
+      }
 
       // Set up real-time subscription for snags
       const snagsChannel = supabase
@@ -181,7 +193,26 @@ const SubsectionDetail = () => {
       setLoading(false);
       fetchTemplates();
     }
-  }, [subsectionId]);
+  }, [subsectionId, isOnline]);
+
+  const loadOfflineData = async () => {
+    if (!subsectionId) return;
+    
+    try {
+      const offlineData = await getOfflineData(subsectionId);
+      
+      if (offlineData.documents.length > 0) {
+        setOfflineDocuments(offlineData.documents);
+        toast.info(`${offlineData.documents.length} offline document(s) available`);
+      }
+      
+      if (offlineData.floorPlans.length > 0) {
+        setOfflineFloorPlans(offlineData.floorPlans);
+      }
+    } catch (error) {
+      console.error('Error loading offline data:', error);
+    }
+  };
 
   useEffect(() => {
     // Force regenerate QR code when component mounts or logo changes

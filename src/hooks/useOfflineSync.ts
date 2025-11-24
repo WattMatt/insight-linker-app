@@ -106,6 +106,82 @@ export function useOfflineSync() {
         break;
       }
 
+      case 'UPDATE_SUBSECTION': {
+        const { id, ...updates } = mutation.data;
+        const { error } = await supabase
+          .from('subsections')
+          .update(updates)
+          .eq('id', id);
+        if (error) throw error;
+        
+        // Mark as synced in IndexedDB
+        const { markSubsectionSynced } = await import('@/lib/offlineDBExtensions');
+        await markSubsectionSynced(id);
+        break;
+      }
+
+      case 'UPLOAD_DOCUMENT': {
+        const { documentId, subsectionId, categoryId, file, filePath } = mutation.data;
+        
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath);
+
+        // Insert into database
+        const { error: dbError } = await supabase
+          .from('subsection_documents')
+          .insert({
+            subsection_id: subsectionId,
+            category_id: categoryId,
+            file_name: file.name,
+            file_url: publicUrl,
+            file_size: file.size,
+          });
+        if (dbError) throw dbError;
+
+        // Mark as synced in IndexedDB
+        const { markDocumentSynced } = await import('@/lib/offlineDBExtensions');
+        await markDocumentSynced(documentId);
+        break;
+      }
+
+      case 'UPLOAD_FLOOR_PLAN': {
+        const { floorPlanId, subsectionId, file, filePath } = mutation.data;
+        
+        // Upload to storage
+        const { error: uploadError } = await supabase.storage
+          .from('documents')
+          .upload(filePath, file);
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('documents')
+          .getPublicUrl(filePath);
+
+        // Insert into database
+        const { error: dbError } = await supabase
+          .from('subsection_floor_plans')
+          .insert({
+            subsection_id: subsectionId,
+            file_name: file.name,
+            file_url: publicUrl,
+          });
+        if (dbError) throw dbError;
+
+        // Mark as synced in IndexedDB
+        const { markFloorPlanSynced } = await import('@/lib/offlineDBExtensions');
+        await markFloorPlanSynced(floorPlanId);
+        break;
+      }
+
       default:
         console.warn('Unknown mutation type:', mutation.type);
     }
