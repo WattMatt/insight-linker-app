@@ -46,7 +46,6 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const AdminContractorPreview = lazy(() => import("./pages/AdminContractorPreview"));
 const ContractorAccessSimulator = lazy(() => import("./pages/ContractorAccessSimulator"));
 const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
-const VerificationManagement = lazy(() => import("./pages/VerificationManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
 
@@ -328,16 +327,7 @@ const App = () => (
           {/* Redirect old routes to new consolidated page */}
           <Route path="/issue-reports" element={<ProtectedRoute><DashboardLayout><FeedbackManagement /></DashboardLayout></ProtectedRoute>} />
           <Route path="/suggestions" element={<ProtectedRoute><DashboardLayout><FeedbackManagement /></DashboardLayout></ProtectedRoute>} />
-          <Route
-            path="/verification-management"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <VerificationManagement />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
+          <Route path="/verification-management" element={<ProtectedRoute><DashboardLayout><FeedbackManagement /></DashboardLayout></ProtectedRoute>} />
           <Route
             path="/qr-codes"
             element={
