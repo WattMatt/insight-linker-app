@@ -19,13 +19,13 @@ const ClientPortalDashboard = () => {
     queryFn: async () => {
       const clientId = clientInfo?.client_id;
       
-      // Get sites count
+      // Get sites count - RLS ensures only client's sites are counted
       const { count: sitesCount } = await supabase
         .from("sites")
         .select("*", { count: "exact", head: true })
         .eq("client_id", clientId);
 
-      // Get subsections count
+      // Get site IDs owned by this client for filtering related data
       const { data: sites } = await supabase
         .from("sites")
         .select("id")
@@ -33,18 +33,29 @@ const ClientPortalDashboard = () => {
       
       const siteIds = sites?.map(s => s.id) || [];
       
+      // Only query if client has sites
+      if (siteIds.length === 0) {
+        return {
+          sites: 0,
+          subsections: 0,
+          inspections: 0,
+          upcoming: 0,
+        };
+      }
+      
+      // Get subsections count - RLS policies ensure only subsections from client's sites
       const { count: subsectionsCount } = await supabase
         .from("subsections")
         .select("*", { count: "exact", head: true })
         .in("site_id", siteIds);
 
-      // Get inspections count
+      // Get inspections count - RLS policies ensure only inspections from client's sites
       const { count: inspectionsCount } = await supabase
         .from("inspections")
         .select("*", { count: "exact", head: true })
         .in("site_id", siteIds);
 
-      // Get upcoming inspections
+      // Get upcoming inspections - RLS policies ensure only inspections from client's sites
       const { count: upcomingCount } = await supabase
         .from("inspections")
         .select("*", { count: "exact", head: true })

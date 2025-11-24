@@ -50,17 +50,17 @@ const ClientPortalCalendar = () => {
     queryKey: ["client-calendar-events", clientInfo?.client_id],
     enabled: !!clientInfo?.client_id,
     queryFn: async () => {
-      // Get site names for this client
+      // First verify client ownership of sites by querying with client_id filter
       const { data: sites } = await supabase
         .from("sites")
-        .select("name")
+        .select("id, name")
         .eq("client_id", clientInfo!.client_id);
       
       if (!sites || sites.length === 0) return [];
 
       const siteNames = sites.map(s => s.name);
 
-      // Get calendar events for these sites
+      // Get calendar events for these sites (filtered by site names from client's sites only)
       const { data, error } = await supabase
         .from("calendar_events")
         .select("*")

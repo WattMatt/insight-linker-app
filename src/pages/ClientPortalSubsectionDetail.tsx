@@ -18,24 +18,32 @@ const ClientPortalSubsectionDetail = () => {
   const queryClient = useQueryClient();
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
-    queryKey: ["client-subsection", subsectionId],
-    enabled: !!subsectionId,
+    queryKey: ["client-subsection", subsectionId, clientInfo?.client_id],
+    enabled: !!subsectionId && !!clientInfo?.client_id,
     queryFn: async () => {
+      // Fetch subsection with site info including client_id for verification
       const { data, error } = await supabase
         .from("subsections")
-        .select("*, sites(name, id)")
+        .select("*, sites(name, id, client_id)")
         .eq("id", subsectionId!)
         .single();
 
       if (error) throw error;
+      
+      // Verify client owns this subsection's site
+      if (data?.sites?.client_id !== clientInfo!.client_id) {
+        throw new Error("Access denied: You don't have permission to view this subsection");
+      }
+      
       return data;
     },
   });
 
   const { data: documents, isLoading: docsLoading } = useQuery({
     queryKey: ["client-subsection-documents", subsectionId],
-    enabled: !!subsectionId,
+    enabled: !!subsectionId && !!subsection, // Only fetch if subsection access is verified
     queryFn: async () => {
+      // RLS policies ensure client can only see documents for their subsections
       const { data, error } = await supabase
         .from("subsection_documents")
         .select("*, document_categories(name)")
