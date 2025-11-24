@@ -108,7 +108,7 @@ Be conversational, helpful, and technically accurate. If you learn something new
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
+        model: 'google/gemini-3-pro-preview',
         messages: conversationMessages,
         temperature: 0.7,
       }),
