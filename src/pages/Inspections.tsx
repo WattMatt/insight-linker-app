@@ -9,11 +9,13 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ClipboardCheck } from "lucide-react";
+import { Plus, Trash2, ClipboardCheck, WifiOff } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { inspectionSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
+import { useOfflineInspections } from "@/hooks/useOfflineInspections";
+import { offlineDB } from "@/lib/offlineDB";
 
 interface Inspection {
   id: string;
@@ -60,12 +62,15 @@ const Inspections = () => {
     site_id: "",
   });
 
+  const { createInspection, deleteInspection, isOnline } = useOfflineInspections();
+
   useEffect(() => {
     fetchData();
   }, []);
 
   const fetchData = async () => {
     try {
+      // Fetch online data
       const [inspectionsRes, sitesRes] = await Promise.all([
         supabase
           .from("inspections")
@@ -77,11 +82,75 @@ const Inspections = () => {
       if (inspectionsRes.error) throw inspectionsRes.error;
       if (sitesRes.error) throw sitesRes.error;
 
-      setInspections(inspectionsRes.data || []);
+      let allInspections = inspectionsRes.data || [];
+
+      // If offline, merge with offline inspections
+      if (!isOnline) {
+        const offlineInspections = await offlineDB.getUnsyncedInspections();
+        // Add offline inspections to the list with all required fields
+        const offlineMapped = offlineInspections.map(offline => {
+          const site = sites.find(s => s.id === offline.site_id);
+          return {
+            id: offline.id,
+            title: offline.title,
+            description: offline.description,
+            status: offline.status,
+            inspection_date: offline.inspection_date,
+            site_id: offline.site_id,
+            subsection_id: null,
+            sites: site ? {
+              id: site.id,
+              name: site.name,
+              client_id: site.clients?.name || '',
+              clients: {
+                id: '',
+                name: site.clients?.name || ''
+              }
+            } : { 
+              id: offline.site_id, 
+              name: 'Unknown Site', 
+              client_id: '', 
+              clients: { id: '', name: '' } 
+            },
+            subsections: undefined,
+          };
+        });
+        allInspections = [...offlineMapped, ...allInspections] as any[];
+      }
+
+      setInspections(allInspections);
       setSites(sitesRes.data || []);
     } catch (error) {
       console.error("Error fetching data:", error);
-      toast.error("Failed to fetch data");
+      
+      // If completely offline, load from IndexedDB
+      if (!isOnline) {
+        try {
+          const offlineInspections = await offlineDB.getUnsyncedInspections();
+          const offlineMapped: Inspection[] = offlineInspections.map(offline => ({
+            id: offline.id,
+            title: offline.title,
+            description: offline.description,
+            status: offline.status,
+            inspection_date: offline.inspection_date,
+            site_id: offline.site_id,
+            subsection_id: null,
+            sites: { 
+              id: offline.site_id, 
+              name: 'Offline Site', 
+              client_id: '', 
+              clients: { id: '', name: '' } 
+            },
+            subsections: undefined,
+          }));
+          setInspections(offlineMapped as any[]);
+          toast.info("Showing offline data only");
+        } catch (dbError) {
+          toast.error("Failed to load offline data");
+        }
+      } else {
+        toast.error("Failed to fetch data");
+      }
     } finally {
       setLoading(false);
     }
@@ -96,16 +165,15 @@ const Inspections = () => {
       
       const { data: { user } } = await supabase.auth.getUser();
 
-      const { error } = await supabase.from("inspections").insert([
-        {
-          ...validated,
-          inspector_id: user?.id,
-        } as any,  // Type assertion needed due to zod inference
-      ]);
+      await createInspection({
+        title: validated.title,
+        description: validated.description,
+        status: validated.status,
+        inspection_date: validated.inspection_date,
+        site_id: validated.site_id,
+        inspector_id: user?.id,
+      });
 
-      if (error) throw error;
-
-      toast.success("Inspection created successfully");
       setDialogOpen(false);
       setFormData({
         title: "",
@@ -131,10 +199,7 @@ const Inspections = () => {
     if (!confirm("Are you sure you want to delete this inspection?")) return;
 
     try {
-      const { error } = await supabase.from("inspections").delete().eq("id", id);
-      if (error) throw error;
-
-      toast.success("Inspection deleted successfully");
+      await deleteInspection(id);
       fetchData();
     } catch (error) {
       console.error("Error deleting inspection:", error);
@@ -170,9 +235,17 @@ const Inspections = () => {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Inspections</h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-3xl font-bold tracking-tight">Inspections</h1>
+            {!isOnline && (
+              <Badge variant="outline" className="bg-orange-500/10 text-orange-500 border-orange-500/20">
+                <WifiOff className="h-3 w-3 mr-1" />
+                Offline Mode
+              </Badge>
+            )}
+          </div>
           <p className="text-muted-foreground mt-2">
-            Manage electrical safety inspections
+            Manage electrical safety inspections {!isOnline && '(offline-first)'}
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -315,6 +388,12 @@ const Inspections = () => {
                     key={inspection.id}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => {
+                      // Check if offline inspection
+                      if (inspection.id.startsWith('offline_')) {
+                        toast.info("This inspection is saved offline. Sync when online to view details.");
+                        return;
+                      }
+                      
                       if (inspection.subsection_id && inspection.subsections) {
                         // Navigate through the proper hierarchy
                         const clientId = inspection.sites.client_id;
@@ -329,7 +408,16 @@ const Inspections = () => {
                       }
                     }}
                   >
-                    <TableCell className="font-medium">{inspection.title}</TableCell>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2">
+                        {inspection.title}
+                        {inspection.id.startsWith('offline_') && (
+                          <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
+                            Offline
+                          </Badge>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>{inspection.sites?.name}</TableCell>
                     <TableCell>{inspection.sites?.clients?.name}</TableCell>
                     <TableCell>

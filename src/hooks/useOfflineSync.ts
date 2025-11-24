@@ -1,6 +1,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
+import { offlineDB } from '@/lib/offlineDB';
 
 interface QueuedMutation {
   id: string;
@@ -50,6 +52,65 @@ export function useOfflineSync() {
     toast.info('Action queued. Will sync when online.', { duration: 2000 });
   }, [getQueue, saveQueue]);
 
+  // Execute mutation based on type
+  const executeMutation = async (mutation: QueuedMutation) => {
+    switch (mutation.type) {
+      case 'CREATE_INSPECTION': {
+        const { error } = await supabase.from('inspections').insert([mutation.data]);
+        if (error) throw error;
+        
+        // Mark as synced in IndexedDB
+        if (mutation.data.id) {
+          await offlineDB.markInspectionSynced(mutation.data.id);
+        }
+        break;
+      }
+
+      case 'UPDATE_INSPECTION': {
+        const { id, ...updates } = mutation.data;
+        const { error } = await supabase
+          .from('inspections')
+          .update(updates)
+          .eq('id', id);
+        if (error) throw error;
+        break;
+      }
+
+      case 'DELETE_INSPECTION': {
+        const { error } = await supabase
+          .from('inspections')
+          .delete()
+          .eq('id', mutation.data.id);
+        if (error) throw error;
+        
+        // Delete from IndexedDB
+        await offlineDB.deleteInspection(mutation.data.id);
+        break;
+      }
+
+      case 'UPLOAD_IMAGE': {
+        const { bucket, path, file, inspectionId } = mutation.data;
+        const { error } = await supabase.storage
+          .from(bucket)
+          .upload(path, file);
+        if (error) throw error;
+        
+        // Mark as synced in IndexedDB
+        if (inspectionId) {
+          const images = await offlineDB.getUnsyncedImages();
+          const image = images.find(img => img.inspection_id === inspectionId);
+          if (image) {
+            await offlineDB.markImageSynced(image.id);
+          }
+        }
+        break;
+      }
+
+      default:
+        console.warn('Unknown mutation type:', mutation.type);
+    }
+  };
+
   // Process queue when online
   const processQueue = useCallback(async () => {
     if (!isOnline || isSyncing) return;
@@ -62,12 +123,8 @@ export function useOfflineSync() {
 
     for (const mutation of queue) {
       try {
-        // Execute mutation based on type
-        // This is a generic handler - specific implementations would go here
-        console.log('Processing queued mutation:', mutation);
-        
-        // Invalidate relevant queries after successful sync
-        queryClient.invalidateQueries();
+        await executeMutation(mutation);
+        console.log('Successfully synced mutation:', mutation.type);
       } catch (error) {
         console.error('Failed to process mutation:', error);
         
@@ -77,7 +134,7 @@ export function useOfflineSync() {
             retries: mutation.retries + 1,
           });
         } else {
-          toast.error(`Failed to sync action after ${MAX_RETRIES} attempts`);
+          toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
         }
       }
     }
@@ -87,6 +144,7 @@ export function useOfflineSync() {
 
     if (failedMutations.length === 0 && queue.length > 0) {
       toast.success(`Synced ${queue.length} offline action${queue.length > 1 ? 's' : ''}`);
+      queryClient.invalidateQueries();
     }
   }, [isOnline, isSyncing, getQueue, saveQueue, queryClient]);
 
