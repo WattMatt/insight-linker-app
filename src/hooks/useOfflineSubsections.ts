@@ -10,6 +10,8 @@ import {
 } from '@/lib/offlineDBExtensions';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { validateFile, FILE_LIMITS } from '@/lib/fileValidation';
+import { checkStorageAvailable } from '@/lib/storageQuota';
 
 interface SubsectionData {
   name: string;
@@ -71,6 +73,22 @@ export function useOfflineSubsections() {
     categoryId: string,
     file: File
   ) => {
+    // Validate file
+    const validation = validateFile(file, {
+      maxSize: FILE_LIMITS.MAX_DOCUMENT_SIZE,
+      category: 'documents'
+    });
+
+    if (!validation.valid) {
+      return;
+    }
+
+    // Check storage quota
+    const hasSpace = await checkStorageAvailable(file.size);
+    if (!hasSpace) {
+      return;
+    }
+
     const filePath = `subsections/${subsectionId}/${Date.now()}_${file.name}`;
     
     if (isOnline) {
@@ -130,6 +148,22 @@ export function useOfflineSubsections() {
     subsectionId: string,
     file: File
   ) => {
+    // Validate file
+    const validation = validateFile(file, {
+      maxSize: FILE_LIMITS.MAX_DOCUMENT_SIZE,
+      category: 'images'
+    });
+
+    if (!validation.valid) {
+      return;
+    }
+
+    // Check storage quota
+    const hasSpace = await checkStorageAvailable(file.size);
+    if (!hasSpace) {
+      return;
+    }
+
     const filePath = `floor-plans/${subsectionId}/${Date.now()}_${file.name}`;
     
     if (isOnline) {

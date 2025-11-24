@@ -3,6 +3,8 @@ import { useOfflineSync } from './useOfflineSync';
 import { offlineDB } from '@/lib/offlineDB';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { validateFile, FILE_LIMITS } from '@/lib/fileValidation';
+import { checkStorageAvailable } from '@/lib/storageQuota';
 
 export interface InspectionData {
   title: string;
@@ -103,6 +105,22 @@ export function useOfflineInspections() {
     file: File,
     inspectionId?: string
   ) => {
+    // Validate file
+    const validation = validateFile(file, {
+      maxSize: FILE_LIMITS.MAX_IMAGE_SIZE,
+      category: 'images'
+    });
+
+    if (!validation.valid) {
+      return;
+    }
+
+    // Check storage quota
+    const hasSpace = await checkStorageAvailable(file.size);
+    if (!hasSpace) {
+      return;
+    }
+
     if (isOnline) {
       try {
         const { error } = await supabase.storage
