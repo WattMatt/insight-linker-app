@@ -1,50 +1,49 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Loader2, FileCode, CheckCircle2, AlertTriangle, XCircle } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Loader2, FileCode, CheckCircle2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import ReactMarkdown from "react-markdown";
+import { Alert, AlertDescription } from "@/components/ui/alert";
 
 export default function OfflineReview() {
   const [isLoading, setIsLoading] = useState(false);
   const [review, setReview] = useState<string | null>(null);
+  const [customCode, setCustomCode] = useState("");
 
   const offlineFiles = [
-    { path: "src/hooks/useOfflineSync.ts", key: "useOfflineSync" },
-    { path: "src/hooks/useOfflineInspections.ts", key: "useOfflineInspections" },
-    { path: "src/hooks/useOfflineSubsections.ts", key: "useOfflineSubsections" },
-    { path: "src/hooks/useOfflineFloorPlanAnnotations.ts", key: "useOfflineFloorPlanAnnotations" },
-    { path: "src/lib/offlineDB.ts", key: "offlineDB" },
-    { path: "src/lib/offlineDBExtensions.ts", key: "offlineDBExtensions" },
-    { path: "src/lib/offlineFloorPlanDB.ts", key: "offlineFloorPlanDB" },
+    "src/hooks/useOfflineSync.ts",
+    "src/hooks/useOfflineInspections.ts", 
+    "src/hooks/useOfflineSubsections.ts",
+    "src/hooks/useOfflineFloorPlanAnnotations.ts",
+    "src/lib/offlineDB.ts",
+    "src/lib/offlineDBExtensions.ts",
+    "src/lib/offlineFloorPlanDB.ts",
   ];
 
   const runReview = async () => {
+    if (!customCode.trim()) {
+      toast.error("Please paste your offline functionality code below");
+      return;
+    }
+
     setIsLoading(true);
     setReview(null);
 
     try {
-      // Fetch all offline-related files
-      const fileContents = await Promise.all(
-        offlineFiles.map(async (file) => {
-          try {
-            const response = await fetch(`/${file.path}`);
-            const content = await response.text();
-            return { path: file.path, content };
-          } catch (error) {
-            console.error(`Failed to fetch ${file.path}:`, error);
-            return { path: file.path, content: "// File could not be loaded" };
-          }
-        })
-      );
+      const codeFiles = [{
+        path: "offline-functionality.ts",
+        content: customCode
+      }];
 
-      // Call edge function
       const { data, error } = await supabase.functions.invoke("offline-review", {
-        body: { codeFiles: fileContents },
+        body: { codeFiles },
       });
 
       if (error) {
+        console.error("Edge function error:", error);
         if (error.message?.includes("429")) {
           toast.error("Rate limit exceeded. Please try again in a few minutes.");
         } else if (error.message?.includes("402")) {
@@ -74,33 +73,47 @@ export default function OfflineReview() {
         </p>
       </div>
 
+      <Alert>
+        <AlertCircle className="h-4 w-4" />
+        <AlertDescription>
+          Paste your offline functionality code below for a comprehensive AI review. The following files are recommended for analysis:
+        </AlertDescription>
+      </Alert>
+
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <FileCode className="h-5 w-5" />
-            Files to Review
+            Offline Files to Review
           </CardTitle>
           <CardDescription>
-            The following offline functionality files will be analyzed:
+            Copy and paste code from these files into the text area below:
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="grid gap-2">
+          <div className="grid gap-2 mb-4">
             {offlineFiles.map((file) => (
               <div
-                key={file.path}
+                key={file}
                 className="flex items-center gap-2 p-2 rounded-lg bg-muted/50 text-sm font-mono"
               >
                 <FileCode className="h-4 w-4 text-muted-foreground" />
-                {file.path}
+                {file}
               </div>
             ))}
           </div>
 
+          <Textarea
+            placeholder="Paste your offline functionality code here... (you can paste multiple files' content)"
+            value={customCode}
+            onChange={(e) => setCustomCode(e.target.value)}
+            className="min-h-[300px] font-mono text-sm"
+          />
+
           <Button
             onClick={runReview}
-            disabled={isLoading}
-            className="w-full mt-6"
+            disabled={isLoading || !customCode.trim()}
+            className="w-full mt-4"
             size="lg"
           >
             {isLoading ? (
@@ -134,12 +147,12 @@ export default function OfflineReview() {
               <ReactMarkdown
                 components={{
                   h1: ({ children }) => (
-                    <h1 className="text-2xl font-bold mb-4 mt-6 flex items-center gap-2">
+                    <h1 className="text-2xl font-bold mb-4 mt-6">
                       {children}
                     </h1>
                   ),
                   h2: ({ children }) => (
-                    <h2 className="text-xl font-semibold mb-3 mt-5 flex items-center gap-2">
+                    <h2 className="text-xl font-semibold mb-3 mt-5">
                       {children}
                     </h2>
                   ),
