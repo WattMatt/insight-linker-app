@@ -182,6 +182,115 @@ export function useOfflineSync() {
         break;
       }
 
+      case 'ADD_FLOOR_PLAN_PIN': {
+        const { pin } = mutation.data;
+        const { markPinSynced } = await import('@/lib/offlineFloorPlanDB');
+        
+        // Upload photo if exists
+        let photoUrl = pin.photo_url;
+        if (pin.photo_blob) {
+          const fileName = `floor-plan-pins/${pin.floor_plan_id}/${Date.now()}_photo.jpg`;
+          await supabase.storage
+            .from('inspection-photos')
+            .upload(fileName, pin.photo_blob);
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('inspection-photos')
+            .getPublicUrl(fileName);
+          photoUrl = publicUrl;
+        }
+        
+        await supabase
+          .from('floor_plan_pins')
+          .insert({
+            floor_plan_id: pin.floor_plan_id,
+            pin_number: pin.pin_number,
+            x_position: pin.x_position,
+            y_position: pin.y_position,
+            pin_type: pin.pin_type,
+            title: pin.title,
+            notes: pin.notes,
+            detailed_description: pin.detailed_description,
+            priority: pin.priority,
+            status: pin.status,
+            assigned_contractor: pin.assigned_contractor,
+            stakeholders: pin.stakeholders,
+            package: pin.package,
+            due_date: pin.due_date,
+            photo_url: photoUrl,
+            created_by: pin.created_by,
+          });
+        
+        await markPinSynced(pin.id);
+        break;
+      }
+
+      case 'UPDATE_FLOOR_PLAN_PIN': {
+        const { pinId, updates, photo } = mutation.data;
+        const { markPinSynced } = await import('@/lib/offlineFloorPlanDB');
+        
+        let photoUrl = updates.photo_url;
+        if (photo) {
+          const fileName = `floor-plan-pins/${pinId}/${Date.now()}_${photo.name}`;
+          await supabase.storage
+            .from('inspection-photos')
+            .upload(fileName, photo);
+          
+          const { data: { publicUrl } } = supabase.storage
+            .from('inspection-photos')
+            .getPublicUrl(fileName);
+          photoUrl = publicUrl;
+        }
+        
+        await supabase
+          .from('floor_plan_pins')
+          .update({
+            ...updates,
+            photo_url: photoUrl,
+          })
+          .eq('id', pinId);
+        
+        await markPinSynced(pinId);
+        break;
+      }
+
+      case 'DELETE_FLOOR_PLAN_PIN': {
+        const { deleteOfflinePin } = await import('@/lib/offlineFloorPlanDB');
+        await supabase
+          .from('floor_plan_pins')
+          .delete()
+          .eq('id', mutation.data.pinId);
+        
+        await deleteOfflinePin(mutation.data.pinId);
+        break;
+      }
+
+      case 'ADD_MARKUP': {
+        const { markMarkupSynced } = await import('@/lib/offlineFloorPlanDB');
+        // Markups are stored locally only for now
+        await markMarkupSynced(mutation.data.markup.id);
+        break;
+      }
+
+      case 'DELETE_MARKUP': {
+        const { deleteMarkup } = await import('@/lib/offlineFloorPlanDB');
+        await deleteMarkup(mutation.data.markupId);
+        break;
+      }
+
+      case 'ADD_MEASUREMENT': {
+        const { markMeasurementSynced } = await import('@/lib/offlineFloorPlanDB');
+        // Measurements are stored locally only for now
+        await markMeasurementSynced(mutation.data.measurement.id);
+        break;
+      }
+
+      case 'DELETE_MEASUREMENT': {
+        const { deleteMeasurement } = await import('@/lib/offlineFloorPlanDB');
+        await deleteMeasurement(mutation.data.measurementId);
+        break;
+      }
+
       default:
         console.warn('Unknown mutation type:', mutation.type);
     }
