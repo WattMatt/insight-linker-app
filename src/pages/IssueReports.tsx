@@ -186,8 +186,9 @@ export default function IssueReports() {
     });
   };
 
-  const handleTestFix = async () => {
-    if (!selectedIssue || !fixDescription.trim()) {
+  const handleTestFix = async (overrideDescription?: string) => {
+    const descriptionToUse = overrideDescription || fixDescription;
+    if (!selectedIssue || !descriptionToUse.trim()) {
       toast.error('Please describe the fix before testing');
       return;
     }
@@ -204,7 +205,7 @@ export default function IssueReports() {
           severity: selectedIssue.severity,
           pageUrl: selectedIssue.page_url,
           browserInfo: selectedIssue.browser_info,
-          fixDescription: fixDescription,
+          fixDescription: descriptionToUse,
           codeChanges: codeChanges || undefined,
           adminNotes: adminNotes || undefined,
         }
@@ -225,7 +226,7 @@ export default function IssueReports() {
       await supabase
         .from('issue_reports')
         .update({
-          fix_description: fixDescription,
+          fix_description: descriptionToUse,
           fix_test_result: JSON.parse(JSON.stringify(result)),
           fix_test_run_at: new Date().toISOString(),
           fix_confidence_score: result.confidenceScore,
@@ -545,20 +546,22 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 <Button
                   variant="default"
                   className="flex-1"
+                  disabled={!selectedIssue.admin_notes || isTesting}
                   onClick={() => {
-                    // Pre-fill from admin notes if no fix description
-                    if (!fixDescription && selectedIssue.admin_notes) {
+                    // Auto-fill from admin notes and run test immediately
+                    if (selectedIssue.admin_notes) {
                       setFixDescription(selectedIssue.admin_notes);
+                      // Scroll to the test section
+                      document.getElementById('fix-verification-section')?.scrollIntoView({ behavior: 'smooth' });
+                      // Run the test after state update
+                      setTimeout(() => {
+                        handleTestFix(selectedIssue.admin_notes);
+                      }, 100);
                     }
-                    // Scroll to the test section
-                    document.getElementById('fix-verification-section')?.scrollIntoView({ behavior: 'smooth' });
-                    setTimeout(() => {
-                      document.getElementById('fix-description-input')?.focus();
-                    }, 300);
                   }}
                 >
                   <FlaskConical className="mr-2 h-4 w-4" />
-                  Quick Test Fix
+                  {isTesting ? 'Testing...' : 'Quick Test Fix'}
                 </Button>
               </div>
 
@@ -630,7 +633,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                   </div>
 
                   <Button 
-                    onClick={handleTestFix} 
+                    onClick={() => handleTestFix()} 
                     disabled={isTesting || !fixDescription.trim()}
                     variant="secondary"
                     className="w-full"
