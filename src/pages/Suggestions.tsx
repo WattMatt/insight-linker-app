@@ -36,6 +36,8 @@ import {
 } from "@/components/ui/table";
 import { Label } from "@/components/ui/label";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { 
   Lightbulb, 
@@ -43,9 +45,26 @@ import {
   Clock, 
   Star,
   Copy,
-  Calendar
+  Calendar,
+  FlaskConical,
+  AlertTriangle,
+  ThumbsUp,
+  ThumbsDown,
+  ChevronDown,
+  ChevronUp,
+  Loader2
 } from "lucide-react";
 import { format } from "date-fns";
+
+interface VerificationReport {
+  status: 'pass' | 'warning' | 'fail';
+  confidenceScore: number;
+  analysis: string;
+  potentialIssues: string[];
+  recommendations: string[];
+  edgeCasesIdentified: string[];
+  testSuggestions: string[];
+}
 
 interface Suggestion {
   id: string;
@@ -70,6 +89,10 @@ interface Suggestion {
   verified_at: string | null;
   rejection_reason: string | null;
   rejection_screenshot_url: string | null;
+  fix_description: string | null;
+  fix_test_result: VerificationReport | null;
+  fix_test_run_at: string | null;
+  fix_confidence_score: number | null;
 }
 
 export default function Suggestions() {
@@ -78,6 +101,11 @@ export default function Suggestions() {
   const [adminNotes, setAdminNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [fixDescription, setFixDescription] = useState("");
+  const [codeChanges, setCodeChanges] = useState("");
+  const [testResult, setTestResult] = useState<VerificationReport | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [showTestDetails, setShowTestDetails] = useState(false);
 
   const { data: suggestions, isLoading } = useQuery({
     queryKey: ["suggestions"],
@@ -88,7 +116,7 @@ export default function Suggestions() {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data as Suggestion[];
+      return data as unknown as Suggestion[];
     },
   });
 
@@ -189,16 +217,81 @@ export default function Suggestions() {
     setSelectedSuggestion(suggestion);
     setAdminNotes(suggestion.admin_notes || "");
     setNewStatus(suggestion.status);
+    setFixDescription(suggestion.fix_description || "");
+    setCodeChanges("");
+    setTestResult(suggestion.fix_test_result || null);
+    setShowTestDetails(false);
   };
 
   const handleUpdateSuggestion = () => {
     if (!selectedSuggestion) return;
-
     updateSuggestionMutation.mutate({
       id: selectedSuggestion.id,
       status: newStatus,
       admin_notes: adminNotes,
     });
+  };
+
+  const handleTestImplementation = async () => {
+    if (!selectedSuggestion || !fixDescription.trim()) {
+      toast.error('Please describe the implementation before testing');
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-fix', {
+        body: {
+          type: 'suggestion',
+          title: selectedSuggestion.title,
+          description: selectedSuggestion.description,
+          category: selectedSuggestion.category,
+          priority: selectedSuggestion.priority,
+          pageUrl: selectedSuggestion.page_url,
+          browserInfo: selectedSuggestion.browser_info,
+          fixDescription: fixDescription,
+          codeChanges: codeChanges || undefined,
+          adminNotes: adminNotes || undefined,
+        }
+      });
+
+      if (error) throw error;
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      const result = data as VerificationReport;
+      setTestResult(result);
+      setShowTestDetails(true);
+
+      await supabase
+        .from('suggestions')
+        .update({
+          fix_description: fixDescription,
+          fix_test_result: JSON.parse(JSON.stringify(result)),
+          fix_test_run_at: new Date().toISOString(),
+          fix_confidence_score: result.confidenceScore,
+        })
+        .eq('id', selectedSuggestion.id);
+
+      queryClient.invalidateQueries({ queryKey: ['suggestions'] });
+
+      if (result.status === 'pass') {
+        toast.success(`Implementation verified with ${result.confidenceScore}% confidence!`);
+      } else if (result.status === 'warning') {
+        toast.warning(`Implementation has concerns - ${result.confidenceScore}% confidence`);
+      } else {
+        toast.error(`Implementation may not work - ${result.confidenceScore}% confidence`);
+      }
+    } catch (error) {
+      console.error('Error testing implementation:', error);
+      toast.error('Failed to test implementation. Please try again.');
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const handleDebugSuggestion = (suggestion: Suggestion) => {
@@ -473,6 +566,84 @@ ${suggestion.screenshot_url ? `📸 Screenshot: ${imageUrl}` : ""}
                   />
                 </div>
               )}
+
+              {/* Implementation Verification Section */}
+              <Card className="border-2 border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <FlaskConical className="h-4 w-4" />
+                    AI Implementation Verification
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Describe your implementation and test it before marking as implemented
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <Label>Implementation Description *</Label>
+                    <Textarea
+                      placeholder="Describe what you implemented..."
+                      value={fixDescription}
+                      onChange={(e) => setFixDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={handleTestImplementation} 
+                    disabled={isTesting || !fixDescription.trim()}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {isTesting ? (
+                      <><Loader2 className="mr-2 h-4 w-4 animate-spin" /> Testing...</>
+                    ) : (
+                      <><FlaskConical className="mr-2 h-4 w-4" /> Test Implementation</>
+                    )}
+                  </Button>
+
+                  {testResult && (
+                    <div className={`rounded-lg p-4 space-y-3 ${
+                      testResult.status === 'pass' ? 'bg-green-500/10 border border-green-500/20' :
+                      testResult.status === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/20' :
+                      'bg-red-500/10 border border-red-500/20'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {testResult.status === 'pass' ? <ThumbsUp className="h-5 w-5 text-green-500" /> :
+                           testResult.status === 'warning' ? <AlertTriangle className="h-5 w-5 text-yellow-500" /> :
+                           <ThumbsDown className="h-5 w-5 text-red-500" />}
+                          <span className="font-medium capitalize">
+                            {testResult.status === 'pass' ? 'Likely to Work' :
+                             testResult.status === 'warning' ? 'Has Concerns' : 'May Not Work'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{testResult.confidenceScore}%</span>
+                          <Progress value={testResult.confidenceScore} className="w-20 h-2" />
+                        </div>
+                      </div>
+                      <p className="text-sm">{testResult.analysis}</p>
+                      
+                      <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full">
+                            {showTestDetails ? <><ChevronUp className="mr-2 h-4 w-4" /> Hide Details</> : <><ChevronDown className="mr-2 h-4 w-4" /> Show Details</>}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 pt-2 text-xs">
+                          {testResult.potentialIssues.length > 0 && (
+                            <div><strong className="text-red-600">Issues:</strong> {testResult.potentialIssues.join(', ')}</div>
+                          )}
+                          {testResult.recommendations.length > 0 && (
+                            <div><strong className="text-blue-600">Recommendations:</strong> {testResult.recommendations.join(', ')}</div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
 
               <div>
                 <Label htmlFor="status">Status</Label>

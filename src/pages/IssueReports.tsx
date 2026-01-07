@@ -10,9 +10,21 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug } from "lucide-react";
+import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug, FlaskConical, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RobustImage } from "@/components/RobustImage";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { Progress } from "@/components/ui/progress";
+
+interface VerificationReport {
+  status: 'pass' | 'warning' | 'fail';
+  confidenceScore: number;
+  analysis: string;
+  potentialIssues: string[];
+  recommendations: string[];
+  edgeCasesIdentified: string[];
+  testSuggestions: string[];
+}
 
 interface IssueReport {
   id: string;
@@ -32,6 +44,10 @@ interface IssueReport {
   verified_at: string | null;
   rejection_reason: string | null;
   rejection_screenshot_url: string | null;
+  fix_description: string | null;
+  fix_test_result: VerificationReport | null;
+  fix_test_run_at: string | null;
+  fix_confidence_score: number | null;
 }
 
 export default function IssueReports() {
@@ -39,6 +55,11 @@ export default function IssueReports() {
   const [adminNotes, setAdminNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
+  const [fixDescription, setFixDescription] = useState("");
+  const [codeChanges, setCodeChanges] = useState("");
+  const [testResult, setTestResult] = useState<VerificationReport | null>(null);
+  const [isTesting, setIsTesting] = useState(false);
+  const [showTestDetails, setShowTestDetails] = useState(false);
   const queryClient = useQueryClient();
 
   // Generate signed URL for screenshot
@@ -70,7 +91,7 @@ export default function IssueReports() {
         .order('created_at', { ascending: false });
       
       if (error) throw error;
-      return data as IssueReport[];
+      return data as unknown as IssueReport[];
     },
   });
 
@@ -146,6 +167,10 @@ export default function IssueReports() {
     setSelectedIssue(issue);
     setAdminNotes(issue.admin_notes || "");
     setNewStatus(issue.status);
+    setFixDescription(issue.fix_description || "");
+    setCodeChanges("");
+    setTestResult(issue.fix_test_result || null);
+    setShowTestDetails(false);
   };
 
   const handleUpdateIssue = () => {
@@ -155,6 +180,69 @@ export default function IssueReports() {
       status: newStatus,
       notes: adminNotes,
     });
+  };
+
+  const handleTestFix = async () => {
+    if (!selectedIssue || !fixDescription.trim()) {
+      toast.error('Please describe the fix before testing');
+      return;
+    }
+
+    setIsTesting(true);
+    setTestResult(null);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('verify-fix', {
+        body: {
+          type: 'issue',
+          description: selectedIssue.description,
+          category: selectedIssue.category,
+          severity: selectedIssue.severity,
+          pageUrl: selectedIssue.page_url,
+          browserInfo: selectedIssue.browser_info,
+          fixDescription: fixDescription,
+          codeChanges: codeChanges || undefined,
+          adminNotes: adminNotes || undefined,
+        }
+      });
+
+      if (error) throw error;
+      
+      if (data.error) {
+        toast.error(data.error);
+        return;
+      }
+
+      const result = data as VerificationReport;
+      setTestResult(result);
+      setShowTestDetails(true);
+
+      // Save the test result to the database
+      await supabase
+        .from('issue_reports')
+        .update({
+          fix_description: fixDescription,
+          fix_test_result: JSON.parse(JSON.stringify(result)),
+          fix_test_run_at: new Date().toISOString(),
+          fix_confidence_score: result.confidenceScore,
+        })
+        .eq('id', selectedIssue.id);
+
+      queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
+
+      if (result.status === 'pass') {
+        toast.success(`Fix verified with ${result.confidenceScore}% confidence!`);
+      } else if (result.status === 'warning') {
+        toast.warning(`Fix has concerns - ${result.confidenceScore}% confidence`);
+      } else {
+        toast.error(`Fix may not work - ${result.confidenceScore}% confidence`);
+      }
+    } catch (error) {
+      console.error('Error testing fix:', error);
+      toast.error('Failed to test fix. Please try again.');
+    } finally {
+      setIsTesting(false);
+    }
   };
 
   const handleDebugIssue = async () => {
@@ -457,6 +545,164 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                   {JSON.stringify(selectedIssue.browser_info, null, 2)}
                 </pre>
               </div>
+
+              {/* Fix Verification Section */}
+              <Card className="border-2 border-dashed">
+                <CardHeader className="pb-3">
+                  <CardTitle className="text-sm flex items-center gap-2">
+                    <FlaskConical className="h-4 w-4" />
+                    AI Fix Verification
+                  </CardTitle>
+                  <CardDescription className="text-xs">
+                    Describe your fix and test it before marking as resolved
+                  </CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-3">
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Fix Description *</h4>
+                    <Textarea
+                      placeholder="Describe what you changed to fix this issue..."
+                      value={fixDescription}
+                      onChange={(e) => setFixDescription(e.target.value)}
+                      rows={3}
+                    />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h4 className="text-sm font-medium">Code Changes (Optional)</h4>
+                    <Textarea
+                      placeholder="Paste relevant code snippets..."
+                      value={codeChanges}
+                      onChange={(e) => setCodeChanges(e.target.value)}
+                      rows={3}
+                      className="font-mono text-xs"
+                    />
+                  </div>
+
+                  <Button 
+                    onClick={handleTestFix} 
+                    disabled={isTesting || !fixDescription.trim()}
+                    variant="secondary"
+                    className="w-full"
+                  >
+                    {isTesting ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Testing Fix...
+                      </>
+                    ) : (
+                      <>
+                        <FlaskConical className="mr-2 h-4 w-4" />
+                        Test Fix
+                      </>
+                    )}
+                  </Button>
+
+                  {testResult && (
+                    <div className={`rounded-lg p-4 space-y-3 ${
+                      testResult.status === 'pass' ? 'bg-green-500/10 border border-green-500/20' :
+                      testResult.status === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/20' :
+                      'bg-red-500/10 border border-red-500/20'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {testResult.status === 'pass' ? (
+                            <ThumbsUp className="h-5 w-5 text-green-500" />
+                          ) : testResult.status === 'warning' ? (
+                            <AlertTriangle className="h-5 w-5 text-yellow-500" />
+                          ) : (
+                            <ThumbsDown className="h-5 w-5 text-red-500" />
+                          )}
+                          <span className={`font-medium capitalize ${
+                            testResult.status === 'pass' ? 'text-green-600' :
+                            testResult.status === 'warning' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {testResult.status === 'pass' ? 'Likely to Work' :
+                             testResult.status === 'warning' ? 'Has Concerns' :
+                             'May Not Work'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-medium">{testResult.confidenceScore}%</span>
+                          <Progress 
+                            value={testResult.confidenceScore} 
+                            className="w-20 h-2"
+                          />
+                        </div>
+                      </div>
+
+                      <p className="text-sm">{testResult.analysis}</p>
+
+                      <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full">
+                            {showTestDetails ? (
+                              <><ChevronUp className="mr-2 h-4 w-4" /> Hide Details</>
+                            ) : (
+                              <><ChevronDown className="mr-2 h-4 w-4" /> Show Details</>
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-3 pt-3">
+                          {testResult.potentialIssues.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-red-600">⚠️ Potential Issues</h5>
+                              <ul className="text-xs space-y-1">
+                                {testResult.potentialIssues.map((issue, i) => (
+                                  <li key={i} className="text-muted-foreground">• {issue}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {testResult.recommendations.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-blue-600">💡 Recommendations</h5>
+                              <ul className="text-xs space-y-1">
+                                {testResult.recommendations.map((rec, i) => (
+                                  <li key={i} className="text-muted-foreground">• {rec}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {testResult.edgeCasesIdentified.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-yellow-600">🔍 Edge Cases</h5>
+                              <ul className="text-xs space-y-1">
+                                {testResult.edgeCasesIdentified.map((edge, i) => (
+                                  <li key={i} className="text-muted-foreground">• {edge}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
+                          {testResult.testSuggestions.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-green-600">✅ Test Suggestions</h5>
+                              <ul className="text-xs space-y-1">
+                                {testResult.testSuggestions.map((test, i) => (
+                                  <li key={i} className="text-muted-foreground">• {test}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </div>
+                  )}
+
+                  {selectedIssue.fix_test_run_at && !testResult && (
+                    <p className="text-xs text-muted-foreground">
+                      Last tested: {format(new Date(selectedIssue.fix_test_run_at), 'MMM d, yyyy HH:mm')}
+                      {selectedIssue.fix_confidence_score !== null && (
+                        <span className="ml-2">• Score: {selectedIssue.fix_confidence_score}%</span>
+                      )}
+                    </p>
+                  )}
+                </CardContent>
+              </Card>
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Update Status</h4>

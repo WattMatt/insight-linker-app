@@ -23,3 +23,6 @@ verify_jwt = true
 
 [functions.offline-review]
 verify_jwt = false
+
+[functions.verify-fix]
+verify_jwt = true
