@@ -163,11 +163,15 @@ export default function IssueReports() {
     },
   });
 
-  const handleViewDetails = (issue: IssueReport) => {
+  const handleViewDetails = (issue: IssueReport, quickTest: boolean = false) => {
     setSelectedIssue(issue);
     setAdminNotes(issue.admin_notes || "");
     setNewStatus(issue.status);
-    setFixDescription(issue.fix_description || "");
+    // For quick test mode, pre-fill fix description from admin notes if available
+    const prefillDescription = quickTest && issue.admin_notes && !issue.fix_description
+      ? issue.admin_notes
+      : (issue.fix_description || "");
+    setFixDescription(prefillDescription);
     setCodeChanges("");
     setTestResult(issue.fix_test_result || null);
     setShowTestDetails(false);
@@ -459,12 +463,12 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                           size="sm"
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleViewDetails(issue);
+                            handleViewDetails(issue, true); // Quick test mode - pre-fill from admin notes
                             setTimeout(() => {
                               document.getElementById('fix-description-input')?.focus();
                             }, 100);
                           }}
-                          title="Test fix"
+                          title={issue.admin_notes ? "Quick test (pre-fills from admin notes)" : "Test fix"}
                           className={issue.fix_confidence_score ? (
                             issue.fix_confidence_score >= 70 ? 'text-green-600 hover:text-green-700' :
                             issue.fix_confidence_score >= 50 ? 'text-yellow-600 hover:text-yellow-700' :
