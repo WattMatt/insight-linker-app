@@ -599,6 +599,10 @@ export type Database = {
           category: string
           created_at: string
           description: string
+          fix_confidence_score: number | null
+          fix_description: string | null
+          fix_test_result: Json | null
+          fix_test_run_at: string | null
           id: string
           needs_user_verification: boolean | null
           page_url: string
@@ -623,6 +627,10 @@ export type Database = {
           category?: string
           created_at?: string
           description: string
+          fix_confidence_score?: number | null
+          fix_description?: string | null
+          fix_test_result?: Json | null
+          fix_test_run_at?: string | null
           id?: string
           needs_user_verification?: boolean | null
           page_url: string
@@ -647,6 +655,10 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string
+          fix_confidence_score?: number | null
+          fix_description?: string | null
+          fix_test_result?: Json | null
+          fix_test_run_at?: string | null
           id?: string
           needs_user_verification?: boolean | null
           page_url?: string
@@ -1374,6 +1386,10 @@ export type Database = {
           category: string
           created_at: string
           description: string
+          fix_confidence_score: number | null
+          fix_description: string | null
+          fix_test_result: Json | null
+          fix_test_run_at: string | null
           id: string
           needs_user_verification: boolean | null
           page_url: string
@@ -1399,6 +1415,10 @@ export type Database = {
           category?: string
           created_at?: string
           description: string
+          fix_confidence_score?: number | null
+          fix_description?: string | null
+          fix_test_result?: Json | null
+          fix_test_run_at?: string | null
           id?: string
           needs_user_verification?: boolean | null
           page_url: string
@@ -1424,6 +1444,10 @@ export type Database = {
           category?: string
           created_at?: string
           description?: string
+          fix_confidence_score?: number | null
+          fix_description?: string | null
+          fix_test_result?: Json | null
+          fix_test_run_at?: string | null
           id?: string
           needs_user_verification?: boolean | null
           page_url?: string
