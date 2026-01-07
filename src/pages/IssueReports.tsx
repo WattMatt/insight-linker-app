@@ -533,14 +533,34 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 <p className="text-sm bg-muted p-3 rounded-md">{selectedIssue.description}</p>
               </div>
 
-              <Button
-                variant="outline"
-                className="w-full"
-                onClick={handleDebugIssue}
-              >
-                <Bug className="mr-2 h-4 w-4" />
-                Copy Debug Info to Clipboard
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  className="flex-1"
+                  onClick={handleDebugIssue}
+                >
+                  <Bug className="mr-2 h-4 w-4" />
+                  Copy Debug Info
+                </Button>
+                <Button
+                  variant="default"
+                  className="flex-1"
+                  onClick={() => {
+                    // Pre-fill from admin notes if no fix description
+                    if (!fixDescription && selectedIssue.admin_notes) {
+                      setFixDescription(selectedIssue.admin_notes);
+                    }
+                    // Scroll to the test section
+                    document.getElementById('fix-verification-section')?.scrollIntoView({ behavior: 'smooth' });
+                    setTimeout(() => {
+                      document.getElementById('fix-description-input')?.focus();
+                    }, 300);
+                  }}
+                >
+                  <FlaskConical className="mr-2 h-4 w-4" />
+                  Quick Test Fix
+                </Button>
+              </div>
 
               <div>
                 <h4 className="text-sm font-medium mb-1">Page URL</h4>
@@ -576,10 +596,10 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
               </div>
 
               {/* Fix Verification Section */}
-              <Card className="border-2 border-dashed">
+              <Card id="fix-verification-section" className="border-2 border-primary/30 bg-primary/5">
                 <CardHeader className="pb-3">
                   <CardTitle className="text-sm flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4" />
+                    <FlaskConical className="h-4 w-4 text-primary" />
                     AI Fix Verification
                   </CardTitle>
                   <CardDescription className="text-xs">
@@ -590,6 +610,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Fix Description *</h4>
                     <Textarea
+                      id="fix-description-input"
                       placeholder="Describe what you changed to fix this issue..."
                       value={fixDescription}
                       onChange={(e) => setFixDescription(e.target.value)}
