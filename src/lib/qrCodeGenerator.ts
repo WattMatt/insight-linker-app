@@ -15,7 +15,7 @@ export async function generateAndUploadQRCode({
   logoUrl
 }: GenerateQRCodeOptions): Promise<string | null> {
   try {
-    // Get QR base URL from settings
+    // Get QR base URL from settings - default to production domain
     const { data: settings, error: settingsError } = await supabase
       .from('settings')
       .select('qr_base_url')
@@ -23,8 +23,13 @@ export async function generateAndUploadQRCode({
     
     console.log('Settings query result:', { settings, settingsError });
     
-    const baseUrl = (settings?.qr_base_url || window.location.origin).replace(/\/$/, '');
+    // Use settings qr_base_url, or default to production domain (not window.location.origin for dev/preview)
+    const baseUrl = (settings?.qr_base_url || 'https://watsonmattheus.com').replace(/\/$/, '');
     console.log('Using base URL for QR code:', baseUrl);
+    
+    // Construct the public subsection URL
+    const qrTargetUrl = `${baseUrl}/public/subsections/${subsectionId}`;
+    console.log('QR code will point to:', qrTargetUrl);
     
     // Create canvas
     const canvas = document.createElement('canvas');
@@ -50,9 +55,9 @@ export async function generateAndUploadQRCode({
     ctx.lineWidth = borderWidth;
     ctx.strokeRect(borderWidth / 2, borderWidth / 2, totalWidth - borderWidth, totalHeight - borderWidth);
 
-    // Generate QR code on temporary canvas
+    // Generate QR code on temporary canvas using the target URL
     const qrCanvas = document.createElement('canvas');
-    await QRCode.toCanvas(qrCanvas, `${baseUrl}/public/subsections/${subsectionId}`, {
+    await QRCode.toCanvas(qrCanvas, qrTargetUrl, {
       width: qrSize,
       margin: 1,
       errorCorrectionLevel: 'H'
