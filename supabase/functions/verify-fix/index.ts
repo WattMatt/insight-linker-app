@@ -15,8 +15,6 @@ interface VerificationRequest {
   pageUrl: string;
   browserInfo?: any;
   fixDescription: string;
-  codeChanges?: string;
-  adminNotes?: string;
 }
 
 interface VerificationReport {
@@ -42,12 +40,11 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
-    // Auto-use adminNotes as fixDescription if fixDescription is empty
-    const effectiveFixDescription = request.fixDescription?.trim() || request.adminNotes?.trim() || '';
+    const effectiveFixDescription = request.fixDescription?.trim() || '';
     
     if (!effectiveFixDescription) {
       return new Response(JSON.stringify({ 
-        error: 'No fix description or admin notes provided. Please add admin notes describing what was fixed.' 
+        error: 'No fix description provided. Please add admin notes describing what was fixed.' 
       }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -89,10 +86,6 @@ ${request.browserInfo ? `**Browser Info:** ${JSON.stringify(request.browserInfo)
 ## Proposed Fix/Implementation
 
 **Fix Description:** ${effectiveFixDescription}
-
-${request.adminNotes && request.fixDescription?.trim() ? `**Additional Admin Notes:** ${request.adminNotes}` : ''}
-
-${request.codeChanges ? `**Code Changes:**\n\`\`\`\n${request.codeChanges}\n\`\`\`` : ''}
 
 ---
 
