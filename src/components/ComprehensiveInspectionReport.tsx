@@ -7,6 +7,17 @@ import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { renameInspectionImages } from "@/lib/imageNaming";
 
+interface Snag {
+  id: string;
+  title: string;
+  description?: string;
+  notes?: string;
+  status: string;
+  risk_level?: string;
+  estimated_cost?: number;
+  photos?: string[];
+}
+
 interface ComprehensiveInspectionReportProps {
   inspectionData: any;
   siteName: string;
@@ -16,6 +27,7 @@ interface ComprehensiveInspectionReportProps {
   siteLogoUrl?: string | null;
   inspectionId?: string;
   clientName?: string;
+  snags?: Snag[];
 }
 
 export const ComprehensiveInspectionReport = ({
@@ -27,6 +39,7 @@ export const ComprehensiveInspectionReport = ({
   siteLogoUrl,
   inspectionId,
   clientName,
+  snags = [],
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -459,6 +472,156 @@ export const ComprehensiveInspectionReport = ({
           }
           
           pageNumber++;
+        }
+      }
+
+      // ===== SNAGS SECTION =====
+      if (snags && snags.length > 0) {
+        doc.addPage();
+        yPos = 20;
+
+        // Snags header - Red/orange background bar with white text
+        doc.setFillColor(220, 53, 69); // Red color for snags
+        doc.rect(0, yPos, pageWidth, 15, 'F');
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text('SNAGS / ISSUES', pageWidth / 2, yPos + 10, { align: 'center' });
+        yPos += 25;
+
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+
+        let snagNumber = 1;
+        for (const snag of snags) {
+          const snagPhotos = snag.photos || [];
+          const hasPhotos = snagPhotos.length > 0;
+          
+          // Photo dimensions
+          const photoWidth = 65;
+          const photoHeight = 50;
+          const photoSpacing = 5;
+          
+          // Calculate layout
+          const imagesPerRow = 2;
+          const imageRows = hasPhotos ? Math.ceil(snagPhotos.length / imagesPerRow) : 0;
+          const totalImageHeight = hasPhotos ? (imageRows * photoHeight) + ((imageRows - 1) * photoSpacing) : 0;
+          
+          // Calculate space needed
+          const headerHeight = 35; // Title + status + risk
+          const descHeight = snag.description ? 20 : 0;
+          const notesHeight = snag.notes ? 20 : 0;
+          const snagBoxHeight = headerHeight + totalImageHeight + descHeight + notesHeight + 15;
+          const snagMargin = 10;
+
+          // Check if we need a new page
+          if (yPos + snagBoxHeight + snagMargin > pageHeight - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          // Draw snag container box
+          const statusColor = snag.status === 'Open' ? [220, 53, 69] : [40, 167, 69];
+          doc.setDrawColor(statusColor[0], statusColor[1], statusColor[2]);
+          doc.setLineWidth(1);
+          doc.rect(20, yPos, pageWidth - 40, snagBoxHeight);
+
+          // Snag title
+          doc.setFontSize(11);
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(0, 0, 0);
+          doc.text(`${snagNumber}. ${snag.title}`, 25, yPos + 8);
+
+          // Status badge
+          doc.setFontSize(9);
+          const statusX = pageWidth - 50;
+          doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
+          doc.roundedRect(statusX, yPos + 3, 25, 8, 2, 2, 'F');
+          doc.setTextColor(255, 255, 255);
+          doc.text(snag.status, statusX + 12.5, yPos + 8.5, { align: 'center' });
+          doc.setTextColor(0, 0, 0);
+
+          // Risk level if present
+          let infoY = yPos + 18;
+          if (snag.risk_level) {
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text('Risk Level:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(snag.risk_level, 55, infoY);
+            infoY += 8;
+          }
+
+          // Estimated cost if present
+          if (snag.estimated_cost) {
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text('Est. Cost:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(`R ${snag.estimated_cost.toLocaleString()}`, 55, infoY);
+            infoY += 8;
+          }
+
+          // Description
+          if (snag.description) {
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text('Description:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            const descLines = doc.splitTextToSize(snag.description, pageWidth - 60);
+            doc.text(descLines.slice(0, 2), 25, infoY + 6);
+            infoY += 15;
+          }
+
+          // Notes
+          if (snag.notes) {
+            doc.setFontSize(9);
+            doc.setFont(undefined, 'bold');
+            doc.text('Notes:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            const notesLines = doc.splitTextToSize(snag.notes, pageWidth - 60);
+            doc.text(notesLines.slice(0, 2), 25, infoY + 6);
+            infoY += 15;
+          }
+
+          // Photos
+          if (hasPhotos) {
+            let photoX = 25;
+            let photoY = infoY + 5;
+            let imgIndex = 0;
+            
+            for (const photoUrl of snagPhotos) {
+              try {
+                if (typeof photoUrl === 'string') {
+                  const response = await fetch(photoUrl);
+                  const blob = await response.blob();
+                  const dataUrl = await new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onloadend = () => resolve(reader.result as string);
+                    reader.readAsDataURL(blob);
+                  });
+
+                  const col = imgIndex % imagesPerRow;
+                  const row = Math.floor(imgIndex / imagesPerRow);
+                  const currentX = photoX + (col * (photoWidth + photoSpacing));
+                  const currentY = photoY + (row * (photoHeight + photoSpacing));
+
+                  doc.setDrawColor(200, 200, 200);
+                  doc.setLineWidth(0.5);
+                  doc.addImage(dataUrl, 'JPEG', currentX, currentY, photoWidth, photoHeight);
+                  doc.rect(currentX, currentY, photoWidth, photoHeight);
+                  
+                  imgIndex++;
+                }
+              } catch (error) {
+                console.error('Error embedding snag image:', error);
+                imgIndex++;
+              }
+            }
+          }
+
+          yPos += snagBoxHeight + snagMargin;
+          snagNumber++;
         }
       }
 

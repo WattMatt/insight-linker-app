@@ -1752,6 +1752,7 @@ const InspectionDetail = () => {
               siteLogoUrl={siteData?.siteImageUrl || siteData?.clientLogoUrl || null}
               inspectionId={inspectionId}
               clientName={siteData?.siteName}
+              snags={snags}
             />
           )}
           <Button 
