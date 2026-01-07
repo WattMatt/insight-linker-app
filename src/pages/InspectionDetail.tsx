@@ -2435,8 +2435,11 @@ const InspectionDetail = () => {
                 <Label htmlFor="snag-title">Title *</Label>
                 <Input
                   id="snag-title"
-                  value={newSnag.title}
-                  onChange={(e) => setNewSnag({ ...newSnag, title: e.target.value })}
+                  value={editingSnag ? editingSnag.title : newSnag.title}
+                  onChange={(e) => editingSnag 
+                    ? setEditingSnag({ ...editingSnag, title: e.target.value })
+                    : setNewSnag({ ...newSnag, title: e.target.value })
+                  }
                   placeholder="Brief description of the issue"
                   required
                 />
@@ -2445,8 +2448,11 @@ const InspectionDetail = () => {
                 <Label htmlFor="snag-description">Description</Label>
                 <Textarea
                   id="snag-description"
-                  value={newSnag.description}
-                  onChange={(e) => setNewSnag({ ...newSnag, description: e.target.value })}
+                  value={editingSnag ? (editingSnag.description || '') : newSnag.description}
+                  onChange={(e) => editingSnag
+                    ? setEditingSnag({ ...editingSnag, description: e.target.value })
+                    : setNewSnag({ ...newSnag, description: e.target.value })
+                  }
                   placeholder="Detailed description of the issue"
                   rows={3}
                 />
@@ -2455,8 +2461,11 @@ const InspectionDetail = () => {
                 <Label htmlFor="snag-notes">Notes / Comments</Label>
                 <Textarea
                   id="snag-notes"
-                  value={newSnag.notes}
-                  onChange={(e) => setNewSnag({ ...newSnag, notes: e.target.value })}
+                  value={editingSnag ? (editingSnag.notes || '') : newSnag.notes}
+                  onChange={(e) => editingSnag
+                    ? setEditingSnag({ ...editingSnag, notes: e.target.value })
+                    : setNewSnag({ ...newSnag, notes: e.target.value })
+                  }
                   placeholder="Additional notes or action items"
                   rows={3}
                 />
@@ -2465,7 +2474,13 @@ const InspectionDetail = () => {
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="snag-risk">Risk Level</Label>
-                  <Select value={newSnag.risk_level} onValueChange={(value) => setNewSnag({ ...newSnag, risk_level: value })}>
+                  <Select 
+                    value={editingSnag ? (editingSnag.risk_level || '') : newSnag.risk_level} 
+                    onValueChange={(value) => editingSnag
+                      ? setEditingSnag({ ...editingSnag, risk_level: value })
+                      : setNewSnag({ ...newSnag, risk_level: value })
+                    }
+                  >
                     <SelectTrigger id="snag-risk">
                       <SelectValue placeholder="Select risk level" />
                     </SelectTrigger>
@@ -2485,8 +2500,11 @@ const InspectionDetail = () => {
                     type="number"
                     step="0.01"
                     min="0"
-                    value={newSnag.estimated_cost}
-                    onChange={(e) => setNewSnag({ ...newSnag, estimated_cost: e.target.value })}
+                    value={editingSnag ? (editingSnag.estimated_cost || '') : newSnag.estimated_cost}
+                    onChange={(e) => editingSnag
+                      ? setEditingSnag({ ...editingSnag, estimated_cost: e.target.value })
+                      : setNewSnag({ ...newSnag, estimated_cost: e.target.value })
+                    }
                     placeholder="0.00"
                   />
                 </div>
@@ -2494,9 +2512,9 @@ const InspectionDetail = () => {
               
               <div className="space-y-2">
                 <Label>Photos</Label>
-                {newSnag.photos.length > 0 && (
+                {(editingSnag ? editingSnag.photos : newSnag.photos).length > 0 && (
                   <div className="grid grid-cols-4 gap-2 mb-2">
-                    {newSnag.photos.map((photo, index) => (
+                    {(editingSnag ? editingSnag.photos : newSnag.photos).map((photo: string, index: number) => (
                       <div 
                         key={index} 
                         className="relative group cursor-pointer hover:opacity-90 transition-opacity"
@@ -2514,10 +2532,17 @@ const InspectionDetail = () => {
                           className="absolute top-1 right-1 h-6 w-6 p-0 bg-black/50 hover:bg-black/70 text-white opacity-0 group-hover:opacity-100 z-10"
                           onClick={(e) => {
                             e.stopPropagation();
-                            setNewSnag(prev => ({
-                              ...prev,
-                              photos: prev.photos.filter((_, i) => i !== index)
-                            }));
+                            if (editingSnag) {
+                              setEditingSnag(prev => ({
+                                ...prev,
+                                photos: prev.photos.filter((_: string, i: number) => i !== index)
+                              }));
+                            } else {
+                              setNewSnag(prev => ({
+                                ...prev,
+                                photos: prev.photos.filter((_, i) => i !== index)
+                              }));
+                            }
                           }}
                         >
                           <X className="h-4 w-4" />
@@ -2552,7 +2577,7 @@ const InspectionDetail = () => {
                 Cancel
               </Button>
               <Button type="submit">
-                Create Snag
+                {editingSnag ? 'Update Snag' : 'Create Snag'}
               </Button>
             </DialogFooter>
           </form>
