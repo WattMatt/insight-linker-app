@@ -445,13 +445,38 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        onClick={() => handleViewDetails(issue)}
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleViewDetails(issue)}
+                          title="View details"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewDetails(issue);
+                            setTimeout(() => {
+                              document.getElementById('fix-description-input')?.focus();
+                            }, 100);
+                          }}
+                          title="Test fix"
+                          className={issue.fix_confidence_score ? (
+                            issue.fix_confidence_score >= 70 ? 'text-green-600 hover:text-green-700' :
+                            issue.fix_confidence_score >= 50 ? 'text-yellow-600 hover:text-yellow-700' :
+                            'text-red-600 hover:text-red-700'
+                          ) : ''}
+                        >
+                          <FlaskConical className="h-4 w-4" />
+                          {issue.fix_confidence_score && (
+                            <span className="text-xs ml-1">{issue.fix_confidence_score}%</span>
+                          )}
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
