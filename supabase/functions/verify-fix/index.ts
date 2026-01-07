@@ -42,6 +42,20 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY is not configured');
     }
 
+    // Auto-use adminNotes as fixDescription if fixDescription is empty
+    const effectiveFixDescription = request.fixDescription?.trim() || request.adminNotes?.trim() || '';
+    
+    if (!effectiveFixDescription) {
+      return new Response(JSON.stringify({ 
+        error: 'No fix description or admin notes provided. Please add admin notes describing what was fixed.' 
+      }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    
+    console.log('Testing fix with description:', effectiveFixDescription.substring(0, 100) + '...');
+
     const systemPrompt = `You are an expert software QA engineer and code reviewer. Your task is to analyze bug fixes and feature implementations to predict whether they will actually solve the reported issue.
 
 You will receive:
@@ -74,9 +88,9 @@ ${request.browserInfo ? `**Browser Info:** ${JSON.stringify(request.browserInfo)
 
 ## Proposed Fix/Implementation
 
-**Fix Description:** ${request.fixDescription}
+**Fix Description:** ${effectiveFixDescription}
 
-${request.adminNotes ? `**Additional Admin Notes:** ${request.adminNotes}` : ''}
+${request.adminNotes && request.fixDescription?.trim() ? `**Additional Admin Notes:** ${request.adminNotes}` : ''}
 
 ${request.codeChanges ? `**Code Changes:**\n\`\`\`\n${request.codeChanges}\n\`\`\`` : ''}
 

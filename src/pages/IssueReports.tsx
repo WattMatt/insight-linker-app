@@ -187,9 +187,9 @@ export default function IssueReports() {
   };
 
   const handleTestFix = async (overrideDescription?: string) => {
-    const descriptionToUse = overrideDescription || fixDescription;
+    const descriptionToUse = overrideDescription || fixDescription || adminNotes;
     if (!selectedIssue || !descriptionToUse.trim()) {
-      toast.error('Please describe the fix before testing');
+      toast.error('Please add admin notes or fix description before testing');
       return;
     }
 
@@ -634,9 +634,10 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
 
                   <Button 
                     onClick={() => handleTestFix()} 
-                    disabled={isTesting || !fixDescription.trim()}
+                    disabled={isTesting || (!fixDescription.trim() && !adminNotes.trim())}
                     variant="secondary"
                     className="w-full"
+                    title={!fixDescription.trim() && adminNotes.trim() ? "Will use admin notes as fix description" : ""}
                   >
                     {isTesting ? (
                       <>
@@ -646,7 +647,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                     ) : (
                       <>
                         <FlaskConical className="mr-2 h-4 w-4" />
-                        Test Fix
+                        Test Fix {!fixDescription.trim() && adminNotes.trim() && "(using admin notes)"}
                       </>
                     )}
                   </Button>
