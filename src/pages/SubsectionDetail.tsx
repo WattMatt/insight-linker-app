@@ -1985,9 +1985,36 @@ const SubsectionDetail = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">COC Required</p>
-                <Badge variant={subsection.isCocRequired ? "default" : "secondary"}>
-                  {subsection.isCocRequired ? "Yes" : "No"}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <Badge variant={subsection.isCocRequired ? "default" : "secondary"}>
+                    {subsection.isCocRequired ? "Yes" : "No"}
+                  </Badge>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 px-2 text-xs"
+                    onClick={async () => {
+                      const newValue = !subsection.isCocRequired;
+                      try {
+                        const { error } = await supabase
+                          .from('subsections')
+                          .update({ is_coc_required: newValue })
+                          .eq('id', subsectionId);
+                        
+                        if (error) throw error;
+                        
+                        setSubsection({ ...subsection, isCocRequired: newValue });
+                        setEditFormData({ ...editFormData, is_coc_required: newValue });
+                        toast.success(`COC requirement ${newValue ? 'enabled' : 'disabled'}`);
+                      } catch (error) {
+                        console.error('Error toggling COC requirement:', error);
+                        toast.error('Failed to update COC requirement');
+                      }
+                    }}
+                  >
+                    {subsection.isCocRequired ? "Disable" : "Enable"}
+                  </Button>
+                </div>
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Overall Status</p>
