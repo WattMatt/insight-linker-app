@@ -606,21 +606,10 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                     AI Fix Verification
                   </CardTitle>
                   <CardDescription className="text-xs">
-                    Describe your fix and test it before marking as resolved
+                    Test your fix using admin notes before marking as resolved
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Fix Description *</h4>
-                    <Textarea
-                      id="fix-description-input"
-                      placeholder="Describe what you changed to fix this issue..."
-                      value={fixDescription}
-                      onChange={(e) => setFixDescription(e.target.value)}
-                      rows={3}
-                    />
-                  </div>
-
                   <div className="space-y-2">
                     <h4 className="text-sm font-medium">Code Changes (Optional)</h4>
                     <Textarea
@@ -634,10 +623,9 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
 
                   <Button 
                     onClick={() => handleTestFix()} 
-                    disabled={isTesting || (!fixDescription.trim() && !adminNotes.trim())}
+                    disabled={isTesting || !adminNotes.trim()}
                     variant="secondary"
                     className="w-full"
-                    title={!fixDescription.trim() && adminNotes.trim() ? "Will use admin notes as fix description" : ""}
                   >
                     {isTesting ? (
                       <>
@@ -647,7 +635,7 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                     ) : (
                       <>
                         <FlaskConical className="mr-2 h-4 w-4" />
-                        Test Fix {!fixDescription.trim() && adminNotes.trim() && "(using admin notes)"}
+                        Test Fix
                       </>
                     )}
                   </Button>
