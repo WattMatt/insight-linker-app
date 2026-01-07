@@ -55,8 +55,6 @@ export default function IssueReports() {
   const [adminNotes, setAdminNotes] = useState("");
   const [newStatus, setNewStatus] = useState("");
   const [imageUrl, setImageUrl] = useState<string | null>(null);
-  const [fixDescription, setFixDescription] = useState("");
-  const [codeChanges, setCodeChanges] = useState("");
   const [testResult, setTestResult] = useState<VerificationReport | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [showTestDetails, setShowTestDetails] = useState(false);
@@ -167,12 +165,6 @@ export default function IssueReports() {
     setSelectedIssue(issue);
     setAdminNotes(issue.admin_notes || "");
     setNewStatus(issue.status);
-    // For quick test mode, pre-fill fix description from admin notes if available
-    const prefillDescription = quickTest && issue.admin_notes && !issue.fix_description
-      ? issue.admin_notes
-      : (issue.fix_description || "");
-    setFixDescription(prefillDescription);
-    setCodeChanges("");
     setTestResult(issue.fix_test_result || null);
     setShowTestDetails(false);
   };
@@ -186,10 +178,9 @@ export default function IssueReports() {
     });
   };
 
-  const handleTestFix = async (overrideDescription?: string) => {
-    const descriptionToUse = overrideDescription || fixDescription || adminNotes;
-    if (!selectedIssue || !descriptionToUse.trim()) {
-      toast.error('Please add admin notes or fix description before testing');
+  const handleTestFix = async () => {
+    if (!selectedIssue || !adminNotes.trim()) {
+      toast.error('Please add admin notes describing your fix before testing');
       return;
     }
 
@@ -205,9 +196,7 @@ export default function IssueReports() {
           severity: selectedIssue.severity,
           pageUrl: selectedIssue.page_url,
           browserInfo: selectedIssue.browser_info,
-          fixDescription: descriptionToUse,
-          codeChanges: codeChanges || undefined,
-          adminNotes: adminNotes || undefined,
+          fixDescription: adminNotes,
         }
       });
 
@@ -226,7 +215,7 @@ export default function IssueReports() {
       await supabase
         .from('issue_reports')
         .update({
-          fix_description: descriptionToUse,
+          fix_description: adminNotes,
           fix_test_result: JSON.parse(JSON.stringify(result)),
           fix_test_run_at: new Date().toISOString(),
           fix_confidence_score: result.confidenceScore,
@@ -546,22 +535,11 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 <Button
                   variant="default"
                   className="flex-1"
-                  disabled={!selectedIssue.admin_notes || isTesting}
-                  onClick={() => {
-                    // Auto-fill from admin notes and run test immediately
-                    if (selectedIssue.admin_notes) {
-                      setFixDescription(selectedIssue.admin_notes);
-                      // Scroll to the test section
-                      document.getElementById('fix-verification-section')?.scrollIntoView({ behavior: 'smooth' });
-                      // Run the test after state update
-                      setTimeout(() => {
-                        handleTestFix(selectedIssue.admin_notes);
-                      }, 100);
-                    }
-                  }}
+                  disabled={!adminNotes.trim() || isTesting}
+                  onClick={() => handleTestFix()}
                 >
                   <FlaskConical className="mr-2 h-4 w-4" />
-                  {isTesting ? 'Testing...' : 'Quick Test Fix'}
+                  {isTesting ? 'Testing...' : 'Test Fix'}
                 </Button>
               </div>
 
@@ -598,153 +576,110 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 </pre>
               </div>
 
-              {/* Fix Verification Section */}
-              <Card id="fix-verification-section" className="border-2 border-primary/30 bg-primary/5">
-                <CardHeader className="pb-3">
-                  <CardTitle className="text-sm flex items-center gap-2">
-                    <FlaskConical className="h-4 w-4 text-primary" />
-                    AI Fix Verification
-                  </CardTitle>
-                  <CardDescription className="text-xs">
-                    Test your fix using admin notes before marking as resolved
-                  </CardDescription>
-                </CardHeader>
-                <CardContent className="space-y-3">
-                  <div className="space-y-2">
-                    <h4 className="text-sm font-medium">Code Changes (Optional)</h4>
-                    <Textarea
-                      placeholder="Paste relevant code snippets..."
-                      value={codeChanges}
-                      onChange={(e) => setCodeChanges(e.target.value)}
-                      rows={3}
-                      className="font-mono text-xs"
-                    />
-                  </div>
-
-                  <Button 
-                    onClick={() => handleTestFix()} 
-                    disabled={isTesting || !adminNotes.trim()}
-                    variant="secondary"
-                    className="w-full"
-                  >
-                    {isTesting ? (
-                      <>
-                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                        Testing Fix...
-                      </>
-                    ) : (
-                      <>
-                        <FlaskConical className="mr-2 h-4 w-4" />
-                        Test Fix
-                      </>
-                    )}
-                  </Button>
-
-                  {testResult && (
-                    <div className={`rounded-lg p-4 space-y-3 ${
-                      testResult.status === 'pass' ? 'bg-green-500/10 border border-green-500/20' :
-                      testResult.status === 'warning' ? 'bg-yellow-500/10 border border-yellow-500/20' :
-                      'bg-red-500/10 border border-red-500/20'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {testResult.status === 'pass' ? (
-                            <ThumbsUp className="h-5 w-5 text-green-500" />
-                          ) : testResult.status === 'warning' ? (
-                            <AlertTriangle className="h-5 w-5 text-yellow-500" />
-                          ) : (
-                            <ThumbsDown className="h-5 w-5 text-red-500" />
-                          )}
-                          <span className={`font-medium capitalize ${
-                            testResult.status === 'pass' ? 'text-green-600' :
-                            testResult.status === 'warning' ? 'text-yellow-600' :
-                            'text-red-600'
-                          }`}>
-                            {testResult.status === 'pass' ? 'Likely to Work' :
-                             testResult.status === 'warning' ? 'Has Concerns' :
-                             'May Not Work'}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium">{testResult.confidenceScore}%</span>
-                          <Progress 
-                            value={testResult.confidenceScore} 
-                            className="w-20 h-2"
-                          />
-                        </div>
+              {/* Test Results Section - only show if there are results */}
+              {testResult && (
+                <Card className={`border-2 ${
+                  testResult.status === 'pass' ? 'border-green-500/30 bg-green-500/5' :
+                  testResult.status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                  'border-red-500/30 bg-red-500/5'
+                }`}>
+                  <CardHeader className="pb-3">
+                    <CardTitle className="text-sm flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        {testResult.status === 'pass' ? (
+                          <ThumbsUp className="h-4 w-4 text-green-500" />
+                        ) : testResult.status === 'warning' ? (
+                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                        ) : (
+                          <ThumbsDown className="h-4 w-4 text-red-500" />
+                        )}
+                        <span className={
+                          testResult.status === 'pass' ? 'text-green-600' :
+                          testResult.status === 'warning' ? 'text-yellow-600' :
+                          'text-red-600'
+                        }>
+                          {testResult.status === 'pass' ? 'Fix Likely to Work' :
+                           testResult.status === 'warning' ? 'Fix Has Concerns' :
+                           'Fix May Not Work'}
+                        </span>
                       </div>
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-bold">{testResult.confidenceScore}%</span>
+                        <Progress value={testResult.confidenceScore} className="w-16 h-2" />
+                      </div>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-3 pt-0">
+                    <p className="text-sm">{testResult.analysis}</p>
 
-                      <p className="text-sm">{testResult.analysis}</p>
-
-                      <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
-                        <CollapsibleTrigger asChild>
-                          <Button variant="ghost" size="sm" className="w-full">
-                            {showTestDetails ? (
-                              <><ChevronUp className="mr-2 h-4 w-4" /> Hide Details</>
-                            ) : (
-                              <><ChevronDown className="mr-2 h-4 w-4" /> Show Details</>
-                            )}
-                          </Button>
-                        </CollapsibleTrigger>
-                        <CollapsibleContent className="space-y-3 pt-3">
-                          {testResult.potentialIssues.length > 0 && (
-                            <div>
-                              <h5 className="text-xs font-medium mb-1 text-red-600">⚠️ Potential Issues</h5>
-                              <ul className="text-xs space-y-1">
-                                {testResult.potentialIssues.map((issue, i) => (
-                                  <li key={i} className="text-muted-foreground">• {issue}</li>
-                                ))}
-                              </ul>
-                            </div>
+                    <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
+                      <CollapsibleTrigger asChild>
+                        <Button variant="ghost" size="sm" className="w-full">
+                          {showTestDetails ? (
+                            <><ChevronUp className="mr-2 h-4 w-4" /> Hide Details</>
+                          ) : (
+                            <><ChevronDown className="mr-2 h-4 w-4" /> Show Details</>
                           )}
+                        </Button>
+                      </CollapsibleTrigger>
+                      <CollapsibleContent className="space-y-3 pt-3">
+                        {testResult.potentialIssues.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-medium mb-1 text-red-600">⚠️ Potential Issues</h5>
+                            <ul className="text-xs space-y-1">
+                              {testResult.potentialIssues.map((issue, i) => (
+                                <li key={i} className="text-muted-foreground">• {issue}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
 
-                          {testResult.recommendations.length > 0 && (
-                            <div>
-                              <h5 className="text-xs font-medium mb-1 text-blue-600">💡 Recommendations</h5>
-                              <ul className="text-xs space-y-1">
-                                {testResult.recommendations.map((rec, i) => (
-                                  <li key={i} className="text-muted-foreground">• {rec}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                        {testResult.recommendations.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-medium mb-1 text-blue-600">💡 Recommendations</h5>
+                            <ul className="text-xs space-y-1">
+                              {testResult.recommendations.map((rec, i) => (
+                                <li key={i} className="text-muted-foreground">• {rec}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
 
-                          {testResult.edgeCasesIdentified.length > 0 && (
-                            <div>
-                              <h5 className="text-xs font-medium mb-1 text-yellow-600">🔍 Edge Cases</h5>
-                              <ul className="text-xs space-y-1">
-                                {testResult.edgeCasesIdentified.map((edge, i) => (
-                                  <li key={i} className="text-muted-foreground">• {edge}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
+                        {testResult.edgeCasesIdentified.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-medium mb-1 text-yellow-600">🔍 Edge Cases</h5>
+                            <ul className="text-xs space-y-1">
+                              {testResult.edgeCasesIdentified.map((edge, i) => (
+                                <li key={i} className="text-muted-foreground">• {edge}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
 
-                          {testResult.testSuggestions.length > 0 && (
-                            <div>
-                              <h5 className="text-xs font-medium mb-1 text-green-600">✅ Test Suggestions</h5>
-                              <ul className="text-xs space-y-1">
-                                {testResult.testSuggestions.map((test, i) => (
-                                  <li key={i} className="text-muted-foreground">• {test}</li>
-                                ))}
-                              </ul>
-                            </div>
-                          )}
-                        </CollapsibleContent>
-                      </Collapsible>
-                    </div>
+                        {testResult.testSuggestions.length > 0 && (
+                          <div>
+                            <h5 className="text-xs font-medium mb-1 text-green-600">✅ Test Suggestions</h5>
+                            <ul className="text-xs space-y-1">
+                              {testResult.testSuggestions.map((test, i) => (
+                                <li key={i} className="text-muted-foreground">• {test}</li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </CollapsibleContent>
+                    </Collapsible>
+                  </CardContent>
+                </Card>
+              )}
+
+              {selectedIssue.fix_test_run_at && !testResult && (
+                <p className="text-xs text-muted-foreground">
+                  Last tested: {format(new Date(selectedIssue.fix_test_run_at), 'MMM d, yyyy HH:mm')}
+                  {selectedIssue.fix_confidence_score !== null && (
+                    <span className="ml-2">• Score: {selectedIssue.fix_confidence_score}%</span>
                   )}
-
-                  {selectedIssue.fix_test_run_at && !testResult && (
-                    <p className="text-xs text-muted-foreground">
-                      Last tested: {format(new Date(selectedIssue.fix_test_run_at), 'MMM d, yyyy HH:mm')}
-                      {selectedIssue.fix_confidence_score !== null && (
-                        <span className="ml-2">• Score: {selectedIssue.fix_confidence_score}%</span>
-                      )}
-                    </p>
-                  )}
-                </CardContent>
-              </Card>
+                </p>
+              )}
 
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Update Status</h4>
