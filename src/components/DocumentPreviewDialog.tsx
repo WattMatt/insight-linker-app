@@ -6,12 +6,12 @@ import {
   ZoomOut, 
   RotateCw, 
   Download, 
-  X, 
   ChevronLeft, 
   ChevronRight,
   Maximize2,
   Minimize2
 } from 'lucide-react';
+import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
@@ -177,7 +177,7 @@ export function DocumentPreviewDialog({
     return (
       <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
         <p className="mb-4">Preview not available for this file type</p>
-        <Button onClick={() => window.open(fileUrl, '_blank')}>
+        <Button onClick={() => downloadFile(fileUrl, fileName)}>
           <Download className="h-4 w-4 mr-2" />
           Download File
         </Button>
@@ -212,7 +212,7 @@ export function DocumentPreviewDialog({
               <Button variant="ghost" size="icon" onClick={toggleFullscreen} title="Fullscreen">
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
-              <Button variant="ghost" size="icon" onClick={() => window.open(fileUrl, '_blank')} title="Download">
+              <Button variant="ghost" size="icon" onClick={() => downloadFile(fileUrl, fileName)} title="Download">
                 <Download className="h-4 w-4" />
               </Button>
             </div>

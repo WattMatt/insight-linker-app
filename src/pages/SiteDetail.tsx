@@ -28,6 +28,7 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import JSZip from 'jszip';
 import { DocumentPreviewDialog } from '@/components/DocumentPreviewDialog';
+import { downloadFile } from '@/lib/fileDownload';
 
 interface Site {
   id: string;
@@ -1618,7 +1619,7 @@ const SiteDetail = () => {
                                       variant="ghost"
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        window.open(doc.file_url, '_blank');
+                                        downloadFile(doc.file_url, doc.file_name);
                                       }}
                                       title="Download"
                                     >
