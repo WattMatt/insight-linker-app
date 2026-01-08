@@ -395,7 +395,7 @@ const InspectionDetail = () => {
       
       // Generate descriptive file name with client/site/subsection info
       const filePath = generateTenantImagePath({
-        clientName: siteData?.siteName || 'unknown-client',
+        clientName: siteData?.clientName || 'unknown-client',
         siteName: siteData?.siteName || 'unknown-site',
         subsectionName: subsectionData?.name || 'unknown-subsection',
         inspectionId: inspectionId!,
@@ -636,7 +636,11 @@ const InspectionDetail = () => {
             name,
             address,
             site_image_url,
-            client_logo_url
+            client_logo_url,
+            clients (
+              id,
+              name
+            )
           ),
           subsections (
             id,
@@ -723,6 +727,7 @@ const InspectionDetail = () => {
         }
         
         setSiteData({ 
+          clientName: inspData.sites.clients?.name || 'unknown-client',
           siteName: inspData.sites.name, 
           physicalAddress: inspData.sites.address,
           siteImageUrl,
@@ -1005,7 +1010,7 @@ const InspectionDetail = () => {
         
         // Generate descriptive file name with client/site/subsection info
         const fileName = generateInspectionImagePath({
-          clientName: siteData?.siteName || 'unknown-client',
+          clientName: siteData?.clientName || 'unknown-client',
           siteName: siteData?.siteName || 'unknown-site',
           subsectionName: subsectionData?.name || 'unknown-subsection',
           inspectionId: inspectionId!,

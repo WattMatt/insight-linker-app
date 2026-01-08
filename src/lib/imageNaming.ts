@@ -31,9 +31,6 @@ export interface ImagePathOptions {
 
 export const generateInspectionImagePath = (options: ImagePathOptions): string => {
   const {
-    clientName = 'unknown-client',
-    siteName = 'unknown-site',
-    subsectionName = 'unknown-subsection',
     inspectionId,
     sectionKey,
     itemKey,
@@ -43,46 +40,31 @@ export const generateInspectionImagePath = (options: ImagePathOptions): string =
 
   const timestamp = Date.now();
   
-  // Sanitize all parts
-  const safeClient = sanitizeForFileName(clientName);
-  const safeSite = sanitizeForFileName(siteName);
-  const safeSubsection = sanitizeForFileName(subsectionName);
-  const safeSection = sanitizeForFileName(sectionKey);
-  const safeItem = sanitizeForFileName(itemKey);
-  
-  // Build descriptive file name
-  const fileName = [
-    safeClient,
-    safeSite,
-    safeSubsection,
-    safeSection,
-    safeItem,
-    timestamp,
-    index !== undefined ? index + 1 : undefined
-  ].filter(Boolean).join('_');
+  // Use simple, reliable naming: inspectionId/sectionKey/itemKey/timestamp_index.ext
+  // This ensures the URL stored in the database matches the actual file path
+  const indexSuffix = index !== undefined ? `_${index + 1}` : '';
+  const fileName = `${timestamp}${indexSuffix}.${fileExtension}`;
 
-  // Build full path
-  return `${inspectionId}/${safeSection}/${safeItem}/${fileName}.${fileExtension}`;
+  // Build full path with simple structure
+  return `${inspectionId}/${sectionKey}/${itemKey}/${fileName}`;
 };
 
 /**
  * Generates a descriptive file path for tenant images
  */
 export interface TenantImagePathOptions {
-  clientName?: string;
-  siteName?: string;
-  subsectionName?: string;
   inspectionId: string;
   tenantId: string;
   field: string;
   fileExtension: string;
+  // Optional - kept for backward compatibility but not used in path
+  clientName?: string;
+  siteName?: string;
+  subsectionName?: string;
 }
 
 export const generateTenantImagePath = (options: TenantImagePathOptions): string => {
   const {
-    clientName = 'unknown-client',
-    siteName = 'unknown-site',
-    subsectionName = 'unknown-subsection',
     inspectionId,
     tenantId,
     field,
@@ -91,26 +73,12 @@ export const generateTenantImagePath = (options: TenantImagePathOptions): string
 
   const timestamp = Date.now();
   
-  // Sanitize all parts
-  const safeClient = sanitizeForFileName(clientName);
-  const safeSite = sanitizeForFileName(siteName);
-  const safeSubsection = sanitizeForFileName(subsectionName);
-  const safeField = sanitizeForFileName(field);
-  
-  // Build descriptive file name
-  const fileName = [
-    safeClient,
-    safeSite,
-    safeSubsection,
-    'tenant',
-    safeField,
-    timestamp
-  ].join('_');
+  // Use simple, reliable naming
+  const fileName = `${timestamp}.${fileExtension}`;
 
   // Build full path
-  return `${inspectionId}/tenants/${tenantId}/${field}/${fileName}.${fileExtension}`;
+  return `${inspectionId}/tenants/${tenantId}/${field}/${fileName}`;
 };
-
 /**
  * Extracts the storage path from a URL
  */
