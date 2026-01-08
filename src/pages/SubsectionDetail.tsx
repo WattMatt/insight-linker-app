@@ -2209,6 +2209,37 @@ const SubsectionDetail = () => {
                 >
                   {openSnagsCount}
                 </Badge>
+                {snags.length > 0 && (
+                  <div className="mt-3 space-y-2">
+                    {snags.slice(0, 5).map((snag) => (
+                      <div key={snag.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                        <span className="truncate flex-1 mr-2">{snag.title}</span>
+                        <div className="flex items-center gap-2">
+                          <Badge 
+                            variant="outline" 
+                            className={
+                              snag.risk_level === 'critical' ? 'bg-red-500/20 text-red-600 border-red-300' :
+                              snag.risk_level === 'high' ? 'bg-orange-500/20 text-orange-600 border-orange-300' :
+                              snag.risk_level === 'medium' ? 'bg-yellow-500/20 text-yellow-600 border-yellow-300' :
+                              'bg-green-500/20 text-green-600 border-green-300'
+                            }
+                          >
+                            {snag.risk_level || 'low'}
+                          </Badge>
+                          <Badge 
+                            variant="outline"
+                            className={snag.status === 'Open' ? 'bg-red-500/10 text-red-500' : 'bg-green-500/10 text-green-500'}
+                          >
+                            {snag.status}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                    {snags.length > 5 && (
+                      <p className="text-xs text-muted-foreground text-center">+{snags.length - 5} more snags</p>
+                    )}
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
