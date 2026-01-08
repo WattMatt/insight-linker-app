@@ -333,8 +333,18 @@ export const ComprehensiveInspectionReport = ({
           for (let i = 0; i < items.length; i++) {
             const itemInfo = items[i] as any;
             const itemId = String(itemInfo.id ?? i);
-            // Access jsonData using section and item IDs
-            const itemData = jsonData[sectionId]?.[itemId] || {};
+            
+            // Access jsonData using section and item IDs - try both string and number keys
+            const sectionEntry = jsonData[sectionId] || jsonData[Number(sectionId)] || {};
+            const itemData = sectionEntry[itemId] || sectionEntry[Number(itemId)] || {};
+            
+            console.log(`PDF Debug - Section: ${sectionId}, Item: ${itemId}`, { 
+              sectionEntry: !!Object.keys(sectionEntry).length,
+              itemData: !!Object.keys(itemData).length,
+              photos: itemData.photos,
+              jsonDataKeys: Object.keys(jsonData)
+            });
+            
             const photos = itemData.photos || [];
             const images = itemData.images || {};
             
@@ -343,6 +353,8 @@ export const ComprehensiveInspectionReport = ({
             if (typeof images === 'object') {
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
+            
+            console.log(`PDF Debug - allImages count: ${allImages.length}`, allImages);
 
 
             const hasImages = allImages.length > 0;
