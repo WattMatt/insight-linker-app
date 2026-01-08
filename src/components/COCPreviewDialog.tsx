@@ -124,13 +124,11 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     }
   };
 
-  // Handle mouse wheel zoom
+  // Handle mouse wheel zoom (scroll wheel zooms, hold Shift to pan vertically)
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale(prev => Math.min(Math.max(prev + delta, 0.5), 3));
-    }
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale(prev => Math.min(Math.max(prev + delta, 0.5), 3));
   }, []);
 
   // Handle pan start
