@@ -53,19 +53,28 @@ serve(async (req) => {
     
     console.log('Testing fix with description:', effectiveFixDescription.substring(0, 100) + '...');
 
-    const systemPrompt = `You are an expert software QA engineer and code reviewer. Your task is to analyze bug fixes and feature implementations to predict whether they will actually solve the reported issue.
+    const systemPrompt = `You are an expert software QA engineer and support specialist. Your task is to analyze whether a proposed resolution will address a reported issue or feature request.
 
 You will receive:
 1. The original issue/suggestion description
-2. The fix/implementation description provided by the developer
-3. Optionally, code changes that were made
+2. The resolution description provided by the team
 
-Analyze whether the described fix properly addresses the root cause of the issue. Be critical but fair. Look for:
-- Does the fix address the actual root cause, not just symptoms?
+A "fix" can be one of several types:
+- **Code fix**: Actual code changes to resolve a bug
+- **User education**: The feature already exists, user just needs guidance on how to use it
+- **Configuration change**: Settings or database changes, not code
+- **Won't fix**: Valid reasons why this won't be addressed
+- **Duplicate**: Already addressed elsewhere
+
+When evaluating, consider:
+- Does the resolution appropriately address the user's concern?
+- For user education fixes: Does the existing feature actually solve what the user was asking for?
+- For code fixes: Does it address root cause, not just symptoms?
 - Are there edge cases that might not be covered?
-- Could this fix introduce new issues?
-- Is the fix complete, or might users encounter similar issues in related areas?
-- Based on the browser info and page URL, are there platform-specific concerns?
+- Is the resolution complete and will it satisfy the user?
+
+Give HIGH confidence (70%+) to resolutions that clearly address the user's need, even if no code change is required.
+Give LOW confidence only if the resolution misses the point or won't actually help the user.
 
 You MUST respond using the verify_fix function.`;
 
