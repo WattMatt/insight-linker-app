@@ -27,6 +27,7 @@ import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import JSZip from 'jszip';
+import { DocumentPreviewDialog } from '@/components/DocumentPreviewDialog';
 
 interface Site {
   id: string;
@@ -98,6 +99,7 @@ const SiteDetail = () => {
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [siteDocuments, setSiteDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category: string, category_id: string}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
+  const [previewDocument, setPreviewDocument] = useState<{url: string, name: string} | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
@@ -1590,7 +1592,8 @@ const SiteDetail = () => {
                               categoryDocs.map((doc) => (
                                 <div
                                   key={doc.id}
-                                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors"
+                                  className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent transition-colors cursor-pointer"
+                                  onClick={() => setPreviewDocument({ url: doc.file_url, name: doc.file_name })}
                                 >
                                   <div className="flex items-center gap-3 flex-1">
                                     <div className="w-2 h-2 rounded-full bg-primary" />
@@ -1602,14 +1605,20 @@ const SiteDetail = () => {
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={() => window.open(doc.file_url, '_blank')}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        window.open(doc.file_url, '_blank');
+                                      }}
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
                                     <Button
                                       size="sm"
                                       variant="ghost"
-                                      onClick={() => setDeleteDocumentId(doc.id)}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setDeleteDocumentId(doc.id);
+                                      }}
                                     >
                                       <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
@@ -1649,6 +1658,13 @@ const SiteDetail = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          <DocumentPreviewDialog
+            open={previewDocument !== null}
+            onOpenChange={(open) => !open && setPreviewDocument(null)}
+            fileUrl={previewDocument?.url || ''}
+            fileName={previewDocument?.name || ''}
+          />
         </TabsContent>
 
         <TabsContent value="subsections" className="space-y-4">
