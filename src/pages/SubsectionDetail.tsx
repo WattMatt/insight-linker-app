@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
+import { generateAndSaveInspectionReport } from "@/lib/inspectionReportGenerator";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import { getSubsectionDocuments, getSubsectionFloorPlans } from "@/lib/offlineDBExtensions";
 
@@ -30,6 +31,7 @@ import { ValidationChat } from "@/components/ValidationChat";
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 
 interface SubsectionData {
   name: string;
@@ -113,6 +115,7 @@ const SubsectionDetail = () => {
   const [offlineFloorPlans, setOfflineFloorPlans] = useState<any[]>([]);
   const [cocPreviewDoc, setCocPreviewDoc] = useState<{id: string, file_name: string, file_url: string, uploaded_at: string} | null>(null);
   const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
+  const [previewDocument, setPreviewDocument] = useState<{file_name: string, file_url: string} | null>(null);
 
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
@@ -1678,7 +1681,7 @@ const SubsectionDetail = () => {
       if (newStatus === 'Completed') {
         const { data: inspection, error: fetchError } = await supabase
           .from('inspections')
-          .select('quality_rating')
+          .select('quality_rating, template_id')
           .eq('id', inspectionId)
           .single();
         
@@ -1687,6 +1690,30 @@ const SubsectionDetail = () => {
         if (!inspection?.quality_rating) {
           toast.error("Cannot mark inspection as complete without setting a quality rating (1-5). Please edit the inspection and set the quality rating in the General Info tab.");
           return;
+        }
+
+        // Generate and save PDF report
+        if (subsectionId && siteData?.siteName && subsection?.name) {
+          toast.info("Generating inspection report...");
+          
+          const reportResult = await generateAndSaveInspectionReport({
+            inspectionId,
+            subsectionId,
+            siteName: siteData.siteName,
+            subsectionName: subsection.name,
+            clientName: siteData.clientInfo || undefined,
+            templateId: inspection.template_id,
+            siteLogoUrl: companyLogo
+          });
+
+          if (reportResult.success) {
+            toast.success(`Report saved: ${reportResult.fileName}`);
+            // Refresh documents to show the new report
+            fetchSupabaseDocuments();
+            fetchDocumentCategories();
+          } else {
+            toast.error(`Report generation failed: ${reportResult.error}`);
+          }
         }
       }
       
@@ -2556,7 +2583,16 @@ const SubsectionDetail = () => {
                                     <Button
                                       size="sm"
                                       variant="ghost"
+                                      onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
+                                      title="Preview document"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
                                       onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
+                                      title="Download document"
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
@@ -2852,6 +2888,14 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
+                                title="Preview document"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
                                 onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
                               >
                                 <Download className="h-4 w-4" />
@@ -3000,13 +3044,24 @@ const SubsectionDetail = () => {
                                 <Badge variant="secondary" className="text-xs">Supabase</Badge>
                               </div>
                             </div>
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
-                            >
-                              <Download className="h-4 w-4" />
-                            </Button>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
+                                title="Preview document"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
+                                title="Download document"
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
                           </div>
 
                       <div className="grid md:grid-cols-2 gap-4">
@@ -3487,7 +3542,16 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="ghost"
+                                onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
+                                title="Preview document"
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
                                 onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
+                                title="Download document"
                               >
                                 <Download className="h-4 w-4" />
                               </Button>
@@ -3844,6 +3908,14 @@ const SubsectionDetail = () => {
         }}
         document={cocPreviewDoc}
         validation={cocPreviewDoc ? cocValidations[cocPreviewDoc.id] : null}
+      />
+
+      {/* Document Preview Dialog */}
+      <DocumentPreviewDialog
+        open={previewDocument !== null}
+        onOpenChange={(open) => !open && setPreviewDocument(null)}
+        fileUrl={previewDocument?.file_url || ''}
+        fileName={previewDocument?.file_name || ''}
       />
     </div>
   );
