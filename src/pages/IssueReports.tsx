@@ -7,10 +7,12 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { format } from "date-fns";
-import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug, FlaskConical, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp } from "lucide-react";
+import { Eye, CheckCircle, Loader2, AlertCircle, Clock, Bug, FlaskConical, AlertTriangle, ThumbsUp, ThumbsDown, ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { RobustImage } from "@/components/RobustImage";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
@@ -59,6 +61,8 @@ export default function IssueReports() {
   const [isTesting, setIsTesting] = useState(false);
   const [showTestDetails, setShowTestDetails] = useState(false);
   const [lastTestedNotes, setLastTestedNotes] = useState("");
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const queryClient = useQueryClient();
 
   // Generate signed URL for screenshot
@@ -214,6 +218,53 @@ export default function IssueReports() {
     },
   });
 
+  const bulkDeleteMutation = useMutation({
+    mutationFn: async (ids: string[]) => {
+      const { error } = await supabase
+        .from('issue_reports')
+        .delete()
+        .in('id', ids);
+      
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
+      toast.success(`${selectedIds.size} issue(s) deleted`);
+      setSelectedIds(new Set());
+      setShowDeleteConfirm(false);
+    },
+    onError: () => {
+      toast.error('Failed to delete issues');
+    },
+  });
+
+  const handleSelectAll = (checked: boolean) => {
+    if (checked && issues) {
+      setSelectedIds(new Set(issues.map(i => i.id)));
+    } else {
+      setSelectedIds(new Set());
+    }
+  };
+
+  const handleSelectOne = (id: string, checked: boolean) => {
+    const newSet = new Set(selectedIds);
+    if (checked) {
+      newSet.add(id);
+    } else {
+      newSet.delete(id);
+    }
+    setSelectedIds(newSet);
+  };
+
+  const handleBulkDelete = () => {
+    if (selectedIds.size === 0) return;
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmBulkDelete = () => {
+    bulkDeleteMutation.mutate(Array.from(selectedIds));
+  };
+
   const handleViewDetails = (issue: IssueReport) => {
     setSelectedIssue(issue);
     setAdminNotes(issue.admin_notes || "");
@@ -339,10 +390,31 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
 
       <Card>
         <CardHeader>
-          <CardTitle className="text-lg md:text-xl">All Reports</CardTitle>
-          <CardDescription className="text-sm">
-            Click on any report to view details
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-lg md:text-xl">All Reports</CardTitle>
+              <CardDescription className="text-sm">
+                {selectedIds.size > 0 
+                  ? `${selectedIds.size} selected` 
+                  : 'Click on any report to view details'}
+              </CardDescription>
+            </div>
+            {selectedIds.size > 0 && (
+              <Button 
+                variant="destructive" 
+                size="sm"
+                onClick={handleBulkDelete}
+                disabled={bulkDeleteMutation.isPending}
+              >
+                {bulkDeleteMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                ) : (
+                  <Trash2 className="h-4 w-4 mr-2" />
+                )}
+                Delete ({selectedIds.size})
+              </Button>
+            )}
+          </div>
         </CardHeader>
         <CardContent className="p-0 md:p-6">
           {/* Mobile Card View */}
@@ -350,27 +422,35 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
             {issues?.map((issue) => (
               <div
                 key={issue.id}
-                onClick={() => handleViewDetails(issue)}
-                className="p-4 hover:bg-muted/50 cursor-pointer transition-colors"
+                className="p-4 hover:bg-muted/50 transition-colors"
               >
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      {getStatusIcon(issue.status)}
-                      <span className="text-xs font-medium capitalize">{issue.status}</span>
+                <div className="flex items-start gap-3">
+                  <Checkbox
+                    checked={selectedIds.has(issue.id)}
+                    onCheckedChange={(checked) => handleSelectOne(issue.id, checked as boolean)}
+                    onClick={(e) => e.stopPropagation()}
+                  />
+                  <div className="flex-1 cursor-pointer" onClick={() => handleViewDetails(issue)}>
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          {getStatusIcon(issue.status)}
+                          <span className="text-xs font-medium capitalize">{issue.status}</span>
+                        </div>
+                        <p className="text-sm font-medium truncate">{issue.user_name}</p>
+                      </div>
+                      <Badge variant={getSeverityColor(issue.severity) as any} className="text-xs">
+                        {issue.severity}
+                      </Badge>
                     </div>
-                    <p className="text-sm font-medium truncate">{issue.user_name}</p>
+                    <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                      {issue.description}
+                    </p>
+                    <div className="flex items-center justify-between text-xs text-muted-foreground">
+                      <span>{format(new Date(issue.created_at), 'MMM d, yyyy')}</span>
+                      <Badge variant="outline" className="text-xs">{issue.category}</Badge>
+                    </div>
                   </div>
-                  <Badge variant={getSeverityColor(issue.severity) as any} className="text-xs">
-                    {issue.severity}
-                  </Badge>
-                </div>
-                <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                  {issue.description}
-                </p>
-                <div className="flex items-center justify-between text-xs text-muted-foreground">
-                  <span>{format(new Date(issue.created_at), 'MMM d, yyyy')}</span>
-                  <Badge variant="outline" className="text-xs">{issue.category}</Badge>
                 </div>
               </div>
             ))}
@@ -381,6 +461,12 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-12">
+                    <Checkbox
+                      checked={issues?.length ? selectedIds.size === issues.length : false}
+                      onCheckedChange={handleSelectAll}
+                    />
+                  </TableHead>
                   <TableHead>Date</TableHead>
                   <TableHead>User</TableHead>
                   <TableHead>Description</TableHead>
@@ -394,6 +480,12 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
               <TableBody>
                 {issues?.map((issue) => (
                   <TableRow key={issue.id}>
+                    <TableCell>
+                      <Checkbox
+                        checked={selectedIds.has(issue.id)}
+                        onCheckedChange={(checked) => handleSelectOne(issue.id, checked as boolean)}
+                      />
+                    </TableCell>
                     <TableCell>
                       {format(new Date(issue.created_at), 'MMM d, yyyy HH:mm')}
                     </TableCell>
@@ -714,6 +806,29 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showDeleteConfirm} onOpenChange={setShowDeleteConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete {selectedIds.size} Issue Report(s)?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This action cannot be undone. This will permanently delete the selected issue reports.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              onClick={confirmBulkDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              {bulkDeleteMutation.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin mr-2" />
+              ) : null}
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
