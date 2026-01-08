@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
-import { generateAndSaveInspectionReport } from "@/lib/inspectionReportGenerator";
+import { generateAndSaveComprehensiveReport } from "@/components/ComprehensiveInspectionReport";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import { getSubsectionDocuments, getSubsectionFloorPlans } from "@/lib/offlineDBExtensions";
 
@@ -1697,7 +1697,7 @@ const SubsectionDetail = () => {
         if (subsectionId && siteData?.siteName && subsection?.name) {
           toast.info("Generating inspection report...");
           
-          const reportResult = await generateAndSaveInspectionReport({
+          const reportResult = await generateAndSaveComprehensiveReport({
             inspectionId,
             subsectionId,
             siteName: siteData.siteName,
@@ -2490,7 +2490,7 @@ const SubsectionDetail = () => {
                               e.stopPropagation();
                               setGeneratingReportForId(id);
                               try {
-                                const result = await generateAndSaveInspectionReport({
+                                const result = await generateAndSaveComprehensiveReport({
                                   inspectionId: id,
                                   subsectionId: subsectionId!,
                                   siteName: siteData?.siteName || 'Unknown Site',
