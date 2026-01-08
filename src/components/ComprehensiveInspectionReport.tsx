@@ -77,24 +77,8 @@ export const ComprehensiveInspectionReport = ({
         return null;
       }
 
-      // Rename images to descriptive format before generating PDF
+      // Use inspection data directly - skip image renaming to prevent stuck state
       let jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || {};
-      
-      if (inspectionId && clientName) {
-        toast.info("Optimizing image names...");
-        const renameResult = await renameInspectionImages(
-          inspectionId,
-          clientName || siteName,
-          siteName,
-          subsectionName,
-          jsonData
-        );
-        
-        if (renameResult.renamedCount > 0) {
-          jsonData = renameResult.updatedJsonData;
-          console.log(`Renamed ${renameResult.renamedCount} images for PDF`);
-        }
-      }
 
       const date = new Date().toLocaleDateString('en-US', { 
         year: 'numeric', 

@@ -133,14 +133,24 @@ export const renameImage = async (
   newPath: string
 ): Promise<{ success: boolean; newUrl?: string; error?: string }> => {
   try {
-    // Download the file
-    const { data: fileData, error: downloadError } = await supabase.storage
+    // Add a timeout to prevent hanging
+    const timeoutPromise = new Promise<{ success: false; error: string }>((_, reject) => 
+      setTimeout(() => reject({ success: false, error: 'Download timeout' }), 10000)
+    );
+
+    // Download the file with timeout
+    const downloadPromise = supabase.storage
       .from('inspection-photos')
       .download(oldPath);
 
+    const { data: fileData, error: downloadError } = await Promise.race([
+      downloadPromise,
+      timeoutPromise.then(() => ({ data: null, error: { message: 'Timeout' } }))
+    ]) as any;
+
     if (downloadError || !fileData) {
-      console.error('Error downloading file:', downloadError);
-      return { success: false, error: 'Failed to download original file' };
+      // Silently skip - file doesn't exist at this path
+      return { success: false, error: 'File not found or download failed' };
     }
 
     // Upload to new location
@@ -152,7 +162,6 @@ export const renameImage = async (
       });
 
     if (uploadError) {
-      console.error('Error uploading to new location:', uploadError);
       return { success: false, error: 'Failed to upload to new location' };
     }
 
@@ -161,19 +170,15 @@ export const renameImage = async (
       .from('inspection-photos')
       .getPublicUrl(newPath);
 
-    // Delete old file
-    const { error: deleteError } = await supabase.storage
+    // Delete old file (don't wait or fail on this)
+    supabase.storage
       .from('inspection-photos')
-      .remove([oldPath]);
-
-    if (deleteError) {
-      console.warn('Warning: Failed to delete old file:', deleteError);
-      // Don't fail the operation if old file deletion fails
-    }
+      .remove([oldPath])
+      .catch(() => {});
 
     return { success: true, newUrl: publicData.publicUrl };
   } catch (error: any) {
-    console.error('Error renaming image:', error);
+    // Don't log errors for missing files
     return { success: false, error: error.message || 'Unknown error' };
   }
 };
