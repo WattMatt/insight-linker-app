@@ -471,6 +471,147 @@ export const ComprehensiveInspectionReport = ({
         }
       }
 
+      // ===== TENANTS SECTION =====
+      const tenants = jsonData.tenants || [];
+      if (tenants.length > 0) {
+        doc.addPage();
+        yPos = 20;
+
+        // Tenants header - Green background bar with white text
+        doc.setFillColor(40, 167, 69); // Green color for tenants
+        doc.rect(0, yPos, pageWidth, 15, 'F');
+        doc.setFontSize(14);
+        doc.setFont(undefined, 'bold');
+        doc.setTextColor(255, 255, 255);
+        doc.text('TENANTS / METERS', pageWidth / 2, yPos + 10, { align: 'center' });
+        yPos += 25;
+
+        // Reset text color
+        doc.setTextColor(0, 0, 0);
+
+        let tenantNumber = 1;
+        for (const tenant of tenants) {
+          // Collect tenant images
+          const tenantImages: { label: string; url: string }[] = [];
+          if (tenant.breakerImage) tenantImages.push({ label: 'Breaker', url: tenant.breakerImage });
+          if (tenant.ctRatioImage) tenantImages.push({ label: 'CT Ratio', url: tenant.ctRatioImage });
+          if (tenant.meterImage) tenantImages.push({ label: 'Meter', url: tenant.meterImage });
+          
+          const hasImages = tenantImages.length > 0;
+          
+          // Photo dimensions
+          const photoWidth = 50;
+          const photoHeight = 40;
+          const photoSpacing = 5;
+          
+          // Calculate layout
+          const imagesPerRow = 3;
+          const imageRows = hasImages ? Math.ceil(tenantImages.length / imagesPerRow) : 0;
+          const totalImageHeight = hasImages ? (imageRows * photoHeight) + ((imageRows - 1) * photoSpacing) : 0;
+          
+          // Calculate space needed
+          const headerHeight = 45; // Title + info rows
+          const tenantBoxHeight = headerHeight + totalImageHeight + 15;
+          const tenantMargin = 10;
+
+          // Check if we need a new page
+          if (yPos + tenantBoxHeight + tenantMargin > pageHeight - 20) {
+            doc.addPage();
+            yPos = 20;
+          }
+
+          // Draw tenant container box
+          doc.setDrawColor(40, 167, 69);
+          doc.setLineWidth(1);
+          doc.rect(20, yPos, pageWidth - 40, tenantBoxHeight);
+
+          // Tenant title (Shop Name + Number)
+          doc.setFontSize(11);
+          doc.setFont(undefined, 'bold');
+          doc.setTextColor(0, 0, 0);
+          const tenantTitle = `${tenantNumber}. ${tenant.shopName || 'Unnamed Tenant'}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`;
+          doc.text(tenantTitle, 25, yPos + 8);
+
+          // Tenant info
+          let infoY = yPos + 18;
+          doc.setFontSize(9);
+          
+          if (tenant.breakerSize) {
+            doc.setFont(undefined, 'bold');
+            doc.text('Breaker Size:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(tenant.breakerSize, 60, infoY);
+            infoY += 8;
+          }
+          
+          if (tenant.ctSizeAndRatio) {
+            doc.setFont(undefined, 'bold');
+            doc.text('CT Ratio:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(tenant.ctSizeAndRatio, 60, infoY);
+            infoY += 8;
+          }
+          
+          if (tenant.meterSerialNumber) {
+            doc.setFont(undefined, 'bold');
+            doc.text('Meter S/N:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(tenant.meterSerialNumber, 60, infoY);
+            infoY += 8;
+          }
+          
+          if (tenant.controlStatus48V) {
+            doc.setFont(undefined, 'bold');
+            doc.text('48V Control:', 25, infoY);
+            doc.setFont(undefined, 'normal');
+            doc.text(tenant.controlStatus48V, 60, infoY);
+            infoY += 8;
+          }
+
+          // Photos
+          if (hasImages) {
+            let photoX = 25;
+            let photoY = yPos + headerHeight;
+            let imgIndex = 0;
+            
+            for (const img of tenantImages) {
+              try {
+                // Use the resolver that handles URL mismatches
+                const dataUrl = await fetchImageAsDataUrl(img.url);
+                
+                if (dataUrl) {
+                  const col = imgIndex % imagesPerRow;
+                  const row = Math.floor(imgIndex / imagesPerRow);
+                  const currentX = photoX + (col * (photoWidth + photoSpacing));
+                  const currentY = photoY + (row * (photoHeight + photoSpacing));
+
+                  // Draw photo with border
+                  doc.setDrawColor(200, 200, 200);
+                  doc.setLineWidth(0.5);
+                  doc.addImage(dataUrl, 'JPEG', currentX, currentY, photoWidth, photoHeight);
+                  doc.rect(currentX, currentY, photoWidth, photoHeight);
+                  
+                  // Add label below image
+                  doc.setFontSize(7);
+                  doc.setFont(undefined, 'normal');
+                  doc.setTextColor(100, 100, 100);
+                  doc.text(img.label, currentX + photoWidth / 2, currentY + photoHeight + 4, { align: 'center' });
+                  doc.setTextColor(0, 0, 0);
+                }
+                
+                imgIndex++;
+              } catch (error) {
+                console.error('Error embedding tenant image:', error);
+                imgIndex++;
+              }
+            }
+          }
+
+          yPos += tenantBoxHeight + tenantMargin;
+          tenantNumber++;
+        }
+      }
+
       // ===== SNAGS SECTION =====
       if (snags && snags.length > 0) {
         doc.addPage();
