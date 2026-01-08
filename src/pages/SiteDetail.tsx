@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck, Shield } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
@@ -25,6 +25,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import JSZip from 'jszip';
 
 interface Site {
@@ -1068,10 +1069,14 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="compliance" className="gap-2">
+            <Shield className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Compliance</span>
           </TabsTrigger>
           <TabsTrigger value="images" className="gap-2">
             <Image className="h-4 w-4 shrink-0" />
@@ -1098,6 +1103,14 @@ const SiteDetail = () => {
             <span className="hidden lg:inline">Export</span>
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="compliance" className="space-y-6">
+          <ComplianceDashboard 
+            siteId={siteId!}
+            subsections={subsections}
+            inspections={inspections}
+          />
+        </TabsContent>
 
         <TabsContent value="overview" className="space-y-6">
           {/* Site Details Card */}
