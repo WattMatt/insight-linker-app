@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useCallback, useRef } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight, Loader2, Target } from "lucide-react";
 import { Document, Page, pdfjs } from "react-pdf";
 import "react-pdf/dist/Page/AnnotationLayer.css";
 import "react-pdf/dist/Page/TextLayer.css";
@@ -36,12 +36,26 @@ interface COCPreviewDialogProps {
   } | null;
 }
 
+// Keywords to search for each clause type
+const clauseKeywords: Record<string, string[]> = {
+  '8.6': ['insulation resistance', 'insulation', 'ir test', 'megohm', 'mω', 'mohm', '0 mω', '0mω'],
+  '8.5': ['earth loop', 'loop impedance', 'earth fault', 'ze', 'zs', 'earth continuity'],
+  '8.4': ['earth continuity', 'protective conductor', 'bonding'],
+  '8.7': ['rcd', 'residual current', 'trip time', 'earth leakage', '30ma', '30 ma'],
+  '6.1': ['installation', 'premises', 'address', 'description'],
+  '6.2': ['circuit', 'schedule', 'distribution', 'db'],
+  '7.1': ['inspection', 'visual', 'check'],
+  '5.1': ['certificate', 'coc number', 'registration'],
+  '5.2': ['installer', 'registered', 'accredited'],
+};
+
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [highlightedClause, setHighlightedClause] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const scrollRef = useRef<HTMLDivElement>(null);
 
   if (!document) return null;
 
@@ -77,25 +91,76 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     }
   };
 
-  // Map clause numbers to COC form sections for reference
-  const getClauseLocation = (clause: string): string => {
-    const clauseLocations: Record<string, string> = {
-      '8.6': 'Section 4 - Test Results (Insulation Resistance)',
-      '8.5': 'Section 4 - Test Results (Earth Loop Impedance)',
-      '8.4': 'Section 4 - Test Results (Earth Continuity)',
-      '8.7': 'Section 4 - Test Results (RCD Testing)',
-      '6.1': 'Section 2 - Installation Details',
-      '6.2': 'Section 2 - Circuit Schedule',
-      '7.1': 'Section 3 - Inspection Checks',
-      '5.1': 'Section 1 - Certificate Details',
-      '5.2': 'Section 1 - Installer Registration',
+  // Get clause location and page info
+  const getClauseLocation = (clause: string): { location: string; page: number } => {
+    const clauseLocations: Record<string, { location: string; page: number }> = {
+      '8.6': { location: 'Test Results - Insulation Resistance', page: 2 },
+      '8.5': { location: 'Test Results - Earth Loop Impedance', page: 2 },
+      '8.4': { location: 'Test Results - Earth Continuity', page: 2 },
+      '8.7': { location: 'Test Results - RCD Testing', page: 2 },
+      '6.1': { location: 'Installation Details', page: 1 },
+      '6.2': { location: 'Circuit Schedule', page: 1 },
+      '7.1': { location: 'Inspection Checks', page: 1 },
+      '5.1': { location: 'Certificate Details', page: 1 },
+      '5.2': { location: 'Installer Registration', page: 1 },
     };
-    return clauseLocations[clause] || `Refer to SANS 10142-1 Clause ${clause}`;
+    return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
   };
+
+  // Handle clause click - navigate to relevant page
+  const handleClauseClick = (clause: string) => {
+    const newHighlight = highlightedClause === clause ? null : clause;
+    setHighlightedClause(newHighlight);
+    
+    if (newHighlight) {
+      const { page } = getClauseLocation(clause);
+      if (page <= numPages) {
+        setPageNumber(page);
+      }
+    }
+  };
+
+  // Custom text renderer to highlight matching text
+  const customTextRenderer = useCallback(
+    (textItem: { str: string }) => {
+      if (!highlightedClause) return textItem.str;
+
+      const keywords = clauseKeywords[highlightedClause] || [];
+      const text = textItem.str.toLowerCase();
+      
+      // Check if any keyword matches
+      const hasMatch = keywords.some(keyword => text.includes(keyword.toLowerCase()));
+      
+      if (hasMatch) {
+        return `<mark class="coc-highlight">${textItem.str}</mark>`;
+      }
+      
+      return textItem.str;
+    },
+    [highlightedClause]
+  );
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-7xl w-[95vw] h-[90vh] p-0 flex flex-col">
+        {/* Custom styles for highlighting */}
+        <style>{`
+          .coc-highlight {
+            background-color: hsl(var(--primary) / 0.3) !important;
+            border: 2px solid hsl(var(--primary)) !important;
+            border-radius: 2px;
+            padding: 2px 0;
+            animation: pulse-highlight 1.5s ease-in-out infinite;
+          }
+          @keyframes pulse-highlight {
+            0%, 100% { background-color: hsl(var(--primary) / 0.3); }
+            50% { background-color: hsl(var(--primary) / 0.5); }
+          }
+          .react-pdf__Page__textContent {
+            pointer-events: none;
+          }
+        `}</style>
+
         <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div>
@@ -161,6 +226,12 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                 )}
               </div>
               <div className="flex items-center gap-2">
+                {highlightedClause && (
+                  <Badge variant="secondary" className="gap-1">
+                    <Target className="h-3 w-3" />
+                    Highlighting Clause {highlightedClause}
+                  </Badge>
+                )}
                 <Button size="sm" variant="outline" onClick={handleDownload} title="Download">
                   <Download className="h-4 w-4 mr-1" />
                   Download
@@ -169,7 +240,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             </div>
 
             {/* Document View */}
-            <ScrollArea className="flex-1 bg-muted/30">
+            <ScrollArea className="flex-1 bg-muted/30" ref={scrollRef}>
               <div className="flex items-start justify-center p-4 min-h-full">
                 {isPdf ? (
                   <Document
@@ -195,11 +266,13 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     className="flex justify-center"
                   >
                     <Page
+                      key={`page-${pageNumber}-${highlightedClause}`}
                       pageNumber={pageNumber}
                       scale={scale}
                       renderTextLayer={true}
                       renderAnnotationLayer={true}
-                      className="shadow-lg"
+                      customTextRenderer={customTextRenderer}
+                      className="shadow-lg rounded overflow-hidden"
                       loading={
                         <div className="flex items-center justify-center h-64">
                           <Loader2 className="h-6 w-6 animate-spin text-primary" />
@@ -242,7 +315,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             <div className="px-4 py-3 bg-muted/50 border-b shrink-0">
               <h3 className="font-semibold">SANS 10142-1 Verification</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Click a clause to see its location on the COC
+                Click a clause to highlight it on the document
               </p>
             </div>
             <ScrollArea className="flex-1">
@@ -274,62 +347,75 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     </div>
 
                     <div className="space-y-3">
-                      {validation.violations?.map((v, i) => (
-                        <div 
-                          key={i} 
-                          className={`border rounded-lg p-3 bg-card cursor-pointer transition-all ${
-                            highlightedClause === v.clause 
-                              ? 'ring-2 ring-primary border-primary bg-primary/5' 
-                              : 'hover:bg-muted/50'
-                          }`}
-                          onClick={() => setHighlightedClause(highlightedClause === v.clause ? null : v.clause)}
-                        >
-                          <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <Badge variant="outline" className="text-xs font-mono">
-                                Clause {v.clause}
-                              </Badge>
-                              {v.riskLevel && (
-                                <Badge 
-                                  variant={v.riskLevel === 'High' ? 'destructive' : v.riskLevel === 'Medium' ? 'secondary' : 'outline'} 
-                                  className="text-xs"
-                                >
-                                  {v.riskLevel}
+                      {validation.violations?.map((v, i) => {
+                        const clauseInfo = getClauseLocation(v.clause);
+                        return (
+                          <div 
+                            key={i} 
+                            className={`border rounded-lg p-3 bg-card cursor-pointer transition-all ${
+                              highlightedClause === v.clause 
+                                ? 'ring-2 ring-primary border-primary bg-primary/5' 
+                                : 'hover:bg-muted/50 hover:border-muted-foreground/30'
+                            }`}
+                            onClick={() => handleClauseClick(v.clause)}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-2">
+                              <div className="flex items-center gap-2 flex-wrap">
+                                <Badge variant="outline" className="text-xs font-mono">
+                                  Clause {v.clause}
                                 </Badge>
-                              )}
+                                {v.riskLevel && (
+                                  <Badge 
+                                    variant={v.riskLevel === 'High' ? 'destructive' : v.riskLevel === 'Medium' ? 'secondary' : 'outline'} 
+                                    className="text-xs"
+                                  >
+                                    {v.riskLevel}
+                                  </Badge>
+                                )}
+                              </div>
+                              <Button 
+                                size="sm" 
+                                variant={highlightedClause === v.clause ? 'default' : 'ghost'}
+                                className="h-6 w-6 p-0 shrink-0"
+                                title="Highlight on document"
+                              >
+                                <Target className="h-3 w-3" />
+                              </Button>
                             </div>
-                          </div>
-                          
-                          <p className="font-medium text-sm text-foreground mb-1">
-                            {v.description}
-                          </p>
-                          
-                          {v.reason && (
-                            <p className="text-sm text-muted-foreground mb-2">
-                              {v.reason}
+                            
+                            <p className="font-medium text-sm text-foreground mb-1">
+                              {v.description}
                             </p>
-                          )}
+                            
+                            {v.reason && (
+                              <p className="text-sm text-muted-foreground mb-2">
+                                {v.reason}
+                              </p>
+                            )}
 
-                          {/* Document Location Reference */}
-                          {highlightedClause === v.clause && (
-                            <div className="text-sm bg-primary/10 text-primary p-2 rounded mt-2 border border-primary/20">
-                              <strong>📍 Find on COC:</strong> {getClauseLocation(v.clause)}
+                            {/* Document Location Reference */}
+                            <div className={`text-xs p-2 rounded mt-2 border ${
+                              highlightedClause === v.clause 
+                                ? 'bg-primary/10 text-primary border-primary/20' 
+                                : 'bg-muted/50 text-muted-foreground border-transparent'
+                            }`}>
+                              <strong>📍 Location:</strong> {clauseInfo.location} (Page {clauseInfo.page})
                             </div>
-                          )}
-                          
-                          {v.immediateAction && (
-                            <div className="text-sm bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 p-2 rounded mt-2">
-                              <strong>Action:</strong> {v.immediateAction}
-                            </div>
-                          )}
-                          
-                          {v.evidence && (
-                            <p className="text-xs italic text-muted-foreground mt-2 border-t pt-2">
-                              Evidence: {v.evidence}
-                            </p>
-                          )}
-                        </div>
-                      ))}
+                            
+                            {v.immediateAction && (
+                              <div className="text-sm bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 p-2 rounded mt-2">
+                                <strong>Action:</strong> {v.immediateAction}
+                              </div>
+                            )}
+                            
+                            {v.evidence && (
+                              <p className="text-xs italic text-muted-foreground mt-2 border-t pt-2">
+                                Evidence: {v.evidence}
+                              </p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   </>
                 )}
@@ -370,17 +456,17 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                   </>
                 )}
 
-                {/* COC Form Reference Guide */}
+                {/* Legend */}
                 <Separator className="my-4" />
                 <div className="bg-muted/50 rounded-lg p-3">
-                  <h4 className="font-medium text-sm mb-2">📋 COC Section Reference</h4>
-                  <div className="text-xs text-muted-foreground space-y-1">
-                    <p><strong>Section 1:</strong> Certificate & Installer Details</p>
-                    <p><strong>Section 2:</strong> Installation Details & Circuit Schedule</p>
-                    <p><strong>Section 3:</strong> Inspection Checks</p>
-                    <p><strong>Section 4:</strong> Test Results (IR, Earth, RCD)</p>
-                    <p><strong>Section 5:</strong> Declaration & Signatures</p>
-                  </div>
+                  <h4 className="font-medium text-sm mb-2 flex items-center gap-2">
+                    <Target className="h-4 w-4" />
+                    Highlighting Guide
+                  </h4>
+                  <p className="text-xs text-muted-foreground">
+                    Click any clause above to highlight the relevant test results or sections on the COC document. 
+                    The document will automatically navigate to the correct page.
+                  </p>
                 </div>
               </div>
             </ScrollArea>
