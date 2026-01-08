@@ -4,7 +4,13 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, Download, ExternalLink, FileText } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, Download, ChevronLeft, ChevronRight, Loader2 } from "lucide-react";
+import { Document, Page, pdfjs } from "react-pdf";
+import "react-pdf/dist/Page/AnnotationLayer.css";
+import "react-pdf/dist/Page/TextLayer.css";
+
+// Set up PDF.js worker
+pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface COCPreviewDialogProps {
   open: boolean;
@@ -31,21 +37,27 @@ interface COCPreviewDialogProps {
 }
 
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
+  const [numPages, setNumPages] = useState<number>(0);
+  const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
-  const [rotation, setRotation] = useState(0);
   const [highlightedClause, setHighlightedClause] = useState<string | null>(null);
-  const [loadError, setLoadError] = useState(false);
+  const [loading, setLoading] = useState(true);
 
   if (!document) return null;
 
   const isPdf = document.file_name.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name);
 
-  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
-  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
+  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
+  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
 
-  const handleOpenExternal = () => {
-    window.open(document.file_url, '_blank');
+  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+    setNumPages(numPages);
+    setLoading(false);
+  };
+
+  const onDocumentLoadError = () => {
+    setLoading(false);
   };
 
   const handleDownload = async () => {
@@ -113,104 +125,116 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b shrink-0">
               <div className="flex items-center gap-2">
-                {isImage && (
+                <Button size="sm" variant="outline" onClick={handleZoomOut} title="Zoom out">
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+                <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+                  {Math.round(scale * 100)}%
+                </span>
+                <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoom in">
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
+                
+                {isPdf && numPages > 1 && (
                   <>
-                    <Button size="sm" variant="outline" onClick={handleZoomOut} title="Zoom out">
-                      <ZoomOut className="h-4 w-4" />
+                    <Separator orientation="vertical" className="h-6 mx-2" />
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => setPageNumber(p => Math.max(1, p - 1))}
+                      disabled={pageNumber <= 1}
+                    >
+                      <ChevronLeft className="h-4 w-4" />
                     </Button>
-                    <span className="text-sm text-muted-foreground min-w-[60px] text-center">
-                      {Math.round(scale * 100)}%
+                    <span className="text-sm text-muted-foreground min-w-[80px] text-center">
+                      Page {pageNumber} / {numPages}
                     </span>
-                    <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoom in">
-                      <ZoomIn className="h-4 w-4" />
+                    <Button 
+                      size="sm" 
+                      variant="outline" 
+                      onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
+                      disabled={pageNumber >= numPages}
+                    >
+                      <ChevronRight className="h-4 w-4" />
                     </Button>
                   </>
                 )}
-                {isPdf && (
-                  <span className="text-sm text-muted-foreground">
-                    Use browser controls to zoom/navigate
-                  </span>
-                )}
               </div>
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={handleOpenExternal} title="Open in new tab">
-                  <ExternalLink className="h-4 w-4 mr-1" />
-                  Open Full View
-                </Button>
                 <Button size="sm" variant="outline" onClick={handleDownload} title="Download">
-                  <Download className="h-4 w-4" />
+                  <Download className="h-4 w-4 mr-1" />
+                  Download
                 </Button>
               </div>
             </div>
 
             {/* Document View */}
-            <div className="flex-1 bg-muted/30 overflow-hidden relative">
-              {isPdf ? (
-                loadError ? (
-                  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                    <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                    <h4 className="font-semibold text-lg mb-2">PDF Preview Unavailable</h4>
-                    <p className="text-muted-foreground mb-4 max-w-md">
-                      The PDF cannot be displayed inline. Click below to open it in a new tab for full viewing.
-                    </p>
-                    <Button onClick={handleOpenExternal} size="lg">
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open PDF in New Tab
-                    </Button>
-                  </div>
-                ) : (
-                  <object
-                    data={document.file_url}
-                    type="application/pdf"
-                    className="w-full h-full"
-                    onError={() => setLoadError(true)}
+            <ScrollArea className="flex-1 bg-muted/30">
+              <div className="flex items-start justify-center p-4 min-h-full">
+                {isPdf ? (
+                  <Document
+                    file={document.file_url}
+                    onLoadSuccess={onDocumentLoadSuccess}
+                    onLoadError={onDocumentLoadError}
+                    loading={
+                      <div className="flex flex-col items-center justify-center h-64 gap-3">
+                        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                        <p className="text-sm text-muted-foreground">Loading PDF...</p>
+                      </div>
+                    }
+                    error={
+                      <div className="flex flex-col items-center justify-center h-64 gap-3 text-center p-4">
+                        <AlertTriangle className="h-12 w-12 text-destructive" />
+                        <p className="text-sm text-muted-foreground">Failed to load PDF</p>
+                        <Button variant="outline" onClick={handleDownload}>
+                          <Download className="h-4 w-4 mr-2" />
+                          Download Instead
+                        </Button>
+                      </div>
+                    }
+                    className="flex justify-center"
                   >
-                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
-                      <FileText className="h-16 w-16 text-muted-foreground mb-4" />
-                      <h4 className="font-semibold text-lg mb-2">PDF Preview Unavailable</h4>
-                      <p className="text-muted-foreground mb-4 max-w-md">
-                        Your browser cannot display this PDF inline. Click below to open it in a new tab.
-                      </p>
-                      <Button onClick={handleOpenExternal} size="lg">
-                        <ExternalLink className="h-4 w-4 mr-2" />
-                        Open PDF in New Tab
-                      </Button>
-                    </div>
-                  </object>
-                )
-              ) : isImage ? (
-                <ScrollArea className="h-full">
-                  <div className="flex items-center justify-center min-h-full p-4">
-                    <img
-                      src={document.file_url}
-                      alt={document.file_name}
-                      style={{
-                        transform: `scale(${scale}) rotate(${rotation}deg)`,
-                        maxWidth: '100%',
-                        maxHeight: '100%',
-                        objectFit: 'contain',
-                        transition: 'transform 0.2s ease'
-                      }}
-                      className="rounded shadow-lg"
-                      onError={(e) => {
-                        (e.target as HTMLImageElement).src = '/placeholder.svg';
-                      }}
+                    <Page
+                      pageNumber={pageNumber}
+                      scale={scale}
+                      renderTextLayer={true}
+                      renderAnnotationLayer={true}
+                      className="shadow-lg"
+                      loading={
+                        <div className="flex items-center justify-center h-64">
+                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                        </div>
+                      }
                     />
-                  </div>
-                </ScrollArea>
-              ) : (
-                <div className="flex items-center justify-center h-full text-center text-muted-foreground p-8">
-                  <div>
-                    <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
+                  </Document>
+                ) : isImage ? (
+                  <img
+                    src={document.file_url}
+                    alt={document.file_name}
+                    style={{
+                      transform: `scale(${scale})`,
+                      transformOrigin: 'top center',
+                      maxWidth: '100%',
+                      objectFit: 'contain',
+                      transition: 'transform 0.2s ease'
+                    }}
+                    className="rounded shadow-lg"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = '/placeholder.svg';
+                    }}
+                  />
+                ) : (
+                  <div className="flex flex-col items-center justify-center h-64 text-center text-muted-foreground">
+                    <AlertTriangle className="h-12 w-12 mb-4 opacity-50" />
                     <p className="mb-4">Unable to preview this file type</p>
-                    <Button onClick={handleOpenExternal}>
-                      <ExternalLink className="h-4 w-4 mr-2" />
-                      Open in New Tab
+                    <Button onClick={handleDownload}>
+                      <Download className="h-4 w-4 mr-2" />
+                      Download File
                     </Button>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            </ScrollArea>
           </div>
 
           {/* Validation Results Panel */}
@@ -218,7 +242,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             <div className="px-4 py-3 bg-muted/50 border-b shrink-0">
               <h3 className="font-semibold">SANS 10142-1 Verification</h3>
               <p className="text-xs text-muted-foreground mt-1">
-                Click a clause to highlight its location reference
+                Click a clause to see its location on the COC
               </p>
             </div>
             <ScrollArea className="flex-1">
