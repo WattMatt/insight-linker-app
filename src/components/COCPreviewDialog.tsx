@@ -124,11 +124,15 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     }
   };
 
-  // Handle mouse wheel zoom (scroll wheel zooms, hold Shift to pan vertically)
+  // Handle mouse wheel zoom (Ctrl+scroll or pinch to zoom, normal scroll to pan)
   const handleWheel = useCallback((e: React.WheelEvent) => {
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(prev => Math.min(Math.max(prev + delta, 0.5), 3));
+    // Only zoom when Ctrl/Cmd is held (for pinch-to-zoom on trackpads and Ctrl+scroll on mouse)
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale(prev => Math.min(Math.max(prev + delta, 0.5), 3));
+    }
+    // Otherwise let normal scroll behavior happen for panning
   }, []);
 
   // Handle pan start
