@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
-import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, RotateCw, Download, ExternalLink } from "lucide-react";
+import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, Download, ExternalLink, FileText } from "lucide-react";
 
 interface COCPreviewDialogProps {
   open: boolean;
@@ -24,6 +24,7 @@ interface COCPreviewDialogProps {
       riskLevel?: string;
       immediateAction?: string;
       evidence?: string;
+      section?: string;
     }>;
     report_data?: any;
   } | null;
@@ -32,6 +33,8 @@ interface COCPreviewDialogProps {
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
   const [scale, setScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
+  const [highlightedClause, setHighlightedClause] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState(false);
 
   if (!document) return null;
 
@@ -40,7 +43,6 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
-  const handleRotate = () => setRotation(prev => (prev + 90) % 360);
 
   const handleOpenExternal = () => {
     window.open(document.file_url, '_blank');
@@ -63,10 +65,26 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     }
   };
 
+  // Map clause numbers to COC form sections for reference
+  const getClauseLocation = (clause: string): string => {
+    const clauseLocations: Record<string, string> = {
+      '8.6': 'Section 4 - Test Results (Insulation Resistance)',
+      '8.5': 'Section 4 - Test Results (Earth Loop Impedance)',
+      '8.4': 'Section 4 - Test Results (Earth Continuity)',
+      '8.7': 'Section 4 - Test Results (RCD Testing)',
+      '6.1': 'Section 2 - Installation Details',
+      '6.2': 'Section 2 - Circuit Schedule',
+      '7.1': 'Section 3 - Inspection Checks',
+      '5.1': 'Section 1 - Certificate Details',
+      '5.2': 'Section 1 - Installer Registration',
+    };
+    return clauseLocations[clause] || `Refer to SANS 10142-1 Clause ${clause}`;
+  };
+
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-7xl w-[95vw] h-[90vh] p-0 flex flex-col">
-        <DialogHeader className="px-6 py-4 border-b">
+        <DialogHeader className="px-6 py-4 border-b shrink-0">
           <div className="flex items-center justify-between">
             <div>
               <DialogTitle className="text-lg font-semibold">{document.file_name}</DialogTitle>
@@ -89,11 +107,11 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
           </div>
         </DialogHeader>
 
-        <div className="flex-1 flex overflow-hidden">
+        <div className="flex-1 flex overflow-hidden min-h-0">
           {/* Document Preview Panel */}
-          <div className="flex-1 flex flex-col border-r">
+          <div className="flex-1 flex flex-col border-r min-w-0">
             {/* Toolbar */}
-            <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b">
+            <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b shrink-0">
               <div className="flex items-center gap-2">
                 {isImage && (
                   <>
@@ -106,16 +124,18 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoom in">
                       <ZoomIn className="h-4 w-4" />
                     </Button>
-                    <Separator orientation="vertical" className="h-6 mx-2" />
-                    <Button size="sm" variant="outline" onClick={handleRotate} title="Rotate">
-                      <RotateCw className="h-4 w-4" />
-                    </Button>
                   </>
+                )}
+                {isPdf && (
+                  <span className="text-sm text-muted-foreground">
+                    Use browser controls to zoom/navigate
+                  </span>
                 )}
               </div>
               <div className="flex items-center gap-2">
                 <Button size="sm" variant="outline" onClick={handleOpenExternal} title="Open in new tab">
-                  <ExternalLink className="h-4 w-4" />
+                  <ExternalLink className="h-4 w-4 mr-1" />
+                  Open Full View
                 </Button>
                 <Button size="sm" variant="outline" onClick={handleDownload} title="Download">
                   <Download className="h-4 w-4" />
@@ -124,13 +144,40 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             </div>
 
             {/* Document View */}
-            <div className="flex-1 bg-muted/30 overflow-hidden">
+            <div className="flex-1 bg-muted/30 overflow-hidden relative">
               {isPdf ? (
-                <iframe
-                  src={`${document.file_url}#toolbar=1&navpanes=0`}
-                  className="w-full h-full border-0"
-                  title={document.file_name}
-                />
+                loadError ? (
+                  <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                    <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                    <h4 className="font-semibold text-lg mb-2">PDF Preview Unavailable</h4>
+                    <p className="text-muted-foreground mb-4 max-w-md">
+                      The PDF cannot be displayed inline. Click below to open it in a new tab for full viewing.
+                    </p>
+                    <Button onClick={handleOpenExternal} size="lg">
+                      <ExternalLink className="h-4 w-4 mr-2" />
+                      Open PDF in New Tab
+                    </Button>
+                  </div>
+                ) : (
+                  <object
+                    data={document.file_url}
+                    type="application/pdf"
+                    className="w-full h-full"
+                    onError={() => setLoadError(true)}
+                  >
+                    <div className="flex flex-col items-center justify-center h-full p-8 text-center">
+                      <FileText className="h-16 w-16 text-muted-foreground mb-4" />
+                      <h4 className="font-semibold text-lg mb-2">PDF Preview Unavailable</h4>
+                      <p className="text-muted-foreground mb-4 max-w-md">
+                        Your browser cannot display this PDF inline. Click below to open it in a new tab.
+                      </p>
+                      <Button onClick={handleOpenExternal} size="lg">
+                        <ExternalLink className="h-4 w-4 mr-2" />
+                        Open PDF in New Tab
+                      </Button>
+                    </div>
+                  </object>
+                )
               ) : isImage ? (
                 <ScrollArea className="h-full">
                   <div className="flex items-center justify-center min-h-full p-4">
@@ -154,6 +201,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
               ) : (
                 <div className="flex items-center justify-center h-full text-center text-muted-foreground p-8">
                   <div>
+                    <FileText className="h-16 w-16 mx-auto mb-4 opacity-50" />
                     <p className="mb-4">Unable to preview this file type</p>
                     <Button onClick={handleOpenExternal}>
                       <ExternalLink className="h-4 w-4 mr-2" />
@@ -166,9 +214,12 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
           </div>
 
           {/* Validation Results Panel */}
-          <div className="w-[400px] flex flex-col bg-background">
-            <div className="px-4 py-3 bg-muted/50 border-b">
+          <div className="w-[420px] flex flex-col bg-background shrink-0">
+            <div className="px-4 py-3 bg-muted/50 border-b shrink-0">
               <h3 className="font-semibold">SANS 10142-1 Verification</h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Click a clause to highlight its location reference
+              </p>
             </div>
             <ScrollArea className="flex-1">
               <div className="p-4 space-y-4">
@@ -189,7 +240,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                 ) : (
                   <>
                     <div className="flex items-center gap-2 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
-                      <XCircle className="h-5 w-5 text-destructive" />
+                      <XCircle className="h-5 w-5 text-destructive shrink-0" />
                       <div>
                         <p className="font-medium text-destructive">Validation Failed</p>
                         <p className="text-sm text-muted-foreground">
@@ -202,7 +253,12 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                       {validation.violations?.map((v, i) => (
                         <div 
                           key={i} 
-                          className="border rounded-lg p-3 bg-card hover:bg-muted/50 transition-colors"
+                          className={`border rounded-lg p-3 bg-card cursor-pointer transition-all ${
+                            highlightedClause === v.clause 
+                              ? 'ring-2 ring-primary border-primary bg-primary/5' 
+                              : 'hover:bg-muted/50'
+                          }`}
+                          onClick={() => setHighlightedClause(highlightedClause === v.clause ? null : v.clause)}
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
                             <div className="flex items-center gap-2 flex-wrap">
@@ -228,6 +284,13 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                             <p className="text-sm text-muted-foreground mb-2">
                               {v.reason}
                             </p>
+                          )}
+
+                          {/* Document Location Reference */}
+                          {highlightedClause === v.clause && (
+                            <div className="text-sm bg-primary/10 text-primary p-2 rounded mt-2 border border-primary/20">
+                              <strong>📍 Find on COC:</strong> {getClauseLocation(v.clause)}
+                            </div>
                           )}
                           
                           {v.immediateAction && (
@@ -282,6 +345,19 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     </div>
                   </>
                 )}
+
+                {/* COC Form Reference Guide */}
+                <Separator className="my-4" />
+                <div className="bg-muted/50 rounded-lg p-3">
+                  <h4 className="font-medium text-sm mb-2">📋 COC Section Reference</h4>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <p><strong>Section 1:</strong> Certificate & Installer Details</p>
+                    <p><strong>Section 2:</strong> Installation Details & Circuit Schedule</p>
+                    <p><strong>Section 3:</strong> Inspection Checks</p>
+                    <p><strong>Section 4:</strong> Test Results (IR, Earth, RCD)</p>
+                    <p><strong>Section 5:</strong> Declaration & Signatures</p>
+                  </div>
+                </div>
               </div>
             </ScrollArea>
           </div>
