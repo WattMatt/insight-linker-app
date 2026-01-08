@@ -146,18 +146,35 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
         {/* Custom styles for highlighting */}
         <style>{`
           .coc-highlight {
-            background-color: hsl(var(--primary) / 0.3) !important;
-            border: 2px solid hsl(var(--primary)) !important;
-            border-radius: 2px;
-            padding: 2px 0;
-            animation: pulse-highlight 1.5s ease-in-out infinite;
+            background-color: #ffff00 !important;
+            border: 3px solid #ff0000 !important;
+            border-radius: 4px;
+            padding: 4px 2px;
+            margin: -2px;
+            box-shadow: 0 0 20px 8px rgba(255, 0, 0, 0.6), 0 0 40px 15px rgba(255, 255, 0, 0.4) !important;
+            animation: pulse-highlight 0.8s ease-in-out infinite;
+            position: relative;
+            z-index: 1000;
           }
           @keyframes pulse-highlight {
-            0%, 100% { background-color: hsl(var(--primary) / 0.3); }
-            50% { background-color: hsl(var(--primary) / 0.5); }
+            0%, 100% { 
+              background-color: #ffff00;
+              box-shadow: 0 0 20px 8px rgba(255, 0, 0, 0.6), 0 0 40px 15px rgba(255, 255, 0, 0.4);
+            }
+            50% { 
+              background-color: #ff6b6b;
+              box-shadow: 0 0 30px 12px rgba(255, 0, 0, 0.8), 0 0 60px 25px rgba(255, 255, 0, 0.6);
+            }
           }
           .react-pdf__Page__textContent {
             pointer-events: none;
+          }
+          .react-pdf__Page__textContent span {
+            color: transparent !important;
+          }
+          .react-pdf__Page__textContent .coc-highlight {
+            color: #000 !important;
+            font-weight: bold !important;
           }
         `}</style>
 
