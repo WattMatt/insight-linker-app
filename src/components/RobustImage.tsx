@@ -212,22 +212,21 @@ export const RobustImage = ({
   }
 
   return (
-    <>
+    <div className={`relative ${className}`}>
       {imageState === 'loading' && (
-        <div className={`flex items-center justify-center bg-muted min-h-[60px] ${className}`}>
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
           <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
         </div>
       )}
       <img
+        key={imageSrc}
         src={imageSrc}
         alt={alt}
-        className={`${className} ${onClick ? 'cursor-pointer' : ''}`}
+        className={`w-full h-full object-cover ${onClick ? 'cursor-pointer' : ''} ${imageState !== 'loaded' ? 'opacity-0' : 'opacity-100'}`}
         onLoad={handleLoad}
         onError={handleError}
         onClick={onClick}
-        style={{ display: imageState === 'loaded' ? 'block' : 'none' }}
-        loading="lazy"
       />
-    </>
+    </div>
   );
 };
