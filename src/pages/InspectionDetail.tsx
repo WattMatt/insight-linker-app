@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus, Edit } from "lucide-react";
+import { X, Save, Camera, Upload, Trash2, ArrowLeft, Plus, Edit, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import QRCode from "qrcode";
@@ -28,6 +28,7 @@ import {
   renameInspectionImages 
 } from "@/lib/imageNaming";
 import { InspectionSignatures } from "@/components/InspectionSignatures";
+import { fixInspectionImagePaths } from "@/lib/imagePathFixer";
 
 interface InspectionTemplate {
   name: string;
@@ -145,6 +146,7 @@ const InspectionDetail = () => {
   const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [viewingImage, setViewingImage] = useState<string | null>(null);
+  const [fixingImages, setFixingImages] = useState(false);
 
   // Utility function to convert camelCase to Title Case with spaces
   const formatTabLabel = (text: string): string => {
@@ -1756,6 +1758,33 @@ const InspectionDetail = () => {
               snags={snags}
             />
           )}
+          <Button 
+            variant="outline" 
+            onClick={async () => {
+              setFixingImages(true);
+              try {
+                const result = await fixInspectionImagePaths(inspectionId!);
+                if (result.fixed) {
+                  toast.success(`Fixed ${result.updatedPaths} image path(s)`);
+                  // Reload the page to show fixed images
+                  window.location.reload();
+                } else if (result.error) {
+                  toast.error(result.error);
+                } else {
+                  toast.info("No image paths needed fixing");
+                }
+              } catch (error) {
+                console.error("Error fixing images:", error);
+                toast.error("Failed to fix image paths");
+              } finally {
+                setFixingImages(false);
+              }
+            }}
+            disabled={fixingImages}
+          >
+            <RefreshCw className={`mr-2 h-4 w-4 ${fixingImages ? 'animate-spin' : ''}`} />
+            {fixingImages ? 'Fixing...' : 'Fix Images'}
+          </Button>
           <Button 
             variant="outline" 
             onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}

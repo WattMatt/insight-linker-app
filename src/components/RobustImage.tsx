@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { AlertCircle, RefreshCw, ImageOff } from 'lucide-react';
+import { RefreshCw, ImageOff } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { Button } from './ui/button';
 
@@ -14,8 +14,7 @@ interface RobustImageProps {
 
 /**
  * A robust image component that handles loading states, errors, and retries
- * Falls back to signed URLs when public URLs fail
- * Attempts to find similar files in storage when exact path fails
+ * Handles public bucket URLs directly without needing signed URLs
  */
 export const RobustImage = ({ 
   src, 
@@ -52,71 +51,60 @@ export const RobustImage = ({
     }
   }, []);
 
-  // Try to find a similar file in the same folder or by searching common patterns
-  const findSimilarFile = useCallback(async (url: string): Promise<string | null> => {
+  // Search for any image file in the inspection folder
+  const findAnyImageInInspection = useCallback(async (url: string): Promise<string | null> => {
     const storageInfo = extractStorageInfo(url);
     if (!storageInfo) return null;
     
     try {
       const pathParts = storageInfo.path.split('/');
-      const fileName = pathParts.pop() || '';
-      const folderPath = pathParts.join('/');
-      const inspectionId = pathParts[0]; // First part is usually the inspection ID
+      const inspectionId = pathParts[0]; // First part is the inspection ID
       
-      // Try listing files in the original folder first
-      const { data: files, error } = await supabase.storage
+      if (!inspectionId) return null;
+
+      // List all folders under the inspection ID
+      const { data: folders, error: folderError } = await supabase.storage
         .from(storageInfo.bucket)
-        .list(folderPath, { limit: 100 });
-      
-      if (!error && files && files.length > 0) {
-        const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
-        if (imageFiles.length > 0) {
-          const newPath = `${folderPath}/${imageFiles[0].name}`;
-          const { data: urlData } = supabase.storage
-            .from(storageInfo.bucket)
-            .getPublicUrl(newPath);
-          return urlData.publicUrl;
-        }
-      }
-      
-      // If folder doesn't exist, try to find files under the inspection ID with new naming
-      if (inspectionId) {
-        // Common section folders to check
-        const sectionFolders = [
-          'componentImages/meter',
-          'componentImages/mainBreaker',
-          'componentImages/earthLeakage',
-          'componentImages/ct',
-          'componentImages/other',
-          'normalBoardImages/boardOpen',
-          'normalBoardImages/boardClosed',
-          'normalBoardImages/internalLegend',
-          'normalWiringImages/generalWiring',
-          'normalWiringImages/cleanliness',
-          'normalWiringImages/mainCableGland',
-          'emergencyBoardImages/boardOpen',
-          'emergencyBoardImages/boardClosed',
-          'emergencyBoardImages/internalLegend',
-          'emergencyWiringImages/generalWiring',
-          'emergencyWiringImages/cleanliness',
-          'emergencyWiringImages/mainCableGland'
-        ];
+        .list(inspectionId, { limit: 50 });
+
+      if (folderError || !folders) return null;
+
+      // Look through each folder for images
+      for (const folder of folders) {
+        if (folder.id === null) continue; // Skip if it's a file, not a folder
         
-        // Extract section hint from original path (e.g., "2/1" might map to a section index)
-        for (const sectionFolder of sectionFolders) {
-          const searchPath = `${inspectionId}/${sectionFolder}`;
-          const { data: sectionFiles, error: sectionError } = await supabase.storage
-            .from(storageInfo.bucket)
-            .list(searchPath, { limit: 10 });
-          
-          if (!sectionError && sectionFiles && sectionFiles.length > 0) {
-            const imageFiles = sectionFiles.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
-            if (imageFiles.length > 0) {
-              const newPath = `${searchPath}/${imageFiles[0].name}`;
+        const folderPath = `${inspectionId}/${folder.name}`;
+        const { data: subFolders } = await supabase.storage
+          .from(storageInfo.bucket)
+          .list(folderPath, { limit: 50 });
+
+        if (subFolders) {
+          for (const subItem of subFolders) {
+            // Check if it's an image file
+            if (/\.(jpg|jpeg|png|webp)$/i.test(subItem.name)) {
+              const filePath = `${folderPath}/${subItem.name}`;
               const { data: urlData } = supabase.storage
                 .from(storageInfo.bucket)
-                .getPublicUrl(newPath);
+                .getPublicUrl(filePath);
               return urlData.publicUrl;
+            }
+            
+            // If it's a subfolder, check inside it
+            if (subItem.id === null) continue;
+            const subFolderPath = `${folderPath}/${subItem.name}`;
+            const { data: files } = await supabase.storage
+              .from(storageInfo.bucket)
+              .list(subFolderPath, { limit: 20 });
+            
+            if (files) {
+              const imageFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
+              if (imageFile) {
+                const filePath = `${subFolderPath}/${imageFile.name}`;
+                const { data: urlData } = supabase.storage
+                  .from(storageInfo.bucket)
+                  .getPublicUrl(filePath);
+                return urlData.publicUrl;
+              }
             }
           }
         }
@@ -124,24 +112,7 @@ export const RobustImage = ({
       
       return null;
     } catch (err) {
-      console.error('Error finding similar file:', err);
-      return null;
-    }
-  }, [extractStorageInfo]);
-
-  // Get signed URL as fallback
-  const getSignedUrl = useCallback(async (url: string): Promise<string | null> => {
-    const storageInfo = extractStorageInfo(url);
-    if (!storageInfo) return null;
-    
-    try {
-      const { data, error } = await supabase.storage
-        .from(storageInfo.bucket)
-        .createSignedUrl(storageInfo.path, 3600);
-      
-      if (error) return null;
-      return data.signedUrl;
-    } catch {
+      console.error('Error finding image in inspection:', err);
       return null;
     }
   }, [extractStorageInfo]);
@@ -161,34 +132,20 @@ export const RobustImage = ({
   const handleError = async () => {
     if (!mountedRef.current) return;
     
-    const currentAttempt = attemptedFixes.length;
-    
-    // Strategy 1: Try finding a similar file in the same folder
-    if (currentAttempt === 0 && !attemptedFixes.includes('similar')) {
-      const similarUrl = await findSimilarFile(src);
-      if (similarUrl && mountedRef.current) {
-        console.log('Found similar file:', similarUrl);
-        setAttemptedFixes(prev => [...prev, 'similar']);
-        setImageSrc(similarUrl);
+    // Strategy 1: Try finding any image in the inspection folder
+    if (!attemptedFixes.includes('search')) {
+      const foundUrl = await findAnyImageInInspection(src);
+      if (foundUrl && mountedRef.current) {
+        console.log('Found alternative image:', foundUrl);
+        setAttemptedFixes(prev => [...prev, 'search']);
+        setImageSrc(foundUrl);
         setImageState('loading');
         return;
       }
     }
     
-    // Strategy 2: Try signed URL
-    if (!attemptedFixes.includes('signed')) {
-      const signedUrl = await getSignedUrl(imageSrc);
-      if (signedUrl && mountedRef.current) {
-        console.log('Trying signed URL');
-        setAttemptedFixes(prev => [...prev, 'signed']);
-        setImageSrc(signedUrl);
-        setImageState('loading');
-        return;
-      }
-    }
-    
-    // Strategy 3: Simple retry with cache busting
-    if (retries < retryCount) {
+    // Strategy 2: Simple retry with cache busting
+    if (retries < retryCount && !attemptedFixes.includes('retry')) {
       setTimeout(() => {
         if (!mountedRef.current) return;
         setRetries(prev => prev + 1);
@@ -196,6 +153,7 @@ export const RobustImage = ({
         setImageSrc(`${baseUrl}?t=${Date.now()}`);
         setImageState('loading');
       }, 500 * (retries + 1));
+      setAttemptedFixes(prev => [...prev, 'retry']);
       return;
     }
     
@@ -217,10 +175,10 @@ export const RobustImage = ({
     setRetries(0);
     setAttemptedFixes([]);
     
-    // Try finding similar file first on manual retry
-    const similarUrl = await findSimilarFile(src);
-    if (similarUrl) {
-      setImageSrc(similarUrl);
+    // Try finding any image first on manual retry
+    const foundUrl = await findAnyImageInInspection(src);
+    if (foundUrl) {
+      setImageSrc(foundUrl);
     } else {
       setImageSrc(`${src.split('?')[0]}?t=${Date.now()}`);
     }
