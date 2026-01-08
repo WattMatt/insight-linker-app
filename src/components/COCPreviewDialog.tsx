@@ -5,12 +5,6 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Separator } from "@/components/ui/separator";
 import { AlertTriangle, CheckCircle, XCircle, ZoomIn, ZoomOut, RotateCw, Download, ExternalLink } from "lucide-react";
-import { Document, Page, pdfjs } from "react-pdf";
-import "react-pdf/dist/esm/Page/AnnotationLayer.css";
-import "react-pdf/dist/esm/Page/TextLayer.css";
-
-// Set up PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface COCPreviewDialogProps {
   open: boolean;
@@ -36,25 +30,13 @@ interface COCPreviewDialogProps {
 }
 
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
-  const [numPages, setNumPages] = useState<number>(0);
-  const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [rotation, setRotation] = useState(0);
-  const [pdfError, setPdfError] = useState(false);
 
   if (!document) return null;
 
   const isPdf = document.file_name.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name);
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
-    setNumPages(numPages);
-    setPdfError(false);
-  };
-
-  const onDocumentLoadError = () => {
-    setPdfError(true);
-  };
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 3));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.5));
@@ -113,44 +95,25 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             {/* Toolbar */}
             <div className="flex items-center justify-between px-4 py-2 bg-muted/50 border-b">
               <div className="flex items-center gap-2">
-                <Button size="sm" variant="outline" onClick={handleZoomOut} title="Zoom out">
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-                <span className="text-sm text-muted-foreground min-w-[60px] text-center">
-                  {Math.round(scale * 100)}%
-                </span>
-                <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoom in">
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
-                <Separator orientation="vertical" className="h-6 mx-2" />
-                <Button size="sm" variant="outline" onClick={handleRotate} title="Rotate">
-                  <RotateCw className="h-4 w-4" />
-                </Button>
+                {isImage && (
+                  <>
+                    <Button size="sm" variant="outline" onClick={handleZoomOut} title="Zoom out">
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                    <span className="text-sm text-muted-foreground min-w-[60px] text-center">
+                      {Math.round(scale * 100)}%
+                    </span>
+                    <Button size="sm" variant="outline" onClick={handleZoomIn} title="Zoom in">
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                    <Separator orientation="vertical" className="h-6 mx-2" />
+                    <Button size="sm" variant="outline" onClick={handleRotate} title="Rotate">
+                      <RotateCw className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
               </div>
               <div className="flex items-center gap-2">
-                {isPdf && numPages > 0 && (
-                  <div className="flex items-center gap-2 mr-4">
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={() => setPageNumber(p => Math.max(1, p - 1))}
-                      disabled={pageNumber <= 1}
-                    >
-                      ←
-                    </Button>
-                    <span className="text-sm text-muted-foreground">
-                      Page {pageNumber} of {numPages}
-                    </span>
-                    <Button 
-                      size="sm" 
-                      variant="outline" 
-                      onClick={() => setPageNumber(p => Math.min(numPages, p + 1))}
-                      disabled={pageNumber >= numPages}
-                    >
-                      →
-                    </Button>
-                  </div>
-                )}
                 <Button size="sm" variant="outline" onClick={handleOpenExternal} title="Open in new tab">
                   <ExternalLink className="h-4 w-4" />
                 </Button>
@@ -161,54 +124,45 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             </div>
 
             {/* Document View */}
-            <ScrollArea className="flex-1 bg-muted/30">
-              <div className="flex items-center justify-center min-h-full p-4">
-                {isPdf && !pdfError ? (
-                  <Document
-                    file={document.file_url}
-                    onLoadSuccess={onDocumentLoadSuccess}
-                    onLoadError={onDocumentLoadError}
-                    loading={
-                      <div className="flex items-center justify-center h-64">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-                      </div>
-                    }
-                  >
-                    <Page
-                      pageNumber={pageNumber}
-                      scale={scale}
-                      rotate={rotation}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
+            <div className="flex-1 bg-muted/30 overflow-hidden">
+              {isPdf ? (
+                <iframe
+                  src={`${document.file_url}#toolbar=1&navpanes=0`}
+                  className="w-full h-full border-0"
+                  title={document.file_name}
+                />
+              ) : isImage ? (
+                <ScrollArea className="h-full">
+                  <div className="flex items-center justify-center min-h-full p-4">
+                    <img
+                      src={document.file_url}
+                      alt={document.file_name}
+                      style={{
+                        transform: `scale(${scale}) rotate(${rotation}deg)`,
+                        maxWidth: '100%',
+                        maxHeight: '100%',
+                        objectFit: 'contain',
+                        transition: 'transform 0.2s ease'
+                      }}
+                      className="rounded shadow-lg"
+                      onError={(e) => {
+                        (e.target as HTMLImageElement).src = '/placeholder.svg';
+                      }}
                     />
-                  </Document>
-                ) : isImage || pdfError ? (
-                  <img
-                    src={document.file_url}
-                    alt={document.file_name}
-                    style={{
-                      transform: `scale(${scale}) rotate(${rotation}deg)`,
-                      maxWidth: '100%',
-                      maxHeight: '100%',
-                      objectFit: 'contain',
-                      transition: 'transform 0.2s ease'
-                    }}
-                    className="rounded shadow-lg"
-                    onError={(e) => {
-                      (e.target as HTMLImageElement).src = '/placeholder.svg';
-                    }}
-                  />
-                ) : (
-                  <div className="text-center text-muted-foreground p-8">
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="flex items-center justify-center h-full text-center text-muted-foreground p-8">
+                  <div>
                     <p className="mb-4">Unable to preview this file type</p>
                     <Button onClick={handleOpenExternal}>
                       <ExternalLink className="h-4 w-4 mr-2" />
                       Open in New Tab
                     </Button>
                   </div>
-                )}
-              </div>
-            </ScrollArea>
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Validation Results Panel */}
@@ -251,7 +205,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                           className="border rounded-lg p-3 bg-card hover:bg-muted/50 transition-colors"
                         >
                           <div className="flex items-start justify-between gap-2 mb-2">
-                            <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-2 flex-wrap">
                               <Badge variant="outline" className="text-xs font-mono">
                                 Clause {v.clause}
                               </Badge>
