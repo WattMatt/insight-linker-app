@@ -1,13 +1,8 @@
 import { supabase } from "@/integrations/supabase/client";
 
-interface StorageFile {
-  name: string;
-  id: string | null;
-}
-
 /**
- * Fixes image paths in an inspection's json_data by matching stored paths
- * with actual files in storage
+ * Fixes image paths in an inspection's json_data by finding actual files
+ * in storage and updating the database with correct URLs
  */
 export async function fixInspectionImagePaths(inspectionId: string): Promise<{
   fixed: boolean;
@@ -32,57 +27,50 @@ export async function fixInspectionImagePaths(inspectionId: string): Promise<{
     }
 
     // Get all files in the inspection folder from storage
-    const allFiles = await getAllFilesInFolder('inspection-photos', inspectionId);
+    const storageFiles = await getStorageFilesMap(inspectionId);
     
-    if (allFiles.length === 0) {
+    if (Object.keys(storageFiles).length === 0) {
       return { fixed: false, updatedPaths: 0, error: 'No files found in storage' };
     }
-
-    // Build a map of section/item to files
-    const fileMap = buildFileMap(allFiles);
 
     // Update paths in json_data
     let updatedPaths = 0;
     const updatedJsonData = { ...jsonData };
 
+    // Iterate through each section (normalBoardImages, emergencyBoardImages, etc.)
     for (const [sectionKey, sectionData] of Object.entries(updatedJsonData)) {
       if (typeof sectionData !== 'object' || sectionData === null) continue;
+      if (sectionKey === 'tenants' || sectionKey === 'observations') continue;
 
+      // Iterate through each item in the section (boardOpen, meter, etc.)
       for (const [itemKey, itemData] of Object.entries(sectionData as Record<string, any>)) {
         if (typeof itemData !== 'object' || itemData === null) continue;
         
         const photos = (itemData as any).photos;
         if (!Array.isArray(photos) || photos.length === 0) continue;
 
-        // Check if any photos are broken (old format)
-        const updatedPhotos: string[] = [];
-        for (const photoUrl of photos) {
-          if (typeof photoUrl !== 'string') continue;
+        // Look for matching files in storage
+        const storageKey = `${sectionKey}/${itemKey}`;
+        const matchingFiles = storageFiles[storageKey] || [];
+        
+        if (matchingFiles.length > 0) {
+          // Check if current photos are broken (old format or need updating)
+          const currentPhotosAreBroken = photos.some(
+            (url: string) => /\/\d+\/\d+\/\d+-\d+\.(jpg|jpeg|png|webp)$/i.test(url)
+          );
 
-          // Check if this is an old-format path that doesn't exist
-          const isOldFormat = /\/\d+\/\d+\/\d+-\d+\.(jpg|jpeg|png|webp)$/i.test(photoUrl);
-          
-          if (isOldFormat) {
-            // Try to find a matching file in the new structure
-            const matchingFiles = fileMap[`${sectionKey}/${itemKey}`] || [];
-            if (matchingFiles.length > 0) {
-              // Use the first matching file
-              const newUrl = matchingFiles.shift()!;
-              updatedPhotos.push(newUrl);
-              updatedPaths++;
-            } else {
-              // Keep the old URL if no match found
-              updatedPhotos.push(photoUrl);
+          if (currentPhotosAreBroken) {
+            // Replace with files found in storage (maintain same count if possible)
+            const newPhotos = matchingFiles.slice(0, photos.length);
+            if (newPhotos.length > 0) {
+              (updatedJsonData[sectionKey] as any)[itemKey] = {
+                ...(itemData as any),
+                photos: newPhotos
+              };
+              updatedPaths += newPhotos.length;
             }
-          } else {
-            updatedPhotos.push(photoUrl);
           }
         }
-
-        (updatedJsonData[sectionKey] as any)[itemKey] = {
-          ...(itemData as any),
-          photos: updatedPhotos
-        };
       }
     }
 
@@ -94,6 +82,7 @@ export async function fixInspectionImagePaths(inspectionId: string): Promise<{
         .eq('id', inspectionId);
 
       if (updateError) {
+        console.error('Failed to update inspection:', updateError);
         return { fixed: false, updatedPaths: 0, error: 'Failed to update inspection' };
       }
     }
@@ -106,56 +95,66 @@ export async function fixInspectionImagePaths(inspectionId: string): Promise<{
 }
 
 /**
- * Recursively get all files in a storage folder
+ * Get a map of section/item -> file URLs from storage
  */
-async function getAllFilesInFolder(bucket: string, folderPath: string): Promise<string[]> {
-  const files: string[] = [];
-  
-  const { data, error } = await supabase.storage
+async function getStorageFilesMap(inspectionId: string): Promise<Record<string, string[]>> {
+  const map: Record<string, string[]> = {};
+  const bucket = 'inspection-photos';
+
+  // List top-level folders (section folders)
+  const { data: sections, error: sectionsError } = await supabase.storage
     .from(bucket)
-    .list(folderPath, { limit: 1000 });
+    .list(inspectionId, { limit: 50 });
 
-  if (error || !data) return files;
+  if (sectionsError || !sections) return map;
 
-  for (const item of data) {
-    const itemPath = `${folderPath}/${item.name}`;
+  for (const section of sections) {
+    // Skip if it's not a folder (semantic folders have id === null)
+    if (section.id !== null) continue;
     
-    if (item.id === null) {
-      // It's a folder, recurse
-      const subFiles = await getAllFilesInFolder(bucket, itemPath);
-      files.push(...subFiles);
-    } else {
-      // It's a file
-      if (/\.(jpg|jpeg|png|webp)$/i.test(item.name)) {
+    const sectionPath = `${inspectionId}/${section.name}`;
+    
+    // List items in this section
+    const { data: items, error: itemsError } = await supabase.storage
+      .from(bucket)
+      .list(sectionPath, { limit: 50 });
+
+    if (itemsError || !items) continue;
+
+    for (const item of items) {
+      // If it's a file directly in section folder
+      if (item.id !== null && /\.(jpg|jpeg|png|webp)$/i.test(item.name)) {
+        const key = section.name;
+        if (!map[key]) map[key] = [];
         const { data: urlData } = supabase.storage
           .from(bucket)
-          .getPublicUrl(itemPath);
-        files.push(urlData.publicUrl);
+          .getPublicUrl(`${sectionPath}/${item.name}`);
+        map[key].push(urlData.publicUrl);
+        continue;
       }
-    }
-  }
 
-  return files;
-}
+      // If it's a subfolder (item folder like boardOpen, meter, etc.)
+      if (item.id === null) {
+        const itemPath = `${sectionPath}/${item.name}`;
+        const key = `${section.name}/${item.name}`;
+        
+        // List files in this item folder
+        const { data: files, error: filesError } = await supabase.storage
+          .from(bucket)
+          .list(itemPath, { limit: 50 });
 
-/**
- * Build a map of section/item keys to their file URLs
- */
-function buildFileMap(files: string[]): Record<string, string[]> {
-  const map: Record<string, string[]> = {};
+        if (filesError || !files) continue;
 
-  for (const fileUrl of files) {
-    // Extract path from URL
-    const match = fileUrl.match(/\/inspection-photos\/[^/]+\/([^/]+)\/([^/]+)\//);
-    if (match) {
-      const sectionKey = match[1];
-      const itemKey = match[2];
-      const key = `${sectionKey}/${itemKey}`;
-      
-      if (!map[key]) {
-        map[key] = [];
+        for (const file of files) {
+          if (/\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+            if (!map[key]) map[key] = [];
+            const { data: urlData } = supabase.storage
+              .from(bucket)
+              .getPublicUrl(`${itemPath}/${file.name}`);
+            map[key].push(urlData.publicUrl);
+          }
+        }
       }
-      map[key].push(fileUrl);
     }
   }
 
@@ -190,4 +189,39 @@ export async function fixAllSubsectionImagePaths(subsectionId: string): Promise<
   }
 
   return { inspectionsFixed, totalPathsFixed };
+}
+
+/**
+ * Fix all broken image paths across ALL inspections in the database
+ */
+export async function fixAllInspectionImagePaths(): Promise<{
+  inspectionsProcessed: number;
+  inspectionsFixed: number;
+  totalPathsFixed: number;
+}> {
+  const { data: inspections, error } = await supabase
+    .from('inspections')
+    .select('id')
+    .not('json_data', 'is', null);
+
+  if (error || !inspections) {
+    return { inspectionsProcessed: 0, inspectionsFixed: 0, totalPathsFixed: 0 };
+  }
+
+  let inspectionsFixed = 0;
+  let totalPathsFixed = 0;
+
+  for (const inspection of inspections) {
+    const result = await fixInspectionImagePaths(inspection.id);
+    if (result.fixed) {
+      inspectionsFixed++;
+      totalPathsFixed += result.updatedPaths;
+    }
+  }
+
+  return { 
+    inspectionsProcessed: inspections.length, 
+    inspectionsFixed, 
+    totalPathsFixed 
+  };
 }
