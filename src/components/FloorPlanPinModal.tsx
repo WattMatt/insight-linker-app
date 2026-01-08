@@ -9,6 +9,7 @@ import { Camera, Trash2, Save, Upload, MapPin } from "lucide-react";
 import { useCamera } from "@/hooks/useCamera";
 import { useUserRole } from "@/hooks/useUserRole";
 import { toast } from "sonner";
+import { BeforeAfterComparison } from "./BeforeAfterComparison";
 
 interface PinData {
   id?: string;
@@ -23,12 +24,18 @@ interface PinData {
   package?: string;
   due_date?: string;
   photo_url?: string;
+  rectification_photo_url?: string;
+  rectification_notes?: string;
+  rectified_at?: string;
+  rectified_by?: string;
 }
 
 interface FloorPlanPinModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (data: PinData, photo?: File) => Promise<void>;
+  onSaveRectification?: (pinId: string, photoUrl: string, notes: string) => Promise<void>;
+  onRemoveRectification?: (pinId: string) => Promise<void>;
   onDelete?: () => Promise<void>;
   onMove?: () => void;
   initialData?: PinData;
@@ -51,6 +58,8 @@ export const FloorPlanPinModal = ({
   isOpen,
   onClose,
   onSave,
+  onSaveRectification,
+  onRemoveRectification,
   onDelete,
   onMove,
   initialData,
@@ -418,6 +427,43 @@ export const FloorPlanPinModal = ({
                     placeholder="Comma-separated names..."
                   />
                 </div>
+              </div>
+            )}
+
+            {/* Before/After Comparison - Show for existing snags */}
+            {formData.pin_type === 'snag' && initialData?.id && (
+              <div className="pt-4 border-t">
+                <BeforeAfterComparison
+                  beforePhotoUrl={formData.photo_url}
+                  afterPhotoUrl={formData.rectification_photo_url}
+                  afterNotes={formData.rectification_notes}
+                  rectifiedAt={formData.rectified_at}
+                  rectifiedBy={formData.rectified_by}
+                  pinId={initialData.id}
+                  onSaveAfterPhoto={async (photoUrl, notes) => {
+                    if (onSaveRectification && initialData?.id) {
+                      await onSaveRectification(initialData.id, photoUrl, notes);
+                      setFormData(prev => ({
+                        ...prev,
+                        rectification_photo_url: photoUrl,
+                        rectification_notes: notes,
+                        rectified_at: new Date().toISOString(),
+                      }));
+                    }
+                  }}
+                  onRemoveAfterPhoto={async () => {
+                    if (onRemoveRectification && initialData?.id) {
+                      await onRemoveRectification(initialData.id);
+                      setFormData(prev => ({
+                        ...prev,
+                        rectification_photo_url: undefined,
+                        rectification_notes: undefined,
+                        rectified_at: undefined,
+                        rectified_by: undefined,
+                      }));
+                    }
+                  }}
+                />
               </div>
             )}
 

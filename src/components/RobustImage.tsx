@@ -6,6 +6,7 @@ interface RobustImageProps {
   alt: string;
   className?: string;
   onError?: () => void;
+  onClick?: () => void;
   retryCount?: number;
 }
 
@@ -17,6 +18,7 @@ export const RobustImage = ({
   alt, 
   className = '', 
   onError,
+  onClick,
   retryCount = 3 
 }: RobustImageProps) => {
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
@@ -77,9 +79,10 @@ export const RobustImage = ({
       <img
         src={imageSrc}
         alt={alt}
-        className={className}
+        className={`${className} ${onClick ? 'cursor-pointer' : ''}`}
         onLoad={handleLoad}
         onError={handleError}
+        onClick={onClick}
         style={{ display: imageState === 'loaded' ? 'block' : 'none' }}
       />
     </>

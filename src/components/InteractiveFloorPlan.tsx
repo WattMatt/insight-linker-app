@@ -294,6 +294,54 @@ export const InteractiveFloorPlan = ({
     }
   };
 
+  const handleSaveRectification = async (pinId: string, photoUrl: string, notes: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      const { error } = await supabase
+        .from("floor_plan_pins")
+        .update({
+          rectification_photo_url: photoUrl,
+          rectification_notes: notes,
+          rectified_at: new Date().toISOString(),
+          rectified_by: user?.email || 'Unknown',
+        })
+        .eq("id", pinId);
+
+      if (error) throw error;
+      
+      await loadFloorPlan();
+      toast.success("Rectification photo saved");
+    } catch (error) {
+      console.error("Error saving rectification:", error);
+      toast.error("Failed to save rectification photo");
+      throw error;
+    }
+  };
+
+  const handleRemoveRectification = async (pinId: string) => {
+    try {
+      const { error } = await supabase
+        .from("floor_plan_pins")
+        .update({
+          rectification_photo_url: null,
+          rectification_notes: null,
+          rectified_at: null,
+          rectified_by: null,
+        })
+        .eq("id", pinId);
+
+      if (error) throw error;
+      
+      await loadFloorPlan();
+      toast.success("Rectification photo removed");
+    } catch (error) {
+      console.error("Error removing rectification:", error);
+      toast.error("Failed to remove rectification photo");
+      throw error;
+    }
+  };
+
   const handleMovePin = () => {
     setMoveMode(selectedPin.id);
     setIsModalOpen(false);
@@ -495,6 +543,8 @@ export const InteractiveFloorPlan = ({
             setSelectedPin(null);
           }}
           onSave={handleSavePin}
+          onSaveRectification={handleSaveRectification}
+          onRemoveRectification={handleRemoveRectification}
           onDelete={selectedPin?.id ? handleDeletePin : undefined}
           onMove={handleMovePin}
           initialData={selectedPin}
