@@ -58,6 +58,7 @@ export default function IssueReports() {
   const [testResult, setTestResult] = useState<VerificationReport | null>(null);
   const [isTesting, setIsTesting] = useState(false);
   const [showTestDetails, setShowTestDetails] = useState(false);
+  const [lastTestedNotes, setLastTestedNotes] = useState("");
   const queryClient = useQueryClient();
 
   // Generate signed URL for screenshot
@@ -79,6 +80,58 @@ export default function IssueReports() {
     };
     getSignedUrl();
   }, [selectedIssue]);
+
+  // Auto-run fix verification when admin notes change (debounced)
+  useEffect(() => {
+    if (!selectedIssue || !adminNotes.trim() || adminNotes.trim() === lastTestedNotes) {
+      return;
+    }
+
+    const timeoutId = setTimeout(async () => {
+      setIsTesting(true);
+      try {
+        const { data, error } = await supabase.functions.invoke('verify-fix', {
+          body: {
+            type: 'issue',
+            description: selectedIssue.description,
+            category: selectedIssue.category,
+            severity: selectedIssue.severity,
+            pageUrl: selectedIssue.page_url,
+            browserInfo: selectedIssue.browser_info,
+            fixDescription: adminNotes,
+          }
+        });
+
+        if (error) throw error;
+        
+        if (!data.error) {
+          const result = data as VerificationReport;
+          setTestResult(result);
+          setLastTestedNotes(adminNotes.trim());
+          setShowTestDetails(true);
+
+          // Save the test result to the database
+          await supabase
+            .from('issue_reports')
+            .update({
+              fix_description: adminNotes,
+              fix_test_result: JSON.parse(JSON.stringify(result)),
+              fix_test_run_at: new Date().toISOString(),
+              fix_confidence_score: result.confidenceScore,
+            })
+            .eq('id', selectedIssue.id);
+
+          queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
+        }
+      } catch (error) {
+        console.error('Error auto-testing fix:', error);
+      } finally {
+        setIsTesting(false);
+      }
+    }, 1500); // 1.5 second debounce
+
+    return () => clearTimeout(timeoutId);
+  }, [adminNotes, selectedIssue, lastTestedNotes, queryClient]);
 
   const { data: issues, isLoading } = useQuery({
     queryKey: ['issue-reports'],
@@ -161,11 +214,12 @@ export default function IssueReports() {
     },
   });
 
-  const handleViewDetails = (issue: IssueReport, quickTest: boolean = false) => {
+  const handleViewDetails = (issue: IssueReport) => {
     setSelectedIssue(issue);
     setAdminNotes(issue.admin_notes || "");
     setNewStatus(issue.status);
     setTestResult(issue.fix_test_result || null);
+    setLastTestedNotes(issue.admin_notes?.trim() || "");
     setShowTestDetails(false);
   };
 
@@ -178,66 +232,6 @@ export default function IssueReports() {
     });
   };
 
-  const handleTestFix = async () => {
-    if (!selectedIssue || !adminNotes.trim()) {
-      toast.error('Please add admin notes describing your fix before testing');
-      return;
-    }
-
-    setIsTesting(true);
-    setTestResult(null);
-
-    try {
-      const { data, error } = await supabase.functions.invoke('verify-fix', {
-        body: {
-          type: 'issue',
-          description: selectedIssue.description,
-          category: selectedIssue.category,
-          severity: selectedIssue.severity,
-          pageUrl: selectedIssue.page_url,
-          browserInfo: selectedIssue.browser_info,
-          fixDescription: adminNotes,
-        }
-      });
-
-      if (error) throw error;
-      
-      if (data.error) {
-        toast.error(data.error);
-        return;
-      }
-
-      const result = data as VerificationReport;
-      setTestResult(result);
-      setShowTestDetails(true);
-
-      // Save the test result to the database
-      await supabase
-        .from('issue_reports')
-        .update({
-          fix_description: adminNotes,
-          fix_test_result: JSON.parse(JSON.stringify(result)),
-          fix_test_run_at: new Date().toISOString(),
-          fix_confidence_score: result.confidenceScore,
-        })
-        .eq('id', selectedIssue.id);
-
-      queryClient.invalidateQueries({ queryKey: ['issue-reports'] });
-
-      if (result.status === 'pass') {
-        toast.success(`Fix verified with ${result.confidenceScore}% confidence!`);
-      } else if (result.status === 'warning') {
-        toast.warning(`Fix has concerns - ${result.confidenceScore}% confidence`);
-      } else {
-        toast.error(`Fix may not work - ${result.confidenceScore}% confidence`);
-      }
-    } catch (error) {
-      console.error('Error testing fix:', error);
-      toast.error('Failed to test fix. Please try again.');
-    } finally {
-      setIsTesting(false);
-    }
-  };
 
   const handleDebugIssue = async () => {
     if (!selectedIssue) return;
@@ -448,28 +442,19 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleViewDetails(issue, true); // Quick test mode - pre-fill from admin notes
-                            setTimeout(() => {
-                              document.getElementById('fix-description-input')?.focus();
-                            }, 100);
-                          }}
-                          title={issue.admin_notes ? "Quick test (pre-fills from admin notes)" : "Test fix"}
-                          className={issue.fix_confidence_score ? (
-                            issue.fix_confidence_score >= 70 ? 'text-green-600 hover:text-green-700' :
-                            issue.fix_confidence_score >= 50 ? 'text-yellow-600 hover:text-yellow-700' :
-                            'text-red-600 hover:text-red-700'
-                          ) : ''}
-                        >
-                          <FlaskConical className="h-4 w-4" />
-                          {issue.fix_confidence_score && (
-                            <span className="text-xs ml-1">{issue.fix_confidence_score}%</span>
-                          )}
-                        </Button>
+                        {issue.fix_confidence_score !== null && (
+                          <div 
+                            className={`flex items-center gap-1 px-2 py-1 rounded text-xs ${
+                              issue.fix_confidence_score >= 70 ? 'bg-green-500/10 text-green-600' :
+                              issue.fix_confidence_score >= 50 ? 'bg-yellow-500/10 text-yellow-600' :
+                              'bg-red-500/10 text-red-600'
+                            }`}
+                            title={`Fix confidence: ${issue.fix_confidence_score}%`}
+                          >
+                            <FlaskConical className="h-3 w-3" />
+                            {issue.fix_confidence_score}%
+                          </div>
+                        )}
                       </div>
                     </TableCell>
                   </TableRow>
@@ -523,25 +508,13 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 <p className="text-sm bg-muted p-3 rounded-md">{selectedIssue.description}</p>
               </div>
 
-              <div className="flex gap-2">
-                <Button
-                  variant="outline"
-                  className="flex-1"
-                  onClick={handleDebugIssue}
-                >
-                  <Bug className="mr-2 h-4 w-4" />
-                  Copy Debug Info
-                </Button>
-                <Button
-                  variant="default"
-                  className="flex-1"
-                  disabled={!adminNotes.trim() || isTesting}
-                  onClick={() => handleTestFix()}
-                >
-                  <FlaskConical className="mr-2 h-4 w-4" />
-                  {isTesting ? 'Testing...' : 'Test Fix'}
-                </Button>
-              </div>
+              <Button
+                variant="outline"
+                onClick={handleDebugIssue}
+              >
+                <Bug className="mr-2 h-4 w-4" />
+                Copy Debug Info
+              </Button>
 
               <div>
                 <h4 className="text-sm font-medium mb-1">Page URL</h4>
@@ -576,111 +549,6 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 </pre>
               </div>
 
-              {/* Test Results Section - only show if there are results */}
-              {testResult && (
-                <Card className={`border-2 ${
-                  testResult.status === 'pass' ? 'border-green-500/30 bg-green-500/5' :
-                  testResult.status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
-                  'border-red-500/30 bg-red-500/5'
-                }`}>
-                  <CardHeader className="pb-3">
-                    <CardTitle className="text-sm flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        {testResult.status === 'pass' ? (
-                          <ThumbsUp className="h-4 w-4 text-green-500" />
-                        ) : testResult.status === 'warning' ? (
-                          <AlertTriangle className="h-4 w-4 text-yellow-500" />
-                        ) : (
-                          <ThumbsDown className="h-4 w-4 text-red-500" />
-                        )}
-                        <span className={
-                          testResult.status === 'pass' ? 'text-green-600' :
-                          testResult.status === 'warning' ? 'text-yellow-600' :
-                          'text-red-600'
-                        }>
-                          {testResult.status === 'pass' ? 'Fix Likely to Work' :
-                           testResult.status === 'warning' ? 'Fix Has Concerns' :
-                           'Fix May Not Work'}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold">{testResult.confidenceScore}%</span>
-                        <Progress value={testResult.confidenceScore} className="w-16 h-2" />
-                      </div>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="space-y-3 pt-0">
-                    <p className="text-sm">{testResult.analysis}</p>
-
-                    <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
-                      <CollapsibleTrigger asChild>
-                        <Button variant="ghost" size="sm" className="w-full">
-                          {showTestDetails ? (
-                            <><ChevronUp className="mr-2 h-4 w-4" /> Hide Details</>
-                          ) : (
-                            <><ChevronDown className="mr-2 h-4 w-4" /> Show Details</>
-                          )}
-                        </Button>
-                      </CollapsibleTrigger>
-                      <CollapsibleContent className="space-y-3 pt-3">
-                        {testResult.potentialIssues.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-medium mb-1 text-red-600">⚠️ Potential Issues</h5>
-                            <ul className="text-xs space-y-1">
-                              {testResult.potentialIssues.map((issue, i) => (
-                                <li key={i} className="text-muted-foreground">• {issue}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {testResult.recommendations.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-medium mb-1 text-blue-600">💡 Recommendations</h5>
-                            <ul className="text-xs space-y-1">
-                              {testResult.recommendations.map((rec, i) => (
-                                <li key={i} className="text-muted-foreground">• {rec}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {testResult.edgeCasesIdentified.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-medium mb-1 text-yellow-600">🔍 Edge Cases</h5>
-                            <ul className="text-xs space-y-1">
-                              {testResult.edgeCasesIdentified.map((edge, i) => (
-                                <li key={i} className="text-muted-foreground">• {edge}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-
-                        {testResult.testSuggestions.length > 0 && (
-                          <div>
-                            <h5 className="text-xs font-medium mb-1 text-green-600">✅ Test Suggestions</h5>
-                            <ul className="text-xs space-y-1">
-                              {testResult.testSuggestions.map((test, i) => (
-                                <li key={i} className="text-muted-foreground">• {test}</li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </CollapsibleContent>
-                    </Collapsible>
-                  </CardContent>
-                </Card>
-              )}
-
-              {selectedIssue.fix_test_run_at && !testResult && (
-                <p className="text-xs text-muted-foreground">
-                  Last tested: {format(new Date(selectedIssue.fix_test_run_at), 'MMM d, yyyy HH:mm')}
-                  {selectedIssue.fix_confidence_score !== null && (
-                    <span className="ml-2">• Score: {selectedIssue.fix_confidence_score}%</span>
-                  )}
-                </p>
-              )}
-
               <div className="space-y-2">
                 <h4 className="text-sm font-medium">Update Status</h4>
                 <Select value={newStatus} onValueChange={setNewStatus}>
@@ -695,14 +563,114 @@ ${selectedIssue.admin_notes ? `📋 Admin Notes:\n${selectedIssue.admin_notes}` 
                 </Select>
               </div>
 
-              <div className="space-y-2">
-                <h4 className="text-sm font-medium">Admin Notes</h4>
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-sm font-medium">Admin Notes</h4>
+                  {isTesting && (
+                    <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                      <Loader2 className="h-3 w-3 animate-spin" />
+                      Analyzing fix...
+                    </div>
+                  )}
+                </div>
                 <Textarea
-                  placeholder="Add notes about this issue..."
+                  placeholder="Describe the fix you're applying... (auto-verifies as you type)"
                   value={adminNotes}
                   onChange={(e) => setAdminNotes(e.target.value)}
                   rows={4}
                 />
+                
+                {/* Inline Test Results */}
+                {testResult && (
+                  <Card className={`border ${
+                    testResult.status === 'pass' ? 'border-green-500/30 bg-green-500/5' :
+                    testResult.status === 'warning' ? 'border-yellow-500/30 bg-yellow-500/5' :
+                    'border-red-500/30 bg-red-500/5'
+                  }`}>
+                    <CardContent className="p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          {testResult.status === 'pass' ? (
+                            <ThumbsUp className="h-4 w-4 text-green-500" />
+                          ) : testResult.status === 'warning' ? (
+                            <AlertTriangle className="h-4 w-4 text-yellow-500" />
+                          ) : (
+                            <ThumbsDown className="h-4 w-4 text-red-500" />
+                          )}
+                          <span className={`text-sm font-medium ${
+                            testResult.status === 'pass' ? 'text-green-600' :
+                            testResult.status === 'warning' ? 'text-yellow-600' :
+                            'text-red-600'
+                          }`}>
+                            {testResult.status === 'pass' ? 'Fix Likely to Work' :
+                             testResult.status === 'warning' ? 'Fix Has Concerns' :
+                             'Fix May Not Work'}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold">{testResult.confidenceScore}%</span>
+                          <Progress value={testResult.confidenceScore} className="w-16 h-2" />
+                        </div>
+                      </div>
+                      
+                      <p className="text-xs text-muted-foreground">{testResult.analysis}</p>
+
+                      <Collapsible open={showTestDetails} onOpenChange={setShowTestDetails}>
+                        <CollapsibleTrigger asChild>
+                          <Button variant="ghost" size="sm" className="w-full h-7 text-xs">
+                            {showTestDetails ? (
+                              <><ChevronUp className="mr-1 h-3 w-3" /> Hide Details</>
+                            ) : (
+                              <><ChevronDown className="mr-1 h-3 w-3" /> Show Details</>
+                            )}
+                          </Button>
+                        </CollapsibleTrigger>
+                        <CollapsibleContent className="space-y-2 pt-2">
+                          {testResult.potentialIssues.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-red-600">⚠️ Potential Issues</h5>
+                              <ul className="text-xs space-y-0.5">
+                                {testResult.potentialIssues.map((issue, i) => (
+                                  <li key={i} className="text-muted-foreground">• {issue}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {testResult.recommendations.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-blue-600">💡 Recommendations</h5>
+                              <ul className="text-xs space-y-0.5">
+                                {testResult.recommendations.map((rec, i) => (
+                                  <li key={i} className="text-muted-foreground">• {rec}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {testResult.edgeCasesIdentified.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-yellow-600">🔍 Edge Cases</h5>
+                              <ul className="text-xs space-y-0.5">
+                                {testResult.edgeCasesIdentified.map((edge, i) => (
+                                  <li key={i} className="text-muted-foreground">• {edge}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                          {testResult.testSuggestions.length > 0 && (
+                            <div>
+                              <h5 className="text-xs font-medium mb-1 text-green-600">✅ Test Suggestions</h5>
+                              <ul className="text-xs space-y-0.5">
+                                {testResult.testSuggestions.map((test, i) => (
+                                  <li key={i} className="text-muted-foreground">• {test}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </CardContent>
+                  </Card>
+                )}
               </div>
             </div>
           )}
