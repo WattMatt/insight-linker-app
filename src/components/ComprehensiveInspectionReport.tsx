@@ -389,9 +389,11 @@ async function generatePDFInternal(options: {
 
     // ===== TEMPLATE SECTIONS =====
     const sections = template?.sections || [];
-    for (const section of sections) {
+    for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
+      const section = sections[sectionIndex];
+      // Try multiple key formats: numeric index, section key, or derived from name
       const sectionKey = section.key || section.name?.toLowerCase().replace(/\s+/g, '_');
-      const sectionData = jsonData[sectionKey] || {};
+      const sectionData = jsonData[sectionIndex] || jsonData[String(sectionIndex)] || jsonData[sectionKey] || {};
 
       doc.addPage();
       yPos = 20;
@@ -407,9 +409,11 @@ async function generatePDFInternal(options: {
       doc.setTextColor(0, 0, 0);
 
       const items = section.items || [];
-      for (const item of items) {
+      for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
+        const item = items[itemIndex];
+        // Try multiple key formats: numeric index, item key, or derived from name
         const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
-        const itemData = sectionData[itemKey] || {};
+        const itemData = sectionData[itemIndex] || sectionData[String(itemIndex)] || sectionData[itemKey] || {};
 
         if (yPos > pageHeight - 60) {
           doc.addPage();
@@ -438,8 +442,8 @@ async function generatePDFInternal(options: {
           yPos += wrappedNotes.length * 4 + 2;
         }
 
-        // Item images
-        const imageUrls = itemData.images || itemData.imageUrls || [];
+        // Item images - check multiple possible keys: photos, images, imageUrls
+        const imageUrls = itemData.photos || itemData.images || itemData.imageUrls || [];
         if (imageUrls.length > 0) {
           const imgWidth = 45;
           const imgHeight = 35;
