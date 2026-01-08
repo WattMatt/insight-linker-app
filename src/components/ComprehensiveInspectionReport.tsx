@@ -6,6 +6,7 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { renameInspectionImages } from "@/lib/imageNaming";
+import { fetchImageAsDataUrl } from "@/lib/imageUrlResolver";
 
 interface Snag {
   id: string;
@@ -392,25 +393,24 @@ export const ComprehensiveInspectionReport = ({
                 try {
                   const imgUrl = typeof img === 'string' ? img : (img.url || img.path);
                   if (typeof imgUrl === 'string') {
-                    const response = await fetch(imgUrl);
-                    const blob = await response.blob();
-                    const dataUrl = await new Promise<string>((resolve) => {
-                      const reader = new FileReader();
-                      reader.onloadend = () => resolve(reader.result as string);
-                      reader.readAsDataURL(blob);
-                    });
+                    // Use the resolver that handles URL mismatches
+                    const dataUrl = await fetchImageAsDataUrl(imgUrl);
+                    
+                    if (dataUrl) {
+                      // Calculate position in grid
+                      const col = imgIndex % imagesPerRow;
+                      const row = Math.floor(imgIndex / imagesPerRow);
+                      const currentX = photoX + (col * (photoWidth + photoSpacing));
+                      const currentY = photoY + (row * (photoHeight + photoSpacing));
 
-                    // Calculate position in grid
-                    const col = imgIndex % imagesPerRow;
-                    const row = Math.floor(imgIndex / imagesPerRow);
-                    const currentX = photoX + (col * (photoWidth + photoSpacing));
-                    const currentY = photoY + (row * (photoHeight + photoSpacing));
-
-                    // Draw photo with border
-                    doc.setDrawColor(200, 200, 200);
-                    doc.setLineWidth(0.5);
-                    doc.addImage(dataUrl, 'JPEG', currentX, currentY, photoWidth, photoHeight);
-                    doc.rect(currentX, currentY, photoWidth, photoHeight);
+                      // Draw photo with border
+                      doc.setDrawColor(200, 200, 200);
+                      doc.setLineWidth(0.5);
+                      doc.addImage(dataUrl, 'JPEG', currentX, currentY, photoWidth, photoHeight);
+                      doc.rect(currentX, currentY, photoWidth, photoHeight);
+                    } else {
+                      throw new Error('Could not fetch image');
+                    }
                     
                     imgIndex++;
                   }
