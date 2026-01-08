@@ -21,6 +21,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { useCamera } from "@/hooks/useCamera";
 import { useImageUpload } from "@/hooks/useImageUpload";
 import { RobustImage } from "@/components/RobustImage";
+import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { 
   generateInspectionImagePath, 
@@ -2595,27 +2596,10 @@ const InspectionDetail = () => {
       </Dialog>
 
       {/* Full Screen Image Viewer */}
-      <Dialog open={!!viewingImage} onOpenChange={() => setViewingImage(null)}>
-        <DialogContent className="max-w-[95vw] max-h-[95vh] p-0">
-          <div className="relative w-full h-[95vh] flex items-center justify-center bg-black/95">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="absolute top-2 right-2 text-white hover:bg-white/20 z-10"
-              onClick={() => setViewingImage(null)}
-            >
-              <X className="h-6 w-6" />
-            </Button>
-            {viewingImage && (
-              <RobustImage
-                src={viewingImage}
-                alt="Full size view"
-                className="max-w-full max-h-full object-contain"
-              />
-            )}
-          </div>
-        </DialogContent>
-      </Dialog>
+      <FullscreenImageViewer 
+        src={viewingImage} 
+        onClose={() => setViewingImage(null)} 
+      />
     </div>
   );
 };
