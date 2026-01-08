@@ -1817,7 +1817,7 @@ const InspectionDetail = () => {
                 {formatTabLabel(section.name)}
               </TabsTrigger>
             ))}
-          {templateCategory !== "Site Drawing" && templateCategory !== "Low Voltage" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
+          {templateCategory !== "Site Drawing" && !template?.name?.toLowerCase().includes("line shop") && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="signatures">Sign-Off</TabsTrigger>}
         </TabsList>
