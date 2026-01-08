@@ -36,17 +36,22 @@ interface COCPreviewDialogProps {
   } | null;
 }
 
-// Keywords to search for each clause type
+// Keywords to search for each clause type - matching actual COC form labels
 const clauseKeywords: Record<string, string[]> = {
-  '8.6': ['insulation resistance', 'insulation', 'ir test', 'megohm', 'mω', 'mohm', '0 mω', '0mω'],
-  '8.5': ['earth loop', 'loop impedance', 'earth fault', 'ze', 'zs', 'earth continuity'],
-  '8.4': ['earth continuity', 'protective conductor', 'bonding'],
-  '8.7': ['rcd', 'residual current', 'trip time', 'earth leakage', '30ma', '30 ma'],
-  '6.1': ['installation', 'premises', 'address', 'description'],
-  '6.2': ['circuit', 'schedule', 'distribution', 'db'],
-  '7.1': ['inspection', 'visual', 'check'],
-  '5.1': ['certificate', 'coc number', 'registration'],
-  '5.2': ['installer', 'registered', 'accredited'],
+  // Clause 8.6 - Insulation Resistance (Row 9 in Section 4)
+  '8.6': ['insulation resistance', '9. insulation resistance', '9.insulation', 'mω', 'mohm', 'megohm'],
+  // Clause 8.5 - Earth Loop Impedance (Rows 5, 6, 7 in Section 4) 
+  '8.5': ['earth loop impedance', 'loop impedance test', '5. earth loop', '6. earth loop', '7. prospective', 'pscc', 'zs of'],
+  // Clause 8.4 - Earth Continuity (Row 4 in Section 4)
+  '8.4': ['continuity of earth', 'earth continuity', '4. continuity', 'protective conductor'],
+  // Clause 8.7 - RCD Testing (Rows 12, 13 in Section 4)
+  '8.7': ['earth leakage', 'operation of earth leakage', '12. operation', '13. polarity'],
+  // Other clauses
+  '6.1': ['description of installation', 'section 3', 'premises'],
+  '6.2': ['number of circuits', 'circuits or points', 'lighting', 'socket'],
+  '7.1': ['section 1', 'installation data', 'type of supply'],
+  '5.1': ['certificate number', 'coc number', 'eca m'],
+  '5.2': ['registered person', 'registration certificate', 'accredited'],
 };
 
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
