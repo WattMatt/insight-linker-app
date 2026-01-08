@@ -52,7 +52,7 @@ export const RobustImage = ({
     }
   }, []);
 
-  // Try to find a similar file in the same folder
+  // Try to find a similar file in the same folder or by searching common patterns
   const findSimilarFile = useCallback(async (url: string): Promise<string | null> => {
     const storageInfo = extractStorageInfo(url);
     if (!storageInfo) return null;
@@ -61,35 +61,68 @@ export const RobustImage = ({
       const pathParts = storageInfo.path.split('/');
       const fileName = pathParts.pop() || '';
       const folderPath = pathParts.join('/');
+      const inspectionId = pathParts[0]; // First part is usually the inspection ID
       
-      // List files in the folder
+      // Try listing files in the original folder first
       const { data: files, error } = await supabase.storage
         .from(storageInfo.bucket)
         .list(folderPath, { limit: 100 });
       
-      if (error || !files || files.length === 0) return null;
-      
-      // Look for any jpg/png file in the folder (prioritize files with similar index)
-      const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
-      
-      if (imageFiles.length === 0) return null;
-      
-      // Extract the index from original filename (e.g., "_1.jpg" -> "1")
-      const indexMatch = fileName.match(/_(\d+)\.(jpg|jpeg|png|webp)$/i);
-      const targetIndex = indexMatch ? indexMatch[1] : '1';
-      
-      // Find file with same index or just use first available
-      let matchedFile = imageFiles.find(f => f.name.includes(`_${targetIndex}.`));
-      if (!matchedFile) {
-        matchedFile = imageFiles[0];
+      if (!error && files && files.length > 0) {
+        const imageFiles = files.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
+        if (imageFiles.length > 0) {
+          const newPath = `${folderPath}/${imageFiles[0].name}`;
+          const { data: urlData } = supabase.storage
+            .from(storageInfo.bucket)
+            .getPublicUrl(newPath);
+          return urlData.publicUrl;
+        }
       }
       
-      const newPath = `${folderPath}/${matchedFile.name}`;
-      const { data: urlData } = supabase.storage
-        .from(storageInfo.bucket)
-        .getPublicUrl(newPath);
+      // If folder doesn't exist, try to find files under the inspection ID with new naming
+      if (inspectionId) {
+        // Common section folders to check
+        const sectionFolders = [
+          'componentImages/meter',
+          'componentImages/mainBreaker',
+          'componentImages/earthLeakage',
+          'componentImages/ct',
+          'componentImages/other',
+          'normalBoardImages/boardOpen',
+          'normalBoardImages/boardClosed',
+          'normalBoardImages/internalLegend',
+          'normalWiringImages/generalWiring',
+          'normalWiringImages/cleanliness',
+          'normalWiringImages/mainCableGland',
+          'emergencyBoardImages/boardOpen',
+          'emergencyBoardImages/boardClosed',
+          'emergencyBoardImages/internalLegend',
+          'emergencyWiringImages/generalWiring',
+          'emergencyWiringImages/cleanliness',
+          'emergencyWiringImages/mainCableGland'
+        ];
+        
+        // Extract section hint from original path (e.g., "2/1" might map to a section index)
+        for (const sectionFolder of sectionFolders) {
+          const searchPath = `${inspectionId}/${sectionFolder}`;
+          const { data: sectionFiles, error: sectionError } = await supabase.storage
+            .from(storageInfo.bucket)
+            .list(searchPath, { limit: 10 });
+          
+          if (!sectionError && sectionFiles && sectionFiles.length > 0) {
+            const imageFiles = sectionFiles.filter(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
+            if (imageFiles.length > 0) {
+              const newPath = `${searchPath}/${imageFiles[0].name}`;
+              const { data: urlData } = supabase.storage
+                .from(storageInfo.bucket)
+                .getPublicUrl(newPath);
+              return urlData.publicUrl;
+            }
+          }
+        }
+      }
       
-      return urlData.publicUrl;
+      return null;
     } catch (err) {
       console.error('Error finding similar file:', err);
       return null;
