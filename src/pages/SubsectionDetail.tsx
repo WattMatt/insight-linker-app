@@ -116,6 +116,7 @@ const SubsectionDetail = () => {
   const [cocPreviewDoc, setCocPreviewDoc] = useState<{id: string, file_name: string, file_url: string, uploaded_at: string} | null>(null);
   const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{file_name: string, file_url: string} | null>(null);
+  const [generatingReportForId, setGeneratingReportForId] = useState<string | null>(null);
 
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
@@ -2450,6 +2451,47 @@ const SubsectionDetail = () => {
                             <SelectItem value="Failed">Failed</SelectItem>
                           </SelectContent>
                         </Select>
+                        {inspection.status === 'Completed' && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setGeneratingReportForId(id);
+                              try {
+                                const result = await generateAndSaveInspectionReport({
+                                  inspectionId: id,
+                                  subsectionId: subsectionId!,
+                                  siteName: siteData?.siteName || 'Unknown Site',
+                                  subsectionName: subsection?.name || 'Unknown Subsection',
+                                  clientName: siteData?.clientInfo,
+                                  templateId: inspection.templateId,
+                                  siteLogoUrl: companyLogo
+                                });
+                                if (result.success && result.fileUrl && result.fileName) {
+                                  toast.success("Report generated and saved successfully");
+                                  fetchSupabaseDocuments();
+                                  setPreviewDocument({ file_name: result.fileName, file_url: result.fileUrl });
+                                } else {
+                                  toast.error(result.error || "Failed to generate report");
+                                }
+                              } catch (error) {
+                                console.error("Error generating report:", error);
+                                toast.error("Failed to generate report");
+                              } finally {
+                                setGeneratingReportForId(null);
+                              }
+                            }}
+                            disabled={generatingReportForId === id}
+                          >
+                            {generatingReportForId === id ? (
+                              <Loader2 className="h-4 w-4 animate-spin mr-1" />
+                            ) : (
+                              <FileText className="h-4 w-4 mr-1" />
+                            )}
+                            {generatingReportForId === id ? 'Generating...' : 'Generate Report'}
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
