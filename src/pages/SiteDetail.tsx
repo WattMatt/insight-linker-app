@@ -135,7 +135,7 @@ const SiteDetail = () => {
   // Subsection filter states
   const [subsectionSearch, setSubsectionSearch] = useState("");
   const [complianceFilter, setComplianceFilter] = useState<"all" | "pass" | "fail">("all");
-  const [cocFilter, setCocFilter] = useState<"all" | "approved" | "pending" | "expired" | "missing">("all");
+  const [cocFilter, setCocFilter] = useState<"all" | "approved" | "pending" | "expired" | "missing" | "failed">("all");
   const [meteringFilter, setMeteringFilter] = useState<"all" | "installed" | "missing">("all");
   const [snagFilter, setSnagFilter] = useState<"all" | "has_snags" | "no_snags">("all");
   const [categoryFilter, setCategoryFilter] = useState<string>("all");
@@ -1706,7 +1706,7 @@ const SiteDetail = () => {
                     </SelectContent>
                   </Select>
 
-                  <Select value={cocFilter} onValueChange={(v: "all" | "approved" | "pending" | "expired" | "missing") => setCocFilter(v)}>
+                  <Select value={cocFilter} onValueChange={(v: "all" | "approved" | "pending" | "expired" | "missing" | "failed") => setCocFilter(v)}>
                     <SelectTrigger className="w-[140px]">
                       <SelectValue placeholder="CoC Status" />
                     </SelectTrigger>
@@ -1715,6 +1715,7 @@ const SiteDetail = () => {
                       <SelectItem value="approved">Approved</SelectItem>
                       <SelectItem value="pending">Pending</SelectItem>
                       <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="failed">Failed</SelectItem>
                       <SelectItem value="missing">Missing</SelectItem>
                     </SelectContent>
                   </Select>
@@ -1812,6 +1813,7 @@ const SiteDetail = () => {
                   if (cocFilter === "approved" && status !== "approved" && status !== "valid" && status !== "pass") return false;
                   if (cocFilter === "pending" && status !== "pending") return false;
                   if (cocFilter === "expired" && status !== "expired") return false;
+                  if (cocFilter === "failed" && status !== "failed" && status !== "fail") return false;
                   if (cocFilter === "missing" && status && status !== "missing" && status !== "") return false;
                 }
                 
