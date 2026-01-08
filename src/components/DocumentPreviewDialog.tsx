@@ -84,16 +84,27 @@ export function DocumentPreviewDialog({
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
-    if (e.ctrlKey || e.metaKey) {
-      // Zoom with ctrl/cmd + scroll
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale(prev => Math.max(0.25, Math.min(4, prev + delta)));
-    } else if (scale > 1) {
-      // Pan when zoomed in
-      setPosition(prev => ({
-        x: prev.x - e.deltaX,
-        y: prev.y - e.deltaY
-      }));
+    
+    // Always zoom with mouse wheel (no modifier needed)
+    const delta = e.deltaY > 0 ? -0.15 : 0.15;
+    const newScale = Math.max(0.25, Math.min(4, scale + delta));
+    
+    if (newScale !== scale) {
+      // Get cursor position relative to container
+      const container = containerRef.current;
+      if (container) {
+        const rect = container.getBoundingClientRect();
+        const cursorX = e.clientX - rect.left - rect.width / 2;
+        const cursorY = e.clientY - rect.top - rect.height / 2;
+        
+        // Adjust position to zoom toward cursor
+        const scaleDiff = newScale / scale;
+        setPosition(prev => ({
+          x: cursorX - (cursorX - prev.x) * scaleDiff,
+          y: cursorY - (cursorY - prev.y) * scaleDiff
+        }));
+      }
+      setScale(newScale);
     }
   }, [scale]);
 
