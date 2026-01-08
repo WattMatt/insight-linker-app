@@ -82,7 +82,7 @@ const SubsectionDetail = () => {
   const [uploadingFile, setUploadingFile] = useState(false);
   const [documentCategories, setDocumentCategories] = useState<Array<{id: string, name: string}>>([]);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
-  const [supabaseDocuments, setSupabaseDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category_id: string, uploaded_at: string}>>([]);
+  const [supabaseDocuments, setSupabaseDocuments] = useState<Array<{id: string, file_name: string, file_url: string, category_id: string, uploaded_at: string, coc_number?: string | null, coc_issue_date?: string | null, coc_type?: string | null, coc_status?: string | null}>>([]);
   const [deleteDocumentId, setDeleteDocumentId] = useState<string | null>(null);
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -601,28 +601,54 @@ const SubsectionDetail = () => {
       return;
     }
 
+    const docId = pendingDocumentForVerification.id;
+
     try {
-      setValidatingDocId(pendingDocumentForVerification.id);
+      setValidatingDocId(docId);
       setShowCocPreview(false);
       toast.info("Starting SANS 10142-1 verification...");
 
       // Update subsection with approved data first
-      const updateData: any = {};
-      if (approvedData.cocNumber) updateData.coc_number = approvedData.cocNumber;
-      if (approvedData.cocType) updateData.coc_type = approvedData.cocType;
-      if (approvedData.cocIssueDate) updateData.coc_issue_date = approvedData.cocIssueDate;
+      const subsectionUpdateData: any = {};
+      if (approvedData.cocNumber) subsectionUpdateData.coc_number = approvedData.cocNumber;
+      if (approvedData.cocType) subsectionUpdateData.coc_type = approvedData.cocType;
+      if (approvedData.cocIssueDate) subsectionUpdateData.coc_issue_date = approvedData.cocIssueDate;
 
-      if (Object.keys(updateData).length > 0) {
+      if (Object.keys(subsectionUpdateData).length > 0) {
         await supabase
           .from('subsections')
-          .update(updateData)
+          .update(subsectionUpdateData)
           .eq('id', subsectionId);
       }
+
+      // Also update the document record with extracted COC data
+      const docUpdateData: any = {};
+      if (approvedData.cocNumber) docUpdateData.coc_number = approvedData.cocNumber;
+      if (approvedData.cocType) docUpdateData.coc_type = approvedData.cocType;
+      if (approvedData.cocIssueDate) docUpdateData.coc_issue_date = approvedData.cocIssueDate;
+
+      if (Object.keys(docUpdateData).length > 0) {
+        await supabase
+          .from('subsection_documents')
+          .update(docUpdateData)
+          .eq('id', docId);
+      }
+
+      // Update local state so UI reflects the extracted values immediately
+      setCocDataByDocument(prev => ({
+        ...prev,
+        [docId]: {
+          cocNumber: approvedData.cocNumber || '',
+          cocType: approvedData.cocType || '',
+          cocIssueDate: approvedData.cocIssueDate || '',
+          cocStatus: prev[docId]?.cocStatus || ''
+        }
+      }));
 
       // Now run the validation
       const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
         body: {
-          documentId: pendingDocumentForVerification.id,
+          documentId: docId,
           documentUrl: pendingDocumentForVerification.url,
           subsectionId: subsectionId
         }
@@ -636,18 +662,39 @@ const SubsectionDetail = () => {
       if (validationData?.validation) {
         const result = validationData.validation;
         
+        // Update document COC status based on validation result
+        let docCocStatus = '';
         if (result.overallStatus === 'Pass' || result.status === 'Pass') {
+          docCocStatus = 'Approved';
           toast.success('✅ COC verification passed!');
         } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
+          docCocStatus = 'Failed';
           toast.error(`❌ COC verification failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found`);
         } else {
           toast.warning(`⚠️ COC verification incomplete`);
+        }
+
+        // Update document status in DB and local state
+        if (docCocStatus) {
+          await supabase
+            .from('subsection_documents')
+            .update({ coc_status: docCocStatus })
+            .eq('id', docId);
+          
+          setCocDataByDocument(prev => ({
+            ...prev,
+            [docId]: {
+              ...prev[docId],
+              cocStatus: docCocStatus
+            }
+          }));
         }
         
         // Refresh data
         await Promise.all([
           fetchCocValidations(),
-          fetchSubsectionData()
+          fetchSubsectionData(),
+          fetchSupabaseDocuments()
         ]);
       }
     } catch (error) {
@@ -1118,6 +1165,17 @@ const SubsectionDetail = () => {
   // Helper to get or initialize COC data for a document
   const getDocCocData = (docId: string) => {
     if (!cocDataByDocument[docId]) {
+      // Check if document has stored COC data first
+      const doc = supabaseDocuments.find(d => d.id === docId);
+      if (doc && (doc.coc_number || doc.coc_issue_date || doc.coc_type || doc.coc_status)) {
+        return {
+          cocType: doc.coc_type || '',
+          cocStatus: doc.coc_status || '',
+          cocNumber: doc.coc_number || '',
+          cocIssueDate: doc.coc_issue_date || ''
+        };
+      }
+      // Fall back to subsection-level data
       return {
         cocType: subsection?.cocType || '',
         cocStatus: subsection?.cocStatus || '',
