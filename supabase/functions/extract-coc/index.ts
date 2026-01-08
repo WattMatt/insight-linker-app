@@ -323,6 +323,9 @@ Return ONLY this JSON structure with ALL extracted data:
 3. **NO placeholders**: Never use "Not provided", "N/A" as values - use null instead
 4. **Exact values**: Copy numbers and text EXACTLY as shown
 5. **Date format**: Convert all dates to YYYY-MM-DD (e.g., "18.09.2025" → "2025-09-18")
+   - **CRITICAL FOR DATES**: Read each digit of the year VERY CAREFULLY. Common mistakes: reading 2023 as 2022, reading 3 as 2. DOUBLE CHECK the year!
+   - The "Date of issue" is on PAGE 2 of the test report, usually near the top. Look for text like "Date of issue:" followed by the date.
+   - If the date shows "01/09/2023" extract it as "2023-09-01" (NOT 2022!)
 6. **Measurements**: Include units in the value (e.g., "0.16Ω", ">240 MΩ", "237V")
 7. **Confidence**: "high" only if both pages are clear and complete
 
