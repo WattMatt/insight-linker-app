@@ -55,7 +55,11 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
   const [scale, setScale] = useState(1.0);
   const [highlightedClause, setHighlightedClause] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   if (!document) return null;
 
@@ -119,6 +123,49 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
       }
     }
   };
+
+  // Handle mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale(prev => Math.min(Math.max(prev + delta, 0.5), 3));
+    }
+  }, []);
+
+  // Handle pan start
+  const handleMouseDown = useCallback((e: React.MouseEvent) => {
+    if (e.button === 0 && containerRef.current) {
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
+      if (scrollContainer) {
+        setScrollStart({ x: scrollContainer.scrollLeft, y: scrollContainer.scrollTop });
+      }
+    }
+  }, []);
+
+  // Handle pan move
+  const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (!isPanning || !containerRef.current) return;
+    const dx = e.clientX - panStart.x;
+    const dy = e.clientY - panStart.y;
+    const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
+    if (scrollContainer) {
+      scrollContainer.scrollLeft = scrollStart.x - dx;
+      scrollContainer.scrollTop = scrollStart.y - dy;
+    }
+  }, [isPanning, panStart, scrollStart]);
+
+  // Handle pan end
+  const handleMouseUp = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
+  // Handle mouse leave
+  const handleMouseLeave = useCallback(() => {
+    setIsPanning(false);
+  }, []);
 
   // Custom text renderer to highlight matching text
   const customTextRenderer = useCallback(
@@ -257,8 +304,18 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             </div>
 
             {/* Document View */}
-            <ScrollArea className="flex-1 bg-muted/30" ref={scrollRef}>
-              <div className="flex items-start justify-center p-4 min-h-full">
+            <div 
+              ref={containerRef}
+              onWheel={handleWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUp}
+              onMouseLeave={handleMouseLeave}
+              className="flex-1 overflow-hidden"
+              style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
+            >
+              <ScrollArea className="h-full bg-muted/30" ref={scrollRef}>
+                <div className="flex items-start justify-center p-4 min-h-full select-none">
                 {isPdf ? (
                   <Document
                     file={document.file_url}
@@ -323,8 +380,9 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     </Button>
                   </div>
                 )}
-              </div>
-            </ScrollArea>
+                </div>
+              </ScrollArea>
+            </div>
           </div>
 
           {/* Validation Results Panel */}
