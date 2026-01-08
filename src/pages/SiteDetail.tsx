@@ -92,6 +92,7 @@ const SiteDetail = () => {
   const [subsections, setSubsections] = useState<Subsection[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [documents, setDocuments] = useState<SiteDocument[]>([]);
+  const [snags, setSnags] = useState<Array<{id: string, subsection_id: string, status: string, title: string}>>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
@@ -326,7 +327,7 @@ const SiteDetail = () => {
 
   const fetchSiteData = async () => {
     try {
-  const [siteRes, subsectionsRes, inspectionsRes, docsRes] = await Promise.all([
+  const [siteRes, subsectionsRes, inspectionsRes, docsRes, snagsRes] = await Promise.all([
         supabase
           .from("sites")
           .select("*, clients(id, name)")
@@ -346,6 +347,10 @@ const SiteDetail = () => {
           .from("site_documents")
           .select("category, id, file_url")
           .eq("site_id", siteId),
+        supabase
+          .from("snags")
+          .select("id, subsection_id, status, title")
+          .in("subsection_id", (await supabase.from("subsections").select("id").eq("site_id", siteId)).data?.map(s => s.id) || []),
       ]);
 
       if (siteRes.error) throw siteRes.error;
@@ -398,6 +403,7 @@ const SiteDetail = () => {
       
       setSubsections(sortedSubs);
       setInspections(insp);
+      setSnags(snagsRes.data || []);
       
       // Aggregate documents by category
       const docsData = docsRes.data || [];
@@ -439,25 +445,16 @@ const SiteDetail = () => {
           return; // Not compliant
         }
         
-        // Rule 3: Check for open snags
-        const latestInspection = insp.find(i => i.subsection_id === sub.id);
-        let hasOpenSnags = false;
-        if (latestInspection?.json_data) {
-          const jsonData = latestInspection.json_data as any;
-          if (jsonData.sections && Array.isArray(jsonData.sections)) {
-            jsonData.sections.forEach((section: any) => {
-              if (section.items && Array.isArray(section.items)) {
-                const openItems = section.items.filter((item: any) => 
-                  item.status !== 'Pass' && item.status !== 'N/A'
-                );
-                if (openItems.length > 0) hasOpenSnags = true;
-              }
-            });
-          }
-        }
+        // Rule 3: Check for open snags from snags table
+        const snagsData = snagsRes.data || [];
+        const subsectionSnags = snagsData.filter(snag => 
+          snag.subsection_id === sub.id && 
+          snag.status !== 'rectified' && 
+          snag.status !== 'Rectified'
+        );
         
-        if (hasOpenSnags) {
-          console.log(`  ❌ Failed Rule 3: Has open snags`);
+        if (subsectionSnags.length > 0) {
+          console.log(`  ❌ Failed Rule 3: Has ${subsectionSnags.length} open snags`);
           return; // Not compliant
         }
         
@@ -476,24 +473,11 @@ const SiteDetail = () => {
         s.metering_status === "Installed" || s.meter_serial_number
       ).length;
       
-      // Calculate open snags from inspections
-      let totalOpenSnags = 0;
-      subs.forEach(sub => {
-        const latestInspection = insp.find(i => i.subsection_id === sub.id);
-        if (latestInspection?.json_data) {
-          const jsonData = latestInspection.json_data as any;
-          if (jsonData.sections && Array.isArray(jsonData.sections)) {
-            jsonData.sections.forEach((section: any) => {
-              if (section.items && Array.isArray(section.items)) {
-                const openItems = section.items.filter((item: any) => 
-                  item.status !== 'Pass' && item.status !== 'N/A'
-                );
-                totalOpenSnags += openItems.length;
-              }
-            });
-          }
-        }
-      });
+      // Calculate open snags from snags table
+      const snagsData = snagsRes.data || [];
+      const totalOpenSnags = snagsData.filter(snag => 
+        snag.status !== 'rectified' && snag.status !== 'Rectified'
+      ).length;
 
       setStats({
         totalSubsections,
@@ -1031,21 +1015,11 @@ const SiteDetail = () => {
   };
   
   const getOpenSnags = (subsectionId: string) => {
-    const inspection = inspections.find(i => i.subsection_id === subsectionId);
-    if (!inspection?.json_data) return 0;
-    
-    const jsonData = inspection.json_data as any;
-    if (!jsonData.sections || !Array.isArray(jsonData.sections)) return 0;
-    
-    let count = 0;
-    jsonData.sections.forEach((section: any) => {
-      if (section.items && Array.isArray(section.items)) {
-        count += section.items.filter((item: any) => 
-          item.status !== 'Pass' && item.status !== 'N/A'
-        ).length;
-      }
-    });
-    return count;
+    return snags.filter(snag => 
+      snag.subsection_id === subsectionId && 
+      snag.status !== 'rectified' && 
+      snag.status !== 'Rectified'
+    ).length;
   };
 
   return (
