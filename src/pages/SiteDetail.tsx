@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck, Shield } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck, Shield, Search, Filter, X } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
@@ -131,6 +131,14 @@ const SiteDetail = () => {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
   const [newInspectionDate, setNewInspectionDate] = useState("");
   const [deleteSubsectionId, setDeleteSubsectionId] = useState<string | null>(null);
+  
+  // Subsection filter states
+  const [subsectionSearch, setSubsectionSearch] = useState("");
+  const [complianceFilter, setComplianceFilter] = useState<"all" | "pass" | "fail">("all");
+  const [cocFilter, setCocFilter] = useState<"all" | "approved" | "pending" | "expired" | "missing">("all");
+  const [meteringFilter, setMeteringFilter] = useState<"all" | "installed" | "missing">("all");
+  const [snagFilter, setSnagFilter] = useState<"all" | "has_snags" | "no_snags">("all");
+  const [categoryFilter, setCategoryFilter] = useState<string>("all");
 
   useEffect(() => {
     fetchSiteData();
@@ -1644,7 +1652,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="subsections" className="space-y-4">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-4 md:flex-row md:justify-between md:items-center">
             <div>
               <h3 className="text-lg font-semibold">Subsections / Tenants</h3>
               <p className="text-sm text-muted-foreground">
@@ -1660,6 +1668,114 @@ const SiteDetail = () => {
             </Button>
           </div>
 
+          {/* Search and Filters */}
+          <Card>
+            <CardContent className="pt-4">
+              <div className="flex flex-col gap-4">
+                {/* Search */}
+                <div className="relative">
+                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Search by name or tenant..."
+                    value={subsectionSearch}
+                    onChange={(e) => setSubsectionSearch(e.target.value)}
+                    className="pl-9"
+                  />
+                  {subsectionSearch && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                      onClick={() => setSubsectionSearch("")}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  )}
+                </div>
+                
+                {/* Filters */}
+                <div className="flex flex-wrap gap-2">
+                  <Select value={complianceFilter} onValueChange={(v: "all" | "pass" | "fail") => setComplianceFilter(v)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Compliance" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Status</SelectItem>
+                      <SelectItem value="pass">✅ Passing</SelectItem>
+                      <SelectItem value="fail">❌ Failing</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={cocFilter} onValueChange={(v: "all" | "approved" | "pending" | "expired" | "missing") => setCocFilter(v)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="CoC Status" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All CoC</SelectItem>
+                      <SelectItem value="approved">Approved</SelectItem>
+                      <SelectItem value="pending">Pending</SelectItem>
+                      <SelectItem value="expired">Expired</SelectItem>
+                      <SelectItem value="missing">Missing</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={meteringFilter} onValueChange={(v: "all" | "installed" | "missing") => setMeteringFilter(v)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Metering" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Metering</SelectItem>
+                      <SelectItem value="installed">Installed</SelectItem>
+                      <SelectItem value="missing">Missing</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={snagFilter} onValueChange={(v: "all" | "has_snags" | "no_snags") => setSnagFilter(v)}>
+                    <SelectTrigger className="w-[140px]">
+                      <SelectValue placeholder="Snags" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Snags</SelectItem>
+                      <SelectItem value="has_snags">Has Snags</SelectItem>
+                      <SelectItem value="no_snags">No Snags</SelectItem>
+                    </SelectContent>
+                  </Select>
+
+                  <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+                    <SelectTrigger className="w-[160px]">
+                      <SelectValue placeholder="Category" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="all">All Categories</SelectItem>
+                      {Array.from(new Set(subsections.map(s => s.category || 'Uncategorized'))).map(cat => (
+                        <SelectItem key={cat} value={cat}>{getCategoryConfig(cat).label}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+
+                  {(complianceFilter !== "all" || cocFilter !== "all" || meteringFilter !== "all" || snagFilter !== "all" || categoryFilter !== "all" || subsectionSearch) && (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => {
+                        setComplianceFilter("all");
+                        setCocFilter("all");
+                        setMeteringFilter("all");
+                        setSnagFilter("all");
+                        setCategoryFilter("all");
+                        setSubsectionSearch("");
+                      }}
+                      className="text-muted-foreground"
+                    >
+                      <X className="h-4 w-4 mr-1" />
+                      Clear filters
+                    </Button>
+                  )}
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
           {subsections.length === 0 ? (
             <Card>
               <CardContent className="p-0">
@@ -1672,10 +1788,58 @@ const SiteDetail = () => {
             </Card>
           ) : (
             (() => {
-              // Group subsections by category
-              const groupedSubsections = subsections.reduce((acc, sub) => {
+              // Filter subsections
+              const filteredSubsections = subsections.filter(sub => {
+                // Search filter
+                if (subsectionSearch) {
+                  const searchLower = subsectionSearch.toLowerCase();
+                  if (!sub.name.toLowerCase().includes(searchLower) && 
+                      !(sub.tenant_name?.toLowerCase().includes(searchLower))) {
+                    return false;
+                  }
+                }
+                
+                // Compliance filter
+                if (complianceFilter !== "all") {
+                  const isCompliant = calculateCompliance(sub);
+                  if (complianceFilter === "pass" && !isCompliant) return false;
+                  if (complianceFilter === "fail" && isCompliant) return false;
+                }
+                
+                // CoC filter
+                if (cocFilter !== "all") {
+                  const status = sub.coc_status?.toLowerCase();
+                  if (cocFilter === "approved" && status !== "approved" && status !== "valid" && status !== "pass") return false;
+                  if (cocFilter === "pending" && status !== "pending") return false;
+                  if (cocFilter === "expired" && status !== "expired") return false;
+                  if (cocFilter === "missing" && status && status !== "missing" && status !== "") return false;
+                }
+                
+                // Metering filter
+                if (meteringFilter !== "all") {
+                  const hasMetering = sub.metering_status === "Installed" || sub.meter_serial_number;
+                  if (meteringFilter === "installed" && !hasMetering) return false;
+                  if (meteringFilter === "missing" && hasMetering) return false;
+                }
+                
+                // Snag filter
+                if (snagFilter !== "all") {
+                  const openSnags = getOpenSnags(sub.id);
+                  if (snagFilter === "has_snags" && openSnags === 0) return false;
+                  if (snagFilter === "no_snags" && openSnags > 0) return false;
+                }
+                
+                // Category filter
+                if (categoryFilter !== "all") {
+                  if ((sub.category || 'Uncategorized') !== categoryFilter) return false;
+                }
+                
+                return true;
+              });
+              
+              // Group filtered subsections by category
+              const groupedSubsections = filteredSubsections.reduce((acc, sub) => {
                 const category = sub.category || 'Uncategorized';
-                // Get the full category config to use the proper label
                 const categoryConfig = getCategoryConfig(category);
                 const displayCategory = categoryConfig.label;
                 
@@ -1686,8 +1850,24 @@ const SiteDetail = () => {
                 return acc;
               }, {} as Record<string, Subsection[]>);
 
+              if (filteredSubsections.length === 0) {
+                return (
+                  <Card>
+                    <CardContent className="py-12 text-center">
+                      <Filter className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
+                      <h3 className="text-lg font-semibold mb-2">No matching subsections</h3>
+                      <p className="text-muted-foreground">Try adjusting your filters or search term</p>
+                    </CardContent>
+                  </Card>
+                );
+              }
+
               return (
-                <Accordion type="multiple" defaultValue={Object.keys(groupedSubsections)} className="space-y-4">
+                <>
+                  <p className="text-sm text-muted-foreground">
+                    Showing {filteredSubsections.length} of {subsections.length} subsections
+                  </p>
+                  <Accordion type="multiple" defaultValue={Object.keys(groupedSubsections)} className="space-y-4">
                   {Object.entries(groupedSubsections).map(([category, categorySubsections]) => {
                     const CategoryIcon = getCategoryIcon(category);
                     const colors = getCategoryColor(category);
@@ -1836,6 +2016,7 @@ const SiteDetail = () => {
                     );
                   })}
                 </Accordion>
+                </>
               );
             })()
           )}
