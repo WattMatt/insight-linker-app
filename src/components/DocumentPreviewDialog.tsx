@@ -65,7 +65,9 @@ export function DocumentPreviewDialog({
   };
 
   const handleMouseDown = useCallback((e: React.MouseEvent) => {
-    if (scale > 1) {
+    // Middle mouse button (wheel click) or left click when zoomed
+    if (e.button === 1 || (e.button === 0 && scale > 1)) {
+      e.preventDefault();
       setIsDragging(true);
       setDragStart({ x: e.clientX - position.x, y: e.clientY - position.y });
     }
@@ -81,6 +83,13 @@ export function DocumentPreviewDialog({
   }, [isDragging, dragStart]);
 
   const handleMouseUp = () => setIsDragging(false);
+  
+  // Prevent default middle-click behavior (auto-scroll)
+  const handleAuxClick = useCallback((e: React.MouseEvent) => {
+    if (e.button === 1) {
+      e.preventDefault();
+    }
+  }, []);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -218,8 +227,9 @@ export function DocumentPreviewDialog({
           onMouseMove={handleMouseMove}
           onMouseUp={handleMouseUp}
           onMouseLeave={handleMouseUp}
+          onAuxClick={handleAuxClick}
           onWheel={handleWheel}
-          style={{ cursor: scale > 1 ? (isDragging ? 'grabbing' : 'grab') : 'default' }}
+          style={{ cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default') }}
         >
           <div 
             className="flex items-center justify-center min-h-full p-4"
