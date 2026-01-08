@@ -403,6 +403,53 @@ export type Database = {
           },
         ]
       }
+      inspection_signatures: {
+        Row: {
+          created_at: string
+          id: string
+          inspection_id: string
+          ip_address: string | null
+          signature_data: string
+          signature_url: string | null
+          signed_at: string
+          signer_email: string | null
+          signer_name: string
+          signer_type: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          inspection_id: string
+          ip_address?: string | null
+          signature_data: string
+          signature_url?: string | null
+          signed_at?: string
+          signer_email?: string | null
+          signer_name: string
+          signer_type: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          inspection_id?: string
+          ip_address?: string | null
+          signature_data?: string
+          signature_url?: string | null
+          signed_at?: string
+          signer_email?: string | null
+          signer_name?: string
+          signer_type?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspection_signatures_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       inspection_subsections: {
         Row: {
           created_at: string
