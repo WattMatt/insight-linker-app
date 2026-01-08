@@ -266,13 +266,14 @@ export async function generateAndSaveInspectionReport(
 
     // ===== TEMPLATE-BASED SECTIONS WITH VISUAL LAYOUT =====
     if (template && template.sections) {
-      const sections = template.sections as any;
+      const sections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections);
 
-      for (const [sectionKey, section] of Object.entries(sections)) {
+      for (const section of sections) {
         const sectionData = section as any;
-        const items = sectionData.items || {};
+        const sectionId = String(sectionData.id ?? '');
+        const items = Array.isArray(sectionData.items) ? sectionData.items : Object.values(sectionData.items || {});
 
-        if (Object.keys(items).length === 0) continue;
+        if (items.length === 0) continue;
 
         // Start new page for each section
         doc.addPage();
@@ -284,19 +285,18 @@ export async function generateAndSaveInspectionReport(
         doc.setFontSize(14);
         doc.setFont(undefined, 'bold');
         doc.setTextColor(255, 255, 255);
-        const sectionTitle = (sectionData.name || sectionKey).toUpperCase();
+        const sectionTitle = (sectionData.name || sectionId).toUpperCase();
         doc.text(sectionTitle, pageWidth / 2, yPos + 10, { align: 'center' });
         yPos += 25;
 
         doc.setTextColor(0, 0, 0);
 
         let itemNumber = 1;
-        const itemEntries = Object.entries(items);
 
-        for (let i = 0; i < itemEntries.length; i++) {
-          const [itemKey, item] = itemEntries[i];
-          const itemInfo = item as any;
-          const itemData = jsonData[sectionKey]?.[itemKey] || {};
+        for (let i = 0; i < items.length; i++) {
+          const itemInfo = items[i] as any;
+          const itemId = String(itemInfo.id ?? i);
+          const itemData = jsonData[sectionId]?.[itemId] || {};
           const photos = itemData.photos || [];
           const images = itemData.images || {};
 
@@ -334,7 +334,7 @@ export async function generateAndSaveInspectionReport(
           // Item title
           doc.setFontSize(11);
           doc.setFont(undefined, 'bold');
-          doc.text(`${itemNumber}. ${itemInfo.name || itemKey}`, 25, yPos + 8);
+          doc.text(`${itemNumber}. ${itemInfo.name || itemId}`, 25, yPos + 8);
 
           // Status (right side)
           const status = itemData.status || 'N/A';
