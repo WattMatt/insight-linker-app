@@ -14,7 +14,7 @@ interface RobustImageProps {
 
 /**
  * A robust image component that handles loading states, errors, and retries
- * Handles public bucket URLs directly without needing signed URLs
+ * Automatically finds the correct image when URLs don't match actual files
  */
 export const RobustImage = ({ 
   src, 
@@ -27,7 +27,7 @@ export const RobustImage = ({
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [retries, setRetries] = useState(0);
   const [imageSrc, setImageSrc] = useState(src);
-  const [attemptedFixes, setAttemptedFixes] = useState<string[]>([]);
+  const [hasAttemptedFix, setHasAttemptedFix] = useState(false);
   const mountedRef = useRef(true);
 
   // Extract bucket and path from Supabase storage URL
@@ -51,108 +51,39 @@ export const RobustImage = ({
     }
   }, []);
 
-  // Search for matching image file in the inspection folder - now with proper path matching
-  const findMatchingImage = useCallback(async (url: string): Promise<string | null> => {
+  // Find the actual image in the folder (handles renamed files)
+  const findActualImage = useCallback(async (url: string): Promise<string | null> => {
     const storageInfo = extractStorageInfo(url);
     if (!storageInfo) return null;
     
     try {
+      // Get the folder path (everything except the filename)
       const pathParts = storageInfo.path.split('/');
-      const inspectionId = pathParts[0];
+      const fileName = pathParts.pop(); // Remove filename
+      const folderPath = pathParts.join('/');
       
-      if (!inspectionId) return null;
+      if (!folderPath) return null;
 
-      // Extract what we're looking for from the old path format (e.g., "2/1" means section 2, item 1)
-      const oldSectionIndex = pathParts[1];
-      const oldItemIndex = pathParts[2];
+      // List files in the folder
+      const { data: files, error } = await supabase.storage
+        .from(storageInfo.bucket)
+        .list(folderPath, { limit: 20, sortBy: { column: 'created_at', order: 'desc' } });
 
-      // Map old section indexes to semantic folder names
-      const sectionMap: Record<string, string> = {
-        '0': 'normalBoardImages',
-        '1': 'emergencyBoardImages', 
-        '2': 'componentImages',
-        '3': 'normalWiringImages',
-        '4': 'emergencyWiringImages'
-      };
+      if (error || !files || files.length === 0) return null;
 
-      // Try to find the file in the semantic folder structure
-      const semanticSection = sectionMap[oldSectionIndex];
-      if (semanticSection) {
-        // List contents of the semantic section folder
-        const { data: sectionItems } = await supabase.storage
-          .from(storageInfo.bucket)
-          .list(`${inspectionId}/${semanticSection}`, { limit: 50 });
-
-        if (sectionItems) {
-          // Look for item folders or direct images
-          for (const item of sectionItems) {
-            // If it's an image file at this level, return it
-            if (/\.(jpg|jpeg|png|webp)$/i.test(item.name)) {
-              const { data: urlData } = supabase.storage
-                .from(storageInfo.bucket)
-                .getPublicUrl(`${inspectionId}/${semanticSection}/${item.name}`);
-              return urlData.publicUrl;
-            }
-            
-            // If it's a subfolder, look inside it
-            if (item.id === null) {
-              const { data: subFiles } = await supabase.storage
-                .from(storageInfo.bucket)
-                .list(`${inspectionId}/${semanticSection}/${item.name}`, { limit: 20 });
-              
-              if (subFiles) {
-                const imageFile = subFiles.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
-                if (imageFile) {
-                  const { data: urlData } = supabase.storage
-                    .from(storageInfo.bucket)
-                    .getPublicUrl(`${inspectionId}/${semanticSection}/${item.name}/${imageFile.name}`);
-                  return urlData.publicUrl;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      // Fallback: search all semantic folders for any image
-      const semanticFolders = ['normalBoardImages', 'emergencyBoardImages', 'componentImages', 'normalWiringImages', 'emergencyWiringImages'];
+      // Find the most recent image file
+      const imageFile = files.find(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
       
-      for (const folder of semanticFolders) {
-        const { data: items } = await supabase.storage
+      if (imageFile) {
+        const { data: urlData } = supabase.storage
           .from(storageInfo.bucket)
-          .list(`${inspectionId}/${folder}`, { limit: 20 });
-
-        if (items) {
-          for (const item of items) {
-            if (/\.(jpg|jpeg|png|webp)$/i.test(item.name)) {
-              const { data: urlData } = supabase.storage
-                .from(storageInfo.bucket)
-                .getPublicUrl(`${inspectionId}/${folder}/${item.name}`);
-              return urlData.publicUrl;
-            }
-            
-            if (item.id === null) {
-              const { data: subFiles } = await supabase.storage
-                .from(storageInfo.bucket)
-                .list(`${inspectionId}/${folder}/${item.name}`, { limit: 10 });
-              
-              if (subFiles) {
-                const imageFile = subFiles.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name));
-                if (imageFile) {
-                  const { data: urlData } = supabase.storage
-                    .from(storageInfo.bucket)
-                    .getPublicUrl(`${inspectionId}/${folder}/${item.name}/${imageFile.name}`);
-                  return urlData.publicUrl;
-                }
-              }
-            }
-          }
-        }
+          .getPublicUrl(`${folderPath}/${imageFile.name}`);
+        return urlData.publicUrl;
       }
       
       return null;
     } catch (err) {
-      console.error('Error finding image in inspection:', err);
+      console.error('Error finding actual image:', err);
       return null;
     }
   }, [extractStorageInfo]);
@@ -162,7 +93,7 @@ export const RobustImage = ({
     setImageState('loading');
     setRetries(0);
     setImageSrc(src);
-    setAttemptedFixes([]);
+    setHasAttemptedFix(false);
     
     return () => {
       mountedRef.current = false;
@@ -172,12 +103,12 @@ export const RobustImage = ({
   const handleError = async () => {
     if (!mountedRef.current) return;
     
-    // Strategy 1: Try finding matching image in the inspection folder
-    if (!attemptedFixes.includes('search')) {
-      const foundUrl = await findMatchingImage(src);
+    // Strategy 1: Find the actual image in the same folder
+    if (!hasAttemptedFix) {
+      setHasAttemptedFix(true);
+      const foundUrl = await findActualImage(src);
       if (foundUrl && mountedRef.current) {
-        console.log('Found alternative image:', foundUrl);
-        setAttemptedFixes(prev => [...prev, 'search']);
+        console.log('Found actual image at:', foundUrl);
         setImageSrc(foundUrl);
         setImageState('loading');
         return;
@@ -185,15 +116,14 @@ export const RobustImage = ({
     }
     
     // Strategy 2: Simple retry with cache busting
-    if (retries < retryCount && !attemptedFixes.includes('retry')) {
+    if (retries < retryCount) {
       setTimeout(() => {
         if (!mountedRef.current) return;
         setRetries(prev => prev + 1);
-        const baseUrl = src.split('?')[0];
+        const baseUrl = imageSrc.split('?')[0];
         setImageSrc(`${baseUrl}?t=${Date.now()}`);
         setImageState('loading');
       }, 500 * (retries + 1));
-      setAttemptedFixes(prev => [...prev, 'retry']);
       return;
     }
     
@@ -213,10 +143,10 @@ export const RobustImage = ({
   const handleManualRetry = async () => {
     setImageState('loading');
     setRetries(0);
-    setAttemptedFixes([]);
+    setHasAttemptedFix(false);
     
-    // Try finding matching image first on manual retry
-    const foundUrl = await findMatchingImage(src);
+    // Try finding the actual image first
+    const foundUrl = await findActualImage(src);
     if (foundUrl) {
       setImageSrc(foundUrl);
     } else {
