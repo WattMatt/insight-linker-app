@@ -118,16 +118,86 @@ export async function fetchImageWithFallback(url: string): Promise<Blob | null> 
 }
 
 /**
- * Fetch image and convert to base64 data URL for PDF embedding
+ * Compress image using canvas - reduces size for PDF embedding
  */
-export async function fetchImageAsDataUrl(url: string): Promise<string | null> {
+async function compressImage(blob: Blob, maxWidth: number = 800, quality: number = 0.6): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      // Calculate new dimensions maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      
+      // Create canvas and draw resized image
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        resolve(null);
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to compressed JPEG
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl);
+    };
+    
+    img.onerror = () => resolve(null);
+    
+    // Create object URL from blob
+    const objectUrl = URL.createObjectURL(blob);
+    img.src = objectUrl;
+    
+    // Clean up object URL after load
+    img.onload = function() {
+      // Calculate new dimensions maintaining aspect ratio
+      let width = img.width;
+      let height = img.height;
+      
+      if (width > maxWidth) {
+        height = (height * maxWidth) / width;
+        width = maxWidth;
+      }
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) {
+        URL.revokeObjectURL(objectUrl);
+        resolve(null);
+        return;
+      }
+      
+      ctx.drawImage(img, 0, 0, width, height);
+      URL.revokeObjectURL(objectUrl);
+      
+      const dataUrl = canvas.toDataURL('image/jpeg', quality);
+      resolve(dataUrl);
+    };
+  });
+}
+
+/**
+ * Fetch image and convert to compressed base64 data URL for PDF embedding
+ * Images are resized to max 800px width and compressed to 60% JPEG quality
+ */
+export async function fetchImageAsDataUrl(url: string, maxWidth: number = 800, quality: number = 0.6): Promise<string | null> {
   const blob = await fetchImageWithFallback(url);
   if (!blob) return null;
 
-  return new Promise<string>((resolve) => {
-    const reader = new FileReader();
-    reader.onloadend = () => resolve(reader.result as string);
-    reader.onerror = () => resolve(null as any);
-    reader.readAsDataURL(blob);
-  });
+  // Compress the image for smaller PDF size
+  return compressImage(blob, maxWidth, quality);
 }
