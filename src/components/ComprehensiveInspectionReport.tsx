@@ -338,13 +338,6 @@ export const ComprehensiveInspectionReport = ({
             const sectionEntry = jsonData[sectionId] || jsonData[Number(sectionId)] || {};
             const itemData = sectionEntry[itemId] || sectionEntry[Number(itemId)] || {};
             
-            console.log(`PDF Debug - Section: ${sectionId}, Item: ${itemId}`, { 
-              sectionEntry: !!Object.keys(sectionEntry).length,
-              itemData: !!Object.keys(itemData).length,
-              photos: itemData.photos,
-              jsonDataKeys: Object.keys(jsonData)
-            });
-            
             const photos = itemData.photos || [];
             const images = itemData.images || {};
             
@@ -353,9 +346,6 @@ export const ComprehensiveInspectionReport = ({
             if (typeof images === 'object') {
               allImages.push(...Object.values(images).filter((img: any) => img && (img.url || img.path)));
             }
-            
-            console.log(`PDF Debug - allImages count: ${allImages.length}`, allImages);
-
 
             const hasImages = allImages.length > 0;
             const hasNotes = !!itemData.notes;

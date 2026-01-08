@@ -1048,6 +1048,10 @@ const InspectionDetail = () => {
         const itemData = sectionData[itemKey] || {};
         const existingPhotos = itemData.photos || [];
 
+        // Deduplicate photos to prevent duplicates
+        const allPhotos = [...existingPhotos, ...uploadedUrls];
+        const uniquePhotos = [...new Set(allPhotos)];
+
         return {
           ...prev,
           jsonData: {
@@ -1056,7 +1060,7 @@ const InspectionDetail = () => {
               ...sectionData,
               [itemKey]: {
                 ...itemData,
-                photos: [...existingPhotos, ...uploadedUrls]
+                photos: uniquePhotos
               }
             }
           }
