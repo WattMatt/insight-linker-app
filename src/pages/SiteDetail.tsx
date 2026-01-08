@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Progress } from "@/components/ui/progress";
-import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck, Shield, Search, Filter, X } from "lucide-react";
+import { FileText, QrCode, Plus, Layers, MapPin, Building, User, Mail, Download, Trash2, Upload, Image, BarChart3, FileDown, LayoutGrid, RefreshCw, AlertCircle, ClipboardCheck, Shield, Search, Filter, X, Eye } from "lucide-react";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { getCategoryIcon, getCategoryColor, getCategoryConfig } from "@/lib/subsectionCategories";
@@ -1601,7 +1601,18 @@ const SiteDetail = () => {
                                       <p className="text-sm font-medium">{doc.file_name}</p>
                                     </div>
                                   </div>
-                                  <div className="flex items-center gap-2">
+                                  <div className="flex items-center gap-1">
+                                    <Button
+                                      size="sm"
+                                      variant="ghost"
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setPreviewDocument({ url: doc.file_url, name: doc.file_name });
+                                      }}
+                                      title="Preview"
+                                    >
+                                      <Eye className="h-4 w-4" />
+                                    </Button>
                                     <Button
                                       size="sm"
                                       variant="ghost"
@@ -1609,6 +1620,7 @@ const SiteDetail = () => {
                                         e.stopPropagation();
                                         window.open(doc.file_url, '_blank');
                                       }}
+                                      title="Download"
                                     >
                                       <Download className="h-4 w-4" />
                                     </Button>
@@ -1619,6 +1631,7 @@ const SiteDetail = () => {
                                         e.stopPropagation();
                                         setDeleteDocumentId(doc.id);
                                       }}
+                                      title="Delete"
                                     >
                                       <Trash2 className="h-4 w-4 text-destructive" />
                                     </Button>
