@@ -29,6 +29,7 @@ import { COCValidationReport } from "@/components/COCValidationReport";
 import { ValidationChat } from "@/components/ValidationChat";
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
+import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 
 interface SubsectionData {
   name: string;
@@ -110,6 +111,8 @@ const SubsectionDetail = () => {
   const [pendingDocumentForVerification, setPendingDocumentForVerification] = useState<{id: string, url: string, name: string} | null>(null);
   const [offlineDocuments, setOfflineDocuments] = useState<any[]>([]);
   const [offlineFloorPlans, setOfflineFloorPlans] = useState<any[]>([]);
+  const [cocPreviewDoc, setCocPreviewDoc] = useState<{id: string, file_name: string, file_url: string, uploaded_at: string} | null>(null);
+  const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
 
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
@@ -2765,6 +2768,18 @@ const SubsectionDetail = () => {
                             <div className="flex items-center gap-2">
                               <Button
                                 size="sm"
+                                variant="secondary"
+                                onClick={() => {
+                                  setCocPreviewDoc(doc);
+                                  setCocPreviewDialogOpen(true);
+                                }}
+                                title="Preview COC with validation details"
+                              >
+                                <Eye className="h-4 w-4 mr-1" />
+                                Preview
+                              </Button>
+                              <Button
+                                size="sm"
                                 variant="outline"
                                 onClick={() => handleExtractCocData(doc.id, doc.file_url, doc.file_name)}
                                 disabled={validatingDocId === doc.id}
@@ -3761,6 +3776,17 @@ const SubsectionDetail = () => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      {/* COC Preview Dialog */}
+      <COCPreviewDialog
+        open={cocPreviewDialogOpen}
+        onClose={() => {
+          setCocPreviewDialogOpen(false);
+          setCocPreviewDoc(null);
+        }}
+        document={cocPreviewDoc}
+        validation={cocPreviewDoc ? cocValidations[cocPreviewDoc.id] : null}
+      />
     </div>
   );
 };
