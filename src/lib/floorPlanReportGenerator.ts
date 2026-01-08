@@ -17,6 +17,10 @@ interface Pin {
   created_at?: string;
   updated_at?: string;
   edit_history?: any[];
+  rectification_photo_url?: string;
+  rectification_notes?: string;
+  rectified_at?: string;
+  rectified_by?: string;
   comments?: Array<{
     user_name: string;
     comment: string;
@@ -354,25 +358,90 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
       yPos += 5 * titleLines.length + 8;
     }
 
-    // Photo
-    if (pin.photo_url) {
-      try {
+    // Before/After Photo Comparison
+    if (pin.photo_url || pin.rectification_photo_url) {
+      if (pin.photo_url && pin.rectification_photo_url) {
+        // Side-by-side comparison
         doc.setFont("helvetica", "bold");
         doc.setFontSize(11);
-        doc.text("Photo", margin, yPos);
+        doc.text("Before / After Comparison", margin, yPos);
         yPos += 5;
         
-        const imgWidth = pageWidth - (2 * margin);
-        const imgHeight = 90;
-        doc.setDrawColor(200);
+        const halfWidth = (pageWidth - (2 * margin) - 5) / 2;
+        const imgHeight = 70;
+        
+        // Before label and image
+        doc.setFontSize(9);
+        doc.setTextColor(220, 53, 69);
+        doc.text("BEFORE", margin, yPos);
+        doc.setTextColor(40, 167, 69);
+        doc.text("AFTER", margin + halfWidth + 5, yPos);
+        doc.setTextColor(0, 0, 0);
+        yPos += 3;
+        
+        doc.setDrawColor(220, 53, 69);
+        doc.setLineWidth(1);
+        doc.rect(margin, yPos, halfWidth, imgHeight);
+        try {
+          doc.addImage(pin.photo_url, 'JPEG', margin + 1, yPos + 1, halfWidth - 2, imgHeight - 2, undefined, 'FAST');
+        } catch (error) {
+          console.error('Error adding before photo:', error);
+        }
+        
+        doc.setDrawColor(40, 167, 69);
+        doc.rect(margin + halfWidth + 5, yPos, halfWidth, imgHeight);
+        try {
+          doc.addImage(pin.rectification_photo_url, 'JPEG', margin + halfWidth + 6, yPos + 1, halfWidth - 2, imgHeight - 2, undefined, 'FAST');
+        } catch (error) {
+          console.error('Error adding after photo:', error);
+        }
+        
+        doc.setDrawColor(0);
         doc.setLineWidth(0.5);
-        doc.rect(margin, yPos, imgWidth, imgHeight);
-        doc.addImage(pin.photo_url, 'JPEG', margin + 1, yPos + 1, imgWidth - 2, imgHeight - 2, undefined, 'FAST');
-        yPos += imgHeight + 10;
-      } catch (error) {
-        console.error('Error adding photo:', error);
-        doc.text('Error loading photo', margin, yPos);
-        yPos += 10;
+        yPos += imgHeight + 5;
+        
+        // Rectification notes
+        if (pin.rectification_notes) {
+          doc.setFillColor(232, 245, 233);
+          doc.rect(margin, yPos, pageWidth - 2 * margin, 10, "F");
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(10);
+          doc.text("Rectification Notes:", margin + 2, yPos + 7);
+          yPos += 12;
+          doc.setFont("helvetica", "normal");
+          doc.setFontSize(9);
+          const rectNotes = doc.splitTextToSize(pin.rectification_notes, pageWidth - (2 * margin) - 4);
+          doc.text(rectNotes, margin + 2, yPos);
+          yPos += 4 * rectNotes.length + 3;
+        }
+        
+        if (pin.rectified_at) {
+          doc.setFontSize(8);
+          doc.setTextColor(100);
+          doc.text(`Rectified on ${new Date(pin.rectified_at).toLocaleString()}${pin.rectified_by ? ` by ${pin.rectified_by}` : ''}`, margin, yPos);
+          doc.setTextColor(0);
+          yPos += 8;
+        }
+      } else if (pin.photo_url) {
+        // Original photo only
+        try {
+          doc.setFont("helvetica", "bold");
+          doc.setFontSize(11);
+          doc.text("Photo", margin, yPos);
+          yPos += 5;
+          
+          const imgWidth = pageWidth - (2 * margin);
+          const imgHeight = 90;
+          doc.setDrawColor(200);
+          doc.setLineWidth(0.5);
+          doc.rect(margin, yPos, imgWidth, imgHeight);
+          doc.addImage(pin.photo_url, 'JPEG', margin + 1, yPos + 1, imgWidth - 2, imgHeight - 2, undefined, 'FAST');
+          yPos += imgHeight + 10;
+        } catch (error) {
+          console.error('Error adding photo:', error);
+          doc.text('Error loading photo', margin, yPos);
+          yPos += 10;
+        }
       }
     }
 

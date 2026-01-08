@@ -300,6 +300,10 @@ export type Database = {
           pin_number: number
           pin_type: string
           priority: string | null
+          rectification_notes: string | null
+          rectification_photo_url: string | null
+          rectified_at: string | null
+          rectified_by: string | null
           stakeholders: string | null
           status: string
           title: string | null
@@ -324,6 +328,10 @@ export type Database = {
           pin_number: number
           pin_type: string
           priority?: string | null
+          rectification_notes?: string | null
+          rectification_photo_url?: string | null
+          rectified_at?: string | null
+          rectified_by?: string | null
           stakeholders?: string | null
           status?: string
           title?: string | null
@@ -348,6 +356,10 @@ export type Database = {
           pin_number?: number
           pin_type?: string
           priority?: string | null
+          rectification_notes?: string | null
+          rectification_photo_url?: string | null
+          rectified_at?: string | null
+          rectified_by?: string | null
           stakeholders?: string | null
           status?: string
           title?: string | null
@@ -1191,6 +1203,10 @@ export type Database = {
           inspection_id: string | null
           notes: string | null
           photos: Json | null
+          rectification_notes: string | null
+          rectification_photos: Json | null
+          rectified_at: string | null
+          rectified_by: string | null
           risk_level: string | null
           status: string
           subsection_id: string
@@ -1206,6 +1222,10 @@ export type Database = {
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          rectification_notes?: string | null
+          rectification_photos?: Json | null
+          rectified_at?: string | null
+          rectified_by?: string | null
           risk_level?: string | null
           status?: string
           subsection_id: string
@@ -1221,6 +1241,10 @@ export type Database = {
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          rectification_notes?: string | null
+          rectification_photos?: Json | null
+          rectified_at?: string | null
+          rectified_by?: string | null
           risk_level?: string | null
           status?: string
           subsection_id?: string
