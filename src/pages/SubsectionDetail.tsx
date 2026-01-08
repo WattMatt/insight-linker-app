@@ -2482,6 +2482,43 @@ const SubsectionDetail = () => {
                             <SelectItem value="Failed">Failed</SelectItem>
                           </SelectContent>
                         </Select>
+                        {inspection.status === 'Completed' && (
+                          <Button
+                            size="sm"
+                            variant="default"
+                            onClick={async (e) => {
+                              e.stopPropagation();
+                              setGeneratingReportForId(id);
+                              try {
+                                const result = await generateAndSaveComprehensiveReport({
+                                  inspectionId: id,
+                                  subsectionId: subsectionId!,
+                                  siteName: siteData?.siteName || 'Unknown Site',
+                                  subsectionName: subsection?.name || 'Unknown Subsection',
+                                  clientName: siteData?.clientInfo,
+                                  templateId: inspection.templateId,
+                                  siteLogoUrl: companyLogo
+                                });
+                                if (result.success && result.fileUrl && result.fileName) {
+                                  toast.success("Report generated and saved successfully");
+                                  fetchSupabaseDocuments();
+                                  setPreviewDocument({ file_name: result.fileName, file_url: result.fileUrl });
+                                } else {
+                                  toast.error(result.error || "Failed to generate report");
+                                }
+                              } catch (error) {
+                                console.error("Error generating report:", error);
+                                toast.error("Failed to generate report");
+                              } finally {
+                                setGeneratingReportForId(null);
+                              }
+                            }}
+                            disabled={generatingReportForId === id}
+                          >
+                            <FileText className="h-4 w-4 mr-1" />
+                            {generatingReportForId === id ? 'Generating...' : 'Generate PDF'}
+                          </Button>
+                        )}
                         <Button
                           size="icon"
                           variant="ghost"
