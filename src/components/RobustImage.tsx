@@ -1,6 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { RefreshCw, ImageOff } from 'lucide-react';
-import { supabase } from '@/integrations/supabase/client';
 import { Button } from './ui/button';
 
 interface RobustImageProps {
@@ -14,7 +13,7 @@ interface RobustImageProps {
 
 /**
  * A robust image component that handles loading states, errors, and retries
- * Automatically finds the correct image when URLs don't match actual files
+ * Displays exactly the URL from the database without substitution
  */
 export const RobustImage = ({ 
   src, 
@@ -27,73 +26,13 @@ export const RobustImage = ({
   const [imageState, setImageState] = useState<'loading' | 'loaded' | 'error'>('loading');
   const [retries, setRetries] = useState(0);
   const [imageSrc, setImageSrc] = useState(src);
-  const [hasAttemptedFix, setHasAttemptedFix] = useState(false);
   const mountedRef = useRef(true);
-
-  // Extract bucket and path from Supabase storage URL
-  const extractStorageInfo = useCallback((url: string): { bucket: string; path: string } | null => {
-    if (!url) return null;
-    try {
-      const patterns = [
-        /\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/,
-        /supabase\.co\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+?)(?:\?|$)/
-      ];
-      
-      for (const pattern of patterns) {
-        const match = url.match(pattern);
-        if (match) {
-          return { bucket: match[1], path: decodeURIComponent(match[2].split('?')[0]) };
-        }
-      }
-      return null;
-    } catch {
-      return null;
-    }
-  }, []);
-
-  // Find the actual image in the folder (handles renamed files)
-  const findActualImage = useCallback(async (url: string): Promise<string | null> => {
-    const storageInfo = extractStorageInfo(url);
-    if (!storageInfo) return null;
-    
-    try {
-      // Get the folder path (everything except the filename)
-      const pathParts = storageInfo.path.split('/');
-      const fileName = pathParts.pop(); // Remove filename
-      const folderPath = pathParts.join('/');
-      
-      if (!folderPath) return null;
-
-      // List files in the folder
-      const { data: files, error } = await supabase.storage
-        .from(storageInfo.bucket)
-        .list(folderPath, { limit: 20, sortBy: { column: 'created_at', order: 'desc' } });
-
-      if (error || !files || files.length === 0) return null;
-
-      // Find the most recent image file
-      const imageFile = files.find(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
-      
-      if (imageFile) {
-        const { data: urlData } = supabase.storage
-          .from(storageInfo.bucket)
-          .getPublicUrl(`${folderPath}/${imageFile.name}`);
-        return urlData.publicUrl;
-      }
-      
-      return null;
-    } catch (err) {
-      console.error('Error finding actual image:', err);
-      return null;
-    }
-  }, [extractStorageInfo]);
 
   useEffect(() => {
     mountedRef.current = true;
     setImageState('loading');
     setRetries(0);
     setImageSrc(src);
-    setHasAttemptedFix(false);
     
     return () => {
       mountedRef.current = false;
@@ -103,19 +42,7 @@ export const RobustImage = ({
   const handleError = async () => {
     if (!mountedRef.current) return;
     
-    // Strategy 1: Find the actual image in the same folder
-    if (!hasAttemptedFix) {
-      setHasAttemptedFix(true);
-      const foundUrl = await findActualImage(src);
-      if (foundUrl && mountedRef.current) {
-        console.log('Found actual image at:', foundUrl);
-        setImageSrc(foundUrl);
-        setImageState('loading');
-        return;
-      }
-    }
-    
-    // Strategy 2: Simple retry with cache busting
+    // Simple retry with cache busting - no URL substitution to preserve database accuracy
     if (retries < retryCount) {
       setTimeout(() => {
         if (!mountedRef.current) return;
@@ -127,7 +54,7 @@ export const RobustImage = ({
       return;
     }
     
-    // All strategies failed
+    // All retries failed - show error state
     if (mountedRef.current) {
       setImageState('error');
       onError?.();
@@ -140,18 +67,10 @@ export const RobustImage = ({
     }
   };
 
-  const handleManualRetry = async () => {
+  const handleManualRetry = () => {
     setImageState('loading');
     setRetries(0);
-    setHasAttemptedFix(false);
-    
-    // Try finding the actual image first
-    const foundUrl = await findActualImage(src);
-    if (foundUrl) {
-      setImageSrc(foundUrl);
-    } else {
-      setImageSrc(`${src.split('?')[0]}?t=${Date.now()}`);
-    }
+    setImageSrc(`${src.split('?')[0]}?t=${Date.now()}`);
   };
 
   if (imageState === 'error') {
