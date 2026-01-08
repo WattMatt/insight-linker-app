@@ -66,24 +66,23 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
-  if (!document) return null;
+  const isPdf = document?.file_name?.toLowerCase().endsWith('.pdf') ?? false;
+  const isImage = document?.file_name ? /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name) : false;
 
-  const isPdf = document.file_name.toLowerCase().endsWith('.pdf');
-  const isImage = /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name);
+  const handleZoomIn = useCallback(() => setScale(prev => Math.min(prev + 0.2, 3)), []);
+  const handleZoomOut = useCallback(() => setScale(prev => Math.max(prev - 0.2, 0.5)), []);
 
-  const handleZoomIn = () => setScale(prev => Math.min(prev + 0.2, 3));
-  const handleZoomOut = () => setScale(prev => Math.max(prev - 0.2, 0.5));
-
-  const onDocumentLoadSuccess = ({ numPages }: { numPages: number }) => {
+  const onDocumentLoadSuccess = useCallback(({ numPages }: { numPages: number }) => {
     setNumPages(numPages);
     setLoading(false);
-  };
+  }, []);
 
-  const onDocumentLoadError = () => {
+  const onDocumentLoadError = useCallback(() => {
     setLoading(false);
-  };
+  }, []);
 
-  const handleDownload = async () => {
+  const handleDownload = useCallback(async () => {
+    if (!document) return;
     try {
       const response = await fetch(document.file_url);
       const blob = await response.blob();
@@ -96,12 +95,12 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
       window.URL.revokeObjectURL(url);
       window.document.body.removeChild(a);
     } catch {
-      window.open(document.file_url, '_blank');
+      if (document) window.open(document.file_url, '_blank');
     }
-  };
+  }, [document]);
 
   // Get clause location and page info
-  const getClauseLocation = (clause: string): { location: string; page: number } => {
+  const getClauseLocation = useCallback((clause: string): { location: string; page: number } => {
     const clauseLocations: Record<string, { location: string; page: number }> = {
       '8.6': { location: 'Test Results - Insulation Resistance', page: 2 },
       '8.5': { location: 'Test Results - Earth Loop Impedance', page: 2 },
@@ -114,20 +113,21 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
       '5.2': { location: 'Installer Registration', page: 1 },
     };
     return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
-  };
+  }, []);
 
   // Handle clause click - navigate to relevant page
-  const handleClauseClick = (clause: string) => {
-    const newHighlight = highlightedClause === clause ? null : clause;
-    setHighlightedClause(newHighlight);
-    
-    if (newHighlight) {
-      const { page } = getClauseLocation(clause);
-      if (page <= numPages) {
-        setPageNumber(page);
+  const handleClauseClick = useCallback((clause: string) => {
+    setHighlightedClause(prev => {
+      const newHighlight = prev === clause ? null : clause;
+      if (newHighlight) {
+        const { page } = getClauseLocation(clause);
+        if (page <= numPages) {
+          setPageNumber(page);
+        }
       }
-    }
-  };
+      return newHighlight;
+    });
+  }, [getClauseLocation, numPages]);
 
   // Handle mouse wheel zoom (Ctrl+scroll or pinch to zoom, normal scroll to pan)
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -193,6 +193,9 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     },
     [highlightedClause]
   );
+
+  // Early return after all hooks
+  if (!document) return null;
 
   return (
     <Dialog open={open} onOpenChange={onClose}>
