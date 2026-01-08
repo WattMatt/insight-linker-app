@@ -18,6 +18,15 @@ interface Snag {
   photos?: string[];
 }
 
+interface SignatureData {
+  id: string;
+  signer_type: string;
+  signer_name: string;
+  signer_email: string | null;
+  signature_data: string;
+  signed_at: string;
+}
+
 interface ComprehensiveInspectionReportProps {
   inspectionData: any;
   siteName: string;
@@ -622,6 +631,97 @@ export const ComprehensiveInspectionReport = ({
 
           yPos += snagBoxHeight + snagMargin;
           snagNumber++;
+        }
+      }
+
+      // ===== SIGNATURES PAGE =====
+      if (inspectionId) {
+        try {
+          const { data: signaturesData } = await supabase
+            .from('inspection_signatures')
+            .select('*')
+            .eq('inspection_id', inspectionId);
+
+          if (signaturesData && signaturesData.length > 0) {
+            doc.addPage();
+            let sigY = 25;
+
+            // Page title
+            doc.setFontSize(16);
+            doc.setTextColor(0, 0, 0);
+            doc.setFont(undefined, 'bold');
+            doc.text('Sign-Off Signatures', pageWidth / 2, sigY, { align: 'center' });
+            sigY += 15;
+
+            doc.setFontSize(10);
+            doc.setFont(undefined, 'normal');
+            doc.setTextColor(100, 100, 100);
+            doc.text('This inspection has been reviewed and signed off by the following parties:', pageWidth / 2, sigY, { align: 'center' });
+            sigY += 20;
+
+            // Draw signature boxes in a 2x2 grid
+            const sigBoxWidth = (pageWidth - 50) / 2;
+            const sigBoxHeight = 80;
+            const sigBoxMargin = 10;
+            let sigCol = 0;
+            let sigRow = 0;
+
+            const signerTypeLabels: Record<string, string> = {
+              'inspector': 'Inspector',
+              'contractor': 'Contractor',
+              'client': 'Client Representative',
+              'witness': 'Witness'
+            };
+
+            for (const sig of signaturesData as SignatureData[]) {
+              const boxX = 20 + (sigCol * (sigBoxWidth + sigBoxMargin));
+              const boxY = sigY + (sigRow * (sigBoxHeight + sigBoxMargin));
+
+              // Draw box
+              doc.setDrawColor(200, 200, 200);
+              doc.setFillColor(250, 250, 250);
+              doc.roundedRect(boxX, boxY, sigBoxWidth, sigBoxHeight, 3, 3, 'FD');
+
+              // Title
+              doc.setFontSize(10);
+              doc.setFont(undefined, 'bold');
+              doc.setTextColor(0, 0, 0);
+              doc.text(signerTypeLabels[sig.signer_type] || sig.signer_type, boxX + 5, boxY + 10);
+
+              // Signature image
+              try {
+                const sigImgWidth = sigBoxWidth - 20;
+                const sigImgHeight = 35;
+                doc.addImage(sig.signature_data, 'PNG', boxX + 10, boxY + 15, sigImgWidth, sigImgHeight);
+              } catch (e) {
+                console.error('Error adding signature image:', e);
+              }
+
+              // Name and date
+              doc.setFontSize(9);
+              doc.setFont(undefined, 'normal');
+              doc.text(sig.signer_name, boxX + 5, boxY + sigBoxHeight - 15);
+              
+              doc.setFontSize(8);
+              doc.setTextColor(100, 100, 100);
+              const signedDate = new Date(sig.signed_at).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'short',
+                day: 'numeric',
+                hour: '2-digit',
+                minute: '2-digit'
+              });
+              doc.text(`Signed: ${signedDate}`, boxX + 5, boxY + sigBoxHeight - 7);
+
+              sigCol++;
+              if (sigCol >= 2) {
+                sigCol = 0;
+                sigRow++;
+              }
+            }
+          }
+        } catch (error) {
+          console.error('Error fetching signatures for PDF:', error);
         }
       }
 

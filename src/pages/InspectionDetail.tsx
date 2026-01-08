@@ -27,6 +27,7 @@ import {
   generateTenantImagePath, 
   renameInspectionImages 
 } from "@/lib/imageNaming";
+import { InspectionSignatures } from "@/components/InspectionSignatures";
 
 interface InspectionTemplate {
   name: string;
@@ -1789,6 +1790,7 @@ const InspectionDetail = () => {
             ))}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
+          {templateCategory !== "Site Drawing" && <TabsTrigger value="signatures">Sign-Off</TabsTrigger>}
         </TabsList>
 
         {templateCategory === "Site Drawing" ? (
@@ -2266,6 +2268,12 @@ const InspectionDetail = () => {
                   )}
                 </CardContent>
               </Card>
+            </TabsContent>
+
+            <TabsContent value="signatures" className="space-y-4">
+              {inspectionId && (
+                <InspectionSignatures inspectionId={inspectionId} />
+              )}
             </TabsContent>
           </>
         )}
