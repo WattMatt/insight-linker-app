@@ -342,6 +342,30 @@ export const InteractiveFloorPlan = ({
     }
   };
 
+  const handleQuickStatusChange = async (pinId: string, newStatus: string) => {
+    try {
+      const { error } = await supabase
+        .from("floor_plan_pins")
+        .update({ status: newStatus })
+        .eq("id", pinId);
+
+      if (error) throw error;
+      
+      // Update local state immediately for snappy UI
+      setPins(prevPins => 
+        prevPins.map(pin => 
+          pin.id === pinId ? { ...pin, status: newStatus } : pin
+        )
+      );
+      
+      toast.success(`Status updated to ${newStatus.replace('_', ' ')}`);
+    } catch (error) {
+      console.error("Error updating status:", error);
+      toast.error("Failed to update status");
+      throw error;
+    }
+  };
+
   const handleMovePin = () => {
     setMoveMode(selectedPin.id);
     setIsModalOpen(false);
@@ -530,6 +554,7 @@ export const InteractiveFloorPlan = ({
               setSelectedPin(pin);
               setIsModalOpen(true);
             }}
+            onQuickStatusChange={handleQuickStatusChange}
           />
         </div>
       </div>
