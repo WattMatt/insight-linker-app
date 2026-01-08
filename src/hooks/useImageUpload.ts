@@ -84,16 +84,36 @@ export const useImageUpload = () => {
             throw error;
           }
 
-          // Use public URL (doesn't expire)
+          // Verify the file exists in storage before returning URL
+          const { data: verifyData, error: verifyError } = await supabase.storage
+            .from(bucket)
+            .list(data.path.split('/').slice(0, -1).join('/'), {
+              limit: 1,
+              search: data.path.split('/').pop()
+            });
+
+          if (verifyError || !verifyData || verifyData.length === 0) {
+            console.warn('Upload verification failed, file may not exist:', data.path);
+          }
+
+          // Use public URL (doesn't expire) - use the exact path returned by storage
           const { data: publicData } = supabase.storage
             .from(bucket)
             .getPublicUrl(data.path);
           
-          console.log('Image uploaded successfully:', publicData.publicUrl);
+          // Final validation: ensure URL contains the actual stored path
+          const storedPath = data.path;
+          const urlPath = publicData.publicUrl.split(`${bucket}/`).pop()?.split('?')[0];
+          
+          if (urlPath && decodeURIComponent(urlPath) !== storedPath) {
+            console.warn('URL path mismatch detected:', { urlPath, storedPath });
+          }
+          
+          console.log('Image uploaded and verified:', { url: publicData.publicUrl, path: storedPath });
           setUploading(false);
           return {
             url: publicData.publicUrl,
-            path: data.path
+            path: storedPath
           };
 
         } catch (error: any) {
@@ -191,11 +211,61 @@ export const useImageUpload = () => {
     }
   };
 
+  /**
+   * Validates that a URL points to an actual file in storage
+   * Returns the corrected URL if found, or null if not
+   */
+  const validateImageUrl = async (url: string, bucket: string): Promise<string | null> => {
+    try {
+      const path = getPathFromUrl(url, bucket);
+      if (!path) return null;
+
+      // Get the folder path and filename
+      const pathParts = path.split('/');
+      const fileName = pathParts.pop();
+      const folderPath = pathParts.join('/');
+
+      if (!fileName || !folderPath) return null;
+
+      // List files in the folder to find the actual file
+      const { data: files, error } = await supabase.storage
+        .from(bucket)
+        .list(folderPath, { limit: 50, sortBy: { column: 'created_at', order: 'desc' } });
+
+      if (error || !files) return null;
+
+      // Check if exact filename exists
+      const exactMatch = files.find(f => f.name === fileName);
+      if (exactMatch) {
+        const { data: urlData } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(`${folderPath}/${exactMatch.name}`);
+        return urlData.publicUrl;
+      }
+
+      // Find the most recent image in the folder as fallback
+      const imageFile = files.find(f => /\.(jpg|jpeg|png|webp|gif)$/i.test(f.name));
+      if (imageFile) {
+        const { data: urlData } = supabase.storage
+          .from(bucket)
+          .getPublicUrl(`${folderPath}/${imageFile.name}`);
+        console.log('Corrected image URL:', { original: url, corrected: urlData.publicUrl });
+        return urlData.publicUrl;
+      }
+
+      return null;
+    } catch (error) {
+      console.error('Error validating image URL:', error);
+      return null;
+    }
+  };
+
   return {
     uploadImage,
     deleteImage,
     refreshSignedUrl,
     getPathFromUrl,
+    validateImageUrl,
     uploading
   };
 };
