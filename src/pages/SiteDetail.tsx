@@ -606,7 +606,7 @@ const SiteDetail = () => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
-          <SiteOverview site={site} stats={stats} />
+          <SiteOverview site={site} stats={stats} onTabChange={setActiveTab} />
           <SiteLevelInspections inspections={inspections} siteId={siteId!} clientId={clientId} onCreateClick={() => setIsCreateInspectionOpen(true)} />
         </TabsContent>
 
