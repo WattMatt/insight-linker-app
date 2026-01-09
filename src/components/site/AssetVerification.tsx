@@ -454,6 +454,10 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               subsections={subsections}
               subsectionImages={subsectionImages}
               siteName={siteName}
+              onDataUpdated={() => {
+                refetch();
+                queryClient.invalidateQueries({ queryKey: ["site-subsections-for-comparison", siteId] });
+              }}
             />
           </TabsContent>
 
