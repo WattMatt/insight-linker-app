@@ -337,7 +337,7 @@ const PublicSubsection = () => {
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-muted-foreground mb-1">Open Snags</p>
-              <div className="flex items-center gap-3 flex-wrap">
+              <div className="flex items-start gap-2 flex-wrap">
                 <Badge 
                   variant="outline"
                   className={openSnagsCount > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
@@ -345,50 +345,50 @@ const PublicSubsection = () => {
                   {openSnagsCount} Total
                 </Badge>
                 {openSnagsCount > 0 && (
-                  <>
+                  <div className="flex flex-wrap gap-1.5 sm:gap-2">
                     {severityCounts.critical > 0 && (
-                      <Badge variant="outline" className="bg-red-500/20 text-red-600 border-red-300">
+                      <Badge variant="outline" className="bg-red-500/20 text-red-600 border-red-300 text-xs">
                         {severityCounts.critical} Critical
                       </Badge>
                     )}
                     {severityCounts.high > 0 && (
-                      <Badge variant="outline" className="bg-orange-500/20 text-orange-600 border-orange-300">
+                      <Badge variant="outline" className="bg-orange-500/20 text-orange-600 border-orange-300 text-xs">
                         {severityCounts.high} High
                       </Badge>
                     )}
                     {severityCounts.medium > 0 && (
-                      <Badge variant="outline" className="bg-yellow-500/20 text-yellow-600 border-yellow-300">
+                      <Badge variant="outline" className="bg-yellow-500/20 text-yellow-600 border-yellow-300 text-xs">
                         {severityCounts.medium} Medium
                       </Badge>
                     )}
                     {severityCounts.low > 0 && (
-                      <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-300">
+                      <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-300 text-xs">
                         {severityCounts.low} Low
                       </Badge>
                     )}
-                  </>
+                  </div>
                 )}
               </div>
               {snags.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {snags.map((snag) => (
-                    <div key={snag.id} className="flex items-center justify-between p-2 border rounded text-sm">
-                      <span className="truncate flex-1 mr-2">{snag.title}</span>
-                      <div className="flex items-center gap-2">
+                    <div key={snag.id} className="flex flex-col sm:flex-row sm:items-center sm:justify-between p-2 border rounded text-sm gap-2">
+                      <span className="break-words sm:truncate flex-1 text-left">{snag.title}</span>
+                      <div className="flex items-center gap-1.5 flex-shrink-0">
                         {snag.risk_level && (
                           <Badge 
                             variant="outline" 
-                            className={getRiskLevelColor(snag.risk_level)}
+                            className={`${getRiskLevelColor(snag.risk_level)} text-xs`}
                           >
                             {snag.risk_level}
                           </Badge>
                         )}
                         <Badge 
                           variant="outline"
-                          className={snag.status === 'Rectified' || snag.status === 'Closed' || snag.status === 'rectified' 
+                          className={`text-xs ${snag.status === 'Rectified' || snag.status === 'Closed' || snag.status === 'rectified' 
                             ? 'bg-green-500/10 text-green-500' 
                             : 'bg-red-500/10 text-red-500'
-                          }
+                          }`}
                         >
                           {snag.status}
                         </Badge>
