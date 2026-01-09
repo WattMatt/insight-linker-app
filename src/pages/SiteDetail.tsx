@@ -51,6 +51,7 @@ const SiteDetail = () => {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState(searchParams.get('tab') || "overview");
   const [siteDocuments, setSiteDocuments] = useState<any[]>([]);
+  const [subsectionDocuments, setSubsectionDocuments] = useState<any[]>([]);
   const [previewDocument, setPreviewDocument] = useState<{ url: string, name: string } | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
@@ -76,6 +77,7 @@ const SiteDetail = () => {
   useEffect(() => {
     fetchSiteData();
     fetchSiteDocuments();
+    fetchSubsectionDocuments();
     fetchDocumentCategories();
     fetchTemplates();
     fetchCompanyLogo();
@@ -109,6 +111,52 @@ const SiteDetail = () => {
       setSiteDocuments(data || []);
     } catch (error) {
       console.error("Error fetching site documents:", error);
+    }
+  };
+
+  const fetchSubsectionDocuments = async () => {
+    if (!siteId) return;
+    try {
+      // First get all subsection IDs for this site
+      const { data: subs, error: subsError } = await supabase
+        .from('subsections')
+        .select('id')
+        .eq('site_id', siteId);
+
+      if (subsError) throw subsError;
+      if (!subs || subs.length === 0) {
+        setSubsectionDocuments([]);
+        return;
+      }
+
+      const subsectionIds = subs.map(s => s.id);
+
+      // Fetch documents with category names
+      const { data: docs, error: docsError } = await supabase
+        .from('subsection_documents')
+        .select(`
+          id, 
+          file_name, 
+          file_url, 
+          subsection_id,
+          document_categories(name)
+        `)
+        .in('subsection_id', subsectionIds)
+        .order('uploaded_at', { ascending: false });
+
+      if (docsError) throw docsError;
+
+      const enrichedDocs = (docs || []).map(doc => ({
+        id: doc.id,
+        file_name: doc.file_name,
+        file_url: doc.file_url,
+        subsection_id: doc.subsection_id,
+        category_name: doc.document_categories?.name || null
+      }));
+
+      setSubsectionDocuments(enrichedDocs);
+    } catch (error) {
+      console.error("Error fetching subsection documents:", error);
     }
   };
 
@@ -562,10 +610,16 @@ const SiteDetail = () => {
 
         <TabsContent value="documents" className="space-y-6">
           <SiteDocumentsComponent
-            documents={siteDocuments} categories={documentCategories} onDeleteDocument={handleDeleteSiteDocument}
-            onPreview={(url, name) => setPreviewDocument({ url, name })} onDownload={downloadFile}
+            documents={siteDocuments} 
+            categories={documentCategories} 
+            subsectionDocuments={subsectionDocuments}
+            subsections={subsections.map(s => ({ id: s.id, name: s.name }))}
+            onDeleteDocument={handleDeleteSiteDocument}
+            onPreview={(url, name) => setPreviewDocument({ url, name })} 
+            onDownload={downloadFile}
             onUploadClick={id => { setUploadCategoryId(id); setUploadDialogOpen(true); }}
-            onCreateCategory={() => setCreateCategoryOpen(true)} onDeleteCategory={handleDeleteCategory}
+            onCreateCategory={() => setCreateCategoryOpen(true)} 
+            onDeleteCategory={handleDeleteCategory}
             onBulkDeleteCategories={handleBulkDeleteCategories}
           />
           <DocumentPreviewDialog
