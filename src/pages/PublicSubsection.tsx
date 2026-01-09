@@ -216,7 +216,16 @@ const PublicSubsection = () => {
   }
 
   // Calculate status values
-  const openSnagsCount = snags.filter(s => s.status !== 'Rectified' && s.status !== 'Closed' && s.status !== 'rectified').length;
+  const openSnags = snags.filter(s => s.status !== 'Rectified' && s.status !== 'Closed' && s.status !== 'rectified');
+  const openSnagsCount = openSnags.length;
+  
+  // Severity breakdown
+  const severityCounts = {
+    critical: openSnags.filter(s => s.risk_level?.toLowerCase() === 'critical').length,
+    high: openSnags.filter(s => s.risk_level?.toLowerCase() === 'high').length,
+    medium: openSnags.filter(s => s.risk_level?.toLowerCase() === 'medium').length,
+    low: openSnags.filter(s => s.risk_level?.toLowerCase() === 'low').length,
+  };
   
   const getOverallStatus = () => {
     if (subsection.is_coc_required && subsection.coc_status !== 'Approved' && subsection.coc_status !== 'Valid' && subsection.coc_status !== 'Pass') return "Fail";
@@ -328,12 +337,38 @@ const PublicSubsection = () => {
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-muted-foreground mb-1">Open Snags</p>
-              <Badge 
-                variant="outline"
-                className={openSnagsCount > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
-              >
-                {openSnagsCount}
-              </Badge>
+              <div className="flex items-center gap-3 flex-wrap">
+                <Badge 
+                  variant="outline"
+                  className={openSnagsCount > 0 ? "bg-red-500/10 text-red-500" : "bg-green-500/10 text-green-500"}
+                >
+                  {openSnagsCount} Total
+                </Badge>
+                {openSnagsCount > 0 && (
+                  <>
+                    {severityCounts.critical > 0 && (
+                      <Badge variant="outline" className="bg-red-500/20 text-red-600 border-red-300">
+                        {severityCounts.critical} Critical
+                      </Badge>
+                    )}
+                    {severityCounts.high > 0 && (
+                      <Badge variant="outline" className="bg-orange-500/20 text-orange-600 border-orange-300">
+                        {severityCounts.high} High
+                      </Badge>
+                    )}
+                    {severityCounts.medium > 0 && (
+                      <Badge variant="outline" className="bg-yellow-500/20 text-yellow-600 border-yellow-300">
+                        {severityCounts.medium} Medium
+                      </Badge>
+                    )}
+                    {severityCounts.low > 0 && (
+                      <Badge variant="outline" className="bg-green-500/20 text-green-600 border-green-300">
+                        {severityCounts.low} Low
+                      </Badge>
+                    )}
+                  </>
+                )}
+              </div>
               {snags.length > 0 && (
                 <div className="mt-3 space-y-2">
                   {snags.map((snag) => (
