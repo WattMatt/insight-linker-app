@@ -3,12 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Zap, Droplets, Trash2, RefreshCw } from "lucide-react";
+import { Upload, Zap, Droplets, Trash2, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { AssetTable } from "./AssetTable";
+import { AssetComparisonTable } from "./AssetComparisonTable";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -55,6 +56,21 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
         .select("*")
         .eq("site_id", siteId)
         .order("premises_id");
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
+
+  // Fetch subsections for comparison
+  const { data: subsections = [] } = useQuery({
+    queryKey: ["site-subsections-for-comparison", siteId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subsections")
+        .select("id, name, meter_serial_number, ct_ratio, tenant_name")
+        .eq("site_id", siteId)
+        .order("name");
 
       if (error) throw error;
       return data || [];
@@ -386,8 +402,12 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
           </CardContent>
         </Card>
       ) : (
-        <Tabs defaultValue="electrical" className="space-y-4">
+        <Tabs defaultValue="verification" className="space-y-4">
           <TabsList>
+            <TabsTrigger value="verification" className="gap-2">
+              <ShieldCheck className="h-4 w-4" />
+              Verification
+            </TabsTrigger>
             <TabsTrigger value="electrical" className="gap-2">
               <Zap className="h-4 w-4" />
               Electrical Meters
@@ -403,6 +423,13 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               </Badge>
             </TabsTrigger>
           </TabsList>
+
+          <TabsContent value="verification">
+            <AssetComparisonTable 
+              assets={electricalAssets} 
+              subsections={subsections} 
+            />
+          </TabsContent>
 
           <TabsContent value="electrical">
             <AssetTable assets={electricalAssets} type="electrical" onRefresh={refetch} />
