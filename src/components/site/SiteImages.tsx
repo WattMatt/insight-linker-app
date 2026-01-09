@@ -7,6 +7,7 @@ import { Site } from "@/types/site";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useCamera } from "@/hooks/useCamera";
 
 interface SiteImagesProps {
     site: Site;
@@ -30,11 +31,12 @@ export const SiteImages: React.FC<SiteImagesProps> = ({
     fetchSiteData
 }) => {
     const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
+    const { takePicture } = useCamera();
 
-    const onFileUpload = async (e: React.ChangeEvent<HTMLInputElement>, type: 'site_image' | 'client_logo') => {
-        const file = e.target.files?.[0];
-        if (file) {
-            try {
+    const onCaptureImage = async (type: 'site_image' | 'client_logo') => {
+        try {
+            const file = await takePicture({ preferCamera: false }); // Let user choose between camera and gallery
+            if (file) {
                 const reader = new FileReader();
                 const previewPromise = new Promise<string>((resolve, reject) => {
                     reader.onload = (event) => resolve(event.target?.result as string);
@@ -44,16 +46,15 @@ export const SiteImages: React.FC<SiteImagesProps> = ({
                 const result = await previewPromise;
                 setImagePreview(prev => ({ ...prev, [type]: result }));
                 await handleImageUpload(file, type);
-            } catch (error) {
-                console.error(`${type} upload error:`, error);
-                setImagePreview(prev => {
-                    const newPreview = { ...prev };
-                    delete newPreview[type];
-                    return newPreview;
-                });
             }
+        } catch (error) {
+            console.error(`${type} capture error:`, error);
+            setImagePreview(prev => {
+                const newPreview = { ...prev };
+                delete newPreview[type];
+                return newPreview;
+            });
         }
-        e.target.value = '';
     };
 
     return (
@@ -125,17 +126,10 @@ export const SiteImages: React.FC<SiteImagesProps> = ({
                             </div>
                         )}
                         <div className="mt-3">
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                id="site-image-upload"
-                                onChange={(e) => onFileUpload(e, 'site_image')}
-                            />
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => document.getElementById('site-image-upload')?.click()}
+                                onClick={() => onCaptureImage('site_image')}
                                 disabled={uploadingImage === 'site_image'}
                             >
                                 <Upload className="h-4 w-4 mr-2" />
@@ -206,17 +200,10 @@ export const SiteImages: React.FC<SiteImagesProps> = ({
                             </div>
                         )}
                         <div className="mt-3">
-                            <input
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                id="client-logo-upload"
-                                onChange={(e) => onFileUpload(e, 'client_logo')}
-                            />
                             <Button
                                 variant="outline"
                                 size="sm"
-                                onClick={() => document.getElementById('client-logo-upload')?.click()}
+                                onClick={() => onCaptureImage('client_logo')}
                                 disabled={uploadingImage === 'client_logo'}
                             >
                                 <Upload className="h-4 w-4 mr-2" />

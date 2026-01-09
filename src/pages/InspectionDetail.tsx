@@ -23,10 +23,10 @@ import { useImageUpload } from "@/hooks/useImageUpload";
 import { RobustImage } from "@/components/RobustImage";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 import { Breadcrumbs } from "@/components/Breadcrumb";
-import { 
-  generateInspectionImagePath, 
-  generateTenantImagePath, 
-  renameInspectionImages 
+import {
+  generateInspectionImagePath,
+  generateTenantImagePath,
+  renameInspectionImages
 } from "@/lib/imageNaming";
 import { InspectionSignatures } from "@/components/InspectionSignatures";
 
@@ -147,7 +147,7 @@ const InspectionDetail = () => {
   const [uploadingTenantImages, setUploadingTenantImages] = useState<Set<string>>(new Set());
   const tenantImageInputRefs = useRef<{ [key: string]: HTMLInputElement | null }>({});
   const [viewingImage, setViewingImage] = useState<string | null>(null);
-  
+
 
   // Utility function to convert camelCase to Title Case with spaces
   const formatTabLabel = (text: string): string => {
@@ -178,9 +178,9 @@ const InspectionDetail = () => {
         .from('settings')
         .select('company_logo_url')
         .maybeSingle();
-      
+
       if (error) throw error;
-      
+
       if (data?.company_logo_url) {
         setCompanyLogo(data.company_logo_url);
       }
@@ -202,7 +202,7 @@ const InspectionDetail = () => {
         .select('*')
         .eq('subsection_id', subId)
         .order('created_at', { ascending: false });
-      
+
       if (error) throw error;
       setSnags(data || []);
     } catch (error) {
@@ -215,7 +215,7 @@ const InspectionDetail = () => {
 
   const handleCreateSnag = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!newSnag.title.trim()) {
       toast.error("Snag title is required");
       return;
@@ -223,7 +223,7 @@ const InspectionDetail = () => {
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-      
+
       const snagData: any = {
         subsection_id: subsectionId,
         title: newSnag.title,
@@ -235,13 +235,13 @@ const InspectionDetail = () => {
         status: 'Open',
         created_by: user?.id
       };
-      
+
       const { error } = await supabase
         .from('snags')
         .insert(snagData);
-      
+
       if (error) throw error;
-      
+
       toast.success("Snag created successfully");
       setSnagDialogOpen(false);
       setNewSnag({ title: '', description: '', notes: '', photos: [], risk_level: '', estimated_cost: '' });
@@ -262,7 +262,7 @@ const InspectionDetail = () => {
 
   const handleUpdateSnag = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!editingSnag?.title?.trim()) {
       toast.error("Please enter a title");
       return;
@@ -280,9 +280,9 @@ const InspectionDetail = () => {
           estimated_cost: editingSnag.estimated_cost ? parseFloat(editingSnag.estimated_cost) : null
         })
         .eq('id', editingSnag.id);
-      
+
       if (error) throw error;
-      
+
       toast.success("Snag updated successfully");
       setSnagDialogOpen(false);
       setEditingSnag(null);
@@ -301,15 +301,15 @@ const InspectionDetail = () => {
 
   const handleToggleSnagStatus = async (snagId: string, currentStatus: string) => {
     const newStatus = currentStatus === 'Open' ? 'Closed' : 'Open';
-    
+
     try {
       const { error } = await supabase
         .from('snags')
         .update({ status: newStatus })
         .eq('id', snagId);
-      
+
       if (error) throw error;
-      
+
       toast.success(`Snag ${newStatus.toLowerCase()} successfully`);
       fetchSnags();
     } catch (error) {
@@ -320,15 +320,15 @@ const InspectionDetail = () => {
 
   const handleDeleteSnag = async (snagId: string) => {
     if (!confirm("Are you sure you want to delete this snag?")) return;
-    
+
     try {
       const { error } = await supabase
         .from('snags')
         .delete()
         .eq('id', snagId);
-      
+
       if (error) throw error;
-      
+
       toast.success("Snag deleted successfully");
       fetchSnags();
     } catch (error) {
@@ -392,7 +392,7 @@ const InspectionDetail = () => {
     try {
       const file = files[0];
       const fileExt = file.name.split('.').pop();
-      
+
       // Generate descriptive file name with client/site/subsection info
       const filePath = generateTenantImagePath({
         clientName: siteData?.clientName || 'unknown-client',
@@ -413,10 +413,10 @@ const InspectionDetail = () => {
 
       console.log('Image uploaded successfully, URL:', result.url);
 
-      const updatedTenants = tenants.map(t => 
+      const updatedTenants = tenants.map(t =>
         t.id === tenantId ? { ...t, [field]: result.url } : t
       );
-      
+
       setTenants(updatedTenants);
 
       // Auto-save to database immediately
@@ -447,14 +447,14 @@ const InspectionDetail = () => {
       }
     } catch (error: any) {
       console.error("Error uploading tenant image:", error);
-      
+
       // Check for JWT/authentication errors
-      if (error?.message?.includes('JWT') || 
-          error?.message?.includes('signature verification') ||
-          error?.statusCode === '408' ||
-          error?.error === 'InvalidJWT') {
+      if (error?.message?.includes('JWT') ||
+        error?.message?.includes('signature verification') ||
+        error?.statusCode === '408' ||
+        error?.error === 'InvalidJWT') {
         toast.error("Your session has expired. Please refresh the page and try again.");
-        
+
         // Try to refresh the session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (!session || sessionError) {
@@ -476,7 +476,7 @@ const InspectionDetail = () => {
   };
 
   const handleTenantFieldChange = (tenantId: string, field: keyof Tenant, value: string) => {
-    setTenants(tenants.map(t => 
+    setTenants(tenants.map(t =>
       t.id === tenantId ? { ...t, [field]: value } : t
     ));
   };
@@ -493,7 +493,7 @@ const InspectionDetail = () => {
     try {
       // Extract path from URL
       const path = getPathFromUrl(imageUrl, 'inspection-photos');
-      
+
       if (path) {
         // Delete from storage
         const success = await deleteImage('inspection-photos', path);
@@ -503,10 +503,10 @@ const InspectionDetail = () => {
       }
 
       // Update state
-      const updatedTenants = tenants.map(t => 
+      const updatedTenants = tenants.map(t =>
         t.id === tenantId ? { ...t, [field]: '' } : t
       );
-      
+
       setTenants(updatedTenants);
 
       // Auto-save to database
@@ -542,54 +542,30 @@ const InspectionDetail = () => {
 
   const handleSnagPhotoUpload = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
-    
+
     setUploadingSnagPhotos(true);
     try {
       const uploadedUrls: string[] = [];
-      
+
       for (let i = 0; i < files.length; i++) {
-        let file = files[i];
-        
-        // Convert HEIC if needed
-        const inputFileName = file.name.toLowerCase();
-        const isHEIC = file.type === 'image/heic' || file.type === 'image/heif' || 
-                       (file.type === '' && (inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif'))) ||
-                       inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif');
-        
-        if (isHEIC) {
-          try {
-            const heic2any = (await import('heic2any')).default;
-            const convertedBlob = await heic2any({
-              blob: file,
-              toType: 'image/jpeg',
-              quality: 0.9
-            });
-            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-            file = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
-          } catch (conversionError) {
-            console.error("Error converting HEIC:", conversionError);
-            toast.error(`Failed to convert ${file.name}`);
-            continue;
-          }
-        }
-        
+        const file = files[i];
         const fileExt = file.name.split('.').pop();
         const timestamp = Date.now();
         const fileName = `${subsectionId}/snags/${timestamp}-${i + 1}.${fileExt}`;
-        
+
         const { data, error } = await supabase.storage
           .from('inspection-photos')
           .upload(fileName, file);
-        
+
         if (error) throw error;
-        
+
         const { data: urlData } = supabase.storage
           .from('inspection-photos')
           .getPublicUrl(data.path);
-        
+
         uploadedUrls.push(urlData.publicUrl);
       }
-      
+
       if (editingSnag) {
         setEditingSnag(prev => ({ ...prev, photos: [...(prev?.photos || []), ...uploadedUrls] }));
       } else {
@@ -598,14 +574,14 @@ const InspectionDetail = () => {
       toast.success(`${uploadedUrls.length} photo(s) uploaded`);
     } catch (error: any) {
       console.error("Error uploading snag photos:", error);
-      
+
       // Check for JWT/authentication errors
-      if (error?.message?.includes('JWT') || 
-          error?.message?.includes('signature verification') ||
-          error?.statusCode === '408' ||
-          error?.error === 'InvalidJWT') {
+      if (error?.message?.includes('JWT') ||
+        error?.message?.includes('signature verification') ||
+        error?.statusCode === '408' ||
+        error?.error === 'InvalidJWT') {
         toast.error("Your session has expired. Please refresh the page and try again.");
-        
+
         // Try to refresh the session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (!session || sessionError) {
@@ -702,11 +678,11 @@ const InspectionDetail = () => {
 
       setInspection(mappedInspection);
       setTenants(jsonData?.tenants || []);
-      
+
       // Set site and subsection data
       if (inspData.sites) {
         let siteImageUrl = inspData.sites.site_image_url;
-        
+
         // Generate signed URL for site image if it exists (site-images bucket is private)
         if (siteImageUrl) {
           try {
@@ -716,7 +692,7 @@ const InspectionDetail = () => {
               const { data: signedData } = await supabase.storage
                 .from('site-images')
                 .createSignedUrl(path, 3600);
-              
+
               if (signedData?.signedUrl) {
                 siteImageUrl = signedData.signedUrl;
               }
@@ -725,16 +701,16 @@ const InspectionDetail = () => {
             console.error('Error generating signed URL for site image:', error);
           }
         }
-        
-        setSiteData({ 
+
+        setSiteData({
           clientName: inspData.sites.clients?.name || 'unknown-client',
-          siteName: inspData.sites.name, 
+          siteName: inspData.sites.name,
           physicalAddress: inspData.sites.address,
           siteImageUrl,
           clientLogoUrl: inspData.sites.client_logo_url
         });
       }
-      
+
       if (inspData.subsections) {
         setSubsectionData({ name: inspData.subsections.name });
         // Fetch snags for this subsection if not already provided in URL
@@ -747,13 +723,13 @@ const InspectionDetail = () => {
       if (templateData && templateData.sections) {
         // Convert template sections to ensure items are objects, not arrays
         const normalizedSections: any = {};
-        
+
         if (Array.isArray(templateData.sections)) {
           // Template has sections as an array
           templateData.sections.forEach((section: any) => {
             const sectionKey = section.id || section.name?.toLowerCase().replace(/\s+/g, '_');
             const items: any = {};
-            
+
             if (Array.isArray(section.items)) {
               // Convert items array to object with item.id as key
               section.items.forEach((item: any) => {
@@ -772,7 +748,7 @@ const InspectionDetail = () => {
                 };
               });
             }
-            
+
             normalizedSections[sectionKey] = {
               ...section,
               items
@@ -783,7 +759,7 @@ const InspectionDetail = () => {
           Object.keys(templateData.sections).forEach(sectionKey => {
             const section = templateData.sections[sectionKey];
             const items: any = {};
-            
+
             if (Array.isArray(section.items)) {
               // Convert items array to object
               section.items.forEach((item: any) => {
@@ -802,7 +778,7 @@ const InspectionDetail = () => {
                 };
               });
             }
-            
+
             normalizedSections[sectionKey] = {
               ...section,
               name: section.name || formatTabLabel(sectionKey), // Fallback to formatted key if name is missing
@@ -810,12 +786,12 @@ const InspectionDetail = () => {
             };
           });
         }
-        
+
         setTemplate({
           name: templateData.name,
           sections: normalizedSections
         });
-        
+
         // Set active tab - default to general for non-Site Drawing templates
         if (templateData.category === "Site Drawing") {
           const firstSection = Object.keys(templateData.sections as any)[0];
@@ -828,11 +804,11 @@ const InspectionDetail = () => {
         if (mappedInspection.jsonData && Object.keys(mappedInspection.jsonData).length > 0) {
           const sections: any = {};
           const imageCategories = ['General', 'DB', 'Earthing', 'LV', 'HV', 'Generator', 'Relay', 'Signage'];
-          
+
           Object.keys(mappedInspection.jsonData).forEach(sectionKey => {
             // Check if this is an image category (imagesGeneral, imagesDB, etc.)
             const isImageCategory = imageCategories.some(cat => sectionKey === `images${cat}`);
-            
+
             if (isImageCategory) {
               // Create a special section for image categories
               const categoryName = sectionKey.replace('images', '');
@@ -841,8 +817,8 @@ const InspectionDetail = () => {
                 items: {},
                 isImageGallery: true
               };
-            } else if (typeof mappedInspection.jsonData![sectionKey] === 'object' && 
-                       !Array.isArray(mappedInspection.jsonData![sectionKey])) {
+            } else if (typeof mappedInspection.jsonData![sectionKey] === 'object' &&
+              !Array.isArray(mappedInspection.jsonData![sectionKey])) {
               // Regular section with items
               sections[sectionKey] = {
                 name: sectionKey,
@@ -859,7 +835,7 @@ const InspectionDetail = () => {
               }
             }
           });
-          
+
           setTemplate({
             name: 'Inspection Template',
             sections
@@ -874,48 +850,48 @@ const InspectionDetail = () => {
 
       // Generate QR code with logo
       const url = `${window.location.origin.replace(/\/$/, '')}/public/subsections/${inspData.subsection_id || subsectionId}`;
-      
+
       const canvas = document.createElement('canvas');
       const size = 200;
       canvas.width = size;
       canvas.height = size;
-      
+
       await QRCode.toCanvas(canvas, url, {
         width: size,
         margin: 2,
         errorCorrectionLevel: 'H'
       });
-      
+
       if (companyLogo) {
         const ctx = canvas.getContext('2d');
         if (ctx) {
           const img = new Image();
           img.crossOrigin = 'anonymous';
-          
+
           img.onload = () => {
             const logoWidth = size * 0.24 * 1.5; // Rectangular, wider than tall
             const logoHeight = size * 0.24;
             const x = (size - logoWidth) / 2;
             const y = (size - logoHeight) / 2;
             const padding = logoHeight * 0.1; // 10% of logo height
-            
+
             // Draw white rectangular background for logo
             ctx.fillStyle = 'white';
             ctx.fillRect(
-              x - padding, 
-              y - padding, 
-              logoWidth + (padding * 2), 
+              x - padding,
+              y - padding,
+              logoWidth + (padding * 2),
               logoHeight + (padding * 2)
             );
-            
+
             ctx.drawImage(img, x, y, logoWidth, logoHeight);
             setQrCodeUrl(canvas.toDataURL());
           };
-          
+
           img.onerror = () => {
             setQrCodeUrl(canvas.toDataURL());
           };
-          
+
           img.src = companyLogo;
         } else {
           setQrCodeUrl(canvas.toDataURL());
@@ -938,7 +914,7 @@ const InspectionDetail = () => {
   const handleItemChange = (sectionKey: string, itemKey: string, field: 'status' | 'notes', value: string) => {
     setInspection(prev => {
       if (!prev) return null;
-      
+
       const jsonData = prev.jsonData || {};
       const sectionData = jsonData[sectionKey] || {};
       const itemData = sectionData[itemKey] || {};
@@ -971,43 +947,12 @@ const InspectionDetail = () => {
       let processedFiles = 0;
 
       for (let i = 0; i < files.length; i++) {
-        let file = files[i];
-        
+        const file = files[i];
+
         console.log(`Processing file ${i + 1}/${totalFiles}:`, file.name, 'Type:', file.type, 'Size:', file.size);
-        
-        // Convert HEIC/HEIF images to JPEG for cross-browser compatibility
-        // Check both MIME type and file extension since iOS doesn't always set MIME type correctly
-        const inputFileName = file.name.toLowerCase();
-        const isHEIC = file.type === 'image/heic' || 
-                       file.type === 'image/heif' || 
-                       file.type === '' && (inputFileName.endsWith('.heic') || inputFileName.endsWith('.heif')) ||
-                       inputFileName.endsWith('.heic') || 
-                       inputFileName.endsWith('.heif');
-        
-        if (isHEIC) {
-          console.log('HEIC/HEIF file detected, converting...');
-          try {
-            toast.info(`Converting ${file.name} to JPEG...`);
-            const heic2any = (await import('heic2any')).default;
-            const convertedBlob = await heic2any({
-              blob: file,
-              toType: 'image/jpeg',
-              quality: 0.9
-            });
-            
-            // heic2any can return Blob or Blob[], handle both cases
-            const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
-            file = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
-            console.log('HEIC conversion successful, new file:', file.name, file.type, 'Size:', file.size);
-          } catch (conversionError) {
-            console.error("Error converting HEIC image:", conversionError);
-            toast.error(`Failed to convert ${file.name}. Please use JPG or PNG.`);
-            continue;
-          }
-        }
-        
+
         const fileExt = file.name.split('.').pop();
-        
+
         // Generate descriptive file name with client/site/subsection info
         const fileName = generateInspectionImagePath({
           clientName: siteData?.clientName || 'unknown-client',
@@ -1076,14 +1021,14 @@ const InspectionDetail = () => {
       console.log(`Upload complete: ${uploadedUrls.length}/${totalFiles} images uploaded`);
     } catch (error: any) {
       console.error("Error uploading images:", error);
-      
+
       // Check for JWT/authentication errors
-      if (error?.message?.includes('JWT') || 
-          error?.message?.includes('signature verification') ||
-          error?.statusCode === '408' ||
-          error?.error === 'InvalidJWT') {
+      if (error?.message?.includes('JWT') ||
+        error?.message?.includes('signature verification') ||
+        error?.statusCode === '408' ||
+        error?.error === 'InvalidJWT') {
         toast.error("Your session has expired. Please refresh the page and try again.");
-        
+
         // Try to refresh the session
         const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         if (!session || sessionError) {
@@ -1104,39 +1049,29 @@ const InspectionDetail = () => {
     }
   };
 
-  // Handler for camera button that uses native camera on mobile
+  // Handler for camera button that uses native camera on mobile/web
   const handleCameraCapture = async (sectionKey: string, itemKey: string) => {
     const uploadKey = `${sectionKey}-${itemKey}`;
-    
-    if (!isNative) {
-      // On mobile web browsers, we need to set capture attribute dynamically
-      const input = fileInputRefs.current[uploadKey];
-      if (input) {
-        // Allow multiple images on all platforms
-        input.setAttribute('multiple', '');
-        // Don't force camera mode - let browser/device handle it naturally
-        input.removeAttribute('capture');
-      }
-      
-      input?.click();
-      return;
-    }
-
     setUploadingImages(prev => new Set(prev).add(uploadKey));
 
     try {
-      // Allow user to choose between camera and gallery
-      const files = await selectImages();
-      
+      // Use the enhanced hook which handles web/native and HEIC conversion
+      const files = await selectImages({ preferCamera: true, multiple: true });
+
       if (files.length === 0) {
-        toast.info("No images selected");
+        // User cancelled or no images selected
+        setUploadingImages(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(uploadKey);
+          return newSet;
+        });
         return;
       }
 
       // Create a FileList-like object
       const dataTransfer = new DataTransfer();
       files.forEach(file => dataTransfer.items.add(file));
-      
+
       // Use the existing upload logic
       await handleImageUpload(sectionKey, itemKey, dataTransfer.files);
     } catch (error) {
@@ -1153,31 +1088,24 @@ const InspectionDetail = () => {
   // Handler for tenant image camera capture
   const handleTenantCameraCapture = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage' | 'meterImage') => {
     const uploadKey = `${tenantId}-${field}`;
-    const input = tenantImageInputRefs.current[uploadKey];
-    
-    if (!isNative) {
-      if (input) {
-        // Don't force camera mode - let browser/device handle it naturally
-        input.removeAttribute('capture');
-      }
-      
-      input?.click();
-      return;
-    }
-
     setUploadingTenantImages(prev => new Set(prev).add(uploadKey));
 
     try {
-      const files = await selectImages();
-      
-      if (files.length === 0) {
-        toast.info("No images selected");
+      // Use the hook for unified experience
+      const file = await takePicture({ preferCamera: true });
+
+      if (!file) {
+        setUploadingTenantImages(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(uploadKey);
+          return newSet;
+        });
         return;
       }
 
       const dataTransfer = new DataTransfer();
-      dataTransfer.items.add(files[0]); // Only take first image for tenant
-      
+      dataTransfer.items.add(file);
+
       await handleTenantImageUpload(tenantId, field, dataTransfer.files);
     } catch (error) {
       console.error("Error capturing tenant image:", error);
@@ -1192,33 +1120,20 @@ const InspectionDetail = () => {
 
   // Handler for snag photo camera capture
   const handleSnagCameraCapture = async () => {
-    const input = document.getElementById('snag-photo-upload') as HTMLInputElement;
-    
-    if (!isNative) {
-      if (input) {
-        // Allow multiple images
-        input.setAttribute('multiple', '');
-        // Don't force camera mode - let browser/device handle it naturally
-        input.removeAttribute('capture');
-      }
-      
-      input?.click();
-      return;
-    }
-
     setUploadingSnagPhotos(true);
 
     try {
-      const files = await selectImages();
-      
+      // Capture multiple photos if needed
+      const files = await selectImages({ preferCamera: true, multiple: true });
+
       if (files.length === 0) {
-        toast.info("No images selected");
+        setUploadingSnagPhotos(false);
         return;
       }
 
       const dataTransfer = new DataTransfer();
       files.forEach(file => dataTransfer.items.add(file));
-      
+
       await handleSnagPhotoUpload(dataTransfer.files);
     } catch (error) {
       console.error("Error capturing snag photos:", error);
@@ -1290,7 +1205,7 @@ const InspectionDetail = () => {
         // Update inspection with new URLs
         setInspection(prev => prev ? { ...prev, jsonData: result.updatedJsonData } : null);
         toast.success(`Optimized ${result.renamedCount} image name(s)`);
-        
+
         if (result.failedCount > 0) {
           toast.warning(`${result.failedCount} image(s) could not be renamed`);
         }
@@ -1500,7 +1415,7 @@ const InspectionDetail = () => {
   const renderImageGallery = (sectionKey: string) => {
     const imagesData = inspection?.jsonData?.[sectionKey] || {};
     const images: Array<{ url: string; name: string; id: string }> = [];
-    
+
     // Extract images from object structure
     if (typeof imagesData === 'object' && !Array.isArray(imagesData)) {
       Object.entries(imagesData).forEach(([imgId, imgData]: [string, any]) => {
@@ -1559,10 +1474,10 @@ const InspectionDetail = () => {
 
   const renderInspectionItem = (sectionKey: string, itemKey: string, item: any) => {
     const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
-    
+
     // Get photos array
     const photos: string[] = itemData.photos || [];
-    
+
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
 
@@ -1572,7 +1487,7 @@ const InspectionDetail = () => {
     return (
       <div key={itemKey} className="border-b pb-6 mb-6 last:border-b-0">
         <h4 className="font-medium mb-4">{displayName}</h4>
-        
+
         <div className="grid md:grid-cols-2 gap-6">
           <div className="space-y-4">
             <div>
@@ -1609,7 +1524,7 @@ const InspectionDetail = () => {
               {photos.length > 0 && (
                 <div className="grid grid-cols-2 gap-2">
                   {photos.map((photo: string, index: number) => (
-                    <div 
+                    <div
                       key={index}
                       className="relative group cursor-pointer"
                       onClick={() => setViewingImage(photo)}
@@ -1634,7 +1549,7 @@ const InspectionDetail = () => {
                   ))}
                 </div>
               )}
-              
+
               <input
                 ref={(el) => (fileInputRefs.current[uploadKey] = el)}
                 type="file"
@@ -1644,7 +1559,7 @@ const InspectionDetail = () => {
                 className="hidden"
                 onChange={(e) => handleImageUpload(sectionKey, itemKey, e.target.files)}
               />
-              
+
               <Button
                 type="button"
                 variant="outline"
@@ -1684,8 +1599,8 @@ const InspectionDetail = () => {
       <div className="flex items-center justify-center h-full">
         <div className="text-center">
           <p className="text-muted-foreground">Inspection not found</p>
-          <Button 
-            className="mt-4" 
+          <Button
+            className="mt-4"
             onClick={() => {
               if (isContractorPortal) {
                 navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
@@ -1704,36 +1619,36 @@ const InspectionDetail = () => {
   return (
     <div className="space-y-6">
       {/* Breadcrumbs */}
-      <Breadcrumbs 
+      <Breadcrumbs
         items={[
-          { 
-            label: "Sites", 
-            href: isContractorPortal 
-              ? `/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}` 
-              : clientId 
-                ? `/clients/${clientId}/sites` 
+          {
+            label: "Sites",
+            href: isContractorPortal
+              ? `/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`
+              : clientId
+                ? `/clients/${clientId}/sites`
                 : "/sites"
           },
-          { 
-            label: siteData?.siteName || 'Site', 
+          {
+            label: siteData?.siteName || 'Site',
             href: isContractorPortal
               ? `/contractor/sites/${siteId}${previewSiteId ? `?preview=${previewSiteId}` : ''}`
-              : clientId 
-                ? `/clients/${clientId}/sites/${siteId}` 
+              : clientId
+                ? `/clients/${clientId}/sites/${siteId}`
                 : `/sites/${siteId}`
           },
-          { 
-            label: subsectionData?.name || 'Subsection', 
+          {
+            label: subsectionData?.name || 'Subsection',
             href: isContractorPortal
               ? `/contractor/sites/${siteId}/subsections/${subsectionId}${previewSiteId ? `?preview=${previewSiteId}` : ''}`
-              : clientId 
-                ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}` 
+              : clientId
+                ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`
                 : `/sites/${siteId}/subsections/${subsectionId}`
           },
           { label: template?.name || 'Inspection' }
         ]}
       />
-      
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -1768,8 +1683,8 @@ const InspectionDetail = () => {
               snags={snags}
             />
           )}
-          <Button 
-            variant="outline" 
+          <Button
+            variant="outline"
             onClick={() => navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`)}
           >
             <X className="mr-2 h-4 w-4" />
@@ -1793,7 +1708,7 @@ const InspectionDetail = () => {
               const lowerKey = key.toLowerCase();
               const lowerName = section.name?.toLowerCase() || '';
               return !lowerKey.includes('general') && !lowerName.includes('general') &&
-                     !lowerKey.includes('observation') && !lowerName.includes('observation');
+                !lowerKey.includes('observation') && !lowerName.includes('observation');
             })
             .map(([key, section]) => (
               <TabsTrigger key={key} value={key}>
@@ -1829,53 +1744,53 @@ const InspectionDetail = () => {
                 const lowerKey = key.toLowerCase();
                 const lowerName = section.name?.toLowerCase() || '';
                 return !lowerKey.includes('general') && !lowerName.includes('general') &&
-                       !lowerKey.includes('observation') && !lowerName.includes('observation');
+                  !lowerKey.includes('observation') && !lowerName.includes('observation');
               })
               .map(([sectionKey, section]) => (
-              <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
-                {section.isImageGallery ? (
-                  renderImageGallery(sectionKey)
-                ) : (
-                  <Card>
-                    <CardHeader>
-                      <CardTitle>{section.name}</CardTitle>
-                      {templateCategory === "Progress" && (
-                        <p className="text-sm text-muted-foreground">
-                          Add custom fields and images for this progress report section
-                        </p>
-                      )}
-                    </CardHeader>
-                    <CardContent className="space-y-4">
-                      {Object.entries(section.items || {}).map(([itemKey, item]) =>
-                        renderInspectionItem(sectionKey, itemKey, item)
-                      )}
-                      
-                      {templateCategory === "Progress" && (
-                        <div className="mt-6 pt-6 border-t">
-                          <DynamicFieldManager
-                            inspectionId={inspectionId!}
-                            sectionKey={sectionKey}
-                            initialFields={(inspection?.jsonData?.[`${sectionKey}_customFields`] as any) || []}
-                            onFieldsChange={(fields) => {
-                              setInspection(prev => {
-                                if (!prev) return null;
-                                return {
-                                  ...prev,
-                                  jsonData: {
-                                    ...prev.jsonData,
-                                    [`${sectionKey}_customFields`]: fields as any
-                                  }
-                                };
-                              });
-                            }}
-                          />
-                        </div>
-                      )}
-                    </CardContent>
-                  </Card>
-                )}
-              </TabsContent>
-            ))}
+                <TabsContent key={sectionKey} value={sectionKey} className="space-y-4">
+                  {section.isImageGallery ? (
+                    renderImageGallery(sectionKey)
+                  ) : (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>{section.name}</CardTitle>
+                        {templateCategory === "Progress" && (
+                          <p className="text-sm text-muted-foreground">
+                            Add custom fields and images for this progress report section
+                          </p>
+                        )}
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {Object.entries(section.items || {}).map(([itemKey, item]) =>
+                          renderInspectionItem(sectionKey, itemKey, item)
+                        )}
+
+                        {templateCategory === "Progress" && (
+                          <div className="mt-6 pt-6 border-t">
+                            <DynamicFieldManager
+                              inspectionId={inspectionId!}
+                              sectionKey={sectionKey}
+                              initialFields={(inspection?.jsonData?.[`${sectionKey}_customFields`] as any) || []}
+                              onFieldsChange={(fields) => {
+                                setInspection(prev => {
+                                  if (!prev) return null;
+                                  return {
+                                    ...prev,
+                                    jsonData: {
+                                      ...prev.jsonData,
+                                      [`${sectionKey}_customFields`]: fields as any
+                                    }
+                                  };
+                                });
+                              }}
+                            />
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              ))}
 
             <TabsContent value="tenants" className="space-y-4">
               <Card>
@@ -1922,7 +1837,7 @@ const InspectionDetail = () => {
                                 <Trash2 className="h-4 w-4 text-destructive" />
                               </Button>
                             </div>
-                            
+
                             <div className="grid md:grid-cols-2 gap-4">
                               <div className="space-y-2">
                                 <Label htmlFor={`shop-number-${tenant.id}`}>Shop Number *</Label>
@@ -2206,9 +2121,9 @@ const InspectionDetail = () => {
                                   {snag.risk_level && (
                                     <Badge variant={
                                       snag.risk_level === 'Critical' ? 'destructive' :
-                                      snag.risk_level === 'High' ? 'destructive' :
-                                      snag.risk_level === 'Medium' ? 'default' : 
-                                      'secondary'
+                                        snag.risk_level === 'High' ? 'destructive' :
+                                          snag.risk_level === 'Medium' ? 'default' :
+                                            'secondary'
                                     }>
                                       {snag.risk_level} Risk
                                     </Badge>
@@ -2259,7 +2174,7 @@ const InspectionDetail = () => {
                             {snag.photos && Array.isArray(snag.photos) && snag.photos.length > 0 && (
                               <div className="grid grid-cols-4 gap-2 mt-3">
                                 {snag.photos.map((photo: string, index: number) => (
-                                  <div 
+                                  <div
                                     key={index}
                                     className="cursor-pointer hover:opacity-90 transition-opacity"
                                     onClick={() => setViewingImage(photo)}
@@ -2456,7 +2371,7 @@ const InspectionDetail = () => {
                 <Input
                   id="snag-title"
                   value={editingSnag ? editingSnag.title : newSnag.title}
-                  onChange={(e) => editingSnag 
+                  onChange={(e) => editingSnag
                     ? setEditingSnag({ ...editingSnag, title: e.target.value })
                     : setNewSnag({ ...newSnag, title: e.target.value })
                   }
@@ -2490,12 +2405,12 @@ const InspectionDetail = () => {
                   rows={3}
                 />
               </div>
-              
+
               <div className="grid md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label htmlFor="snag-risk">Risk Level</Label>
-                  <Select 
-                    value={editingSnag ? (editingSnag.risk_level || '') : newSnag.risk_level} 
+                  <Select
+                    value={editingSnag ? (editingSnag.risk_level || '') : newSnag.risk_level}
                     onValueChange={(value) => editingSnag
                       ? setEditingSnag({ ...editingSnag, risk_level: value })
                       : setNewSnag({ ...newSnag, risk_level: value })
@@ -2512,7 +2427,7 @@ const InspectionDetail = () => {
                     </SelectContent>
                   </Select>
                 </div>
-                
+
                 <div className="space-y-2">
                   <Label htmlFor="snag-cost">Estimated Cost (ZAR)</Label>
                   <Input
@@ -2529,14 +2444,14 @@ const InspectionDetail = () => {
                   />
                 </div>
               </div>
-              
+
               <div className="space-y-2">
                 <Label>Photos</Label>
                 {(editingSnag ? editingSnag.photos : newSnag.photos).length > 0 && (
                   <div className="grid grid-cols-4 gap-2 mb-2">
                     {(editingSnag ? editingSnag.photos : newSnag.photos).map((photo: string, index: number) => (
-                      <div 
-                        key={index} 
+                      <div
+                        key={index}
                         className="relative group cursor-pointer hover:opacity-90 transition-opacity"
                         onClick={() => setViewingImage(photo)}
                       >
@@ -2605,9 +2520,9 @@ const InspectionDetail = () => {
       </Dialog>
 
       {/* Full Screen Image Viewer */}
-      <FullscreenImageViewer 
-        src={viewingImage} 
-        onClose={() => setViewingImage(null)} 
+      <FullscreenImageViewer
+        src={viewingImage}
+        onClose={() => setViewingImage(null)}
       />
     </div>
   );
