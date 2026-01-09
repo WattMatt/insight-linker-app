@@ -47,50 +47,44 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
     siteId,
     onImageChange
 }) => {
-    const [deleteImageType, setDeleteImageType] = useState<'site_image' | 'client_logo' | null>(null);
-    const [uploadingImage, setUploadingImage] = useState<'site_image' | 'client_logo' | null>(null);
-    const [imagePreview, setImagePreview] = useState<{ site_image?: string; client_logo?: string }>({});
+    const [deleteImageConfirm, setDeleteImageConfirm] = useState(false);
+    const [uploadingImage, setUploadingImage] = useState(false);
+    const [imagePreview, setImagePreview] = useState<string | null>(null);
     const { takePicture } = useCamera();
 
-    const handleImageUpload = async (file: File, imageType: 'site_image' | 'client_logo') => {
+    const handleImageUpload = async (file: File) => {
         if (!siteId) return;
-        setUploadingImage(imageType);
+        setUploadingImage(true);
         try {
-            const path = `${siteId}/${imageType === 'site_image' ? 'site-image' : 'client-logo'}.${file.name.split('.').pop()}`;
+            const path = `${siteId}/site-image.${file.name.split('.').pop()}`;
             await supabase.storage.from('site-images').upload(path, file, { upsert: true });
             const { data } = supabase.storage.from('site-images').getPublicUrl(path);
             await supabase.from('sites').update({ 
-                [imageType === 'site_image' ? 'site_image_url' : 'client_logo_url']: `${data.publicUrl}?t=${Date.now()}` 
+                site_image_url: `${data.publicUrl}?t=${Date.now()}` 
             }).eq('id', siteId);
-            toast.success(`${imageType === 'site_image' ? 'Site image' : 'Client logo'} uploaded`);
+            toast.success("Site image uploaded");
             onImageChange?.();
         } catch (error) {
             console.error('Upload error:', error);
             toast.error('Failed to upload image');
         } finally {
-            setUploadingImage(null);
-            setImagePreview(prev => {
-                const newPreview = { ...prev };
-                delete newPreview[imageType];
-                return newPreview;
-            });
+            setUploadingImage(false);
+            setImagePreview(null);
         }
     };
 
-    const handleDeleteImage = async (imageType: 'site_image' | 'client_logo') => {
+    const handleDeleteImage = async () => {
         if (!siteId) return;
         try {
-            await supabase.from('sites').update({ 
-                [imageType === 'site_image' ? 'site_image_url' : 'client_logo_url']: null 
-            }).eq('id', siteId);
-            toast.success(`${imageType === 'site_image' ? 'Site image' : 'Client logo'} deleted`);
+            await supabase.from('sites').update({ site_image_url: null }).eq('id', siteId);
+            toast.success("Site image deleted");
             onImageChange?.();
         } catch (error) {
             toast.error('Failed to delete image');
         }
     };
 
-    const onCaptureImage = async (type: 'site_image' | 'client_logo') => {
+    const onCaptureImage = async () => {
         try {
             const file = await takePicture({ preferCamera: false });
             if (file) {
@@ -101,25 +95,18 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
                 });
                 reader.readAsDataURL(file);
                 const result = await previewPromise;
-                setImagePreview(prev => ({ ...prev, [type]: result }));
-                await handleImageUpload(file, type);
+                setImagePreview(result);
+                await handleImageUpload(file);
             }
         } catch (error) {
-            console.error(`${type} capture error:`, error);
-            setImagePreview(prev => {
-                const newPreview = { ...prev };
-                delete newPreview[type];
-                return newPreview;
-            });
+            console.error("Image capture error:", error);
+            setImagePreview(null);
         }
     };
 
-    const clearLegacyUrl = async (type: 'site_image' | 'client_logo') => {
+    const clearLegacyUrl = async () => {
         if (!siteId) return;
-        await supabase
-            .from('sites')
-            .update({ [type === 'site_image' ? 'site_image_url' : 'client_logo_url']: null })
-            .eq('id', siteId);
+        await supabase.from('sites').update({ site_image_url: null }).eq('id', siteId);
         toast.success("Legacy URL removed. Please upload a new image.");
         onImageChange?.();
     };
@@ -138,7 +125,7 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
                     <DialogHeader>
                         <DialogTitle>Edit Site</DialogTitle>
                         <DialogDescription>
-                            Update site information and images
+                            Update site information and image
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={onSubmit}>
@@ -221,146 +208,78 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
                                 </div>
                             </div>
 
-                            {/* Site Images Section */}
+                            {/* Site Image Section */}
                             {site && siteId && (
                                 <div className="space-y-4">
                                     <h3 className="font-semibold flex items-center gap-2">
                                         <Image className="h-4 w-4" />
-                                        Site Images
+                                        Site Image
                                     </h3>
+                                    <p className="text-sm text-muted-foreground">
+                                        Note: Client logo is managed at the client level and applies to all sites.
+                                    </p>
                                     
-                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                                        {/* Site Main Image */}
-                                        <div className="space-y-3">
-                                            <Label>Site Main Image</Label>
-                                            {imagePreview.site_image ? (
-                                                <div className="relative w-full aspect-video">
-                                                    <img
-                                                        src={imagePreview.site_image}
-                                                        alt="Preview"
-                                                        className="w-full h-full object-cover rounded border bg-muted"
-                                                    />
-                                                    <Badge variant="secondary" className="absolute top-2 left-2 text-xs">
-                                                        Uploading...
-                                                    </Badge>
-                                                </div>
-                                            ) : site.site_image_url ? (
-                                                <div className="relative group w-full aspect-video">
-                                                    {isLegacyUrl(site.site_image_url) ? (
-                                                        <div className="w-full h-full border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
-                                                            <AlertCircle className="h-6 w-6 text-amber-500 mb-2" />
-                                                            <p className="text-xs text-center mb-2">Legacy URL</p>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => clearLegacyUrl('site_image')}
-                                                            >
-                                                                Clear & Upload New
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <img
-                                                                src={site.site_image_url}
-                                                                alt="Site main image"
-                                                                className="w-full h-full object-cover rounded border bg-muted"
-                                                            />
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="destructive"
-                                                                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                onClick={() => setDeleteImageType('site_image')}
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="w-full aspect-video border-2 border-dashed rounded flex items-center justify-center text-muted-foreground text-sm">
-                                                    No image
-                                                </div>
-                                            )}
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="w-full"
-                                                onClick={() => onCaptureImage('site_image')}
-                                                disabled={uploadingImage === 'site_image'}
-                                            >
-                                                <Upload className="h-4 w-4 mr-2" />
-                                                {uploadingImage === 'site_image' ? 'Uploading...' : 'Upload Image'}
-                                            </Button>
-                                        </div>
-
-                                        {/* Client Logo */}
-                                        <div className="space-y-3">
-                                            <Label>Client Logo</Label>
-                                            {imagePreview.client_logo ? (
-                                                <div className="relative w-full aspect-video">
-                                                    <img
-                                                        src={imagePreview.client_logo}
-                                                        alt="Preview"
-                                                        className="w-full h-full object-contain rounded border p-2 bg-muted"
-                                                    />
-                                                    <Badge variant="secondary" className="absolute top-2 left-2 text-xs">
-                                                        Uploading...
-                                                    </Badge>
-                                                </div>
-                                            ) : site.client_logo_url ? (
-                                                <div className="relative group w-full aspect-video">
-                                                    {isLegacyUrl(site.client_logo_url) ? (
-                                                        <div className="w-full h-full border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
-                                                            <AlertCircle className="h-6 w-6 text-amber-500 mb-2" />
-                                                            <p className="text-xs text-center mb-2">Legacy URL</p>
-                                                            <Button
-                                                                type="button"
-                                                                size="sm"
-                                                                variant="outline"
-                                                                onClick={() => clearLegacyUrl('client_logo')}
-                                                            >
-                                                                Clear & Upload New
-                                                            </Button>
-                                                        </div>
-                                                    ) : (
-                                                        <>
-                                                            <img
-                                                                src={site.client_logo_url}
-                                                                alt="Client logo"
-                                                                className="w-full h-full object-contain rounded border p-2 bg-muted"
-                                                            />
-                                                            <Button
-                                                                type="button"
-                                                                size="icon"
-                                                                variant="destructive"
-                                                                className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                                                                onClick={() => setDeleteImageType('client_logo')}
-                                                            >
-                                                                <Trash2 className="h-3 w-3" />
-                                                            </Button>
-                                                        </>
-                                                    )}
-                                                </div>
-                                            ) : (
-                                                <div className="w-full aspect-video border-2 border-dashed rounded flex items-center justify-center text-muted-foreground text-sm">
-                                                    No logo
-                                                </div>
-                                            )}
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="w-full"
-                                                onClick={() => onCaptureImage('client_logo')}
-                                                disabled={uploadingImage === 'client_logo'}
-                                            >
-                                                <Upload className="h-4 w-4 mr-2" />
-                                                {uploadingImage === 'client_logo' ? 'Uploading...' : 'Upload Logo'}
-                                            </Button>
-                                        </div>
+                                    <div className="space-y-3">
+                                        {imagePreview ? (
+                                            <div className="relative w-full max-w-md aspect-video">
+                                                <img
+                                                    src={imagePreview}
+                                                    alt="Preview"
+                                                    className="w-full h-full object-cover rounded border bg-muted"
+                                                />
+                                                <Badge variant="secondary" className="absolute top-2 left-2 text-xs">
+                                                    Uploading...
+                                                </Badge>
+                                            </div>
+                                        ) : site.site_image_url ? (
+                                            <div className="relative group w-full max-w-md aspect-video">
+                                                {isLegacyUrl(site.site_image_url) ? (
+                                                    <div className="w-full h-full border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-4">
+                                                        <AlertCircle className="h-6 w-6 text-amber-500 mb-2" />
+                                                        <p className="text-xs text-center mb-2">Legacy URL</p>
+                                                        <Button
+                                                            type="button"
+                                                            size="sm"
+                                                            variant="outline"
+                                                            onClick={clearLegacyUrl}
+                                                        >
+                                                            Clear & Upload New
+                                                        </Button>
+                                                    </div>
+                                                ) : (
+                                                    <>
+                                                        <img
+                                                            src={site.site_image_url}
+                                                            alt="Site main image"
+                                                            className="w-full h-full object-cover rounded border bg-muted"
+                                                        />
+                                                        <Button
+                                                            type="button"
+                                                            size="icon"
+                                                            variant="destructive"
+                                                            className="absolute top-2 right-2 h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
+                                                            onClick={() => setDeleteImageConfirm(true)}
+                                                        >
+                                                            <Trash2 className="h-3 w-3" />
+                                                        </Button>
+                                                    </>
+                                                )}
+                                            </div>
+                                        ) : (
+                                            <div className="w-full max-w-md aspect-video border-2 border-dashed rounded flex items-center justify-center text-muted-foreground text-sm">
+                                                No image uploaded
+                                            </div>
+                                        )}
+                                        <Button
+                                            type="button"
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={onCaptureImage}
+                                            disabled={uploadingImage}
+                                        >
+                                            <Upload className="h-4 w-4 mr-2" />
+                                            {uploadingImage ? 'Uploading...' : 'Upload Site Image'}
+                                        </Button>
                                     </div>
                                 </div>
                             )}
@@ -378,22 +297,20 @@ export const SiteEditDialog: React.FC<SiteEditDialogProps> = ({
             </Dialog>
 
             {/* Delete Image Confirmation */}
-            <AlertDialog open={deleteImageType !== null} onOpenChange={() => setDeleteImageType(null)}>
+            <AlertDialog open={deleteImageConfirm} onOpenChange={setDeleteImageConfirm}>
                 <AlertDialogContent>
                     <AlertDialogHeader>
-                        <AlertDialogTitle>Delete Image</AlertDialogTitle>
+                        <AlertDialogTitle>Delete Site Image</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Are you sure you want to delete this {deleteImageType === 'site_image' ? 'site image' : 'client logo'}? This action cannot be undone.
+                            Are you sure you want to delete this site image? This action cannot be undone.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <AlertDialogFooter>
                         <AlertDialogCancel>Cancel</AlertDialogCancel>
                         <AlertDialogAction
                             onClick={() => {
-                                if (deleteImageType) {
-                                    handleDeleteImage(deleteImageType);
-                                    setDeleteImageType(null);
-                                }
+                                handleDeleteImage();
+                                setDeleteImageConfirm(false);
                             }}
                             className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
                         >

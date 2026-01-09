@@ -5,10 +5,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { MapPin, Building2, FileText, ClipboardCheck } from "lucide-react";
+import { MapPin, Building2, FileText, ClipboardCheck, Upload, Trash2, AlertCircle, Image, Pencil } from "lucide-react";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { toast } from "sonner";
 import { Breadcrumbs } from "@/components/Breadcrumb";
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
+import { useCamera } from "@/hooks/useCamera";
 
 // Data structures
 interface Client {
@@ -59,6 +61,10 @@ const ClientDetail = () => {
   const [client, setClient] = useState<Client | null>(null);
   const [sites, setSites] = useState<Site[]>([]);
   const [loading, setLoading] = useState(true);
+  const [uploadingLogo, setUploadingLogo] = useState(false);
+  const [logoPreview, setLogoPreview] = useState<string | null>(null);
+  const [deleteLogoConfirm, setDeleteLogoConfirm] = useState(false);
+  const { takePicture } = useCamera();
 
   useEffect(() => {
     if (clientId) {
@@ -98,6 +104,72 @@ const ClientDetail = () => {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleLogoUpload = async (file: File) => {
+    if (!clientId) return;
+    setUploadingLogo(true);
+    try {
+      const path = `${clientId}/logo.${file.name.split('.').pop()}`;
+      await supabase.storage.from('client-logos').upload(path, file, { upsert: true });
+      const { data } = supabase.storage.from('client-logos').getPublicUrl(path);
+      await supabase.from('clients').update({ 
+        logo_url: `${data.publicUrl}?t=${Date.now()}` 
+      }).eq('id', clientId);
+      toast.success("Client logo uploaded - this logo will appear on all sites");
+      fetchClientData();
+    } catch (error) {
+      console.error('Upload error:', error);
+      toast.error('Failed to upload logo');
+    } finally {
+      setUploadingLogo(false);
+      setLogoPreview(null);
+    }
+  };
+
+  const handleDeleteLogo = async () => {
+    if (!clientId) return;
+    try {
+      await supabase.from('clients').update({ logo_url: null }).eq('id', clientId);
+      toast.success("Client logo deleted");
+      fetchClientData();
+    } catch (error) {
+      toast.error('Failed to delete logo');
+    }
+  };
+
+  const onCaptureLogo = async () => {
+    try {
+      const file = await takePicture({ preferCamera: false });
+      if (file) {
+        const reader = new FileReader();
+        const previewPromise = new Promise<string>((resolve, reject) => {
+          reader.onload = (event) => resolve(event.target?.result as string);
+          reader.onerror = reject;
+        });
+        reader.readAsDataURL(file);
+        const result = await previewPromise;
+        setLogoPreview(result);
+        await handleLogoUpload(file);
+      }
+    } catch (error) {
+      console.error("Logo capture error:", error);
+      setLogoPreview(null);
+    }
+  };
+
+  const isLegacyUrl = (url: string | null | undefined) => {
+    if (!url) return false;
+    return url.includes('firebasestorage.googleapis.com') ||
+      url.includes('storage.googleapis.com') ||
+      !url.includes('supabase.co/storage');
+  };
+
+  const clearLegacyUrl = async () => {
+    if (!clientId) return;
+    await supabase.from('clients').update({ logo_url: null }).eq('id', clientId);
+    toast.success("Legacy URL removed. Please upload a new logo.");
+    fetchClientData();
   };
 
 
@@ -142,8 +214,19 @@ const ClientDetail = () => {
       
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
-            <Building2 className="h-6 w-6 text-primary" />
+          {/* Client Logo or Default Icon */}
+          <div className="relative group">
+            {client.logo_url && !isLegacyUrl(client.logo_url) ? (
+              <img 
+                src={client.logo_url} 
+                alt={`${client.name} logo`}
+                className="h-16 w-16 rounded-xl object-contain bg-muted border p-1"
+              />
+            ) : (
+              <div className="h-16 w-16 rounded-xl bg-primary/10 flex items-center justify-center">
+                <Building2 className="h-8 w-8 text-primary" />
+              </div>
+            )}
           </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
@@ -188,6 +271,76 @@ const ClientDetail = () => {
             {!client.contact_person && !client.email && !client.phone && (
               <p className="text-muted-foreground">No contact information available</p>
             )}
+          </CardContent>
+        </Card>
+
+        {/* Client Logo Card */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Image className="h-4 w-4" />
+              Client Logo
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-sm text-muted-foreground">
+              This logo will be used across all sites for this client.
+            </p>
+            
+            {logoPreview ? (
+              <div className="relative w-full aspect-video max-w-[200px]">
+                <img
+                  src={logoPreview}
+                  alt="Preview"
+                  className="w-full h-full object-contain rounded border p-2 bg-muted"
+                />
+                <Badge variant="secondary" className="absolute top-1 left-1 text-xs">
+                  Uploading...
+                </Badge>
+              </div>
+            ) : client.logo_url ? (
+              <div className="relative group w-full max-w-[200px] aspect-video">
+                {isLegacyUrl(client.logo_url) ? (
+                  <div className="w-full h-full border-2 border-dashed border-amber-500 rounded flex flex-col items-center justify-center text-muted-foreground p-3">
+                    <AlertCircle className="h-5 w-5 text-amber-500 mb-1" />
+                    <p className="text-xs text-center mb-2">Legacy URL</p>
+                    <Button type="button" size="sm" variant="outline" onClick={clearLegacyUrl}>
+                      Clear & Upload New
+                    </Button>
+                  </div>
+                ) : (
+                  <>
+                    <img
+                      src={client.logo_url}
+                      alt="Client logo"
+                      className="w-full h-full object-contain rounded border p-2 bg-muted"
+                    />
+                    <Button
+                      size="icon"
+                      variant="destructive"
+                      className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => setDeleteLogoConfirm(true)}
+                    >
+                      <Trash2 className="h-3 w-3" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            ) : (
+              <div className="w-full max-w-[200px] aspect-video border-2 border-dashed rounded flex items-center justify-center text-muted-foreground text-sm">
+                No logo uploaded
+              </div>
+            )}
+            
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onCaptureLogo}
+              disabled={uploadingLogo}
+            >
+              <Upload className="h-4 w-4 mr-2" />
+              {uploadingLogo ? 'Uploading...' : 'Upload Logo'}
+            </Button>
           </CardContent>
         </Card>
 
@@ -347,6 +500,30 @@ const ClientDetail = () => {
           )}
         </CardContent>
       </Card>
+
+      {/* Delete Logo Confirmation */}
+      <AlertDialog open={deleteLogoConfirm} onOpenChange={setDeleteLogoConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Client Logo</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to delete this client logo? This will remove the logo from all sites under this client.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                handleDeleteLogo();
+                setDeleteLogoConfirm(false);
+              }}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
