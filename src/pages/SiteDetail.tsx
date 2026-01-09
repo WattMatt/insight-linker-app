@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-import { FileText, QrCode, Layers, MapPin, Building, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus } from "lucide-react";
+import { FileText, QrCode, Layers, MapPin, Building, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
@@ -24,6 +24,7 @@ import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
+import { AssetVerification } from "@/components/site/AssetVerification";
 
 interface SiteDocument {
   category: string;
@@ -576,10 +577,14 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-7">
+        <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Dashboard</span>
+          </TabsTrigger>
+          <TabsTrigger value="asset-verification" className="gap-2">
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Asset Verification</span>
           </TabsTrigger>
           <TabsTrigger value="compliance" className="gap-2">
             <Shield className="h-4 w-4 shrink-0" />
@@ -610,6 +615,10 @@ const SiteDetail = () => {
         <TabsContent value="overview" className="space-y-6 mt-6">
           <SiteOverview site={site} stats={stats} onTabChange={setActiveTab} />
           <SiteLevelInspections inspections={inspections} siteId={siteId!} clientId={clientId} onCreateClick={() => setIsCreateInspectionOpen(true)} />
+        </TabsContent>
+
+        <TabsContent value="asset-verification" className="space-y-6 mt-6">
+          <AssetVerification siteId={siteId!} siteName={site.name} />
         </TabsContent>
 
         <TabsContent value="compliance">
