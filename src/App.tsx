@@ -133,6 +133,26 @@ const App = () => (
             }
           />
           <Route
+            path="/clients/:clientId/sites/:siteId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SiteDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/clients/:clientId/sites/:siteId/subsections/:subsectionId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <SubsectionDetail />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
             path="/clients/:clientId/sites"
             element={
               <ProtectedRoute>
