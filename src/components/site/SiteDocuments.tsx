@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { FileText, Trash2, Download, Eye, Upload, Plus, Search, Filter, Building, Layers, FolderTree, List } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
@@ -61,7 +61,7 @@ export function SiteDocuments({
     onBulkDeleteDocumentsInCategory
 }: SiteDocumentsProps) {
     const [searchQuery, setSearchQuery] = useState("");
-    const [activeDocTab, setActiveDocTab] = useState("all");
+    const [sourceFilter, setSourceFilter] = useState<"all" | "site" | "subsections">("all");
     const [selectedSubsection, setSelectedSubsection] = useState<string>("all");
     const [subsectionGrouping, setSubsectionGrouping] = useState<"category" | "subsection">("category");
 
@@ -131,6 +131,10 @@ export function SiteDocuments({
 
     const totalDocCount = documents.length + subsectionDocuments.length;
 
+    // Determine what to show based on filter
+    const showSiteDocs = sourceFilter === "all" || sourceFilter === "site";
+    const showSubsectionDocs = sourceFilter === "all" || sourceFilter === "subsections";
+
     return (
         <div className="space-y-6">
             {/* Header with search and filters */}
@@ -187,109 +191,45 @@ export function SiteDocuments({
                         </Select>
                     )}
                 </div>
-            </div>
 
-            {/* Document Source Tabs */}
-            <Tabs value={activeDocTab} onValueChange={setActiveDocTab}>
-                <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="all" className="gap-2">
-                        <FileText className="h-4 w-4" />
-                        <span className="hidden sm:inline">All</span>
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                            {totalDocCount}
-                        </Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="site" className="gap-2">
-                        <Building className="h-4 w-4" />
-                        <span className="hidden sm:inline">Site</span>
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                            {documents.length}
-                        </Badge>
-                    </TabsTrigger>
-                    <TabsTrigger value="subsections" className="gap-2">
-                        <Layers className="h-4 w-4" />
-                        <span className="hidden sm:inline">Subsections</span>
-                        <Badge variant="secondary" className="ml-1 h-5 px-1.5 text-xs">
-                            {subsectionDocuments.length}
-                        </Badge>
-                    </TabsTrigger>
-                </TabsList>
+                {/* Filter and Grouping Controls */}
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 p-3 bg-muted/30 rounded-lg">
+                    {/* Source Filter Toggle */}
+                    <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium">Show:</span>
+                        <ToggleGroup 
+                            type="single" 
+                            value={sourceFilter} 
+                            onValueChange={(value) => value && setSourceFilter(value as "all" | "site" | "subsections")}
+                            className="bg-background rounded-lg p-1 border"
+                        >
+                            <ToggleGroupItem value="all" aria-label="Show all" className="gap-1.5 text-xs px-3">
+                                <FileText className="h-3.5 w-3.5" />
+                                All
+                                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{totalDocCount}</Badge>
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="site" aria-label="Show site only" className="gap-1.5 text-xs px-3">
+                                <Building className="h-3.5 w-3.5" />
+                                Site
+                                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{documents.length}</Badge>
+                            </ToggleGroupItem>
+                            <ToggleGroupItem value="subsections" aria-label="Show subsections only" className="gap-1.5 text-xs px-3">
+                                <Layers className="h-3.5 w-3.5" />
+                                Subsections
+                                <Badge variant="secondary" className="ml-1 h-4 px-1 text-[10px]">{subsectionDocuments.length}</Badge>
+                            </ToggleGroupItem>
+                        </ToggleGroup>
+                    </div>
 
-                {/* All Documents Tab */}
-                <TabsContent value="all" className="mt-4 space-y-6">
-                    {/* Site Documents Section */}
-                    {filteredSiteDocs.length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <Building className="h-4 w-4 text-primary" />
-                                <h4 className="font-medium">Site Documents</h4>
-                                <Badge variant="outline">{filteredSiteDocs.length}</Badge>
-                            </div>
-                            <SiteDocumentsList 
-                                documents={filteredSiteDocs}
-                                categories={categories}
-                                onPreview={onPreview}
-                                onDownload={onDownload}
-                                onDeleteDocument={onDeleteDocument}
-                                onUploadClick={onUploadClick}
-                                onDeleteCategory={onDeleteCategory}
-                                onBulkDeleteDocumentsInCategory={onBulkDeleteDocumentsInCategory}
-                            />
-                        </div>
-                    )}
-
-                    {/* Subsection Documents Section */}
-                    {Object.keys(groupedBySubsection).length > 0 && (
-                        <div>
-                            <div className="flex items-center gap-2 mb-3">
-                                <Layers className="h-4 w-4 text-primary" />
-                                <h4 className="font-medium">Subsection Documents</h4>
-                                <Badge variant="outline">{filteredSubsectionDocs.length}</Badge>
-                            </div>
-                            <SubsectionDocumentsList 
-                                groupedDocs={groupedBySubsection}
-                                onPreview={onPreview}
-                                onDownload={onDownload}
-                            />
-                        </div>
-                    )}
-
-                    {filteredSiteDocs.length === 0 && Object.keys(groupedBySubsection).length === 0 && (
-                        <EmptyDocumentsState searchQuery={searchQuery} />
-                    )}
-                </TabsContent>
-
-                {/* Site Documents Tab */}
-                <TabsContent value="site" className="mt-4">
-                    <SiteDocumentsList 
-                        documents={filteredSiteDocs}
-                        categories={categories}
-                        onPreview={onPreview}
-                        onDownload={onDownload}
-                        onDeleteDocument={onDeleteDocument}
-                        onUploadClick={onUploadClick}
-                        onDeleteCategory={onDeleteCategory}
-                        onBulkDeleteDocumentsInCategory={onBulkDeleteDocumentsInCategory}
-                    />
-                    {filteredSiteDocs.length === 0 && categories.length === 0 && (
-                        <EmptyDocumentsState searchQuery={searchQuery} />
-                    )}
-                </TabsContent>
-
-                {/* Subsection Documents Tab */}
-                <TabsContent value="subsections" className="mt-4 space-y-4">
-                    {/* Grouping Toggle */}
-                    <div className="flex items-center justify-between">
-                        <p className="text-sm text-muted-foreground">
-                            {filteredSubsectionDocs.length} documents
-                        </p>
+                    {/* Grouping Toggle (only relevant when showing subsections) */}
+                    {showSubsectionDocs && (
                         <div className="flex items-center gap-2">
                             <span className="text-sm text-muted-foreground">Group by:</span>
                             <ToggleGroup 
                                 type="single" 
                                 value={subsectionGrouping} 
                                 onValueChange={(value) => value && setSubsectionGrouping(value as "category" | "subsection")}
-                                className="bg-muted rounded-lg p-1"
+                                className="bg-background rounded-lg p-1 border"
                             >
                                 <ToggleGroupItem value="category" aria-label="Group by category" className="gap-1.5 text-xs px-3">
                                     <FolderTree className="h-3.5 w-3.5" />
@@ -301,34 +241,77 @@ export function SiteDocuments({
                                 </ToggleGroupItem>
                             </ToggleGroup>
                         </div>
-                    </div>
-
-                    {/* Document List based on grouping */}
-                    {subsectionGrouping === "category" ? (
-                        Object.keys(groupedByCategory).length > 0 ? (
-                            <SubsectionDocumentsList 
-                                groupedDocs={groupedByCategory}
-                                onPreview={onPreview}
-                                onDownload={onDownload}
-                                groupLabel="category"
-                            />
-                        ) : (
-                            <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
-                        )
-                    ) : (
-                        Object.keys(groupedBySubsection).length > 0 ? (
-                            <SubsectionDocumentsList 
-                                groupedDocs={groupedBySubsection}
-                                onPreview={onPreview}
-                                onDownload={onDownload}
-                                groupLabel="subsection"
-                            />
-                        ) : (
-                            <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
-                        )
                     )}
-                </TabsContent>
-            </Tabs>
+                </div>
+            </div>
+
+            {/* Combined Document View */}
+            <div className="space-y-6">
+                {/* Site Documents Section */}
+                {showSiteDocs && (categories.length > 0 || filteredSiteDocs.length > 0) && (
+                    <div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <Building className="h-4 w-4 text-primary" />
+                            <h4 className="font-medium">Site Documents</h4>
+                            <Badge variant="outline">{filteredSiteDocs.length}</Badge>
+                        </div>
+                        <SiteDocumentsList 
+                            documents={filteredSiteDocs}
+                            categories={categories}
+                            onPreview={onPreview}
+                            onDownload={onDownload}
+                            onDeleteDocument={onDeleteDocument}
+                            onUploadClick={onUploadClick}
+                            onDeleteCategory={onDeleteCategory}
+                            onBulkDeleteDocumentsInCategory={onBulkDeleteDocumentsInCategory}
+                        />
+                    </div>
+                )}
+
+                {/* Subsection Documents Section */}
+                {showSubsectionDocs && (
+                    <div>
+                        <div className="flex items-center gap-2 mb-3">
+                            <Layers className="h-4 w-4 text-primary" />
+                            <h4 className="font-medium">Subsection Documents</h4>
+                            <Badge variant="outline">{filteredSubsectionDocs.length}</Badge>
+                        </div>
+                        
+                        {subsectionGrouping === "category" ? (
+                            Object.keys(groupedByCategory).length > 0 ? (
+                                <SubsectionDocumentsList 
+                                    groupedDocs={groupedByCategory}
+                                    onPreview={onPreview}
+                                    onDownload={onDownload}
+                                    groupLabel="category"
+                                />
+                            ) : (
+                                <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
+                            )
+                        ) : (
+                            Object.keys(groupedBySubsection).length > 0 ? (
+                                <SubsectionDocumentsList 
+                                    groupedDocs={groupedBySubsection}
+                                    onPreview={onPreview}
+                                    onDownload={onDownload}
+                                    groupLabel="subsection"
+                                />
+                            ) : (
+                                <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
+                            )
+                        )}
+                    </div>
+                )}
+
+                {/* Empty state when no documents match */}
+                {!showSiteDocs && !showSubsectionDocs && (
+                    <EmptyDocumentsState searchQuery={searchQuery} />
+                )}
+                
+                {showSiteDocs && !showSubsectionDocs && filteredSiteDocs.length === 0 && categories.length === 0 && (
+                    <EmptyDocumentsState searchQuery={searchQuery} />
+                )}
+            </div>
         </div>
     );
 }
