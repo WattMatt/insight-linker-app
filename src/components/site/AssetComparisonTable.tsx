@@ -25,10 +25,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2, Link2, Unlink } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2, Link2, Unlink, Pencil, Check, X } from "lucide-react";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateAssetVerificationReport } from "@/lib/assetVerificationReportGenerator";
+import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
 interface Asset {
@@ -71,7 +72,15 @@ interface AssetComparisonTableProps {
   subsectionImages?: Record<string, TenantImages>;
   siteName: string;
   companyLogoUrl?: string | null;
+  onDataUpdated?: () => void;
 }
+
+type EditingCell = {
+  rowIndex: number;
+  field: "meter_serial" | "ct_ratio" | "breaker_size";
+  source: "asset" | "subsection";
+  value: string;
+} | null;
 
 // Normalize name for matching - strip prefixes like "YA - "
 const normalizeForMatching = (name: string): string => {
@@ -115,12 +124,15 @@ export const AssetComparisonTable = ({
   subsectionImages = {},
   siteName,
   companyLogoUrl,
+  onDataUpdated,
 }: AssetComparisonTableProps) => {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "matched" | "discrepancies" | "unmatched">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [generating, setGenerating] = useState(false);
+  const [editingCell, setEditingCell] = useState<EditingCell>(null);
+  const [saving, setSaving] = useState(false);
   // Manual links: assetId -> subsectionId
   const [manualLinks, setManualLinks] = useState<Record<string, string>>({});
 
@@ -430,6 +442,127 @@ export const AssetComparisonTable = ({
     return !!(images.breakerImage || images.ctRatioImage || images.meterImage);
   };
 
+  // Handle inline edit save
+  const handleSaveEdit = async () => {
+    if (!editingCell) return;
+    
+    setSaving(true);
+    try {
+      const { rowIndex, field, source, value } = editingCell;
+      const result = filteredResults[rowIndex];
+      
+      if (source === "asset" && result.asset) {
+        const updateData: Record<string, string | null> = {};
+        if (field === "meter_serial") updateData.meter_serial_number = value || null;
+        if (field === "ct_ratio") updateData.ct_ratio = value || null;
+        if (field === "breaker_size") updateData.breaker_size = value || null;
+        
+        const { error } = await supabase
+          .from("site_assets")
+          .update(updateData)
+          .eq("id", result.asset.id);
+          
+        if (error) throw error;
+        toast.success("Asset updated successfully");
+      } else if (source === "subsection" && result.subsection) {
+        const updateData: Record<string, string | null> = {};
+        if (field === "meter_serial") updateData.meter_serial_number = value || null;
+        if (field === "ct_ratio") updateData.ct_ratio = value || null;
+        
+        const { error } = await supabase
+          .from("subsections")
+          .update(updateData)
+          .eq("id", result.subsection.id);
+          
+        if (error) throw error;
+        toast.success("Subsection updated successfully");
+      }
+      
+      setEditingCell(null);
+      onDataUpdated?.();
+    } catch (error) {
+      console.error("Failed to save edit:", error);
+      toast.error("Failed to save changes");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const startEditing = (rowIndex: number, field: EditingCell["field"], source: EditingCell["source"], currentValue: string) => {
+    setEditingCell({ rowIndex, field, source, value: currentValue });
+  };
+
+  const cancelEditing = () => {
+    setEditingCell(null);
+  };
+
+  // Editable value component
+  const EditableValue = ({ 
+    rowIndex, 
+    field, 
+    source, 
+    value, 
+    label 
+  }: { 
+    rowIndex: number; 
+    field: EditingCell["field"]; 
+    source: EditingCell["source"]; 
+    value: string | null; 
+    label: string;
+  }) => {
+    const isEditing = editingCell?.rowIndex === rowIndex && 
+                      editingCell?.field === field && 
+                      editingCell?.source === source;
+    
+    if (isEditing) {
+      return (
+        <div className="flex items-center gap-1">
+          <span className="text-muted-foreground text-xs">{label}:</span>
+          <Input
+            value={editingCell.value}
+            onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
+            className="h-6 w-24 text-xs px-1"
+            autoFocus
+            onKeyDown={(e) => {
+              if (e.key === "Enter") handleSaveEdit();
+              if (e.key === "Escape") cancelEditing();
+            }}
+          />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={handleSaveEdit}
+            disabled={saving}
+          >
+            <Check className="h-3 w-3 text-green-600" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-5 w-5"
+            onClick={cancelEditing}
+            disabled={saving}
+          >
+            <X className="h-3 w-3 text-muted-foreground" />
+          </Button>
+        </div>
+      );
+    }
+    
+    return (
+      <div 
+        className="group flex items-center gap-1 cursor-pointer hover:bg-muted/50 rounded px-1 -mx-1"
+        onClick={() => startEditing(rowIndex, field, source, value || "")}
+      >
+        <span className={source === "asset" ? "text-muted-foreground" : ""}>
+          {label}: {value || "-"}
+        </span>
+        <Pencil className="h-3 w-3 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
+      </div>
+    );
+  };
+
   const handleExportReport = async () => {
     setGenerating(true);
     try {
@@ -699,15 +832,25 @@ export const AssetComparisonTable = ({
                       <div className="flex items-center gap-2">
                         {getValueBadge(result.meterSerialMatch)}
                         <div className="text-sm space-y-0.5">
-                          {result.asset?.meter_serial_number && (
-                            <div className="text-muted-foreground">
-                              A: {result.asset.meter_serial_number}
-                            </div>
+                          {result.asset && (
+                            <EditableValue
+                              rowIndex={idx}
+                              field="meter_serial"
+                              source="asset"
+                              value={result.asset.meter_serial_number}
+                              label="A"
+                            />
                           )}
-                          {result.subsection?.meter_serial_number && (
-                            <div>S: {result.subsection.meter_serial_number}</div>
+                          {result.subsection && (
+                            <EditableValue
+                              rowIndex={idx}
+                              field="meter_serial"
+                              source="subsection"
+                              value={result.subsection.meter_serial_number}
+                              label="S"
+                            />
                           )}
-                          {!result.asset?.meter_serial_number && !result.subsection?.meter_serial_number && (
+                          {!result.asset && !result.subsection && (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </div>
@@ -717,13 +860,25 @@ export const AssetComparisonTable = ({
                       <div className="flex items-center gap-2">
                         {getValueBadge(result.ctRatioMatch)}
                         <div className="text-sm space-y-0.5">
-                          {result.asset?.ct_ratio && (
-                            <div className="text-muted-foreground">A: {result.asset.ct_ratio}</div>
+                          {result.asset && (
+                            <EditableValue
+                              rowIndex={idx}
+                              field="ct_ratio"
+                              source="asset"
+                              value={result.asset.ct_ratio}
+                              label="A"
+                            />
                           )}
-                          {result.subsection?.ct_ratio && (
-                            <div>S: {result.subsection.ct_ratio}</div>
+                          {result.subsection && (
+                            <EditableValue
+                              rowIndex={idx}
+                              field="ct_ratio"
+                              source="subsection"
+                              value={result.subsection.ct_ratio}
+                              label="S"
+                            />
                           )}
-                          {!result.asset?.ct_ratio && !result.subsection?.ct_ratio && (
+                          {!result.asset && !result.subsection && (
                             <span className="text-muted-foreground">-</span>
                           )}
                         </div>
@@ -731,7 +886,15 @@ export const AssetComparisonTable = ({
                     </TableCell>
                     <TableCell>
                       <div className="text-sm">
-                        {result.asset?.breaker_size || (
+                        {result.asset ? (
+                          <EditableValue
+                            rowIndex={idx}
+                            field="breaker_size"
+                            source="asset"
+                            value={result.asset.breaker_size}
+                            label=""
+                          />
+                        ) : (
                           <span className="text-muted-foreground">-</span>
                         )}
                       </div>
