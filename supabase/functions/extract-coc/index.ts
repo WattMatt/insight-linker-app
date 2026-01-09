@@ -323,11 +323,11 @@ Return ONLY this JSON structure with ALL extracted data:
 3. **NO placeholders**: Never use "Not provided", "N/A" as values - use null instead
 4. **Exact values**: Copy numbers and text EXACTLY as shown
 5. **Date format**: Convert all dates to YYYY-MM-DD (e.g., "18.09.2025" → "2025-09-18")
-   - **CRITICAL FOR DATES**: Read each digit of the year VERY CAREFULLY. Common mistakes: reading 2023 as 2022, reading 3 as 2. DOUBLE CHECK the year!
-   - **THE MAIN COC ISSUE DATE (cocIssueDate)**: Look for the "Date:" field in the "Declaration by registered person" section on PAGE 1. This is typically next to the registered person's signature. The format is usually DD/MM/YYYY or DD MM YYYY (e.g., "01 02 2023" means 1st February 2023 → "2023-02-01").
-   - **DO NOT** confuse the COC issue date with "Date of registration" or other administrative dates.
-   - If the date shows "01/02/2023" or "01 02 2023", extract cocIssueDate as "2023-02-01" (day=01, month=02, year=2023).
-   - The test report "Date of issue" (testReport.issueDate) is a SEPARATE field on PAGE 2.
+   - **CRITICAL - COC ISSUE DATE**: The cocIssueDate is the date next to "Signature:" in the "Declaration by registered person" section on PAGE 1. Look for "Date:" followed by the actual date near the signature line.
+   - **FORMAT**: Usually DD.MM.YYYY or DD/MM/YYYY or DD MM YYYY. Convert to YYYY-MM-DD.
+   - **EXAMPLE**: "Date: 01.02.2023" → cocIssueDate = "2023-02-01" (NOT 2022! Read each digit carefully!)
+   - **WARNING**: Do NOT use dates from "Date of registration", "Date issued", or other fields. Only use the signature date.
+   - The test report "Date of issue" (testReport.issueDate) on PAGE 2 is a SEPARATE field.
 6. **Measurements**: Include units in the value (e.g., "0.16Ω", ">240 MΩ", "237V")
 7. **Confidence**: "high" only if both pages are clear and complete
 
