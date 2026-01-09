@@ -147,9 +147,111 @@ export async function generateAssetVerificationReport(
   doc.setFont('helvetica', 'normal');
   doc.text(date, col2X + 35, statY + 20);
 
+  // ===== KPI SUMMARY PAGE =====
+  doc.addPage();
+  addPageHeader(doc, 'Summary Statistics', 2);
+
+  const kpiY = 45;
+  const cardWidth = (pageWidth - margins.left - margins.right - 20) / 3;
+  const cardHeight = 45;
+  const cardGap = 10;
+
+  // Row 1: Total Assets, Matched, Discrepancies
+  const row1Cards = [
+    { label: 'Total Assets', value: stats.total.toString(), color: [100, 116, 139] },  // slate
+    { label: 'Matched', value: stats.matchedNoDiscrepancy.toString(), color: [34, 197, 94] },  // green
+    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: [234, 179, 8] },  // yellow
+  ];
+
+  row1Cards.forEach((card, i) => {
+    const x = margins.left + i * (cardWidth + cardGap);
+    
+    // Card background
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(x, kpiY, cardWidth, cardHeight, 3, 3, 'F');
+    
+    // Left accent bar
+    doc.setFillColor(card.color[0], card.color[1], card.color[2]);
+    doc.rect(x, kpiY, 4, cardHeight, 'F');
+    
+    // Value
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text(card.value, x + cardWidth / 2, kpiY + 22, { align: 'center' });
+    
+    // Label
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(card.label, x + cardWidth / 2, kpiY + 36, { align: 'center' });
+  });
+
+  // Row 2: Assets Only, Subsections Only
+  const row2Y = kpiY + cardHeight + 15;
+  const row2CardWidth = (pageWidth - margins.left - margins.right - 10) / 2;
+  
+  const row2Cards = [
+    { label: 'Assets Without Subsection', value: stats.assetOnly.toString(), color: [249, 115, 22] },  // orange
+    { label: 'Subsections Without Asset', value: stats.subsectionOnly.toString(), color: [59, 130, 246] },  // blue
+  ];
+
+  row2Cards.forEach((card, i) => {
+    const x = margins.left + i * (row2CardWidth + cardGap);
+    
+    // Card background
+    doc.setFillColor(248, 250, 252);
+    doc.roundedRect(x, row2Y, row2CardWidth, cardHeight, 3, 3, 'F');
+    
+    // Left accent bar
+    doc.setFillColor(card.color[0], card.color[1], card.color[2]);
+    doc.rect(x, row2Y, 4, cardHeight, 'F');
+    
+    // Value
+    doc.setFontSize(24);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(30, 41, 59);
+    doc.text(card.value, x + row2CardWidth / 2, row2Y + 22, { align: 'center' });
+    
+    // Label
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100, 116, 139);
+    doc.text(card.label, x + row2CardWidth / 2, row2Y + 36, { align: 'center' });
+  });
+
+  // Match rate indicator
+  const matchRate = stats.total > 0 ? Math.round((stats.matchedNoDiscrepancy / stats.total) * 100) : 0;
+  const indicatorY = row2Y + cardHeight + 25;
+  
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text('Match Rate', margins.left, indicatorY);
+  
+  // Progress bar background
+  const barWidth = pageWidth - margins.left - margins.right - 50;
+  const barHeight = 12;
+  doc.setFillColor(226, 232, 240);
+  doc.roundedRect(margins.left, indicatorY + 5, barWidth, barHeight, 3, 3, 'F');
+  
+  // Progress bar fill
+  const fillWidth = (matchRate / 100) * barWidth;
+  if (fillWidth > 0) {
+    const fillColor = matchRate >= 80 ? [34, 197, 94] : matchRate >= 50 ? [234, 179, 8] : [239, 68, 68];
+    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
+    doc.roundedRect(margins.left, indicatorY + 5, fillWidth, barHeight, 3, 3, 'F');
+  }
+  
+  // Percentage text
+  doc.setFontSize(12);
+  doc.setFont('helvetica', 'bold');
+  doc.setTextColor(30, 41, 59);
+  doc.text(`${matchRate}%`, margins.left + barWidth + 10, indicatorY + 14);
+
   // ===== MATCHED ITEMS TABLE =====
   doc.addPage();
-  addPageHeader(doc, 'Matched Items', 2);
+  addPageHeader(doc, 'Matched Items', 3);
 
   const matchedResults = comparisonResults.filter(r => r.matchType === 'matched');
   
