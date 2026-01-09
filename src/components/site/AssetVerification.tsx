@@ -73,33 +73,41 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
           const workbook = XLSX.read(data, { type: "array" });
           const sheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 }) as string[][];
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as (string | number)[][];
+
+          console.log("Sheet names:", workbook.SheetNames);
+          console.log("Total rows:", jsonData.length);
+          console.log("First 5 rows:", jsonData.slice(0, 5));
 
           const parsedAssets: ParsedAsset[] = [];
           let currentSection: "electrical" | "water" | null = null;
 
           for (let i = 0; i < jsonData.length; i++) {
             const row = jsonData[i];
-            if (!row || row.length === 0 || !row[0]) continue;
+            if (!row || row.length === 0) continue;
 
             const firstCell = String(row[0] || "").trim();
+            if (!firstCell) continue;
 
-            // Detect section headers
-            if (firstCell === "Premises ID") {
+            // Detect section headers by checking for "Premises ID" in the row
+            const rowStr = row.map((cell) => String(cell || "").toLowerCase()).join(" ");
+            
+            if (firstCell.toLowerCase() === "premises id" || rowStr.includes("premises id")) {
               // Check if this is electrical or water section by looking at headers
-              const headers = row.map((h) => String(h || "").toLowerCase());
-              if (headers.includes("breaker size") || headers.includes("ct ratio")) {
+              if (rowStr.includes("breaker size") || rowStr.includes("ct ratio") || rowStr.includes("current transformer")) {
                 currentSection = "electrical";
-              } else if (headers.includes("m-bus gateway index") || headers.includes("tag")) {
+                console.log("Detected ELECTRICAL section at row", i);
+              } else if (rowStr.includes("m-bus") || rowStr.includes("mbus") || (rowStr.includes("tag") && rowStr.includes("meter serial"))) {
                 currentSection = "water";
+                console.log("Detected WATER section at row", i);
               }
               continue;
             }
 
-            // Skip empty or header rows
-            if (!firstCell || firstCell.startsWith("Premises")) continue;
+            // Parse data rows - look for rows that start with typical premises ID patterns
+            const isPremisesRow = /^[A-Z]{2}\s*-/.test(firstCell) || firstCell.includes("SHOP") || firstCell.includes("KIOSK") || firstCell.includes("ATM");
 
-            if (currentSection === "electrical" && firstCell.startsWith("YA")) {
+            if (currentSection === "electrical" && isPremisesRow) {
               const asset: ParsedAsset = {
                 premises_id: firstCell,
                 trade_as: String(row[1] || ""),
@@ -113,29 +121,61 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
                 last_meter_read_old: String(row[8] || ""),
                 comments: String(row[9] || ""),
               };
-              if (asset.meter_serial_number) {
+              if (asset.meter_serial_number && asset.meter_serial_number.trim()) {
                 parsedAssets.push(asset);
               }
-            } else if (currentSection === "water" && firstCell.startsWith("YA")) {
+            } else if (currentSection === "water" && isPremisesRow) {
+              const meterSerial = String(row[2] || "").trim();
               const asset: ParsedAsset = {
                 premises_id: firstCell,
                 trade_as: String(row[1] || ""),
                 asset_category: "water_meter",
-                meter_serial_number: String(row[2] || ""),
+                meter_serial_number: meterSerial,
                 tag: String(row[3] || ""),
                 mbus_gateway_index: String(row[4] || ""),
                 reading_at_commissioning: String(row[5] || ""),
                 last_meter_read_old: String(row[6] || ""),
                 comments: String(row[7] || ""),
               };
-              if (asset.meter_serial_number && asset.meter_serial_number !== "TBC" && asset.meter_serial_number !== "NO WATER SUPPLY") {
+              // Skip invalid meter serials
+              if (meterSerial && meterSerial !== "TBC" && !meterSerial.toLowerCase().includes("no water")) {
                 parsedAssets.push(asset);
+              }
+            } else if (!currentSection && isPremisesRow) {
+              // Try to auto-detect based on row content if we haven't found a header yet
+              // Check if row has CT Ratio type values (like "1000/5A")
+              const hasCTRatio = row.some((cell) => /\d+\/\d+[aA]?/.test(String(cell)));
+              const hasBreakerSize = row.some((cell) => /^\d+[aA]$/.test(String(cell).trim()));
+              
+              if (hasCTRatio || hasBreakerSize) {
+                currentSection = "electrical";
+                console.log("Auto-detected ELECTRICAL section from data at row", i);
+                const asset: ParsedAsset = {
+                  premises_id: firstCell,
+                  trade_as: String(row[1] || ""),
+                  asset_category: "electrical_meter",
+                  meter_type: String(row[2] || ""),
+                  ct_ratio: String(row[3] || ""),
+                  meter_serial_number: String(row[4] || ""),
+                  breaker_size: String(row[5] || ""),
+                  reading_at_commissioning: String(row[6] || ""),
+                  old_meter_serial_number: String(row[7] || ""),
+                  last_meter_read_old: String(row[8] || ""),
+                  comments: String(row[9] || ""),
+                };
+                if (asset.meter_serial_number && asset.meter_serial_number.trim()) {
+                  parsedAssets.push(asset);
+                }
               }
             }
           }
 
+          console.log("Total parsed assets:", parsedAssets.length);
+          console.log("First 3 parsed:", parsedAssets.slice(0, 3));
+
           resolve(parsedAssets);
         } catch (error) {
+          console.error("Excel parsing error:", error);
           reject(error);
         }
       };
