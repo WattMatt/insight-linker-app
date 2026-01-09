@@ -1057,7 +1057,7 @@ const SiteDetail = () => {
         <TabsList className="grid w-full grid-cols-8">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Overview</span>
+            <span className="hidden lg:inline">Dashboard</span>
           </TabsTrigger>
           <TabsTrigger value="compliance" className="gap-2">
             <Shield className="h-4 w-4 shrink-0" />
