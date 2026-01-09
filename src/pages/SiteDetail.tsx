@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-import { FileText, QrCode, Layers, MapPin, Building, Image, BarChart3, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus } from "lucide-react";
+import { FileText, QrCode, Layers, MapPin, Building, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
@@ -13,7 +13,6 @@ import { SiteOverview } from "@/components/site/SiteOverview";
 import { SubsectionList } from "@/components/site/SubsectionList";
 import { SiteDocuments as SiteDocumentsComponent } from "@/components/site/SiteDocuments";
 import { QRAnalytics } from "@/components/site/QRAnalytics";
-import { SiteImages } from "@/components/site/SiteImages";
 import { SiteExport } from "@/components/site/SiteExport";
 import { SiteEditDialog } from "@/components/site/SiteEditDialog";
 import { SiteLevelInspections } from "@/components/site/SiteLevelInspections";
@@ -56,8 +55,6 @@ const SiteDetail = () => {
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState<"client_logo" | "site_image" | null>(null);
-  const [imagePreview, setImagePreview] = useState<{ site_image?: string, client_logo?: string }>({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: '', address: '', description: '', status: '', location_lat: '', location_lng: '',
@@ -544,7 +541,7 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-8">
+        <TabsList className="grid w-full grid-cols-7">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Dashboard</span>
@@ -552,10 +549,6 @@ const SiteDetail = () => {
           <TabsTrigger value="compliance" className="gap-2">
             <Shield className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Compliance</span>
-          </TabsTrigger>
-          <TabsTrigger value="images" className="gap-2">
-            <Image className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Images</span>
           </TabsTrigger>
           <TabsTrigger value="documents" className="gap-2">
             <FileText className="h-4 w-4 shrink-0" />
@@ -586,26 +579,6 @@ const SiteDetail = () => {
 
         <TabsContent value="compliance">
           <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
-        </TabsContent>
-
-        <TabsContent value="images">
-          <SiteImages
-            site={site} siteId={siteId!} imagePreview={imagePreview} setImagePreview={setImagePreview}
-            handleImageUpload={async (file, type) => {
-              setUploadingImage(type);
-              const path = `${siteId}/${type === 'site_image' ? 'site-image' : 'client-logo'}.${file.name.split('.').pop()}`;
-              await supabase.storage.from('site-images').upload(path, file, { upsert: true });
-              const { data } = supabase.storage.from('site-images').getPublicUrl(path);
-              await supabase.from('sites').update({ [type === 'site_image' ? 'site_image_url' : 'client_logo_url']: `${data.publicUrl}?t=${Date.now()}` }).eq('id', siteId);
-              setUploadingImage(null);
-              fetchSiteData();
-            }}
-            handleDeleteImage={async type => {
-              await supabase.from('sites').update({ [type === 'site_image' ? 'site_image_url' : 'client_logo_url']: null }).eq('id', siteId);
-              fetchSiteData();
-            }}
-            uploadingImage={uploadingImage} fetchSiteData={fetchSiteData}
-          />
         </TabsContent>
 
         <TabsContent value="documents" className="space-y-6">
@@ -651,7 +624,7 @@ const SiteDetail = () => {
         </TabsContent>
       </Tabs>
 
-      <SiteEditDialog open={editDialogOpen} onOpenChange={setEditDialogOpen} editFormData={editFormData} setEditFormData={setEditFormData} onSubmit={handleUpdateSite} />
+      <SiteEditDialog open={editDialogOpen} onOpenChange={setEditDialogOpen} editFormData={editFormData} setEditFormData={setEditFormData} onSubmit={handleUpdateSite} site={site} siteId={siteId} onImageChange={fetchSiteData} />
 
       <DocumentDialogs
         createCategoryOpen={createCategoryOpen} setCreateCategoryOpen={setCreateCategoryOpen}
