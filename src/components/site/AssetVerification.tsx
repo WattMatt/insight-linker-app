@@ -77,101 +77,119 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
 
           console.log("Sheet names:", workbook.SheetNames);
           console.log("Total rows:", jsonData.length);
-          console.log("First 5 rows:", jsonData.slice(0, 5));
 
           const parsedAssets: ParsedAsset[] = [];
           let currentSection: "electrical" | "water" | null = null;
+          let headerRow: (string | number)[] | null = null;
+          let columnMap: Record<string, number> = {};
+
+          const normalizeHeader = (header: string) => {
+            return header.toLowerCase().replace(/[^a-z0-9]/g, "");
+          };
 
           for (let i = 0; i < jsonData.length; i++) {
             const row = jsonData[i];
             if (!row || row.length === 0) continue;
 
-            const firstCell = String(row[0] || "").trim();
-            if (!firstCell) continue;
+            const firstCell = String(row[0] || "").trim().toUpperCase();
+            const secondCell = String(row[1] || "").trim().toUpperCase();
 
-            // Detect section headers by checking for "Premises ID" in the row
-            const rowStr = row.map((cell) => String(cell || "").toLowerCase()).join(" ");
-            
-            if (firstCell.toLowerCase() === "premises id" || rowStr.includes("premises id")) {
-              // Check if this is electrical or water section by looking at headers
-              if (rowStr.includes("breaker size") || rowStr.includes("ct ratio") || rowStr.includes("current transformer")) {
-                currentSection = "electrical";
-                console.log("Detected ELECTRICAL section at row", i);
-              } else if (rowStr.includes("m-bus") || rowStr.includes("mbus") || (rowStr.includes("tag") && rowStr.includes("meter serial"))) {
-                currentSection = "water";
-                console.log("Detected WATER section at row", i);
-              }
+            // Detect section type by looking for "ELECTRICAL" or "WATER" labels
+            if (firstCell === "ELECTRICAL" || secondCell === "ELECTRICAL") {
+              currentSection = "electrical";
+              console.log("Found ELECTRICAL section marker at row", i);
+              continue;
+            }
+            if (firstCell === "WATER" || secondCell === "WATER") {
+              currentSection = "water";
+              console.log("Found WATER section marker at row", i);
               continue;
             }
 
-            // Parse data rows - look for rows that start with typical premises ID patterns
-            const isPremisesRow = /^[A-Z]{2}\s*-/.test(firstCell) || firstCell.includes("SHOP") || firstCell.includes("KIOSK") || firstCell.includes("ATM");
+            // Detect header rows (contains "Premises ID")
+            const rowStrings = row.map((cell) => String(cell || "").toLowerCase());
+            const hasPremisesId = rowStrings.some((cell) => cell.includes("premises id"));
+            
+            if (hasPremisesId) {
+              headerRow = row;
+              columnMap = {};
+              row.forEach((cell, idx) => {
+                const normalized = normalizeHeader(String(cell || ""));
+                if (normalized) columnMap[normalized] = idx;
+              });
+              console.log("Found header row at", i, "for section:", currentSection);
+              console.log("Column map:", columnMap);
+              continue;
+            }
 
-            if (currentSection === "electrical" && isPremisesRow) {
-              const asset: ParsedAsset = {
-                premises_id: firstCell,
-                trade_as: String(row[1] || ""),
-                asset_category: "electrical_meter",
-                meter_type: String(row[2] || ""),
-                ct_ratio: String(row[3] || ""),
-                meter_serial_number: String(row[4] || ""),
-                breaker_size: String(row[5] || ""),
-                reading_at_commissioning: String(row[6] || ""),
-                old_meter_serial_number: String(row[7] || ""),
-                last_meter_read_old: String(row[8] || ""),
-                comments: String(row[9] || ""),
-              };
-              if (asset.meter_serial_number && asset.meter_serial_number.trim()) {
-                parsedAssets.push(asset);
-              }
-            } else if (currentSection === "water" && isPremisesRow) {
-              const meterSerial = String(row[2] || "").trim();
-              const asset: ParsedAsset = {
-                premises_id: firstCell,
-                trade_as: String(row[1] || ""),
-                asset_category: "water_meter",
-                meter_serial_number: meterSerial,
-                tag: String(row[3] || ""),
-                mbus_gateway_index: String(row[4] || ""),
-                reading_at_commissioning: String(row[5] || ""),
-                last_meter_read_old: String(row[6] || ""),
-                comments: String(row[7] || ""),
-              };
-              // Skip invalid meter serials
-              if (meterSerial && meterSerial !== "TBC" && !meterSerial.toLowerCase().includes("no water")) {
-                parsedAssets.push(asset);
-              }
-            } else if (!currentSection && isPremisesRow) {
-              // Try to auto-detect based on row content if we haven't found a header yet
-              // Check if row has CT Ratio type values (like "1000/5A")
-              const hasCTRatio = row.some((cell) => /\d+\/\d+[aA]?/.test(String(cell)));
-              const hasBreakerSize = row.some((cell) => /^\d+[aA]$/.test(String(cell).trim()));
-              
-              if (hasCTRatio || hasBreakerSize) {
-                currentSection = "electrical";
-                console.log("Auto-detected ELECTRICAL section from data at row", i);
-                const asset: ParsedAsset = {
-                  premises_id: firstCell,
-                  trade_as: String(row[1] || ""),
-                  asset_category: "electrical_meter",
-                  meter_type: String(row[2] || ""),
-                  ct_ratio: String(row[3] || ""),
-                  meter_serial_number: String(row[4] || ""),
-                  breaker_size: String(row[5] || ""),
-                  reading_at_commissioning: String(row[6] || ""),
-                  old_meter_serial_number: String(row[7] || ""),
-                  last_meter_read_old: String(row[8] || ""),
-                  comments: String(row[9] || ""),
-                };
-                if (asset.meter_serial_number && asset.meter_serial_number.trim()) {
-                  parsedAssets.push(asset);
+            // Skip if we don't have a section or headers yet
+            if (!currentSection || !headerRow || Object.keys(columnMap).length === 0) continue;
+
+            // Get premises ID - could be in different columns
+            const premisesIdIdx = columnMap["premisesid"] ?? columnMap["premiseid"] ?? 1;
+            const premisesId = String(row[premisesIdIdx] || "").trim();
+
+            // Skip empty rows or header-like rows
+            if (!premisesId || premisesId.toLowerCase().includes("premises")) continue;
+
+            // Helper to get column value
+            const getCol = (keys: string[]): string => {
+              for (const key of keys) {
+                if (columnMap[key] !== undefined) {
+                  return String(row[columnMap[key]] || "").trim();
                 }
               }
+              return "";
+            };
+
+            if (currentSection === "electrical") {
+              const meterSerial = getCol(["meterserialnumber", "meterserno", "serialnumber", "serial"]);
+              
+              const asset: ParsedAsset = {
+                premises_id: premisesId,
+                trade_as: getCol(["tradeas", "trade", "tenant"]) || getCol(["tenant"]),
+                asset_category: "electrical_meter",
+                meter_type: getCol(["directdcurrenttransformerct", "directcurrenttransformer", "type", "metertype"]),
+                ct_ratio: getCol(["ctratio", "ratio"]),
+                meter_serial_number: meterSerial,
+                breaker_size: getCol(["breakersize", "breaker"]),
+                reading_at_commissioning: getCol(["readingatcomissioningofnewmeter", "readingatcommissioning", "reading"]),
+                old_meter_serial_number: getCol(["oldmeterserialnumber", "oldmeterserial", "oldserial"]),
+                last_meter_read_old: getCol(["lastmeterreadofoldmeter", "lastmeterread"]),
+                comments: getCol(["comments", "comment", "notes"]),
+              };
+
+              if (meterSerial && meterSerial.length > 0) {
+                parsedAssets.push(asset);
+              }
+            } else if (currentSection === "water") {
+              const meterSerial = getCol(["meterserialnumber", "meterserno", "serialnumber", "serial"]);
+              
+              // Skip invalid meter serials
+              if (!meterSerial || meterSerial === "TBC" || meterSerial.toLowerCase().includes("no water")) {
+                continue;
+              }
+
+              const asset: ParsedAsset = {
+                premises_id: premisesId,
+                trade_as: getCol(["tradeas", "trade", "tenant"]) || getCol(["tenant"]),
+                asset_category: "water_meter",
+                meter_serial_number: meterSerial,
+                tag: getCol(["tag"]),
+                mbus_gateway_index: getCol(["mbusgatewayindex", "mbusindex", "gatewayindex"]),
+                reading_at_commissioning: getCol(["readingatcomissioningofnewmeter", "readingatcommissioning", "reading"]),
+                last_meter_read_old: getCol(["lastmeterreadofoldmeter", "lastmeterread"]),
+                comments: getCol(["comments", "comment", "notes"]),
+              };
+
+              parsedAssets.push(asset);
             }
           }
 
           console.log("Total parsed assets:", parsedAssets.length);
-          console.log("First 3 parsed:", parsedAssets.slice(0, 3));
+          if (parsedAssets.length > 0) {
+            console.log("Sample assets:", parsedAssets.slice(0, 3));
+          }
 
           resolve(parsedAssets);
         } catch (error) {
