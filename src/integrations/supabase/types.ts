@@ -992,6 +992,80 @@ export type Database = {
         }
         Relationships: []
       }
+      site_assets: {
+        Row: {
+          asset_category: Database["public"]["Enums"]["asset_category"]
+          breaker_size: string | null
+          comments: string | null
+          created_at: string
+          created_by: string | null
+          ct_ratio: string | null
+          id: string
+          import_batch_id: string | null
+          last_meter_read_old: string | null
+          mbus_gateway_index: string | null
+          meter_serial_number: string | null
+          meter_type: string | null
+          old_meter_serial_number: string | null
+          premises_id: string
+          reading_at_commissioning: string | null
+          site_id: string
+          tag: string | null
+          trade_as: string | null
+          updated_at: string
+        }
+        Insert: {
+          asset_category?: Database["public"]["Enums"]["asset_category"]
+          breaker_size?: string | null
+          comments?: string | null
+          created_at?: string
+          created_by?: string | null
+          ct_ratio?: string | null
+          id?: string
+          import_batch_id?: string | null
+          last_meter_read_old?: string | null
+          mbus_gateway_index?: string | null
+          meter_serial_number?: string | null
+          meter_type?: string | null
+          old_meter_serial_number?: string | null
+          premises_id: string
+          reading_at_commissioning?: string | null
+          site_id: string
+          tag?: string | null
+          trade_as?: string | null
+          updated_at?: string
+        }
+        Update: {
+          asset_category?: Database["public"]["Enums"]["asset_category"]
+          breaker_size?: string | null
+          comments?: string | null
+          created_at?: string
+          created_by?: string | null
+          ct_ratio?: string | null
+          id?: string
+          import_batch_id?: string | null
+          last_meter_read_old?: string | null
+          mbus_gateway_index?: string | null
+          meter_serial_number?: string | null
+          meter_type?: string | null
+          old_meter_serial_number?: string | null
+          premises_id?: string
+          reading_at_commissioning?: string | null
+          site_id?: string
+          tag?: string | null
+          trade_as?: string | null
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_assets_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       site_document_categories: {
         Row: {
           created_at: string
@@ -1962,6 +2036,7 @@ export type Database = {
     }
     Enums: {
       app_role: "Admin" | "User" | "Contractor" | "Moderator" | "Client"
+      asset_category: "electrical_meter" | "water_meter" | "equipment" | "other"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -2090,6 +2165,7 @@ export const Constants = {
   public: {
     Enums: {
       app_role: ["Admin", "User", "Contractor", "Moderator", "Client"],
+      asset_category: ["electrical_meter", "water_meter", "equipment", "other"],
     },
   },
 } as const
