@@ -91,7 +91,7 @@ export const useGlobalSearch = (
           title: site.name,
           subtitle: site.site_type || undefined,
           description: site.address || undefined,
-          url: `/sites/${site.id}`,
+          url: site.client_id ? `/clients/${site.client_id}/sites/${site.id}` : `/sites/${site.id}`,
           metadata: {
             clientId: site.client_id,
             siteId: site.id,
@@ -125,6 +125,11 @@ export const useGlobalSearch = (
           return;
         }
 
+        const clientId = subsection.sites?.client_id;
+        const subsectionUrl = clientId 
+          ? `/clients/${clientId}/sites/${subsection.site_id}/subsections/${subsection.id}`
+          : `/sites/${subsection.site_id}/subsections/${subsection.id}`;
+
         results.push({
           id: subsection.id,
           type: "subsection",
@@ -135,9 +140,9 @@ export const useGlobalSearch = (
             : subsection.meter_serial_number
             ? `Meter: ${subsection.meter_serial_number}`
             : undefined,
-          url: `/sites/${subsection.site_id}/subsections/${subsection.id}`,
+          url: subsectionUrl,
           metadata: {
-            clientId: subsection.sites?.client_id,
+            clientId: clientId,
             siteId: subsection.site_id,
             subsectionId: subsection.id,
             cocStatus: subsection.coc_status || undefined,
@@ -183,9 +188,20 @@ export const useGlobalSearch = (
           return;
         }
 
-        const inspectionUrl = inspection.subsection_id
-          ? `/sites/${inspection.site_id}/subsections/${inspection.subsection_id}/inspections/${inspection.id}`
-          : `/sites/${inspection.site_id}`;
+        const clientId = inspection.sites?.client_id;
+        let inspectionUrl: string;
+        
+        if (inspection.subsection_id) {
+          // Inspection linked to a subsection
+          inspectionUrl = clientId
+            ? `/clients/${clientId}/sites/${inspection.site_id}/subsections/${inspection.subsection_id}/inspections/${inspection.id}`
+            : `/sites/${inspection.site_id}/subsections/${inspection.subsection_id}/inspections/${inspection.id}`;
+        } else {
+          // Site-level inspection - go to site with inspections tab
+          inspectionUrl = clientId
+            ? `/clients/${clientId}/sites/${inspection.site_id}?tab=inspections`
+            : `/sites/${inspection.site_id}?tab=inspections`;
+        }
 
         results.push({
           id: inspection.id,
@@ -195,7 +211,7 @@ export const useGlobalSearch = (
           description: inspection.description || undefined,
           url: inspectionUrl,
           metadata: {
-            clientId: inspection.sites?.client_id,
+            clientId: clientId,
             siteId: inspection.site_id,
             status: inspection.status || undefined,
           },

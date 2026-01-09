@@ -152,7 +152,7 @@ const AdminContractorPreview = () => {
                     )}
                   </div>
                   <Button
-                    onClick={() => navigate(`/contractor-portal/sites/${site.id}`)}
+                    onClick={() => navigate(`/contractor?preview=${site.id}`)}
                     className="w-full"
                     variant="outline"
                   >
