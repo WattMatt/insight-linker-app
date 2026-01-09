@@ -18,7 +18,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Minus } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon } from "lucide-react";
+import { RobustImage } from "@/components/RobustImage";
 
 interface Asset {
   id: string;
@@ -38,6 +46,12 @@ interface Subsection {
   tenant_name: string | null;
 }
 
+interface TenantImages {
+  breakerImage?: string;
+  ctRatioImage?: string;
+  meterImage?: string;
+}
+
 export interface ComparisonResult {
   asset: Asset | null;
   subsection: Subsection | null;
@@ -50,6 +64,7 @@ export interface ComparisonResult {
 interface AssetComparisonTableProps {
   assets: Asset[];
   subsections: Subsection[];
+  subsectionImages?: Record<string, TenantImages>;
 }
 
 // Normalize name for matching - strip prefixes like "YA - "
@@ -91,9 +106,11 @@ const compareValues = (
 export const AssetComparisonTable = ({
   assets,
   subsections,
+  subsectionImages = {},
 }: AssetComparisonTableProps) => {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "matched" | "discrepancies" | "unmatched">("all");
+  const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
 
   // Build comparison results
   const comparisonResults = useMemo((): ComparisonResult[] => {
@@ -250,6 +267,16 @@ export const AssetComparisonTable = ({
     }
   };
 
+  const getImagesForRow = (result: ComparisonResult): TenantImages | null => {
+    if (!result.subsection) return null;
+    return subsectionImages[result.subsection.id] || null;
+  };
+
+  const hasAnyImage = (images: TenantImages | null): boolean => {
+    if (!images) return false;
+    return !!(images.breakerImage || images.ctRatioImage || images.meterImage);
+  };
+
   return (
     <div className="space-y-4">
       {/* Stats Summary */}
@@ -324,17 +351,20 @@ export const AssetComparisonTable = ({
                 <TableHead>Meter Serial</TableHead>
                 <TableHead>CT Ratio</TableHead>
                 <TableHead>Breaker Size</TableHead>
+                <TableHead>Photos</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
-              {filteredResults.length === 0 ? (
+            {filteredResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     No results found
                   </TableCell>
                 </TableRow>
               ) : (
-                filteredResults.map((result, idx) => (
+                filteredResults.map((result, idx) => {
+                  const images = getImagesForRow(result);
+                  return (
                   <TableRow key={idx}>
                     <TableCell>
                       <div className="space-y-1">
@@ -399,13 +429,65 @@ export const AssetComparisonTable = ({
                         )}
                       </div>
                     </TableCell>
+                    <TableCell>
+                      {hasAnyImage(images) ? (
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button variant="outline" size="sm" className="gap-1">
+                              <ImageIcon className="h-4 w-4" />
+                              View
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {images?.breakerImage && (
+                              <DropdownMenuItem
+                                onClick={() => setImageDialog({ url: images.breakerImage!, title: "Breaker" })}
+                              >
+                                Breaker Photo
+                              </DropdownMenuItem>
+                            )}
+                            {images?.ctRatioImage && (
+                              <DropdownMenuItem
+                                onClick={() => setImageDialog({ url: images.ctRatioImage!, title: "CT Ratio" })}
+                              >
+                                CT Ratio Photo
+                              </DropdownMenuItem>
+                            )}
+                            {images?.meterImage && (
+                              <DropdownMenuItem
+                                onClick={() => setImageDialog({ url: images.meterImage!, title: "Meter" })}
+                              >
+                                Meter Photo
+                              </DropdownMenuItem>
+                            )}
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
+                      )}
+                    </TableCell>
                   </TableRow>
-                ))
+                  );
+                })
               )}
             </TableBody>
           </Table>
         </CardContent>
       </Card>
+
+      {/* Image Dialog */}
+      <Dialog open={!!imageDialog} onOpenChange={() => setImageDialog(null)}>
+        <DialogContent className="max-w-2xl">
+          <DialogTitle>{imageDialog?.title} Photo</DialogTitle>
+          {imageDialog && (
+            <RobustImage
+              src={imageDialog.url}
+              alt={imageDialog.title}
+              className="w-full max-h-[70vh] object-contain rounded"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
