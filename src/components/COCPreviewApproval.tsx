@@ -176,6 +176,14 @@ interface ExtractedData {
   // Metadata
   confidence?: 'high' | 'medium' | 'low';
   extractionNotes?: string;
+  
+  // All dates found during extraction for manual selection
+  allDatesFound?: Array<{
+    rawDate: string;
+    convertedDate: string;
+    location: string;
+    usedFor?: string;
+  }>;
 }
 
 interface COCPreviewApprovalProps {
@@ -511,6 +519,12 @@ export function COCPreviewApproval({
                   <div className="space-y-1 col-span-2">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Issue Date <span className="text-destructive">*</span>
+                      {extractedData?.confidence === 'low' && (
+                        <Badge variant="outline" className="ml-2 text-[10px]">
+                          <AlertTriangle className="h-3 w-3 mr-1" />
+                          Please verify
+                        </Badge>
+                      )}
                     </Label>
                     <Input
                       type="date"
@@ -525,6 +539,37 @@ export function COCPreviewApproval({
                       })}
                       className="h-9"
                     />
+                    
+                    {/* Show all dates found for manual selection if extraction found multiple */}
+                    {extractedData?.allDatesFound && extractedData.allDatesFound.length > 1 && (
+                      <div className="mt-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs">
+                        <p className="font-medium text-amber-800 dark:text-amber-200 mb-1">
+                          Multiple dates found in document. Select the correct COC issue date:
+                        </p>
+                        <div className="space-y-1">
+                          {extractedData.allDatesFound.map((d, idx) => (
+                            <button
+                              key={idx}
+                              type="button"
+                              onClick={() => setEditedData({
+                                ...editedData,
+                                cocIssueDate: d.convertedDate,
+                                testReport: {
+                                  ...editedData.testReport,
+                                  issueDate: d.convertedDate
+                                }
+                              })}
+                              className={`w-full text-left px-2 py-1 rounded hover:bg-amber-100 dark:hover:bg-amber-900/50 flex justify-between items-center ${
+                                editedData.cocIssueDate === d.convertedDate ? 'bg-amber-200 dark:bg-amber-800' : ''
+                              }`}
+                            >
+                              <span className="font-mono">{d.rawDate} → {d.convertedDate}</span>
+                              <span className="text-muted-foreground truncate ml-2">{d.location}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
