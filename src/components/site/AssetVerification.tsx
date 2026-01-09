@@ -470,6 +470,7 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               assets={electricalAssets} 
               subsections={subsections}
               subsectionImages={subsectionImages}
+              siteName={siteName}
             />
           </TabsContent>
 

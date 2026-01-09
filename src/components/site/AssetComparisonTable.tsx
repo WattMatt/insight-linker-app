@@ -25,8 +25,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2 } from "lucide-react";
 import { RobustImage } from "@/components/RobustImage";
+import { generateAssetVerificationReport } from "@/lib/assetVerificationReportGenerator";
+import { toast } from "sonner";
 
 interface Asset {
   id: string;
@@ -65,6 +67,8 @@ interface AssetComparisonTableProps {
   assets: Asset[];
   subsections: Subsection[];
   subsectionImages?: Record<string, TenantImages>;
+  siteName: string;
+  companyLogoUrl?: string | null;
 }
 
 // Normalize name for matching - strip prefixes like "YA - "
@@ -107,10 +111,14 @@ export const AssetComparisonTable = ({
   assets,
   subsections,
   subsectionImages = {},
+  siteName,
+  companyLogoUrl,
 }: AssetComparisonTableProps) => {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "matched" | "discrepancies" | "unmatched">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [generating, setGenerating] = useState(false);
 
   // Build comparison results
   const comparisonResults = useMemo((): ComparisonResult[] => {
@@ -277,6 +285,54 @@ export const AssetComparisonTable = ({
     return !!(images.breakerImage || images.ctRatioImage || images.meterImage);
   };
 
+  const handleExportReport = async () => {
+    setGenerating(true);
+    try {
+      const { blob, filename } = await generateAssetVerificationReport({
+        siteName,
+        comparisonResults,
+        stats,
+        companyLogoUrl,
+      });
+      
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      
+      toast.success("Report exported successfully");
+    } catch (error) {
+      console.error('Failed to export report:', error);
+      toast.error("Failed to export report");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handlePreviewReport = async () => {
+    setGenerating(true);
+    try {
+      const { blob } = await generateAssetVerificationReport({
+        siteName,
+        comparisonResults,
+        stats,
+        companyLogoUrl,
+      });
+      
+      const url = URL.createObjectURL(blob);
+      setPdfPreviewUrl(url);
+    } catch (error) {
+      console.error('Failed to preview report:', error);
+      toast.error("Failed to generate preview");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
   return (
     <div className="space-y-4">
       {/* Stats Summary */}
@@ -307,7 +363,7 @@ export const AssetComparisonTable = ({
         </Card>
       </div>
 
-      {/* Filters */}
+      {/* Filters and Export */}
       <Card>
         <CardContent className="pt-4">
           <div className="flex flex-col sm:flex-row gap-4">
@@ -336,6 +392,34 @@ export const AssetComparisonTable = ({
                 Clear Filter
               </Button>
             )}
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePreviewReport}
+                disabled={generating || comparisonResults.length === 0}
+              >
+                {generating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Eye className="h-4 w-4 mr-2" />
+                )}
+                Preview
+              </Button>
+              <Button
+                variant="default"
+                size="sm"
+                onClick={handleExportReport}
+                disabled={generating || comparisonResults.length === 0}
+              >
+                {generating ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <FileDown className="h-4 w-4 mr-2" />
+                )}
+                Export PDF
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -484,6 +568,25 @@ export const AssetComparisonTable = ({
               src={imageDialog.url}
               alt={imageDialog.title}
               className="w-full max-h-[70vh] object-contain rounded"
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* PDF Preview Dialog */}
+      <Dialog open={!!pdfPreviewUrl} onOpenChange={() => {
+        if (pdfPreviewUrl) {
+          URL.revokeObjectURL(pdfPreviewUrl);
+        }
+        setPdfPreviewUrl(null);
+      }}>
+        <DialogContent className="max-w-5xl h-[90vh]">
+          <DialogTitle>Asset Verification Report Preview</DialogTitle>
+          {pdfPreviewUrl && (
+            <iframe
+              src={pdfPreviewUrl}
+              className="w-full h-full rounded border"
+              title="PDF Preview"
             />
           )}
         </DialogContent>
