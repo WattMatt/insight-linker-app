@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle } from "lucide-react";
+import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle, Plus, QrCode, FileText as TemplateIcon } from "lucide-react";
+import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
@@ -84,15 +85,15 @@ const Dashboard = () => {
   const fetchDashboardData = async () => {
     try {
       const today = new Date().toISOString().split('T')[0];
-      
+
       const [
-        supabaseClientsRes, 
-        supabaseSitesRes, 
+        supabaseClientsRes,
+        supabaseSitesRes,
         supabaseSubsectionsRes,
-        supabaseInspectionsRes, 
+        supabaseInspectionsRes,
         supabaseSnagsRes,
-        activityRes, 
-        eventsRes, 
+        activityRes,
+        eventsRes,
         highRiskSnagsRes
       ] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
@@ -129,11 +130,11 @@ const Dashboard = () => {
       const totalSites = supabaseSitesRes.count || 0;
       const totalSubsections = supabaseSubsectionsRes.count || 0;
       const totalInspections = supabaseInspectionsRes.count || 0;
-      
+
       const completedInspections = supabaseInspectionsRes.data?.filter(
         (i) => i.status === "Completed"
       ).length || 0;
-      
+
       const activeInspections = supabaseInspectionsRes.data?.filter(
         (i) => i.status === "In Progress" || i.status === "Scheduled"
       ).length || 0;
@@ -170,12 +171,12 @@ const Dashboard = () => {
     }
   };
 
-  const cocComplianceRate = stats.cocRequiredCount > 0 
-    ? Math.round((stats.cocCompliantCount / stats.cocRequiredCount) * 100) 
+  const cocComplianceRate = stats.cocRequiredCount > 0
+    ? Math.round((stats.cocCompliantCount / stats.cocRequiredCount) * 100)
     : 100;
 
-  const snagResolutionRate = stats.totalSnags > 0 
-    ? Math.round((stats.closedSnags / stats.totalSnags) * 100) 
+  const snagResolutionRate = stats.totalSnags > 0
+    ? Math.round((stats.closedSnags / stats.totalSnags) * 100)
     : 100;
 
   if (loading) {
@@ -191,16 +192,35 @@ const Dashboard = () => {
 
   return (
     <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+        <div>
+          <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
+          <p className="text-muted-foreground mt-1">Overview of your operations and compliance</p>
+        </div>
+        <div className="flex gap-2 w-full sm:w-auto">
+          <Button onClick={() => navigate("/clients")} className="flex-1 sm:flex-none gap-2">
+            <Users className="h-4 w-4" />
+            Clients
+          </Button>
+          <Button onClick={() => navigate("/sites")} variant="outline" className="flex-1 sm:flex-none gap-2">
+            <Building2 className="h-4 w-4" />
+            Sites
+          </Button>
+          <Button onClick={() => navigate("/qr-codes")} variant="outline" className="flex-1 sm:flex-none gap-2">
+            <QrCode className="h-4 w-4" />
+            QR Codes
+          </Button>
+        </div>
       </div>
 
       {/* Primary KPIs - 4 columns */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-        <Card>
+        <Card className="glass-card border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Sites</CardTitle>
-            <Building2 className="h-4 w-4 text-blue-500" />
+            <div className="p-2 bg-blue-500/10 rounded-full">
+              <Building2 className="h-4 w-4 text-blue-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalSites}</div>
@@ -208,10 +228,12 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-card border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Subsections</CardTitle>
-            <Layers className="h-4 w-4 text-purple-500" />
+            <div className="p-2 bg-purple-500/10 rounded-full">
+              <Layers className="h-4 w-4 text-purple-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalSubsections}</div>
@@ -219,10 +241,12 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-card border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
-            <Users className="h-4 w-4 text-green-500" />
+            <div className="p-2 bg-green-500/10 rounded-full">
+              <Users className="h-4 w-4 text-green-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.totalClients}</div>
@@ -230,10 +254,12 @@ const Dashboard = () => {
           </CardContent>
         </Card>
 
-        <Card>
+        <Card className="glass-card border-none">
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
             <CardTitle className="text-sm font-medium">Active Inspections</CardTitle>
-            <Activity className="h-4 w-4 text-orange-500" />
+            <div className="p-2 bg-orange-500/10 rounded-full">
+              <Activity className="h-4 w-4 text-orange-500" />
+            </div>
           </CardHeader>
           <CardContent>
             <div className="text-2xl font-bold">{stats.activeInspections}</div>
@@ -301,7 +327,7 @@ const Dashboard = () => {
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* High-Risk Snags Tracker */}
-        <Card className="md:col-span-2">
+        <Card className="md:col-span-2 glass-card border-none">
           <CardHeader>
             <CardTitle className="flex items-center gap-2">
               <AlertTriangle className="h-5 w-5 text-orange-500" />
@@ -318,13 +344,13 @@ const Dashboard = () => {
               <div className="space-y-3">
                 {highRiskSnags.map((snag) => {
                   const daysSinceLogged = differenceInDays(new Date(), new Date(snag.created_at));
-                  const daysSinceCleared = snag.status === 'Closed' 
+                  const daysSinceCleared = snag.status === 'Closed'
                     ? differenceInDays(new Date(), new Date(snag.updated_at))
                     : null;
 
                   return (
-                    <div 
-                      key={snag.id} 
+                    <div
+                      key={snag.id}
                       className="flex items-start gap-3 p-4 border rounded-lg hover:bg-accent/50 transition-colors cursor-pointer"
                       onClick={() => {
                         const clientId = snag.subsections?.sites?.client_id;
@@ -334,9 +360,8 @@ const Dashboard = () => {
                         }
                       }}
                     >
-                      <AlertTriangle className={`h-5 w-5 mt-0.5 flex-shrink-0 ${
-                        snag.risk_level === 'Critical' ? 'text-red-500' : 'text-orange-500'
-                      }`} />
+                      <AlertTriangle className={`h-5 w-5 mt-0.5 flex-shrink-0 ${snag.risk_level === 'Critical' ? 'text-red-500' : 'text-orange-500'
+                        }`} />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1 flex-wrap">
                           <p className="text-sm font-medium">{snag.title}</p>
@@ -352,7 +377,7 @@ const Dashboard = () => {
                         </p>
                         <div className="flex gap-4 text-xs text-muted-foreground">
                           <span>
-                            Logged: {format(new Date(snag.created_at), 'MMM dd, yyyy')} 
+                            Logged: {format(new Date(snag.created_at), 'MMM dd, yyyy')}
                             ({daysSinceLogged} {daysSinceLogged === 1 ? 'day' : 'days'} ago)
                           </span>
                           {snag.status === 'Closed' && daysSinceCleared !== null && (
@@ -393,12 +418,12 @@ const Dashboard = () => {
                       <p className="text-sm font-medium truncate">{event.title} at {event.site_name}</p>
                       <p className="text-xs text-muted-foreground">{event.start_date}</p>
                     </div>
-                    <Badge 
+                    <Badge
                       variant="secondary"
                       className={
                         event.status === "Scheduled" ? "bg-blue-500/10 text-blue-500" :
-                        event.status === "In Progress" ? "bg-orange-500/10 text-orange-500" :
-                        "bg-green-500/10 text-green-500"
+                          event.status === "In Progress" ? "bg-orange-500/10 text-orange-500" :
+                            "bg-green-500/10 text-green-500"
                       }
                     >
                       {event.status}

@@ -143,16 +143,6 @@ const App = () => (
             }
           />
           <Route
-            path="/clients/:clientId/sites/:siteId"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <SiteDetail />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
             path="/sites/:siteId"
             element={
               <ProtectedRoute>
@@ -174,26 +164,6 @@ const App = () => (
           />
           <Route
             path="/sites/:siteId/subsections/:subsectionId/inspections/:inspectionId"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <InspectionDetail />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/clients/:clientId/sites/:siteId/subsections/:subsectionId"
-            element={
-              <ProtectedRoute>
-                <DashboardLayout>
-                  <SubsectionDetail />
-                </DashboardLayout>
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="/clients/:clientId/sites/:siteId/subsections/:subsectionId/inspections/:inspectionId"
             element={
               <ProtectedRoute>
                 <DashboardLayout>

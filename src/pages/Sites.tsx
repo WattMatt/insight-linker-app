@@ -14,6 +14,7 @@ import { toast } from "sonner";
 import { siteSchema } from "@/lib/validation-schemas";
 import { z } from "zod";
 import { RobustImage } from "@/components/RobustImage";
+import { EmptyState } from "@/components/EmptyState";
 
 interface Site {
   id: string;
@@ -55,7 +56,7 @@ const Sites = () => {
   const fetchData = async () => {
     try {
       let sitesQuery = supabase.from("sites").select("*, clients(name)").order("name", { ascending: true });
-      
+
       // Filter by clientId if present in URL
       if (clientId) {
         sitesQuery = sitesQuery.eq("client_id", clientId);
@@ -81,7 +82,7 @@ const Sites = () => {
                 const { data: signedData } = await supabase.storage
                   .from('site-images')
                   .createSignedUrl(path, 3600); // 1 hour expiry
-                
+
                 if (signedData?.signedUrl) {
                   return { ...site, site_image_url: signedData.signedUrl };
                 }
@@ -121,7 +122,7 @@ const Sites = () => {
     try {
       // Validate input
       const validated = siteSchema.parse(formData);
-      
+
       const { data: { user } } = await supabase.auth.getUser();
 
       const { error } = await supabase.from("sites").insert([
@@ -192,8 +193,8 @@ const Sites = () => {
             {currentClient ? `${currentClient.name} - Sites` : "Sites"}
           </h1>
           <p className="text-muted-foreground mt-2">
-            {currentClient 
-              ? `Manage sites for ${currentClient.name}` 
+            {currentClient
+              ? `Manage sites for ${currentClient.name}`
               : "Manage inspection sites and locations"}
           </p>
         </div>
@@ -302,33 +303,27 @@ const Sites = () => {
         </CardHeader>
         <CardContent>
           {sites.length === 0 ? (
-            <div className="text-center py-12">
-              <Building2 className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
-              <h3 className="text-lg font-semibold mb-2">No sites yet</h3>
-              <p className="text-muted-foreground mb-4">
-                Add your first site to start managing inspections
-              </p>
-              {clients.length > 0 && (
-                <Button onClick={() => setDialogOpen(true)}>
-                  <Plus className="mr-2 h-4 w-4" />
-                  Add First Site
-                </Button>
-              )}
-            </div>
+            <EmptyState
+              icon={Building2}
+              title="No sites yet"
+              description="Add your first site to start managing inspections for this client."
+              actionLabel="Add First Site"
+              onAction={() => setDialogOpen(true)}
+            />
           ) : (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
               {sites.map((site) => (
-                <Card 
-                  key={site.id} 
-                  className="group relative overflow-hidden hover:shadow-lg transition-all cursor-pointer border-2 hover:border-primary"
+                <Card
+                  key={site.id}
+                  className="group relative overflow-hidden transition-all cursor-pointer glass-card border-none hover:shadow-2xl"
                   onClick={() => navigate(`/clients/${site.client_id}/sites/${site.id}`)}
                 >
                   <CardHeader className="pb-3">
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3 flex-1 min-w-0">
                         {site.site_image_url ? (
-                          <RobustImage 
-                            src={site.site_image_url} 
+                          <RobustImage
+                            src={site.site_image_url}
                             alt={site.name}
                             className="h-12 w-12 rounded-lg object-cover flex-shrink-0"
                           />
