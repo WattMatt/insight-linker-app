@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Zap, Droplets, Trash2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Upload, Zap, Trash2, RefreshCw, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -119,7 +119,6 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
   }, {});
 
   const electricalAssets = assets.filter((a) => a.asset_category === "electrical_meter");
-  const waterAssets = assets.filter((a) => a.asset_category === "water_meter");
 
   const parseExcelFile = async (file: File): Promise<ParsedAsset[]> => {
     return new Promise((resolve, reject) => {
@@ -386,11 +385,11 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
       </div>
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
             <CardDescription>Total Assets</CardDescription>
-            <CardTitle className="text-3xl">{assets.length}</CardTitle>
+            <CardTitle className="text-3xl">{electricalAssets.length}</CardTitle>
           </CardHeader>
         </Card>
         <Card>
@@ -400,15 +399,6 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               <CardDescription>Electrical Meters</CardDescription>
             </div>
             <CardTitle className="text-3xl">{electricalAssets.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <div className="flex items-center gap-2">
-              <Droplets className="h-4 w-4 text-blue-500" />
-              <CardDescription>Water Meters</CardDescription>
-            </div>
-            <CardTitle className="text-3xl">{waterAssets.length}</CardTitle>
           </CardHeader>
         </Card>
       </div>
@@ -456,13 +446,6 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
                 {electricalAssets.length}
               </Badge>
             </TabsTrigger>
-            <TabsTrigger value="water" className="gap-2">
-              <Droplets className="h-4 w-4" />
-              Water Meters
-              <Badge variant="secondary" className="ml-1">
-                {waterAssets.length}
-              </Badge>
-            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="verification">
@@ -476,10 +459,6 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
 
           <TabsContent value="electrical">
             <AssetTable assets={electricalAssets} type="electrical" onRefresh={refetch} />
-          </TabsContent>
-
-          <TabsContent value="water">
-            <AssetTable assets={waterAssets} type="water" onRefresh={refetch} />
           </TabsContent>
         </Tabs>
       )}
