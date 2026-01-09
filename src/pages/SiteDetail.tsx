@@ -511,7 +511,9 @@ const SiteDetail = () => {
       if (error) throw error;
       toast.success("Inspection created");
       setIsCreateInspectionOpen(false);
-      navigate(`/inspections/${data.id}`);
+      // Site-level inspections: stay on site page with inspections tab
+      const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
+      navigate(`${basePath}?tab=inspections`);
     } catch (error) {
       toast.error("Failed to create inspection");
     }
@@ -574,7 +576,7 @@ const SiteDetail = () => {
 
         <TabsContent value="overview" className="space-y-6 mt-6">
           <SiteOverview site={site} stats={stats} />
-          <SiteLevelInspections inspections={inspections} siteId={siteId!} onCreateClick={() => setIsCreateInspectionOpen(true)} />
+          <SiteLevelInspections inspections={inspections} siteId={siteId!} clientId={clientId} onCreateClick={() => setIsCreateInspectionOpen(true)} />
         </TabsContent>
 
         <TabsContent value="compliance">

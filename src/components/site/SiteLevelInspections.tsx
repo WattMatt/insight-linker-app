@@ -15,12 +15,21 @@ interface Inspection {
 interface SiteLevelInspectionsProps {
     inspections: Inspection[];
     siteId: string;
+    clientId?: string;
     onCreateClick: () => void;
 }
 
-export function SiteLevelInspections({ inspections, siteId, onCreateClick }: SiteLevelInspectionsProps) {
+export function SiteLevelInspections({ inspections, siteId, clientId, onCreateClick }: SiteLevelInspectionsProps) {
     const navigate = useNavigate();
     const siteInspections = inspections.filter(i => !i.subsection_id);
+    
+    const getInspectionUrl = (inspectionId: string) => {
+        // Site-level inspections don't have a subsection, so navigate to inspections list with filter
+        // Since there's no dedicated route for site-level inspection detail, we'll use the inspections page
+        return clientId 
+            ? `/clients/${clientId}/sites/${siteId}?tab=inspections&inspectionId=${inspectionId}`
+            : `/sites/${siteId}?tab=inspections&inspectionId=${inspectionId}`;
+    };
 
     return (
         <Card className="glass-card border-none overflow-hidden">
@@ -51,7 +60,7 @@ export function SiteLevelInspections({ inspections, siteId, onCreateClick }: Sit
                                 <div
                                     key={inspection.id}
                                     className="flex items-center justify-between p-4 border rounded-xl hover:bg-primary/5 cursor-pointer transition-colors group"
-                                    onClick={() => navigate(`/inspections/${inspection.id}`)}
+                                    onClick={() => navigate(getInspectionUrl(inspection.id))}
                                 >
                                     <div className="flex items-center gap-4">
                                         <div className="p-2 rounded-lg bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground transition-colors">
@@ -73,7 +82,7 @@ export function SiteLevelInspections({ inspections, siteId, onCreateClick }: Sit
                             <Button
                                 variant="ghost"
                                 className="w-full mt-2 text-primary hover:bg-primary/5"
-                                onClick={() => navigate(`/inspections?site=${siteId}`)}
+                                onClick={() => navigate(clientId ? `/clients/${clientId}/sites/${siteId}?tab=inspections` : `/sites/${siteId}?tab=inspections`)}
                             >
                                 View all {siteInspections.length} inspections
                             </Button>

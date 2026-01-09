@@ -72,7 +72,7 @@ function ClientSidebar() {
   const handleLogout = async () => {
     // If in preview mode, just navigate back to admin
     if (userRole === "Admin" && previewClientId) {
-      navigate("/admin-client-preview");
+      navigate("/portal-management");
       toast.success("Exited preview mode");
       return;
     }

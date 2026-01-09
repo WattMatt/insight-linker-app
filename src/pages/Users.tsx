@@ -632,7 +632,7 @@ const Users = () => {
         </div>
 
         <div className="flex gap-2">
-          <a href="/admin-client-preview" target="_blank" rel="noopener noreferrer">
+          <a href="/portal-management" target="_blank" rel="noopener noreferrer">
             <Button variant="outline">
               <Eye className="mr-2 h-4 w-4" />
               Preview Client Portal

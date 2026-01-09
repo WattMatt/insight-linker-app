@@ -67,7 +67,7 @@ const ContractorSidebar = () => {
   const handleLogout = async () => {
     // If admin is in preview mode, exit preview instead of logging out
     if (userRole === "Admin" && previewSiteId) {
-      navigate("/admin-contractor-preview");
+      navigate("/portal-management");
       toast.success("Exited contractor preview mode");
       return;
     }
