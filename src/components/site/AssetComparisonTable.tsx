@@ -27,6 +27,7 @@ import {
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2 } from "lucide-react";
 import { RobustImage } from "@/components/RobustImage";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateAssetVerificationReport } from "@/lib/assetVerificationReportGenerator";
 import { toast } from "sonner";
 
@@ -117,7 +118,7 @@ export const AssetComparisonTable = ({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "matched" | "discrepancies" | "unmatched">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
-  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [generating, setGenerating] = useState(false);
 
   // Build comparison results
@@ -316,7 +317,7 @@ export const AssetComparisonTable = ({
   const handlePreviewReport = async () => {
     setGenerating(true);
     try {
-      const { blob } = await generateAssetVerificationReport({
+      const { blob, filename } = await generateAssetVerificationReport({
         siteName,
         comparisonResults,
         stats,
@@ -324,7 +325,7 @@ export const AssetComparisonTable = ({
       });
       
       const url = URL.createObjectURL(blob);
-      setPdfPreviewUrl(url);
+      setPdfPreview({ url, filename });
     } catch (error) {
       console.error('Failed to preview report:', error);
       toast.error("Failed to generate preview");
@@ -573,24 +574,18 @@ export const AssetComparisonTable = ({
         </DialogContent>
       </Dialog>
 
-      {/* PDF Preview Dialog */}
-      <Dialog open={!!pdfPreviewUrl} onOpenChange={() => {
-        if (pdfPreviewUrl) {
-          URL.revokeObjectURL(pdfPreviewUrl);
-        }
-        setPdfPreviewUrl(null);
-      }}>
-        <DialogContent className="max-w-5xl h-[90vh]">
-          <DialogTitle>Asset Verification Report Preview</DialogTitle>
-          {pdfPreviewUrl && (
-            <iframe
-              src={pdfPreviewUrl}
-              className="w-full h-full rounded border"
-              title="PDF Preview"
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      {/* PDF Preview Dialog with React-PDF */}
+      <DocumentPreviewDialog
+        open={!!pdfPreview}
+        onOpenChange={(open) => {
+          if (!open && pdfPreview) {
+            URL.revokeObjectURL(pdfPreview.url);
+            setPdfPreview(null);
+          }
+        }}
+        fileUrl={pdfPreview?.url || ""}
+        fileName={pdfPreview?.filename || "report.pdf"}
+      />
     </div>
   );
 };
