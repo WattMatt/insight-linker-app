@@ -48,8 +48,8 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
                                 >
                                     <TableCell className="font-medium">
                                         <div className="flex items-center gap-3">
-                                            <div className={`p-2 rounded-lg ${categoryColor.replace('text-', 'bg-').replace('-500', '-500/10')}`}>
-                                                <CategoryIcon className={`h-4 w-4 ${categoryColor}`} />
+                                            <div className={`p-2 rounded-lg ${categoryColor.bg}`}>
+                                                <CategoryIcon className={`h-4 w-4 ${categoryColor.text}`} />
                                             </div>
                                             <div>
                                                 <div>{sub.name}</div>
