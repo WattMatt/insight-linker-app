@@ -2,11 +2,12 @@ import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { FileText, Trash2, Download, Eye, Upload, Plus, Search, Filter, Building, Layers } from "lucide-react";
+import { FileText, Trash2, Download, Eye, Upload, Plus, Search, Filter, Building, Layers, FolderTree, List } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 
 interface SiteDocument {
     id: string;
@@ -62,6 +63,7 @@ export function SiteDocuments({
     const [searchQuery, setSearchQuery] = useState("");
     const [activeDocTab, setActiveDocTab] = useState("all");
     const [selectedSubsection, setSelectedSubsection] = useState<string>("all");
+    const [subsectionGrouping, setSubsectionGrouping] = useState<"category" | "subsection">("category");
 
     // Combine and enrich subsection documents with subsection names
     const enrichedSubsectionDocs = useMemo(() => {
@@ -109,6 +111,22 @@ export function SiteDocuments({
             groups[key].push(doc);
         });
         return groups;
+    }, [filteredSubsectionDocs]);
+
+    // Group subsection documents by category
+    const groupedByCategory = useMemo(() => {
+        const groups: Record<string, SubsectionDocument[]> = {};
+        filteredSubsectionDocs.forEach(doc => {
+            const key = doc.category_name || "Uncategorized";
+            if (!groups[key]) groups[key] = [];
+            groups[key].push(doc);
+        });
+        // Sort groups by category name
+        const sortedGroups: Record<string, SubsectionDocument[]> = {};
+        Object.keys(groups).sort().forEach(key => {
+            sortedGroups[key] = groups[key];
+        });
+        return sortedGroups;
     }, [filteredSubsectionDocs]);
 
     const totalDocCount = documents.length + subsectionDocuments.length;
@@ -259,15 +277,55 @@ export function SiteDocuments({
                 </TabsContent>
 
                 {/* Subsection Documents Tab */}
-                <TabsContent value="subsections" className="mt-4">
-                    {Object.keys(groupedBySubsection).length > 0 ? (
-                        <SubsectionDocumentsList 
-                            groupedDocs={groupedBySubsection}
-                            onPreview={onPreview}
-                            onDownload={onDownload}
-                        />
+                <TabsContent value="subsections" className="mt-4 space-y-4">
+                    {/* Grouping Toggle */}
+                    <div className="flex items-center justify-between">
+                        <p className="text-sm text-muted-foreground">
+                            {filteredSubsectionDocs.length} documents
+                        </p>
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm text-muted-foreground">Group by:</span>
+                            <ToggleGroup 
+                                type="single" 
+                                value={subsectionGrouping} 
+                                onValueChange={(value) => value && setSubsectionGrouping(value as "category" | "subsection")}
+                                className="bg-muted rounded-lg p-1"
+                            >
+                                <ToggleGroupItem value="category" aria-label="Group by category" className="gap-1.5 text-xs px-3">
+                                    <FolderTree className="h-3.5 w-3.5" />
+                                    Category
+                                </ToggleGroupItem>
+                                <ToggleGroupItem value="subsection" aria-label="Group by subsection" className="gap-1.5 text-xs px-3">
+                                    <Layers className="h-3.5 w-3.5" />
+                                    Subsection
+                                </ToggleGroupItem>
+                            </ToggleGroup>
+                        </div>
+                    </div>
+
+                    {/* Document List based on grouping */}
+                    {subsectionGrouping === "category" ? (
+                        Object.keys(groupedByCategory).length > 0 ? (
+                            <SubsectionDocumentsList 
+                                groupedDocs={groupedByCategory}
+                                onPreview={onPreview}
+                                onDownload={onDownload}
+                                groupLabel="category"
+                            />
+                        ) : (
+                            <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
+                        )
                     ) : (
-                        <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
+                        Object.keys(groupedBySubsection).length > 0 ? (
+                            <SubsectionDocumentsList 
+                                groupedDocs={groupedBySubsection}
+                                onPreview={onPreview}
+                                onDownload={onDownload}
+                                groupLabel="subsection"
+                            />
+                        ) : (
+                            <EmptyDocumentsState searchQuery={searchQuery} isSubsection />
+                        )
                     )}
                 </TabsContent>
             </Tabs>
@@ -381,24 +439,30 @@ function SiteDocumentsList({
 function SubsectionDocumentsList({
     groupedDocs,
     onPreview,
-    onDownload
+    onDownload,
+    groupLabel = "subsection"
 }: {
     groupedDocs: Record<string, SubsectionDocument[]>;
     onPreview: (url: string, name: string) => void;
     onDownload: (url: string, name: string) => void;
+    groupLabel?: "category" | "subsection";
 }) {
     const sortedGroups = Object.entries(groupedDocs).sort((a, b) => a[0].localeCompare(b[0]));
 
     return (
         <Accordion type="multiple" defaultValue={sortedGroups.map(([name]) => name)} className="space-y-3">
-            {sortedGroups.map(([subsectionName, docs]) => (
-                <AccordionItem key={subsectionName} value={subsectionName} className="border-none">
+            {sortedGroups.map(([groupName, docs]) => (
+                <AccordionItem key={groupName} value={groupName} className="border-none">
                     <Card className="glass-card border-none overflow-hidden">
                         <AccordionTrigger className="px-4 sm:px-6 py-3 sm:py-4 hover:no-underline hover:bg-primary/5 transition-colors">
                             <div className="flex items-center gap-2 sm:gap-3">
-                                <Layers className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                                {groupLabel === "category" ? (
+                                    <FolderTree className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                                ) : (
+                                    <Layers className="h-4 w-4 sm:h-5 sm:w-5 text-primary" />
+                                )}
                                 <div className="flex items-center gap-2 flex-wrap">
-                                    <span className="font-semibold text-sm sm:text-base">{subsectionName}</span>
+                                    <span className="font-semibold text-sm sm:text-base">{groupName}</span>
                                     <Badge variant="secondary" className="text-xs">
                                         {docs.length} files
                                     </Badge>
@@ -413,7 +477,11 @@ function SubsectionDocumentsList({
                                             <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
                                             <div className="min-w-0">
                                                 <span className="text-sm font-medium truncate block">{doc.file_name}</span>
-                                                {doc.category_name && (
+                                                {/* Show the opposite grouping info as subtitle */}
+                                                {groupLabel === "category" && doc.subsection_name && (
+                                                    <span className="text-xs text-muted-foreground">{doc.subsection_name}</span>
+                                                )}
+                                                {groupLabel === "subsection" && doc.category_name && (
                                                     <span className="text-xs text-muted-foreground">{doc.category_name}</span>
                                                 )}
                                             </div>
