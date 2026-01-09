@@ -4,9 +4,10 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { ArrowLeft, Calendar, ClipboardList } from "lucide-react";
+import { Calendar, ClipboardList } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import ContractorPortalLayout from "@/components/ContractorPortalLayout";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 const ContractorSubsectionDetail = () => {
   const { subsectionId } = useParams();
@@ -87,14 +88,14 @@ const ContractorSubsectionDetail = () => {
   return (
     <ContractorPortalLayout>
       <div className="space-y-6">
-        <Button
-          variant="ghost"
-          onClick={() => navigate(-1)}
-          className="mb-4"
-        >
-          <ArrowLeft className="h-4 w-4 mr-2" />
-          Back
-        </Button>
+        {/* Breadcrumbs */}
+        <Breadcrumbs 
+          items={[
+            { label: "Site Overview", href: `/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`, icon: "site" },
+            { label: subsection.sites?.name || "Site", icon: "site" },
+            { label: subsection.name, icon: "subsection" }
+          ]} 
+        />
 
         <Card>
           <CardHeader>

@@ -2,13 +2,14 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, ArrowLeft, Info } from "lucide-react";
+import { FileText, Download, Info } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { useEffect } from "react";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 const ClientPortalSubsectionDetail = () => {
   const { subsectionId } = useParams();
@@ -149,6 +150,15 @@ const ClientPortalSubsectionDetail = () => {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs 
+        items={[
+          { label: "Sites", href: `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
+          { label: subsection.sites?.name || "Site", href: `/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
+          { label: subsection.name, icon: "subsection" }
+        ]} 
+      />
+
       {previewClientId && (
         <Alert className="bg-blue-50 border-blue-200">
           <Info className="h-4 w-4 text-blue-600" />
@@ -177,12 +187,6 @@ const ClientPortalSubsectionDetail = () => {
                 </p>
               </div>
             </div>
-            <Link to={`/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`}>
-              <Button variant="outline" className="gap-2">
-                <ArrowLeft className="h-4 w-4" />
-                Back to Site
-              </Button>
-            </Link>
           </div>
         </CardHeader>
         <CardContent>

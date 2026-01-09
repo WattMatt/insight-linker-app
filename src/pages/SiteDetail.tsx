@@ -477,7 +477,7 @@ const SiteDetail = () => {
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in space-y-8">
-      <Breadcrumbs items={[{ label: "Clients", href: "/clients" }, { label: site.clients?.name || "Client", href: `/clients/${clientId}` }, { label: site.name }]} />
+      <Breadcrumbs items={[{ label: "Clients", href: "/clients", icon: "client" }, { label: site.clients?.name || "Client", href: `/clients/${clientId}`, icon: "client" }, { label: site.name, icon: "site" }]} />
 
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div className="flex items-center gap-4">
