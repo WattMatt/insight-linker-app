@@ -12,6 +12,7 @@ import { useClientInfo } from "@/hooks/useUserRole";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 const ClientPortalSiteDetail = () => {
   const { siteId } = useParams();
@@ -179,6 +180,14 @@ const ClientPortalSiteDetail = () => {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs 
+        items={[
+          { label: "Sites", href: `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
+          { label: site.name, icon: "site" }
+        ]} 
+      />
+
       {previewClientId && (
         <Alert className="bg-blue-50 border-blue-200">
           <Info className="h-4 w-4 text-blue-600" />
@@ -218,9 +227,6 @@ const ClientPortalSiteDetail = () => {
                 )}
               </div>
             </div>
-            <Link to={`/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`}>
-              <Button variant="outline">Back to Sites</Button>
-            </Link>
           </div>
         </CardHeader>
       </Card>

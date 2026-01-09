@@ -5,9 +5,10 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ArrowLeft, MapPin, Building2, Database, FileText, ClipboardCheck } from "lucide-react";
+import { MapPin, Building2, FileText, ClipboardCheck } from "lucide-react";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { toast } from "sonner";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 // Data structures
 interface Client {
@@ -132,11 +133,18 @@ const ClientDetail = () => {
 
   return (
     <div className="space-y-6">
+      <Breadcrumbs 
+        items={[
+          { label: "Clients", href: "/clients", icon: "client" },
+          { label: client.name, icon: "client" }
+        ]} 
+      />
+      
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => navigate(-1)}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+          <div className="h-12 w-12 rounded-xl bg-primary/10 flex items-center justify-center">
+            <Building2 className="h-6 w-6 text-primary" />
+          </div>
           <div>
             <h1 className="text-3xl font-bold tracking-tight">{client.name}</h1>
             <p className="text-muted-foreground mt-1">
@@ -219,7 +227,7 @@ const ClientDetail = () => {
             <div className="space-y-4">
               {sites.map((site) => (
                 <Card key={site.id} className="border-2">
-                  <CardHeader className="cursor-pointer hover:bg-accent" onClick={() => navigate(`/sites/${site.id}`)}>
+                  <CardHeader className="cursor-pointer hover:bg-accent" onClick={() => navigate(`/clients/${clientId}/sites/${site.id}`)}>
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <Building2 className="h-5 w-5 text-primary" />

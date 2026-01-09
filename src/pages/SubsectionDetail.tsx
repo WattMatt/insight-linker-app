@@ -19,6 +19,7 @@ import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { generateAndSaveComprehensiveReport } from "@/components/ComprehensiveInspectionReport";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import { getSubsectionDocuments, getSubsectionFloorPlans } from "@/lib/offlineDBExtensions";
+import { Breadcrumbs } from "@/components/Breadcrumb";
 
 import { supabase } from "@/integrations/supabase/client";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -1973,15 +1974,19 @@ const SubsectionDetail = () => {
 
   return (
     <div className="space-y-6">
+      {/* Breadcrumbs */}
+      <Breadcrumbs 
+        items={[
+          { label: "Clients", href: "/clients", icon: "client" },
+          { label: siteData?.clientInfo || "Client", href: `/clients/${actualClientId || clientId}`, icon: "client" },
+          { label: siteData?.siteName || "Site", href: `/clients/${actualClientId || clientId}/sites/${siteId}`, icon: "site" },
+          { label: subsection.name, icon: "subsection" }
+        ]} 
+      />
+
       {/* Header */}
       <div className="flex items-center justify-between">
-      <div className="flex items-center gap-4">
-          <Button variant="ghost" size="icon" onClick={() => {
-            const basePath = (actualClientId || clientId) ? `/clients/${actualClientId || clientId}/sites/${siteId}` : `/sites/${siteId}`;
-            navigate(`${basePath}?tab=subsections`);
-          }}>
-            <ArrowLeft className="h-4 w-4" />
-          </Button>
+        <div className="flex items-center gap-4">
           <div>
             <div className="flex items-center gap-3">
               {subsection.category && (() => {
@@ -1995,10 +2000,10 @@ const SubsectionDetail = () => {
               })()}
               <div>
                 <h1 className="text-2xl font-bold tracking-tight">
-                  {subsection.name} - {siteData.siteName}
+                  {subsection.name}
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  Subsection of {siteData.siteName}
+                  {siteData.siteName} • {subsection.category || "General"}
                 </p>
               </div>
             </div>
