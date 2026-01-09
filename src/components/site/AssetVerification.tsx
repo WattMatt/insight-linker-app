@@ -3,13 +3,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Zap, Trash2, RefreshCw, ShieldCheck } from "lucide-react";
+import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as XLSX from "xlsx";
 import { AssetTable } from "./AssetTable";
 import { AssetComparisonTable } from "./AssetComparisonTable";
+import { MeterRegister } from "./MeterRegister";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -439,6 +440,10 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               <ShieldCheck className="h-4 w-4" />
               Verification
             </TabsTrigger>
+            <TabsTrigger value="meter-register" className="gap-2">
+              <Gauge className="h-4 w-4" />
+              Meter Register
+            </TabsTrigger>
             <TabsTrigger value="electrical" className="gap-2">
               <Zap className="h-4 w-4" />
               Electrical Meters
@@ -459,6 +464,10 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
                 queryClient.invalidateQueries({ queryKey: ["site-subsections-for-comparison", siteId] });
               }}
             />
+          </TabsContent>
+
+          <TabsContent value="meter-register">
+            <MeterRegister siteId={siteId} siteName={siteName} />
           </TabsContent>
 
           <TabsContent value="electrical">
