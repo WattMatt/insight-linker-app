@@ -42,6 +42,7 @@ interface SiteDocumentsProps {
     onCreateCategory: () => void;
     onDeleteCategory: (id: string, name: string) => void;
     onBulkDeleteCategories?: () => void;
+    onBulkDeleteDocumentsInCategory?: (categoryId: string, categoryName: string) => void;
 }
 
 export function SiteDocuments({
@@ -55,7 +56,8 @@ export function SiteDocuments({
     onUploadClick,
     onCreateCategory,
     onDeleteCategory,
-    onBulkDeleteCategories
+    onBulkDeleteCategories,
+    onBulkDeleteDocumentsInCategory
 }: SiteDocumentsProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [activeDocTab, setActiveDocTab] = useState("all");
@@ -213,6 +215,7 @@ export function SiteDocuments({
                                 onDeleteDocument={onDeleteDocument}
                                 onUploadClick={onUploadClick}
                                 onDeleteCategory={onDeleteCategory}
+                                onBulkDeleteDocumentsInCategory={onBulkDeleteDocumentsInCategory}
                             />
                         </div>
                     )}
@@ -248,6 +251,7 @@ export function SiteDocuments({
                         onDeleteDocument={onDeleteDocument}
                         onUploadClick={onUploadClick}
                         onDeleteCategory={onDeleteCategory}
+                        onBulkDeleteDocumentsInCategory={onBulkDeleteDocumentsInCategory}
                     />
                     {filteredSiteDocs.length === 0 && categories.length === 0 && (
                         <EmptyDocumentsState searchQuery={searchQuery} />
@@ -279,7 +283,8 @@ function SiteDocumentsList({
     onDownload, 
     onDeleteDocument,
     onUploadClick,
-    onDeleteCategory
+    onDeleteCategory,
+    onBulkDeleteDocumentsInCategory
 }: {
     documents: SiteDocument[];
     categories: SiteDocumentCategory[];
@@ -288,6 +293,7 @@ function SiteDocumentsList({
     onDeleteDocument: (id: string, name: string) => void;
     onUploadClick: (categoryId: string) => void;
     onDeleteCategory: (id: string, name: string) => void;
+    onBulkDeleteDocumentsInCategory?: (categoryId: string, categoryName: string) => void;
 }) {
     return (
         <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="space-y-3">
@@ -320,8 +326,19 @@ function SiteDocumentsList({
                                         </div>
                                     ) : (
                                         <>
-                                            <div className="flex justify-end mb-2">
-                                                <Button size="sm" variant="ghost" onClick={() => onUploadClick(category.id)} className="gap-2 text-primary">
+                                            <div className="flex justify-between items-center mb-2">
+                                                {onBulkDeleteDocumentsInCategory && (
+                                                    <Button 
+                                                        size="sm" 
+                                                        variant="ghost" 
+                                                        onClick={() => onBulkDeleteDocumentsInCategory(category.id, category.name)} 
+                                                        className="gap-2 text-destructive hover:text-destructive hover:bg-destructive/10"
+                                                    >
+                                                        <Trash2 className="h-3 w-3" />
+                                                        Delete All Files
+                                                    </Button>
+                                                )}
+                                                <Button size="sm" variant="ghost" onClick={() => onUploadClick(category.id)} className="gap-2 text-primary ml-auto">
                                                     <Plus className="h-3 w-3" />
                                                     Add More
                                                 </Button>
