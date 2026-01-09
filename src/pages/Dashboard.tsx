@@ -1,18 +1,26 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle } from "lucide-react";
+import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { useNavigate } from "react-router-dom";
 import { VerificationDashboardWidget } from "@/components/VerificationDashboardWidget";
 import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
+import { Progress } from "@/components/ui/progress";
 
 interface DashboardStats {
   totalClients: number;
   totalSites: number;
+  totalSubsections: number;
   totalInspections: number;
+  completedInspections: number;
   activeInspections: number;
+  totalSnags: number;
+  openSnags: number;
+  closedSnags: number;
+  cocCompliantCount: number;
+  cocRequiredCount: number;
 }
 
 interface ActivityLog {
@@ -53,8 +61,15 @@ const Dashboard = () => {
   const [stats, setStats] = useState<DashboardStats>({
     totalClients: 0,
     totalSites: 0,
+    totalSubsections: 0,
     totalInspections: 0,
+    completedInspections: 0,
     activeInspections: 0,
+    totalSnags: 0,
+    openSnags: 0,
+    closedSnags: 0,
+    cocCompliantCount: 0,
+    cocRequiredCount: 0,
   });
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -70,11 +85,21 @@ const Dashboard = () => {
     try {
       const today = new Date().toISOString().split('T')[0];
       
-      // Fetch from Supabase only
-      const [supabaseClientsRes, supabaseSitesRes, supabaseInspectionsRes, activityRes, eventsRes, highRiskSnagsRes] = await Promise.all([
+      const [
+        supabaseClientsRes, 
+        supabaseSitesRes, 
+        supabaseSubsectionsRes,
+        supabaseInspectionsRes, 
+        supabaseSnagsRes,
+        activityRes, 
+        eventsRes, 
+        highRiskSnagsRes
+      ] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("sites").select("id", { count: "exact", head: true }),
+        supabase.from("subsections").select("id, coc_status, is_coc_required", { count: "exact" }),
         supabase.from("inspections").select("id, status", { count: "exact" }),
+        supabase.from("snags").select("id, status", { count: "exact" }),
         supabase.from("activity_logs").select("*").order("created_at", { ascending: false }).limit(5),
         supabase.from("calendar_events").select("*").gte("start_date", today).order("start_date", { ascending: true }).limit(5),
         supabase.from("snags")
@@ -102,17 +127,37 @@ const Dashboard = () => {
 
       const totalClients = supabaseClientsRes.count || 0;
       const totalSites = supabaseSitesRes.count || 0;
+      const totalSubsections = supabaseSubsectionsRes.count || 0;
       const totalInspections = supabaseInspectionsRes.count || 0;
+      
+      const completedInspections = supabaseInspectionsRes.data?.filter(
+        (i) => i.status === "Completed"
+      ).length || 0;
       
       const activeInspections = supabaseInspectionsRes.data?.filter(
         (i) => i.status === "In Progress" || i.status === "Scheduled"
       ).length || 0;
 
+      const totalSnags = supabaseSnagsRes.count || 0;
+      const openSnags = supabaseSnagsRes.data?.filter(s => s.status === 'Open' || s.status === 'In Progress').length || 0;
+      const closedSnags = supabaseSnagsRes.data?.filter(s => s.status === 'Closed' || s.status === 'Resolved').length || 0;
+
+      const subsectionsData = supabaseSubsectionsRes.data || [];
+      const cocRequiredCount = subsectionsData.filter(s => s.is_coc_required).length;
+      const cocCompliantCount = subsectionsData.filter(s => s.is_coc_required && s.coc_status === 'Valid').length;
+
       setStats({
         totalClients,
         totalSites,
+        totalSubsections,
         totalInspections,
+        completedInspections,
         activeInspections,
+        totalSnags,
+        openSnags,
+        closedSnags,
+        cocCompliantCount,
+        cocRequiredCount,
       });
 
       setActivities(activityRes.data || []);
@@ -125,26 +170,13 @@ const Dashboard = () => {
     }
   };
 
-  const kpiCards = [
-    {
-      title: "Total Sites Under Management",
-      value: stats.totalSites,
-      icon: Building2,
-      color: "text-blue-500",
-    },
-    {
-      title: "Total Clients",
-      value: stats.totalClients,
-      icon: Users,
-      color: "text-purple-500",
-    },
-    {
-      title: "Active Inspections",
-      value: stats.activeInspections,
-      icon: Activity,
-      color: "text-orange-500",
-    },
-  ];
+  const cocComplianceRate = stats.cocRequiredCount > 0 
+    ? Math.round((stats.cocCompliantCount / stats.cocRequiredCount) * 100) 
+    : 100;
+
+  const snagResolutionRate = stats.totalSnags > 0 
+    ? Math.round((stats.closedSnags / stats.totalSnags) * 100) 
+    : 100;
 
   if (loading) {
     return (
@@ -163,18 +195,108 @@ const Dashboard = () => {
         <h1 className="text-3xl font-bold tracking-tight">Dashboard</h1>
       </div>
 
-      <div className="grid gap-4 md:grid-cols-3">
-        {kpiCards.map((kpi) => (
-          <Card key={kpi.title}>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">{kpi.title}</CardTitle>
-              <kpi.icon className={`h-4 w-4 ${kpi.color}`} />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{kpi.value}</div>
-            </CardContent>
-          </Card>
-        ))}
+      {/* Primary KPIs - 4 columns */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Sites</CardTitle>
+            <Building2 className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalSites}</div>
+            <p className="text-xs text-muted-foreground">Under management</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Subsections</CardTitle>
+            <Layers className="h-4 w-4 text-purple-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalSubsections}</div>
+            <p className="text-xs text-muted-foreground">Across all sites</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Total Clients</CardTitle>
+            <Users className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.totalClients}</div>
+            <p className="text-xs text-muted-foreground">Active clients</p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Active Inspections</CardTitle>
+            <Activity className="h-4 w-4 text-orange-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.activeInspections}</div>
+            <p className="text-xs text-muted-foreground">In progress or scheduled</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Secondary KPIs - Compliance & Snags */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Inspections Completed</CardTitle>
+            <ClipboardCheck className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.completedInspections}</div>
+            <p className="text-xs text-muted-foreground">
+              of {stats.totalInspections} total inspections
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">COC Compliance</CardTitle>
+            <Shield className="h-4 w-4 text-blue-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{cocComplianceRate}%</div>
+            <Progress value={cocComplianceRate} className="mt-2 h-2" />
+            <p className="text-xs text-muted-foreground mt-1">
+              {stats.cocCompliantCount} of {stats.cocRequiredCount} compliant
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Open Snags</CardTitle>
+            <AlertCircle className="h-4 w-4 text-red-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{stats.openSnags}</div>
+            <p className="text-xs text-muted-foreground">
+              {stats.closedSnags} resolved of {stats.totalSnags} total
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+            <CardTitle className="text-sm font-medium">Snag Resolution</CardTitle>
+            <CheckCircle className="h-4 w-4 text-green-500" />
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{snagResolutionRate}%</div>
+            <Progress value={snagResolutionRate} className="mt-2 h-2" />
+            <p className="text-xs text-muted-foreground mt-1">
+              Resolution rate
+            </p>
+          </CardContent>
+        </Card>
       </div>
 
       <div className="grid gap-6 md:grid-cols-2">
