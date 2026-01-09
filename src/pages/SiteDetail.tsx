@@ -55,12 +55,11 @@ const SiteDetail = () => {
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
-  const [uploadingImage, setUploadingImage] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState<"client_logo" | "site_image" | null>(null);
   const [imagePreview, setImagePreview] = useState<{ site_image?: string, client_logo?: string }>({});
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
-    name: '', address: '', site_type: '', supply_authority: '',
-    nominated_max_demand: '', consultant_name: '', consultant_company: '', consultant_contact: '',
+    name: '', address: '', description: '', status: '', location_lat: '', location_lng: '',
   });
   const [documentCategories, setDocumentCategories] = useState<any[]>([]);
   const [createCategoryOpen, setCreateCategoryOpen] = useState(false);
@@ -453,8 +452,7 @@ const SiteDetail = () => {
         </div>
         <Button onClick={() => {
           setEditFormData({
-            name: site.name || '', address: site.address || '', site_type: site.site_type || '', supply_authority: site.supply_authority || '',
-            nominated_max_demand: site.nominated_max_demand || '', consultant_name: site.consultant_name || '', consultant_company: site.consultant_company || '', consultant_contact: site.consultant_contact || '',
+            name: site.name || '', address: site.address || '', description: '', status: 'Active', location_lat: '', location_lng: '',
           });
           setEditDialogOpen(true);
         }} variant="outline" className="gap-2"><ClipboardCheck className="h-4 w-4" />Edit Site</Button>
