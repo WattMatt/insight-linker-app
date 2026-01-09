@@ -232,6 +232,43 @@ const SiteDetail = () => {
     }
   };
 
+  const handleBulkDeleteCategories = async () => {
+    if (!siteId || documentCategories.length === 0) return;
+
+    const confirmed = window.confirm(
+      `Are you sure you want to delete ALL ${documentCategories.length} categories and their documents? This action cannot be undone.`
+    );
+    
+    if (!confirmed) return;
+
+    try {
+      toast.info("Deleting all categories...");
+
+      // First delete all documents for this site
+      const { error: docsError } = await supabase
+        .from('site_documents')
+        .delete()
+        .eq('site_id', siteId);
+
+      if (docsError) throw docsError;
+
+      // Then delete all categories for this site
+      const { error: categoriesError } = await supabase
+        .from('site_document_categories')
+        .delete()
+        .eq('site_id', siteId);
+
+      if (categoriesError) throw categoriesError;
+
+      toast.success("All categories deleted successfully");
+      fetchDocumentCategories();
+      fetchSiteDocuments();
+    } catch (error) {
+      console.error("Error bulk deleting categories:", error);
+      toast.error("Failed to delete categories");
+    }
+  };
+
   const handleDeleteSubsection = async (subsectionId: string, subsectionName: string) => {
     try {
       toast.info("Deleting subsection...");
@@ -529,6 +566,7 @@ const SiteDetail = () => {
             onPreview={(url, name) => setPreviewDocument({ url, name })} onDownload={downloadFile}
             onUploadClick={id => { setUploadCategoryId(id); setUploadDialogOpen(true); }}
             onCreateCategory={() => setCreateCategoryOpen(true)} onDeleteCategory={handleDeleteCategory}
+            onBulkDeleteCategories={handleBulkDeleteCategories}
           />
           <DocumentPreviewDialog
             open={previewDocument !== null}

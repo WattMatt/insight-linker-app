@@ -26,6 +26,7 @@ interface SiteDocumentsProps {
     onUploadClick: (categoryId: string) => void;
     onCreateCategory: () => void;
     onDeleteCategory: (id: string, name: string) => void;
+    onBulkDeleteCategories?: () => void;
 }
 
 export function SiteDocuments({
@@ -36,16 +37,30 @@ export function SiteDocuments({
     onDownload,
     onUploadClick,
     onCreateCategory,
-    onDeleteCategory
+    onDeleteCategory,
+    onBulkDeleteCategories
 }: SiteDocumentsProps) {
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <h3 className="text-lg font-semibold">Project Documentation</h3>
-                <Button size="sm" onClick={onCreateCategory} variant="outline" className="gap-2">
-                    <Plus className="h-4 w-4" />
-                    Add Category
-                </Button>
+                <div className="flex items-center gap-2">
+                    {categories.length > 0 && onBulkDeleteCategories && (
+                        <Button 
+                            size="sm" 
+                            variant="outline" 
+                            className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
+                            onClick={onBulkDeleteCategories}
+                        >
+                            <Trash2 className="h-4 w-4" />
+                            Delete All
+                        </Button>
+                    )}
+                    <Button size="sm" onClick={onCreateCategory} variant="outline" className="gap-2">
+                        <Plus className="h-4 w-4" />
+                        Add Category
+                    </Button>
+                </div>
             </div>
 
             <Accordion type="multiple" defaultValue={categories.map(c => c.id)} className="space-y-4">
