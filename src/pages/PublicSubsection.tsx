@@ -3,7 +3,7 @@ import { useParams } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Download, FileText, Eye } from "lucide-react";
+import { Download, FileText, Eye, AlertTriangle, CheckCircle, XCircle, Clock } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 
 interface SubsectionData {
@@ -45,6 +45,15 @@ interface DocumentFile {
   uploadedAt?: string;
 }
 
+interface SnagData {
+  id: string;
+  title: string;
+  description?: string;
+  status: string;
+  risk_level?: string;
+  created_at: string;
+}
+
 
 const PublicSubsection = () => {
   const { subsectionId } = useParams(); // clientId and siteId are in the URL but not needed since we fetch from Supabase
@@ -52,6 +61,7 @@ const PublicSubsection = () => {
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
+  const [snags, setSnags] = useState<SnagData[]>([]);
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
 
@@ -144,6 +154,19 @@ const PublicSubsection = () => {
         }));
 
       setDocuments(transformedDocs);
+
+      // Fetch snags for this subsection
+      const { data: snagsData, error: snagsError } = await supabase
+        .from('snags')
+        .select('id, title, description, status, risk_level, created_at')
+        .eq('subsection_id', subsectionId)
+        .order('created_at', { ascending: false });
+
+      if (snagsError) {
+        console.error("Error fetching snags:", snagsError);
+      } else {
+        setSnags(snagsData || []);
+      }
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -198,6 +221,18 @@ const PublicSubsection = () => {
   }
 
   const isCompliant = subsection.coc_status === 'Valid' || (subsection.coc_number && subsection.is_coc_required);
+  const openSnags = snags.filter(s => s.status !== 'Rectified' && s.status !== 'Closed');
+  const closedSnags = snags.filter(s => s.status === 'Rectified' || s.status === 'Closed');
+
+  const getRiskLevelColor = (level?: string) => {
+    switch (level?.toLowerCase()) {
+      case 'critical': return 'bg-red-500 text-white';
+      case 'high': return 'bg-orange-500 text-white';
+      case 'medium': return 'bg-yellow-500 text-black';
+      case 'low': return 'bg-green-500 text-white';
+      default: return 'bg-muted text-muted-foreground';
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100">
@@ -222,8 +257,73 @@ const PublicSubsection = () => {
         </div>
       </div>
 
+      {/* Status Summary Section */}
+      <div className="container mx-auto px-4 py-6 max-w-4xl">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+          {/* Compliance Status */}
+          <Card className={`shadow-sm border-l-4 ${isCompliant ? 'border-l-green-500' : 'border-l-red-500'}`}>
+            <CardContent className="p-4 flex items-center gap-3">
+              {isCompliant ? (
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              ) : (
+                <XCircle className="h-8 w-8 text-red-500" />
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Compliance</p>
+                <p className={`font-semibold ${isCompliant ? 'text-green-600' : 'text-red-600'}`}>
+                  {isCompliant ? 'Compliant' : 'Non-Compliant'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* COC Status */}
+          <Card className="shadow-sm border-l-4 border-l-blue-500">
+            <CardContent className="p-4 flex items-center gap-3">
+              <FileText className="h-8 w-8 text-blue-500" />
+              <div>
+                <p className="text-xs text-muted-foreground">COC Status</p>
+                <p className="font-semibold text-blue-600">
+                  {subsection.coc_status || (subsection.is_coc_required ? 'Required' : 'N/A')}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Open Snags */}
+          <Card className={`shadow-sm border-l-4 ${openSnags.length > 0 ? 'border-l-orange-500' : 'border-l-green-500'}`}>
+            <CardContent className="p-4 flex items-center gap-3">
+              {openSnags.length > 0 ? (
+                <AlertTriangle className="h-8 w-8 text-orange-500" />
+              ) : (
+                <CheckCircle className="h-8 w-8 text-green-500" />
+              )}
+              <div>
+                <p className="text-xs text-muted-foreground">Open Issues</p>
+                <p className={`font-semibold ${openSnags.length > 0 ? 'text-orange-600' : 'text-green-600'}`}>
+                  {openSnags.length} {openSnags.length === 1 ? 'Snag' : 'Snags'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Closed Snags */}
+          <Card className="shadow-sm border-l-4 border-l-slate-400">
+            <CardContent className="p-4 flex items-center gap-3">
+              <Clock className="h-8 w-8 text-slate-500" />
+              <div>
+                <p className="text-xs text-muted-foreground">Resolved</p>
+                <p className="font-semibold text-slate-600">
+                  {closedSnags.length} {closedSnags.length === 1 ? 'Snag' : 'Snags'}
+                </p>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Main content */}
-      <div className="container mx-auto px-4 py-8 max-w-4xl">
+      <div className="container mx-auto px-4 pb-8 max-w-4xl">
         {/* Subsection Details */}
         <Card className="mb-6 shadow-sm">
           <CardHeader className="pb-4">
@@ -305,6 +405,49 @@ const PublicSubsection = () => {
             <CardContent className="py-12 text-center">
               <FileText className="h-12 w-12 text-muted-foreground mx-auto mb-4 opacity-50" />
               <p className="text-muted-foreground">No documents available</p>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Snags Section */}
+        {snags.length > 0 && (
+          <Card className="mb-6 shadow-sm">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-base font-semibold flex items-center gap-2">
+                <AlertTriangle className="h-4 w-4" />
+                Reported Issues ({snags.length})
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {snags.map((snag) => (
+                <div
+                  key={snag.id}
+                  className="flex items-start justify-between py-3 border-b last:border-b-0"
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-1">
+                      <p className="text-sm font-medium">{snag.title}</p>
+                      {snag.risk_level && (
+                        <Badge className={`text-xs ${getRiskLevelColor(snag.risk_level)}`}>
+                          {snag.risk_level}
+                        </Badge>
+                      )}
+                    </div>
+                    {snag.description && (
+                      <p className="text-xs text-muted-foreground line-clamp-2">{snag.description}</p>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Reported: {new Date(snag.created_at).toLocaleDateString('en-US', { month: 'short', day: '2-digit', year: 'numeric' })}
+                    </p>
+                  </div>
+                  <Badge 
+                    variant={snag.status === 'Rectified' || snag.status === 'Closed' ? 'default' : 'secondary'}
+                    className="ml-2 flex-shrink-0"
+                  >
+                    {snag.status}
+                  </Badge>
+                </div>
+              ))}
             </CardContent>
           </Card>
         )}
