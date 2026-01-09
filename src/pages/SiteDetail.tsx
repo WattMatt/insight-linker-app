@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-import { FileText, QrCode, Layers, MapPin, Building, Image, BarChart3, FileDown, LayoutGrid, ClipboardCheck, Shield } from "lucide-react";
+import { FileText, QrCode, Layers, MapPin, Building, Image, BarChart3, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
@@ -22,6 +22,9 @@ import { InspectionDialogs } from "@/components/site/InspectionDialogs";
 import { Card, CardTitle, CardHeader, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Breadcrumbs } from "@/components/Breadcrumb";
+import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 
 interface SiteDocument {
   category: string;
@@ -65,6 +68,7 @@ const SiteDetail = () => {
   const [uploadCategoryId, setUploadCategoryId] = useState<string | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [deleteCategoryId, setDeleteCategoryId] = useState<string | null>(null);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const [isCreateInspectionOpen, setIsCreateInspectionOpen] = useState(false);
   const [availableTemplates, setAvailableTemplates] = useState<any[]>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
@@ -255,7 +259,6 @@ const SiteDetail = () => {
       if (subsectionError) throw subsectionError;
 
       toast.success(`${subsectionName} deleted successfully`);
-      setDeleteSubsectionId(null);
       fetchSiteData(); // Refresh all data
     } catch (error) {
       console.error("Error deleting subsection:", error);
@@ -330,22 +333,7 @@ const SiteDetail = () => {
       });
 
       setSubsections(sortedSubs);
-      setInspections(insp);
-      setSnags(snagsRes.data || []);
-
-      // Aggregate documents by category
-      const docsData = docsRes.data || [];
-      const aggregated = docsData.reduce((acc, doc) => {
-        const existing = acc.find(d => d.category === doc.category);
-        if (existing) {
-          existing.file_count++;
-        } else {
-          acc.push({ category: doc.category, file_count: 1 });
-        }
-        return acc;
-      }, [] as SiteDocument[]);
-
-      setDocuments(aggregated);
+      setInspections(inspectionsRes || []);
 
       // Calculate Stats
       const totalSubsections = subs.length;
@@ -376,114 +364,6 @@ const SiteDetail = () => {
       toast.error("Failed to fetch site data");
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchSiteDocuments = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('site_documents')
-        .select('id, file_name, file_url, category, category_id')
-        .eq('site_id', siteId)
-        .order('created_at', { ascending: false });
-      if (error) throw error;
-      setSiteDocuments(data || []);
-    } catch (error) {
-      console.error("Error fetching documents:", error);
-    }
-  };
-
-  const fetchDocumentCategories = async () => {
-    if (!siteId) return;
-    try {
-      const { data, error } = await supabase
-        .from('site_document_categories')
-        .select('id, name')
-        .eq('site_id', siteId)
-        .order('order_index');
-      if (error) throw error;
-      setDocumentCategories(data || []);
-    } catch (error) {
-      console.error("Error fetching categories:", error);
-    }
-  };
-
-  const fetchTemplates = async () => {
-    try {
-      const { data, error } = await supabase.from('inspection_templates').select('id, name, category').order('name');
-      if (error) throw error;
-      setAvailableTemplates(data || []);
-    } catch (error) {
-      console.error("Error fetching templates:", error);
-    }
-  };
-
-  const fetchCompanyLogo = async () => {
-    try {
-      const { data } = await supabase.from('settings').select('company_logo_url').limit(1).maybeSingle();
-      if (data?.company_logo_url) setCompanyLogo(data.company_logo_url);
-    } catch (error) {
-      console.error('Error fetching company logo:', error);
-    }
-  };
-
-  useEffect(() => {
-    fetchSiteData();
-    fetchSiteDocuments();
-    fetchDocumentCategories();
-    fetchTemplates();
-    fetchCompanyLogo();
-  }, [siteId]);
-
-  // Handlers
-  const handleCreateCategory = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newCategoryName.trim() || !siteId) return;
-    try {
-      const { error } = await supabase.from('site_document_categories').insert({
-        site_id: siteId,
-        name: newCategoryName.trim(),
-        order_index: documentCategories.length + 1
-      });
-      if (error) throw error;
-      toast.success("Category created");
-      setCreateCategoryOpen(false);
-      setNewCategoryName("");
-      fetchDocumentCategories();
-    } catch (error) {
-      toast.error("Failed to create category");
-    }
-  };
-
-  const handleDeleteCategory = async (id: string, name: string) => {
-    try {
-      await supabase.from('site_documents').delete().eq('category_id', id);
-      await supabase.from('site_document_categories').delete().eq('id', id);
-      toast.success(`${name} deleted`);
-      fetchDocumentCategories();
-      fetchSiteDocuments();
-    } catch (error) {
-      toast.error("Failed to delete category");
-    }
-  };
-
-  const handleDeleteSubsection = async (id: string, name: string) => {
-    try {
-      const deletions = [
-        supabase.from('subsection_documents').delete().eq('subsection_id', id),
-        supabase.from('inspection_items').delete().eq('subsection_id', id),
-        supabase.from('snags').delete().eq('subsection_id', id),
-        supabase.from('inspections').delete().eq('subsection_id', id),
-        supabase.from('qr_scans').delete().eq('subsection_id', id),
-        supabase.from('coc_validations').delete().eq('subsection_id', id),
-        supabase.from('document_categories').delete().eq('subsection_id', id),
-      ];
-      await Promise.all(deletions);
-      await supabase.from('subsections').delete().eq('id', id);
-      toast.success(`${name} deleted`);
-      fetchSiteData();
-    } catch (error) {
-      toast.error("Failed to delete subsection");
     }
   };
 
