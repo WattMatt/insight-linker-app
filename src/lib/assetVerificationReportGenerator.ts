@@ -27,6 +27,7 @@ interface ComparisonResult {
   meterSerialMatch: "match" | "mismatch" | "na";
   ctRatioMatch: "match" | "mismatch" | "na";
   hasDiscrepancy: boolean;
+  potentialAssetMatch?: Asset;
 }
 
 interface GeneratorOptions {
@@ -39,6 +40,7 @@ interface GeneratorOptions {
     discrepancies: number;
     assetOnly: number;
     subsectionOnly: number;
+    potentialMatches?: number;
   };
   companyLogoUrl?: string | null;
 }
@@ -99,7 +101,7 @@ export async function generateAssetVerificationReport(
 
   // KPI Cards on cover page
   const kpiY = 85;
-  const cardWidth = (pageWidth - margins.left - margins.right - 15) / 4;
+  const cardWidth = (pageWidth - margins.left - margins.right - 20) / 5;
   const cardHeight = 32;
   const cardGap = 5;
 
@@ -108,6 +110,7 @@ export async function generateAssetVerificationReport(
     { label: 'Matched', value: stats.matchedNoDiscrepancy.toString(), color: [34, 197, 94] },
     { label: 'Discrepancies', value: stats.discrepancies.toString(), color: [234, 179, 8] },
     { label: 'Unmatched', value: (stats.assetOnly + stats.subsectionOnly).toString(), color: [239, 68, 68] },
+    { label: 'In Register', value: (stats.potentialMatches || 0).toString(), color: [147, 51, 234] },
   ];
 
   kpiCards.forEach((card, i) => {
@@ -122,13 +125,13 @@ export async function generateAssetVerificationReport(
     doc.rect(x, kpiY, 3, cardHeight, 'F');
     
     // Value
-    doc.setFontSize(16);
+    doc.setFontSize(14);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
     doc.text(card.value, x + cardWidth / 2, kpiY + 14, { align: 'center' });
     
     // Label
-    doc.setFontSize(8);
+    doc.setFontSize(7);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
     doc.text(card.label, x + cardWidth / 2, kpiY + 25, { align: 'center' });
@@ -315,7 +318,7 @@ export async function generateAssetVerificationReport(
   }
 
   // ===== SUBSECTIONS WITHOUT ASSETS =====
-  const subsectionOnly = comparisonResults.filter(r => r.matchType === 'subsection_only');
+  const subsectionOnly = comparisonResults.filter(r => r.matchType === 'subsection_only' && !r.potentialAssetMatch);
   if (subsectionOnly.length > 0) {
     doc.addPage();
     addPageHeader(doc, 'Subsections Without Matching Asset', doc.internal.pages.length);
@@ -336,6 +339,33 @@ export async function generateAssetVerificationReport(
       headStyles: {
         fillColor: [191, 219, 254],
         textColor: [30, 64, 175],
+        fontStyle: 'bold',
+      },
+    });
+  }
+
+  // ===== POTENTIAL MATCHES (meter serial found in register but not linked) =====
+  const potentialMatches = comparisonResults.filter(r => r.matchType === 'subsection_only' && r.potentialAssetMatch);
+  if (potentialMatches.length > 0) {
+    doc.addPage();
+    addPageHeader(doc, 'Meter Serials Found in Asset Register', doc.internal.pages.length);
+
+    autoTable(doc, {
+      startY: 35,
+      head: [['Subsection Name', 'Meter Serial', 'Found in Asset (Premises ID)', 'Asset Trade As']],
+      body: potentialMatches.map(r => [
+        r.subsection?.name || '-',
+        r.subsection?.meter_serial_number || '-',
+        r.potentialAssetMatch?.premises_id || '-',
+        r.potentialAssetMatch?.trade_as || '-'
+      ]),
+      styles: {
+        fontSize: tables.body.fontSize,
+        cellPadding: tables.cellPadding,
+      },
+      headStyles: {
+        fillColor: [233, 213, 255],
+        textColor: [88, 28, 135],
         fontStyle: 'bold',
       },
     });

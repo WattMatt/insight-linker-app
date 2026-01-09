@@ -64,6 +64,8 @@ export interface ComparisonResult {
   meterSerialMatch: "match" | "mismatch" | "na";
   ctRatioMatch: "match" | "mismatch" | "na";
   hasDiscrepancy: boolean;
+  // For unmatched subsections: if their meter serial exists somewhere in asset register
+  potentialAssetMatch?: Asset;
 }
 
 interface AssetComparisonTableProps {
@@ -312,9 +314,22 @@ export const AssetComparisonTable = ({
       }
     }
 
+    // Build a map of all meter serial numbers in assets for quick lookup
+    const assetMeterSerialMap = new Map<string, Asset>();
+    for (const asset of assets) {
+      const normalized = normalizeMeterSerial(asset.meter_serial_number);
+      if (normalized && normalized !== "NA" && normalized !== "TBC") {
+        assetMeterSerialMap.set(normalized, asset);
+      }
+    }
+
     // Add remaining unmatched subsections
     for (const sub of subsections) {
       if (!matchedSubsectionIds.has(sub.id)) {
+        // Check if this subsection's meter serial exists anywhere in the asset register
+        const subMeter = normalizeMeterSerial(sub.meter_serial_number);
+        const potentialMatch = subMeter ? assetMeterSerialMap.get(subMeter) : undefined;
+        
         results.push({
           asset: null,
           subsection: sub,
@@ -323,6 +338,7 @@ export const AssetComparisonTable = ({
           meterSerialMatch: "na",
           ctRatioMatch: "na",
           hasDiscrepancy: false,
+          potentialAssetMatch: potentialMatch,
         });
       }
     }
@@ -364,13 +380,15 @@ export const AssetComparisonTable = ({
   // Stats
   const stats = useMemo(() => {
     const matched = comparisonResults.filter((r) => r.matchType === "matched");
+    const subsectionOnlyResults = comparisonResults.filter((r) => r.matchType === "subsection_only");
     return {
       total: comparisonResults.length,
       matched: matched.length,
       matchedNoDiscrepancy: matched.filter((r) => !r.hasDiscrepancy).length,
       discrepancies: comparisonResults.filter((r) => r.hasDiscrepancy).length,
       assetOnly: comparisonResults.filter((r) => r.matchType === "asset_only").length,
-      subsectionOnly: comparisonResults.filter((r) => r.matchType === "subsection_only").length,
+      subsectionOnly: subsectionOnlyResults.length,
+      potentialMatches: subsectionOnlyResults.filter((r) => r.potentialAssetMatch).length,
     };
   }, [comparisonResults]);
 
@@ -384,6 +402,19 @@ export const AssetComparisonTable = ({
       );
     }
     if (result.matchType === "subsection_only") {
+      if (result.potentialAssetMatch) {
+        return (
+          <div className="flex flex-col gap-1">
+            <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">
+              <AlertTriangle className="h-3 w-3 mr-1" />
+              Found in Register
+            </Badge>
+            <span className="text-xs text-muted-foreground">
+              {result.potentialAssetMatch.premises_id}
+            </span>
+          </div>
+        );
+      }
       return (
         <Badge variant="outline" className="text-blue-600 border-blue-300 bg-blue-50">
           <Minus className="h-3 w-3 mr-1" />
@@ -614,7 +645,7 @@ export const AssetComparisonTable = ({
   return (
     <div className="space-y-4">
       {/* Stats Summary */}
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setFilter("matched")}>
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Matched</CardTitle>
@@ -637,6 +668,12 @@ export const AssetComparisonTable = ({
           <CardHeader className="pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Subsections Only</CardTitle>
             <div className="text-2xl font-bold text-blue-600">{stats.subsectionOnly}</div>
+          </CardHeader>
+        </Card>
+        <Card className="cursor-pointer hover:bg-muted/50" onClick={() => setFilter("unmatched")}>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Found in Register</CardTitle>
+            <div className="text-2xl font-bold text-purple-600">{stats.potentialMatches}</div>
           </CardHeader>
         </Card>
       </div>
