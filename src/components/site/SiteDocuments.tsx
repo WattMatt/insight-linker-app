@@ -247,13 +247,14 @@ export function SiteDocuments({
 
             {/* Combined Document View */}
             <div className="space-y-6">
-                {/* Site Documents Section */}
-                {showSiteDocs && (categories.length > 0 || filteredSiteDocs.length > 0) && (
+                {/* Site-Level Documents Section - Only show when explicitly filtered or has documents */}
+                {showSiteDocs && (filteredSiteDocs.length > 0 || (sourceFilter === "site" && categories.length > 0)) && (
                     <div>
                         <div className="flex items-center gap-2 mb-3">
                             <Building className="h-4 w-4 text-primary" />
-                            <h4 className="font-medium">Site Documents</h4>
+                            <h4 className="font-medium">Site-Level Documents</h4>
                             <Badge variant="outline">{filteredSiteDocs.length}</Badge>
+                            <span className="text-xs text-muted-foreground">(not tied to subsections)</span>
                         </div>
                         <SiteDocumentsList 
                             documents={filteredSiteDocs}
