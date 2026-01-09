@@ -25,7 +25,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2 } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Minus, Image as ImageIcon, FileDown, Eye, Loader2, Link2, Unlink } from "lucide-react";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateAssetVerificationReport } from "@/lib/assetVerificationReportGenerator";
@@ -59,6 +59,7 @@ export interface ComparisonResult {
   asset: Asset | null;
   subsection: Subsection | null;
   matchType: "matched" | "asset_only" | "subsection_only";
+  matchMethod: "name" | "meter_serial" | "manual" | "none";
   meterSerialMatch: "match" | "mismatch" | "na";
   ctRatioMatch: "match" | "mismatch" | "na";
   hasDiscrepancy: boolean;
@@ -120,64 +121,193 @@ export const AssetComparisonTable = ({
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
   const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
   const [generating, setGenerating] = useState(false);
+  // Manual links: assetId -> subsectionId
+  const [manualLinks, setManualLinks] = useState<Record<string, string>>({});
+
+  // Get unmatched subsections for dropdown
+  const getAvailableSubsections = (currentAssetId: string) => {
+    const linkedSubsectionIds = new Set(Object.values(manualLinks));
+    const autoMatchedSubsectionIds = new Set(
+      comparisonResults
+        .filter(r => r.matchType === "matched" && r.matchMethod !== "manual")
+        .map(r => r.subsection?.id)
+        .filter(Boolean)
+    );
+    
+    return subsections.filter(sub => 
+      !linkedSubsectionIds.has(sub.id) && 
+      !autoMatchedSubsectionIds.has(sub.id)
+    );
+  };
+
+  // Get unmatched assets for dropdown  
+  const getAvailableAssets = (currentSubsectionId: string) => {
+    const linkedAssetIds = new Set(Object.keys(manualLinks));
+    const autoMatchedAssetIds = new Set(
+      comparisonResults
+        .filter(r => r.matchType === "matched" && r.matchMethod !== "manual")
+        .map(r => r.asset?.id)
+        .filter(Boolean)
+    );
+    
+    return assets.filter(asset => 
+      !linkedAssetIds.has(asset.id) && 
+      !autoMatchedAssetIds.has(asset.id)
+    );
+  };
+
+  const handleManualLink = (assetId: string, subsectionId: string) => {
+    setManualLinks(prev => ({ ...prev, [assetId]: subsectionId }));
+  };
+
+  const handleUnlink = (assetId: string) => {
+    setManualLinks(prev => {
+      const next = { ...prev };
+      delete next[assetId];
+      return next;
+    });
+  };
+
+  // Normalize meter serial for matching
+  const normalizeMeterSerial = (serial: string | null | undefined): string => {
+    return (serial || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+  };
 
   // Build comparison results
   const comparisonResults = useMemo((): ComparisonResult[] => {
     const results: ComparisonResult[] = [];
     const matchedSubsectionIds = new Set<string>();
+    const matchedAssetIds = new Set<string>();
 
-    // Match each asset to subsections
+    // First pass: Apply manual links
+    for (const [assetId, subsectionId] of Object.entries(manualLinks)) {
+      const asset = assets.find(a => a.id === assetId);
+      const subsection = subsections.find(s => s.id === subsectionId);
+      
+      if (asset && subsection) {
+        matchedSubsectionIds.add(subsectionId);
+        matchedAssetIds.add(assetId);
+        
+        const meterSerialMatch = compareValues(asset.meter_serial_number, subsection.meter_serial_number);
+        const ctRatioMatch = compareValues(asset.ct_ratio, subsection.ct_ratio);
+        
+        results.push({
+          asset,
+          subsection,
+          matchType: "matched",
+          matchMethod: "manual",
+          meterSerialMatch,
+          ctRatioMatch,
+          hasDiscrepancy: meterSerialMatch === "mismatch" || ctRatioMatch === "mismatch",
+        });
+      }
+    }
+
+    // Second pass: Match by name
     for (const asset of assets) {
+      if (matchedAssetIds.has(asset.id)) continue;
+      
       const assetName = normalizeForMatching(asset.premises_id);
       const assetTrade = normalizeForMatching(asset.trade_as || "");
 
-      // Find matching subsection
       let matchedSubsection: Subsection | null = null;
 
       for (const sub of subsections) {
+        if (matchedSubsectionIds.has(sub.id)) continue;
+        
         const subName = normalizeForMatching(sub.name);
         const subTenant = normalizeForMatching(sub.tenant_name || "");
 
-        // Try matching asset premises_id or trade_as with subsection name or tenant_name
         if (
           assetName === subName ||
           assetTrade === subName ||
           (assetName && subTenant && assetName === subTenant) ||
           (assetTrade && subTenant && assetTrade === subTenant) ||
-          // Fuzzy: check if one contains the other (for partial matches)
           (assetName.length > 5 && subName.includes(assetName)) ||
           (subName.length > 5 && assetName.includes(subName))
         ) {
           matchedSubsection = sub;
           matchedSubsectionIds.add(sub.id);
+          matchedAssetIds.add(asset.id);
           break;
         }
       }
 
-      const meterSerialMatch = matchedSubsection
-        ? compareValues(asset.meter_serial_number, matchedSubsection.meter_serial_number)
-        : "na";
-      const ctRatioMatch = matchedSubsection
-        ? compareValues(asset.ct_ratio, matchedSubsection.ct_ratio)
-        : "na";
+      if (matchedSubsection) {
+        const meterSerialMatch = compareValues(asset.meter_serial_number, matchedSubsection.meter_serial_number);
+        const ctRatioMatch = compareValues(asset.ct_ratio, matchedSubsection.ct_ratio);
 
-      results.push({
-        asset,
-        subsection: matchedSubsection,
-        matchType: matchedSubsection ? "matched" : "asset_only",
-        meterSerialMatch,
-        ctRatioMatch,
-        hasDiscrepancy: meterSerialMatch === "mismatch" || ctRatioMatch === "mismatch",
-      });
+        results.push({
+          asset,
+          subsection: matchedSubsection,
+          matchType: "matched",
+          matchMethod: "name",
+          meterSerialMatch,
+          ctRatioMatch,
+          hasDiscrepancy: meterSerialMatch === "mismatch" || ctRatioMatch === "mismatch",
+        });
+      }
     }
 
-    // Add subsections that weren't matched
+    // Third pass: Match by meter serial number (for remaining unmatched)
+    for (const asset of assets) {
+      if (matchedAssetIds.has(asset.id)) continue;
+      
+      const assetMeter = normalizeMeterSerial(asset.meter_serial_number);
+      if (!assetMeter || assetMeter === "NA" || assetMeter === "TBC") continue;
+
+      let matchedSubsection: Subsection | null = null;
+
+      for (const sub of subsections) {
+        if (matchedSubsectionIds.has(sub.id)) continue;
+        
+        const subMeter = normalizeMeterSerial(sub.meter_serial_number);
+        if (subMeter && assetMeter === subMeter) {
+          matchedSubsection = sub;
+          matchedSubsectionIds.add(sub.id);
+          matchedAssetIds.add(asset.id);
+          break;
+        }
+      }
+
+      if (matchedSubsection) {
+        const ctRatioMatch = compareValues(asset.ct_ratio, matchedSubsection.ct_ratio);
+
+        results.push({
+          asset,
+          subsection: matchedSubsection,
+          matchType: "matched",
+          matchMethod: "meter_serial",
+          meterSerialMatch: "match",
+          ctRatioMatch,
+          hasDiscrepancy: ctRatioMatch === "mismatch",
+        });
+      }
+    }
+
+    // Add remaining unmatched assets
+    for (const asset of assets) {
+      if (!matchedAssetIds.has(asset.id)) {
+        results.push({
+          asset,
+          subsection: null,
+          matchType: "asset_only",
+          matchMethod: "none",
+          meterSerialMatch: "na",
+          ctRatioMatch: "na",
+          hasDiscrepancy: false,
+        });
+      }
+    }
+
+    // Add remaining unmatched subsections
     for (const sub of subsections) {
       if (!matchedSubsectionIds.has(sub.id)) {
         results.push({
           asset: null,
           subsection: sub,
           matchType: "subsection_only",
+          matchMethod: "none",
           meterSerialMatch: "na",
           ctRatioMatch: "na",
           hasDiscrepancy: false,
@@ -186,7 +316,7 @@ export const AssetComparisonTable = ({
     }
 
     return results;
-  }, [assets, subsections]);
+  }, [assets, subsections, manualLinks, normalizeMeterSerial]);
 
   // Filter results
   const filteredResults = useMemo(() => {
@@ -251,17 +381,31 @@ export const AssetComparisonTable = ({
     }
     if (result.hasDiscrepancy) {
       return (
-        <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
-          <AlertTriangle className="h-3 w-3 mr-1" />
-          Mismatch
-        </Badge>
+        <div className="flex flex-col gap-1">
+          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+            <AlertTriangle className="h-3 w-3 mr-1" />
+            Mismatch
+          </Badge>
+          {result.matchMethod !== "name" && (
+            <span className="text-xs text-muted-foreground">
+              via {result.matchMethod === "meter_serial" ? "Meter #" : result.matchMethod === "manual" ? "Manual" : ""}
+            </span>
+          )}
+        </div>
       );
     }
     return (
-      <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
-        <CheckCircle2 className="h-3 w-3 mr-1" />
-        Match
-      </Badge>
+      <div className="flex flex-col gap-1">
+        <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+          <CheckCircle2 className="h-3 w-3 mr-1" />
+          Match
+        </Badge>
+        {result.matchMethod !== "name" && (
+          <span className="text-xs text-muted-foreground">
+            via {result.matchMethod === "meter_serial" ? "Meter #" : result.matchMethod === "manual" ? "Manual" : ""}
+          </span>
+        )}
+      </div>
     );
   };
 
@@ -433,6 +577,7 @@ export const AssetComparisonTable = ({
               <TableRow>
                 <TableHead>Asset / Subsection</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Link</TableHead>
                 <TableHead>Meter Serial</TableHead>
                 <TableHead>CT Ratio</TableHead>
                 <TableHead>Breaker Size</TableHead>
@@ -442,7 +587,7 @@ export const AssetComparisonTable = ({
             <TableBody>
             {filteredResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     No results found
                   </TableCell>
                 </TableRow>
@@ -473,6 +618,83 @@ export const AssetComparisonTable = ({
                       </div>
                     </TableCell>
                     <TableCell>{getStatusBadge(result)}</TableCell>
+                    <TableCell>
+                      {/* Link controls for unmatched items */}
+                      {result.matchType === "asset_only" && result.asset && (
+                        <Select
+                          value=""
+                          onValueChange={(subsectionId) => handleManualLink(result.asset!.id, subsectionId)}
+                        >
+                          <SelectTrigger className="w-[160px] h-8 text-xs">
+                            <div className="flex items-center gap-1">
+                              <Link2 className="h-3 w-3" />
+                              <SelectValue placeholder="Link to..." />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAvailableSubsections(result.asset.id).map(sub => (
+                              <SelectItem key={sub.id} value={sub.id} className="text-xs">
+                                <div className="flex flex-col">
+                                  <span>{sub.name}</span>
+                                  {sub.meter_serial_number && (
+                                    <span className="text-muted-foreground text-xs">
+                                      Meter: {sub.meter_serial_number}
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                            {getAvailableSubsections(result.asset.id).length === 0 && (
+                              <div className="p-2 text-xs text-muted-foreground">No unlinked subsections</div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {result.matchType === "subsection_only" && result.subsection && (
+                        <Select
+                          value=""
+                          onValueChange={(assetId) => handleManualLink(assetId, result.subsection!.id)}
+                        >
+                          <SelectTrigger className="w-[160px] h-8 text-xs">
+                            <div className="flex items-center gap-1">
+                              <Link2 className="h-3 w-3" />
+                              <SelectValue placeholder="Link to..." />
+                            </div>
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAvailableAssets(result.subsection.id).map(asset => (
+                              <SelectItem key={asset.id} value={asset.id} className="text-xs">
+                                <div className="flex flex-col">
+                                  <span>{asset.premises_id}</span>
+                                  {asset.meter_serial_number && (
+                                    <span className="text-muted-foreground text-xs">
+                                      Meter: {asset.meter_serial_number}
+                                    </span>
+                                  )}
+                                </div>
+                              </SelectItem>
+                            ))}
+                            {getAvailableAssets(result.subsection.id).length === 0 && (
+                              <div className="p-2 text-xs text-muted-foreground">No unlinked assets</div>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      )}
+                      {result.matchType === "matched" && result.matchMethod === "manual" && result.asset && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-8 text-xs text-muted-foreground hover:text-destructive"
+                          onClick={() => handleUnlink(result.asset!.id)}
+                        >
+                          <Unlink className="h-3 w-3 mr-1" />
+                          Unlink
+                        </Button>
+                      )}
+                      {result.matchType === "matched" && result.matchMethod !== "manual" && (
+                        <span className="text-xs text-muted-foreground">Auto</span>
+                      )}
+                    </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2">
                         {getValueBadge(result.meterSerialMatch)}
