@@ -123,21 +123,21 @@ export function SiteDocuments({
                         </p>
                     </div>
                     <div className="flex items-center gap-2 flex-wrap">
-                        {categories.length > 0 && onBulkDeleteCategories && (
-                            <Button 
-                                size="sm" 
-                                variant="outline" 
-                                className="gap-2 text-destructive border-destructive/30 hover:bg-destructive/10"
-                                onClick={onBulkDeleteCategories}
-                            >
-                                <Trash2 className="h-4 w-4" />
-                                <span className="hidden sm:inline">Delete All</span>
-                            </Button>
-                        )}
                         <Button size="sm" onClick={onCreateCategory} variant="outline" className="gap-2">
                             <Plus className="h-4 w-4" />
                             <span className="hidden sm:inline">Add Category</span>
                         </Button>
+                        {categories.length > 0 && onBulkDeleteCategories && (
+                            <Button 
+                                size="sm" 
+                                variant="destructive" 
+                                className="gap-2"
+                                onClick={onBulkDeleteCategories}
+                            >
+                                <Trash2 className="h-4 w-4" />
+                                <span>Delete All Categories</span>
+                            </Button>
+                        )}
                     </div>
                 </div>
 
