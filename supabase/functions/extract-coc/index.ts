@@ -1,12 +1,50 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.75.0";
 
-// COC extraction edge function - extracts key information from COC without validation
+// COC extraction edge function - extracts key information from COC using Google Gemini 2.5 Pro
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Step 1: Extract ALL dates found in the document with their exact context/location
+const DATE_EXTRACTION_PROMPT = `# Date Extraction from COC Document
+
+Your ONLY task is to find and extract ALL dates visible in this document. 
+
+For EACH date you find, provide:
+1. The exact date as written (e.g., "01 09 2023", "2023-09-01", "01/09/2023")
+2. The exact location/context where you found it (e.g., "Next to 'Signature:' in Declaration section", "Under 'Date of registration'", "Test Report header")
+3. The page number (1 or 2)
+
+Return ONLY this JSON:
+\`\`\`json
+{
+  "dates": [
+    {
+      "rawDate": "exact date as written",
+      "location": "exact description of where this date appears",
+      "page": 1,
+      "nearbyText": "text immediately before or after the date"
+    }
+  ]
+}
+\`\`\`
+
+CRITICAL RULES:
+- Extract EVERY date you can see
+- Be EXTREMELY precise about reading each digit: 0 vs 6 vs 8, 2 vs 3, 1 vs 7
+- Include the EXACT nearby text that helps identify what the date is for
+- Common date locations in COC:
+  * Page 1: "Date:" next to registered person's signature (THIS IS THE COC ISSUE DATE)
+  * Page 1: "Date of registration" for the registered person
+  * Page 1: "Date of registration" for the electrical contractor
+  * Page 2: "Date of issue" in the test report header
+  * Page 2: "Date" in Section 5 (Responsibility)
+
+Extract ALL dates now:`;
+
+// Step 2: Full data extraction prompt
 const EXTRACTION_PROMPT = `# 📋 ECA Certificate of Compliance - Complete Data Extraction
 
 ## 🎯 Objective
@@ -312,7 +350,15 @@ Return ONLY this JSON structure with ALL extracted data:
   },
   "scopeOfWork": "string or null",
   "confidence": "high | medium | low",
-  "extractionNotes": "string"
+  "extractionNotes": "string",
+  "allDatesFound": [
+    {
+      "rawDate": "original date as shown",
+      "convertedDate": "YYYY-MM-DD",
+      "location": "where in document",
+      "usedFor": "which field this date was used for"
+    }
+  ]
 }
 \`\`\`
 
@@ -322,16 +368,71 @@ Return ONLY this JSON structure with ALL extracted data:
 2. **Use null for missing/blank fields**
 3. **NO placeholders**: Never use "Not provided", "N/A" as values - use null instead
 4. **Exact values**: Copy numbers and text EXACTLY as shown
-5. **Date format**: Convert all dates to YYYY-MM-DD (e.g., "18.09.2025" → "2025-09-18")
-   - **CRITICAL - COC ISSUE DATE**: The cocIssueDate is the date next to "Signature:" in the "Declaration by registered person" section on PAGE 1. Look for "Date:" followed by the actual date near the signature line.
-   - **FORMAT**: Usually DD.MM.YYYY or DD/MM/YYYY or DD MM YYYY. Convert to YYYY-MM-DD.
-   - **EXAMPLE**: "Date: 01.02.2023" → cocIssueDate = "2023-02-01" (NOT 2022! Read each digit carefully!)
-   - **WARNING**: Do NOT use dates from "Date of registration", "Date issued", or other fields. Only use the signature date.
-   - The test report "Date of issue" (testReport.issueDate) on PAGE 2 is a SEPARATE field.
+5. **Date format**: Convert all dates to YYYY-MM-DD
+   - **READ EACH DIGIT EXTREMELY CAREFULLY**: 0≠6≠8, 1≠7, 2≠3
+   - **COMMON FORMATS**: DD.MM.YYYY, DD/MM/YYYY, DD MM YYYY
+   - Example: "01 09 2023" = Day 01, Month 09, Year 2023 → "2023-09-01"
+   - **cocIssueDate**: The date next to the registered person's signature in the Declaration section on PAGE 1
+   - **testReport.issueDate**: The "Date of issue" in the test report header on PAGE 2
 6. **Measurements**: Include units in the value (e.g., "0.16Ω", ">240 MΩ", "237V")
 7. **Confidence**: "high" only if both pages are clear and complete
+8. **allDatesFound**: List ALL dates you found in the document with their locations
 
 Now extract ALL data from this ECA COC document:`;
+
+// Helper function to convert PDF to base64 in chunks
+async function pdfToBase64(fileData: Blob): Promise<string> {
+  const arrayBuffer = await fileData.arrayBuffer();
+  const uint8Array = new Uint8Array(arrayBuffer);
+  let binary = '';
+  const chunkSize = 0x8000; // Process 32KB at a time
+  
+  for (let i = 0; i < uint8Array.length; i += chunkSize) {
+    const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  return btoa(binary);
+}
+
+// Helper function to validate and parse dates
+function parseAndValidateDate(rawDate: string): string | null {
+  if (!rawDate) return null;
+  
+  // Clean up the date string
+  const cleaned = rawDate.trim().replace(/\s+/g, ' ');
+  
+  // Try various date formats
+  const patterns = [
+    // DD.MM.YYYY or DD/MM/YYYY or DD-MM-YYYY
+    /^(\d{1,2})[.\/\-](\d{1,2})[.\/\-](\d{4})$/,
+    // DD MM YYYY (with spaces)
+    /^(\d{1,2})\s+(\d{1,2})\s+(\d{4})$/,
+    // YYYY-MM-DD (already ISO format)
+    /^(\d{4})-(\d{2})-(\d{2})$/,
+  ];
+  
+  for (const pattern of patterns) {
+    const match = cleaned.match(pattern);
+    if (match) {
+      let year: number, month: number, day: number;
+      
+      if (pattern.source.startsWith('^(\\d{4})')) {
+        // YYYY-MM-DD format
+        [, year, month, day] = match.map(Number) as [unknown, number, number, number];
+      } else {
+        // DD.MM.YYYY format
+        [, day, month, year] = match.map(Number) as [unknown, number, number, number];
+      }
+      
+      // Validate ranges
+      if (year >= 2000 && year <= 2030 && month >= 1 && month <= 12 && day >= 1 && day <= 31) {
+        return `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      }
+    }
+  }
+  
+  return null;
+}
 
 serve(async (req) => {
   // Handle CORS preflight
@@ -360,20 +461,17 @@ serve(async (req) => {
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     console.log('Starting COC data extraction for:', fileName);
-    console.log('Downloading document from URL:', documentUrl.substring(0, 100) + '...');
+    console.log('Using model: google/gemini-2.5-pro for best visual document analysis');
     
-    // Extract the storage path from the URL
-    // URL format: https://PROJECT.supabase.co/storage/v1/object/public/documents/PATH
+    // Download document
     let fileData: Blob;
     
     try {
-      // Try to extract path from URL
       const urlParts = documentUrl.split('/documents/');
       if (urlParts.length === 2) {
         const filePath = decodeURIComponent(urlParts[1]);
         console.log('Downloading from storage path:', filePath);
         
-        // Use Supabase client to download from private bucket
         const { data, error } = await supabase.storage
           .from('documents')
           .download(filePath);
@@ -386,12 +484,10 @@ serve(async (req) => {
         fileData = data;
         console.log('Document downloaded successfully from storage');
       } else {
-        // Fallback to direct fetch for other URL formats
         console.log('Using direct fetch for URL');
         const docResponse = await fetch(documentUrl);
         
         if (!docResponse.ok) {
-          console.error('Failed to fetch document:', docResponse.status, docResponse.statusText);
           throw new Error(`Failed to download document: ${docResponse.statusText}`);
         }
         
@@ -402,69 +498,75 @@ serve(async (req) => {
       throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
     }
 
-    // Check if this is a PDF file
     const isPDF = fileName?.toLowerCase().endsWith('.pdf');
     
     if (isPDF) {
-      console.log('Processing PDF file with vision');
+      console.log('Processing PDF with Gemini 2.5 Pro vision for accurate extraction');
       
-      // Convert PDF blob to base64 for vision processing (process in chunks to avoid stack overflow)
-      const arrayBuffer = await fileData.arrayBuffer();
-      const uint8Array = new Uint8Array(arrayBuffer);
-      let binary = '';
-      const chunkSize = 0x8000; // Process 32KB at a time
+      const base64 = await pdfToBase64(fileData);
+      console.log('PDF converted to base64, size:', base64.length);
+
+      // Use Gemini 2.5 Pro for best visual understanding
+      // Note: Gemini accepts PDF as base64 with inline_data
+      console.log('Calling Gemini 2.5 Pro for extraction...');
       
-      for (let i = 0; i < uint8Array.length; i += chunkSize) {
-        const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-        binary += String.fromCharCode.apply(null, Array.from(chunk));
-      }
-      const base64 = btoa(binary);
-      
-      console.log('Calling AI with PDF vision...');
-      
-      // Use Claude Sonnet for PDF vision extraction
-      const aiResponse = await fetch('https://api.anthropic.com/v1/messages', {
+      const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
         method: 'POST',
         headers: {
-          'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') || '',
-          'anthropic-version': '2023-06-01',
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          model: 'claude-sonnet-4-5',
-          max_tokens: 4096,
+          model: 'google/gemini-2.5-pro',
           messages: [
             {
               role: 'user',
               content: [
                 {
-                  type: 'document',
-                  source: {
-                    type: 'base64',
-                    media_type: 'application/pdf',
-                    data: base64
+                  type: 'image_url',
+                  image_url: {
+                    url: `data:application/pdf;base64,${base64}`
                   }
                 },
                 {
                   type: 'text',
-                  text: EXTRACTION_PROMPT + '\n\nPlease extract the COC data from this PDF and return ONLY the JSON result.'
+                  text: EXTRACTION_PROMPT + '\n\nIMPORTANT: Read each date digit VERY carefully. The document may have handwritten or stamped dates. Extract the COC issue date from the signature section on page 1.'
                 }
               ]
             }
-          ]
+          ],
+          temperature: 0.1,
+          max_tokens: 8192,
         }),
       });
 
       if (!aiResponse.ok) {
         const errorText = await aiResponse.text();
-        console.error('Anthropic API error:', aiResponse.status, errorText);
-        throw new Error('PDF extraction failed');
+        console.error('Gemini API error:', aiResponse.status, errorText);
+        
+        if (aiResponse.status === 429) {
+          return new Response(
+            JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+            { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        if (aiResponse.status === 402) {
+          return new Response(
+            JSON.stringify({ error: 'Payment required. Please add credits to your Lovable AI workspace.' }),
+            { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        throw new Error('PDF extraction failed: ' + errorText);
       }
 
       const aiData = await aiResponse.json();
-      console.log('AI response received');
+      console.log('Gemini response received');
 
-      const aiContent = aiData.content[0].text;
+      const aiContent = aiData.choices?.[0]?.message?.content;
+      if (!aiContent) {
+        throw new Error('Empty response from AI');
+      }
       
       // Extract JSON from response
       let extractedData;
@@ -474,8 +576,30 @@ serve(async (req) => {
                          [null, aiContent];
         const jsonStr = jsonMatch[1] || aiContent;
         extractedData = JSON.parse(jsonStr);
+        
+        // Validate and fix dates
+        if (extractedData.cocIssueDate) {
+          const validated = parseAndValidateDate(extractedData.cocIssueDate);
+          if (validated) {
+            extractedData.cocIssueDate = validated;
+          }
+        }
+        if (extractedData.testReport?.issueDate) {
+          const validated = parseAndValidateDate(extractedData.testReport.issueDate);
+          if (validated) {
+            extractedData.testReport.issueDate = validated;
+          }
+        }
+        if (extractedData.responsibility?.signatureDate) {
+          const validated = parseAndValidateDate(extractedData.responsibility.signatureDate);
+          if (validated) {
+            extractedData.responsibility.signatureDate = validated;
+          }
+        }
+        
       } catch (parseError) {
         console.error('Failed to parse AI response as JSON:', parseError);
+        console.error('Raw response:', aiContent.substring(0, 500));
         extractedData = {
           cocNumber: null,
           cocType: 'Unknown',
@@ -486,12 +610,14 @@ serve(async (req) => {
         };
       }
 
-      console.log('Extraction completed:', JSON.stringify(extractedData));
+      console.log('Extraction completed. COC Issue Date:', extractedData.cocIssueDate);
+      console.log('All dates found:', JSON.stringify(extractedData.allDatesFound || []));
 
       return new Response(
         JSON.stringify({
           success: true,
-          extractedData
+          extractedData,
+          model: 'google/gemini-2.5-pro'
         }),
         { 
           status: 200, 
@@ -505,9 +631,6 @@ serve(async (req) => {
     console.log('Processing text file');
     const truncatedText = documentText.substring(0, 8000);
 
-    console.log('Document fetched, calling AI for extraction...');
-
-    // Call Lovable AI for extraction
     const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
       method: 'POST',
       headers: {
@@ -526,7 +649,7 @@ serve(async (req) => {
             content: `Document content:\n\n${truncatedText}\n\nPlease extract the COC data and return ONLY the JSON result.`
           }
         ],
-        temperature: 0.1, // Very low temperature for precise extraction
+        temperature: 0.1,
       }),
     });
 
@@ -551,11 +674,8 @@ serve(async (req) => {
     }
 
     const aiData = await aiResponse.json();
-    console.log('AI response received');
-
     const aiContent = aiData.choices[0].message.content;
     
-    // Extract JSON from response
     let extractedData;
     try {
       const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/) || 
