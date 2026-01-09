@@ -32,9 +32,10 @@ export interface SubsectionFiltersState {
   search: string;
   cocStatus: string[];
   compliance: string[];
+  snags: string[];
   metering: string[];
   category: string[];
-  groupBy: "none" | "category" | "cocStatus" | "compliance";
+  groupBy: "none" | "category" | "cocStatus" | "compliance" | "snags";
   viewMode: "table" | "grid";
 }
 
@@ -66,6 +67,11 @@ const METERING_OPTIONS = [
   { value: "missing", label: "Missing", color: "bg-gray-500" },
 ];
 
+const SNAG_OPTIONS = [
+  { value: "has-snags", label: "Has Snags", color: "bg-orange-500" },
+  { value: "no-snags", label: "No Snags", color: "bg-green-500" },
+];
+
 export function SubsectionFilters({ 
   filters, 
   onFiltersChange, 
@@ -80,6 +86,7 @@ export function SubsectionFilters({
     filters.compliance.length > 0,
     filters.metering.length > 0,
     filters.category.length > 0,
+    filters.snags.length > 0,
   ].filter(Boolean).length;
 
   const handleSearchChange = (value: string) => {
@@ -107,6 +114,13 @@ export function SubsectionFilters({
     onFiltersChange({ ...filters, metering: newValues });
   };
 
+  const handleSnagToggle = (value: string) => {
+    const newValues = filters.snags.includes(value)
+      ? filters.snags.filter(v => v !== value)
+      : [...filters.snags, value];
+    onFiltersChange({ ...filters, snags: newValues });
+  };
+
   const handleCategoryToggle = (category: string) => {
     const newCategories = filters.category.includes(category)
       ? filters.category.filter(c => c !== category)
@@ -128,6 +142,7 @@ export function SubsectionFilters({
       search: "",
       cocStatus: [],
       compliance: [],
+      snags: [],
       metering: [],
       category: [],
     });
@@ -279,6 +294,34 @@ export function SubsectionFilters({
                 </div>
               </div>
 
+              <Separator />
+
+              {/* Snags */}
+              <div className="space-y-2">
+                <Label className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Snags
+                </Label>
+                <div className="flex flex-wrap gap-2">
+                  {SNAG_OPTIONS.map((option) => (
+                    <button
+                      key={option.value}
+                      onClick={() => handleSnagToggle(option.value)}
+                      className={`
+                        inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium
+                        transition-all duration-200 border
+                        ${filters.snags.includes(option.value)
+                          ? "bg-primary text-primary-foreground border-primary"
+                          : "bg-muted/50 text-muted-foreground border-border hover:bg-muted"
+                        }
+                      `}
+                    >
+                      <span className={`w-1.5 h-1.5 rounded-full ${option.color}`} />
+                      {option.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               {categories.length > 0 && (
                 <>
                   <Separator />
@@ -323,6 +366,7 @@ export function SubsectionFilters({
             <SelectItem value="category">By Category</SelectItem>
             <SelectItem value="cocStatus">By COC Status</SelectItem>
             <SelectItem value="compliance">By Compliance</SelectItem>
+            <SelectItem value="snags">By Snags</SelectItem>
           </SelectContent>
         </Select>
 
@@ -390,6 +434,14 @@ export function SubsectionFilters({
             <Badge key={cat} variant="secondary" className="gap-1">
               {cat}
               <button onClick={() => handleCategoryToggle(cat)}>
+                <X className="h-3 w-3" />
+              </button>
+            </Badge>
+          ))}
+          {filters.snags.map((value) => (
+            <Badge key={value} variant="secondary" className="gap-1">
+              {value === "has-snags" ? "Has Snags" : "No Snags"}
+              <button onClick={() => handleSnagToggle(value)}>
                 <X className="h-3 w-3" />
               </button>
             </Badge>

@@ -45,6 +45,7 @@ const SiteDetail = () => {
   // States
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
+  const [snags, setSnags] = useState<{ id: string; subsection_id: string; status: string; title: string }[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -445,6 +446,7 @@ const SiteDetail = () => {
       });
 
       setSubsections(sortedSubs);
+      setSnags(snagsRes || []);
       setInspections(inspectionsRes || []);
 
       // Calculate Stats
@@ -642,7 +644,7 @@ const SiteDetail = () => {
             <div><h3 className="text-lg font-semibold">Subsections</h3><p className="text-sm text-muted-foreground">Manage subsections for {site.name}</p></div>
             <Button onClick={() => navigate(`/clients/${clientId}/sites/${siteId}/subsections/new`)} className="gap-2"><Plus className="h-4 w-4" />Add</Button>
           </div>
-          <SubsectionList subsections={subsections} clientId={clientId!} siteId={siteId!} onDelete={handleDeleteSubsection} />
+          <SubsectionList subsections={subsections} clientId={clientId!} siteId={siteId!} onDelete={handleDeleteSubsection} snags={snags} />
         </TabsContent>
 
         <TabsContent value="qr-analytics">

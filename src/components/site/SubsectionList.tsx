@@ -3,7 +3,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Eye, Trash2, Shield, ClipboardCheck, AlertCircle, ChevronDown, ChevronRight, Layers } from "lucide-react";
+import { Eye, Trash2, Shield, ClipboardCheck, AlertCircle, ChevronDown, ChevronRight, Layers, AlertTriangle } from "lucide-react";
 import { Subsection } from "@/types/site";
 import { useNavigate } from "react-router-dom";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
@@ -11,14 +11,21 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
+interface Snag {
+    id: string;
+    subsection_id: string;
+    status: string;
+}
+
 interface SubsectionListProps {
     subsections: Subsection[];
     onDelete: (id: string, name: string) => void;
     clientId: string;
     siteId: string;
+    snags?: Snag[];
 }
 
-export function SubsectionList({ subsections, onDelete, clientId, siteId }: SubsectionListProps) {
+export function SubsectionList({ subsections, onDelete, clientId, siteId, snags = [] }: SubsectionListProps) {
     const navigate = useNavigate();
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
@@ -27,11 +34,23 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
         search: "",
         cocStatus: [],
         compliance: [],
+        snags: [],
         metering: [],
         category: [],
         groupBy: "none",
         viewMode: "table",
     });
+
+    // Get snag counts per subsection
+    const snagCountBySubsection = useMemo(() => {
+        const counts: Record<string, number> = {};
+        snags.forEach(snag => {
+            if (snag.status !== 'rectified' && snag.status !== 'Rectified') {
+                counts[snag.subsection_id] = (counts[snag.subsection_id] || 0) + 1;
+            }
+        });
+        return counts;
+    }, [snags]);
 
     // Get unique categories
     const categories = useMemo(() => {
@@ -85,9 +104,20 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
                 if (!filters.category.includes(category)) return false;
             }
 
+            // Snags filter
+            if (filters.snags.length > 0) {
+                const hasSnags = (snagCountBySubsection[sub.id] || 0) > 0;
+                if (filters.snags.includes("has-snags") && !hasSnags) return false;
+                if (filters.snags.includes("no-snags") && hasSnags) return false;
+                if (filters.snags.length === 1) {
+                    if (filters.snags[0] === "has-snags" && !hasSnags) return false;
+                    if (filters.snags[0] === "no-snags" && hasSnags) return false;
+                }
+            }
+
             return true;
         });
-    }, [subsections, filters]);
+    }, [subsections, filters, snagCountBySubsection]);
 
     // Group subsections
     const groupedSubsections = useMemo(() => {
@@ -108,6 +138,10 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
                     break;
                 case "compliance":
                     groupKey = sub.is_compliant ? "Compliant" : "Non-Compliant";
+                    break;
+                case "snags":
+                    const snagCount = snagCountBySubsection[sub.id] || 0;
+                    groupKey = snagCount > 0 ? "With Snags" : "No Snags";
                     break;
                 default:
                     groupKey = "All";
@@ -319,6 +353,9 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
         if (filters.groupBy === "cocStatus") {
             return ClipboardCheck;
         }
+        if (filters.groupBy === "snags") {
+            return groupName === "No Snags" ? Shield : AlertTriangle;
+        }
         return Layers;
     };
 
@@ -339,6 +376,11 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId }: Subs
                 return "bg-yellow-500/10 text-yellow-600";
             }
             return "bg-gray-500/10 text-gray-600";
+        }
+        if (filters.groupBy === "snags") {
+            return groupName === "No Snags" 
+                ? "bg-green-500/10 text-green-600" 
+                : "bg-orange-500/10 text-orange-600";
         }
         return "bg-primary/10 text-primary";
     };
