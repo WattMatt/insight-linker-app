@@ -97,161 +97,76 @@ export async function generateAssetVerificationReport(
   doc.setTextColor(colors.text.secondary);
   doc.text('Asset Register vs Subsection Comparison', pageWidth / 2, 72, { align: 'center' });
 
-  // Summary stats box
-  const boxY = 90;
-  const boxHeight = 50;
-  doc.setDrawColor(200, 200, 200);
-  doc.setLineWidth(0.5);
-  doc.roundedRect(margins.left, boxY, pageWidth - margins.left - margins.right, boxHeight, 3, 3);
+  // KPI Cards on cover page
+  const kpiY = 85;
+  const cardWidth = (pageWidth - margins.left - margins.right - 15) / 4;
+  const cardHeight = 32;
+  const cardGap = 5;
 
-  doc.setFontSize(typography.scale.body);
-  doc.setTextColor(colors.text.primary);
-  
-  const col1X = margins.left + 15;
-  const col2X = pageWidth / 2 + 10;
-  let statY = boxY + 15;
-
-  // Left column
-  doc.setFont('helvetica', 'bold');
-  doc.text('Total Items:', col1X, statY);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stats.total.toString(), col1X + 35, statY);
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Matched:', col1X, statY + 10);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(colors.success);
-  doc.text(stats.matchedNoDiscrepancy.toString(), col1X + 35, statY + 10);
-  doc.setTextColor(colors.text.primary);
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Discrepancies:', col1X, statY + 20);
-  doc.setFont('helvetica', 'normal');
-  doc.setTextColor(colors.warning);
-  doc.text(stats.discrepancies.toString(), col1X + 35, statY + 20);
-  doc.setTextColor(colors.text.primary);
-
-  // Right column
-  doc.setFont('helvetica', 'bold');
-  doc.text('Assets Only:', col2X, statY);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stats.assetOnly.toString(), col2X + 35, statY);
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Subsections Only:', col2X, statY + 10);
-  doc.setFont('helvetica', 'normal');
-  doc.text(stats.subsectionOnly.toString(), col2X + 35, statY + 10);
-
-  doc.setFont('helvetica', 'bold');
-  doc.text('Report Date:', col2X, statY + 20);
-  doc.setFont('helvetica', 'normal');
-  doc.text(date, col2X + 35, statY + 20);
-
-  // ===== KPI SUMMARY PAGE =====
-  doc.addPage();
-  addPageHeader(doc, 'Summary Statistics', 2);
-
-  const kpiY = 45;
-  const cardWidth = (pageWidth - margins.left - margins.right - 20) / 3;
-  const cardHeight = 45;
-  const cardGap = 10;
-
-  // Row 1: Total Assets, Matched, Discrepancies
-  const row1Cards = [
-    { label: 'Total Assets', value: stats.total.toString(), color: [100, 116, 139] },  // slate
-    { label: 'Matched', value: stats.matchedNoDiscrepancy.toString(), color: [34, 197, 94] },  // green
-    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: [234, 179, 8] },  // yellow
+  const kpiCards = [
+    { label: 'Total', value: stats.total.toString(), color: [100, 116, 139] },
+    { label: 'Matched', value: stats.matchedNoDiscrepancy.toString(), color: [34, 197, 94] },
+    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: [234, 179, 8] },
+    { label: 'Unmatched', value: (stats.assetOnly + stats.subsectionOnly).toString(), color: [239, 68, 68] },
   ];
 
-  row1Cards.forEach((card, i) => {
+  kpiCards.forEach((card, i) => {
     const x = margins.left + i * (cardWidth + cardGap);
     
     // Card background
     doc.setFillColor(248, 250, 252);
-    doc.roundedRect(x, kpiY, cardWidth, cardHeight, 3, 3, 'F');
+    doc.roundedRect(x, kpiY, cardWidth, cardHeight, 2, 2, 'F');
     
     // Left accent bar
     doc.setFillColor(card.color[0], card.color[1], card.color[2]);
-    doc.rect(x, kpiY, 4, cardHeight, 'F');
+    doc.rect(x, kpiY, 3, cardHeight, 'F');
     
     // Value
-    doc.setFontSize(24);
+    doc.setFontSize(16);
     doc.setFont('helvetica', 'bold');
     doc.setTextColor(30, 41, 59);
-    doc.text(card.value, x + cardWidth / 2, kpiY + 22, { align: 'center' });
+    doc.text(card.value, x + cardWidth / 2, kpiY + 14, { align: 'center' });
     
     // Label
-    doc.setFontSize(10);
+    doc.setFontSize(8);
     doc.setFont('helvetica', 'normal');
     doc.setTextColor(100, 116, 139);
-    doc.text(card.label, x + cardWidth / 2, kpiY + 36, { align: 'center' });
+    doc.text(card.label, x + cardWidth / 2, kpiY + 25, { align: 'center' });
   });
 
-  // Row 2: Assets Only, Subsections Only
-  const row2Y = kpiY + cardHeight + 15;
-  const row2CardWidth = (pageWidth - margins.left - margins.right - 10) / 2;
-  
-  const row2Cards = [
-    { label: 'Assets Without Subsection', value: stats.assetOnly.toString(), color: [249, 115, 22] },  // orange
-    { label: 'Subsections Without Asset', value: stats.subsectionOnly.toString(), color: [59, 130, 246] },  // blue
-  ];
-
-  row2Cards.forEach((card, i) => {
-    const x = margins.left + i * (row2CardWidth + cardGap);
-    
-    // Card background
-    doc.setFillColor(248, 250, 252);
-    doc.roundedRect(x, row2Y, row2CardWidth, cardHeight, 3, 3, 'F');
-    
-    // Left accent bar
-    doc.setFillColor(card.color[0], card.color[1], card.color[2]);
-    doc.rect(x, row2Y, 4, cardHeight, 'F');
-    
-    // Value
-    doc.setFontSize(24);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(30, 41, 59);
-    doc.text(card.value, x + row2CardWidth / 2, row2Y + 22, { align: 'center' });
-    
-    // Label
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(100, 116, 139);
-    doc.text(card.label, x + row2CardWidth / 2, row2Y + 36, { align: 'center' });
-  });
-
-  // Match rate indicator
+  // Match rate bar
   const matchRate = stats.total > 0 ? Math.round((stats.matchedNoDiscrepancy / stats.total) * 100) : 0;
-  const indicatorY = row2Y + cardHeight + 25;
+  const barY = kpiY + cardHeight + 12;
   
-  doc.setFontSize(12);
+  doc.setFontSize(9);
   doc.setFont('helvetica', 'bold');
   doc.setTextColor(30, 41, 59);
-  doc.text('Match Rate', margins.left, indicatorY);
+  doc.text('Match Rate', margins.left, barY);
   
-  // Progress bar background
-  const barWidth = pageWidth - margins.left - margins.right - 50;
-  const barHeight = 12;
+  const barWidth = pageWidth - margins.left - margins.right - 40;
+  const barHeight = 8;
   doc.setFillColor(226, 232, 240);
-  doc.roundedRect(margins.left, indicatorY + 5, barWidth, barHeight, 3, 3, 'F');
+  doc.roundedRect(margins.left + 30, barY - 6, barWidth, barHeight, 2, 2, 'F');
   
-  // Progress bar fill
   const fillWidth = (matchRate / 100) * barWidth;
   if (fillWidth > 0) {
     const fillColor = matchRate >= 80 ? [34, 197, 94] : matchRate >= 50 ? [234, 179, 8] : [239, 68, 68];
     doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-    doc.roundedRect(margins.left, indicatorY + 5, fillWidth, barHeight, 3, 3, 'F');
+    doc.roundedRect(margins.left + 30, barY - 6, fillWidth, barHeight, 2, 2, 'F');
   }
   
-  // Percentage text
-  doc.setFontSize(12);
-  doc.setFont('helvetica', 'bold');
-  doc.setTextColor(30, 41, 59);
-  doc.text(`${matchRate}%`, margins.left + barWidth + 10, indicatorY + 14);
+  doc.text(`${matchRate}%`, margins.left + 32 + barWidth + 5, barY);
+
+  // Report details
+  const detailsY = barY + 18;
+  doc.setFontSize(typography.scale.caption);
+  doc.setTextColor(colors.text.muted);
+  doc.text(`Generated: ${date}`, margins.left, detailsY);
+  doc.text(`Assets Only: ${stats.assetOnly} | Subsections Only: ${stats.subsectionOnly}`, pageWidth - margins.right, detailsY, { align: 'right' });
 
   // ===== MATCHED ITEMS TABLE =====
   doc.addPage();
-  addPageHeader(doc, 'Matched Items', 3);
+  addPageHeader(doc, 'Matched Items', 2);
 
   const matchedResults = comparisonResults.filter(r => r.matchType === 'matched');
   
