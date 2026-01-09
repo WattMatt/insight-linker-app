@@ -522,9 +522,16 @@ async function generatePDFInternal(options: {
           const imgWidth = 45;
           const imgHeight = 35;
           let imgX = 25;
+          let imagesEmbedded = 0;
           
           for (const img of tenantImages) {
+            if (!img.url) {
+              console.log(`Tenant ${tenant.shopName}: ${img.label} image URL is empty`);
+              continue;
+            }
+            
             try {
+              console.log(`Fetching tenant image: ${img.label} from ${img.url}`);
               const dataUrl = await fetchImageAsDataUrl(img.url);
               if (dataUrl) {
                 if (yPos + imgHeight > pageHeight - 30) {
@@ -532,14 +539,31 @@ async function generatePDFInternal(options: {
                   yPos = 20;
                   imgX = 25;
                 }
+                // Add label above image
+                doc.setFontSize(7);
+                doc.setFont(undefined, 'normal');
+                doc.text(img.label, imgX, yPos - 2);
                 doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
                 imgX += imgWidth + 5;
+                imagesEmbedded++;
+                
+                if (imgX > pageWidth - imgWidth - 20) {
+                  imgX = 25;
+                  yPos += imgHeight + 10;
+                }
+              } else {
+                console.warn(`Failed to fetch tenant image for ${tenant.shopName}: ${img.label} - ${img.url}`);
               }
             } catch (error) {
-              console.error('Error embedding tenant image:', error);
+              console.error(`Error embedding tenant image for ${tenant.shopName}:`, img.label, error);
             }
           }
-          yPos += imgHeight + 10;
+          
+          if (imagesEmbedded > 0 && imgX > 25) {
+            yPos += imgHeight + 10;
+          } else if (imagesEmbedded === 0) {
+            yPos += 5;
+          }
         } else {
           yPos += 10;
         }
