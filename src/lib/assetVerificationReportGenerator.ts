@@ -1,22 +1,37 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename, getContentWidth } from "./documentDesignStandards";
+import { generateDocumentFilename } from "./documentDesignStandards";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addSectionHeader,
-  addFootersToAllPages,
-  drawKpiCard,
-  drawProgressBar,
-  logComplianceCheck,
-  hexToRgb,
-  RGB_COLORS,
-  PAGE,
-  SAFE_BOTTOM_MARGIN,
+  createBaseDocDefinition,
+  generatePdfBlob,
+  COLORS,
+  DEFAULT_STYLES,
+  getStandardTableLayout,
+  getLightTableLayout,
+  Content,
+  TDocumentDefinitions,
+} from "./pdfMakeConfig";
+import {
+  loadCompanyBranding,
+  imageUrlToBase64,
+  formatPdfDate,
+  generateReferenceNumber,
+  createHeaderLogo,
+  createCoverLogo,
+} from "./pdfBranding";
+import {
+  createCoverPage,
+  createPageHeader,
+  createPageFooter,
+  createKpiDashboard,
+  createSectionHeader,
+  createDataTable,
+  createProgressBar,
+  createSpacer,
+  createParagraph,
   PDFComplianceCheck,
-  CoverPageOptions,
-  getTableOptionsWithSafeMargins,
-} from "./pdfUtils";
+  createComplianceResult,
+  getStatusType,
+  createStatusBadge,
+} from "./pdfTemplates";
 
 interface Asset {
   id: string;
@@ -102,11 +117,8 @@ interface LegacyGeneratorOptions {
   companyLogoUrl?: string | null;
 }
 
-// Destructure design standards for easy access
-const { typography, colors, margins, tables, logo, headers, footers, cards } = DOCUMENT_DESIGN_STANDARDS;
-
 /**
- * Generate Asset Verification Report PDF - New inspection-based version
+ * Generate Asset Verification Report PDF - New inspection-based version using pdfmake
  * Returns both blob/filename and compliance checks for preview dialog
  */
 export async function generateInspectionBasedReport(
@@ -114,309 +126,269 @@ export async function generateInspectionBasedReport(
 ): Promise<{ blob: Blob; filename: string; complianceChecks: PDFComplianceCheck }> {
   const { siteName, clientName, comparisonResults, stats, companyLogoUrl } = options;
   
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const contentWidth = getContentWidth();
-  
-  // Load logo if available
+  // Load branding
   let logoDataUrl: string | null = null;
-  if (companyLogoUrl) {
-    try {
-      logoDataUrl = await loadImage(companyLogoUrl);
-    } catch (e) {
-      console.error('Failed to load logo:', e);
-    }
-  }
+  let organizationName = 'Asset Management System';
   
-  const date = new Date().toLocaleDateString('en-GB', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  if (companyLogoUrl) {
+    logoDataUrl = await imageUrlToBase64(companyLogoUrl);
+  } else {
+    const branding = await loadCompanyBranding();
+    logoDataUrl = branding.logoDataUrl;
+    organizationName = branding.organizationName;
+  }
 
-  // ===== PAGE 1: DEDICATED COVER PAGE =====
-  addCoverPage(doc, {
+  const matchRate = stats.total > 0 ? Math.round((stats.verifiedNoDiscrepancy / stats.total) * 100) : 0;
+  
+  // Build document content
+  const content: Content[] = [];
+
+  // ===== COVER PAGE =====
+  content.push(...createCoverPage({
     title: 'Asset Verification Report',
     subtitle: 'Asset Register vs Inspection Data Verification',
     siteName,
     clientName,
     reportType: 'Verification Report',
-    logoDataUrl,
-    organizationName: 'Asset Management System',
     reportDate: new Date(),
-  });
+    referenceNumber: generateReferenceNumber('AVR'),
+  }, logoDataUrl));
 
-  // ===== PAGE 2: EXECUTIVE SUMMARY WITH KPI DASHBOARD =====
-  doc.addPage();
-  addStandardHeader(doc, 'Executive Summary', logoDataUrl);
-  
-  let y = headers.height + margins.top + 10;
-  
-  // Section title
-  y = addSectionHeader(doc, 'Verification Overview', y);
-  
-  // KPI Cards
-  const cardWidth = (contentWidth - (cards.margin * 3)) / 4;
-  const cardHeight = 28;
-  
-  const kpiData = [
-    { label: 'Total Assets', value: stats.total.toString(), color: RGB_COLORS.textMuted },
-    { label: 'Verified', value: stats.verifiedNoDiscrepancy.toString(), color: RGB_COLORS.success },
-    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: RGB_COLORS.warning },
-    { label: 'Not Verified', value: stats.unverified.toString(), color: RGB_COLORS.error },
-  ];
-  
-  kpiData.forEach((kpi, i) => {
-    const cardX = margins.left + i * (cardWidth + cards.margin);
-    drawKpiCard(doc, cardX, y, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
-  });
-  
-  y += cardHeight + 20;
-  
+  // ===== PAGE 2: EXECUTIVE SUMMARY =====
+  content.push({ text: '', pageBreak: 'before' });
+  content.push(createSectionHeader('Verification Overview', 'primary'));
+  content.push(createSpacer(5));
+
+  // KPI Dashboard
+  content.push(createKpiDashboard([
+    { value: stats.total, label: 'Total Assets', color: COLORS.textMuted },
+    { value: stats.verifiedNoDiscrepancy, label: 'Verified', color: COLORS.success },
+    { value: stats.discrepancies, label: 'Discrepancies', color: COLORS.warning },
+    { value: stats.unverified, label: 'Not Verified', color: COLORS.error },
+  ]));
+
+  content.push(createSpacer(10));
+
   // Verification Rate Progress Bar
-  const matchRate = stats.total > 0 ? Math.round((stats.verifiedNoDiscrepancy / stats.total) * 100) : 0;
-  
-  doc.setFontSize(typography.scale.body);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.setTextColor(...RGB_COLORS.textPrimary);
-  doc.text('Verification Rate', margins.left, y);
-  
-  const barX = margins.left + 40;
-  const barWidth = contentWidth - 60;
-  drawProgressBar(doc, barX, y - 4, barWidth, matchRate);
-  
-  y += 20;
-  
-  // Summary Statistics
-  y = addSectionHeader(doc, 'Summary Statistics', y);
-  
-  const summaryData = [
-    ['Total Assets in Register', stats.total.toString()],
-    ['Verified (No Discrepancies)', stats.verifiedNoDiscrepancy.toString()],
-    ['Verified (With Discrepancies)', stats.discrepancies.toString()],
-    ['Not Yet Verified', stats.unverified.toString()],
-    ['Assets with Inspection Photos', stats.withImages.toString()],
-    ['Verification Rate', `${matchRate}%`],
-  ];
-  
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margins.left, right: margins.right },
-    head: [['Metric', 'Value']],
-    body: summaryData,
-    styles: {
-      fontSize: tables.body.fontSize,
-      cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-      lineColor: hexToRgb(tables.border.color),
-      lineWidth: tables.border.width,
-    },
-    headStyles: {
-      fillColor: RGB_COLORS.primary,
-      textColor: RGB_COLORS.white,
-      fontStyle: 'bold',
-      fontSize: tables.header.fontSize,
-    },
-    alternateRowStyles: {
-      fillColor: hexToRgb(tables.body.alternateRowColor),
-    },
-    columnStyles: {
-      0: { cellWidth: 120 },
-      1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
-    },
+  content.push({
+    columns: [
+      { text: 'Verification Rate:', style: 'body', width: 80, bold: true },
+      createProgressBar(matchRate, { width: 350, showLabel: true }),
+    ],
+    margin: [0, 0, 0, 15],
+  } as Content);
+
+  // Summary Statistics Section
+  content.push(createSectionHeader('Summary Statistics', 'secondary'));
+  content.push(createSpacer(5));
+
+  content.push(...createDataTable(
+    [
+      { header: 'Metric', dataKey: 'metric', width: '*' },
+      { header: 'Value', dataKey: 'value', width: 80, align: 'center' },
+    ],
+    [
+      { metric: 'Total Assets in Register', value: stats.total.toString() },
+      { metric: 'Verified (No Discrepancies)', value: stats.verifiedNoDiscrepancy.toString() },
+      { metric: 'Verified (With Discrepancies)', value: stats.discrepancies.toString() },
+      { metric: 'Not Yet Verified', value: stats.unverified.toString() },
+      { metric: 'Assets with Inspection Photos', value: stats.withImages.toString() },
+      { metric: 'Verification Rate', value: `${matchRate}%` },
+    ],
+    { zebraStripe: true }
+  ));
+
+  content.push(createSpacer(10));
+  content.push({
+    text: `Generated: ${formatPdfDate(new Date())}`,
+    style: 'caption',
+    margin: [0, 5, 0, 0],
   });
-  
-  y = (doc as any).lastAutoTable?.finalY + 15 || y + 50;
-  
-  // Report metadata
-  doc.setFontSize(typography.scale.caption);
-  doc.setTextColor(...RGB_COLORS.textMuted);
-  doc.setFont(typography.fonts.body, 'normal');
-  doc.text(`Generated: ${date}`, margins.left, y);
 
-  // ===== VERIFIED ITEMS TABLE =====
-  doc.addPage();
-  const verifiedHeaderY = addStandardHeader(doc, 'Verified Assets', logoDataUrl, 'Asset Management System');
-  
-  let tableY = verifiedHeaderY;
-  tableY = addSectionHeader(doc, 'Verified via Inspection Data', tableY);
-
+  // ===== VERIFIED ASSETS TABLE =====
   const verifiedResults = comparisonResults.filter(r => r.verified);
   
-  // Column widths sum to exactly 180mm (contentWidth)
-  // Premises ID: 28, Trade As: 38, Status: 22, Source: 28, Meter: 28, CT: 18, Breaker: 18 = 180
-  const verifiedColumnWidths = {
-    0: { cellWidth: 28 },  // Premises ID
-    1: { cellWidth: 38 },  // Trade As
-    2: { cellWidth: 22 },  // Status
-    3: { cellWidth: 28 },  // Inspection Source
-    4: { cellWidth: 28 },  // Meter Serial
-    5: { cellWidth: 18 },  // CT Ratio
-    6: { cellWidth: 18 },  // Breaker
-  };
-  
+  content.push({ text: '', pageBreak: 'before' });
+  content.push(createSectionHeader('Verified via Inspection Data', 'primary'));
+  content.push(createSpacer(5));
+
   if (verifiedResults.length > 0) {
-    autoTable(doc, {
-      ...getTableOptionsWithSafeMargins(doc, tableY, 'Verified Assets (continued)', logoDataUrl, 'Asset Management System'),
-      head: [[
-        'Premises ID',
-        'Trade As',
-        'Status',
-        'Source',
-        'Meter Serial',
-        'CT Ratio',
-        'Breaker'
-      ]],
-      body: verifiedResults.map(r => [
-        r.asset.premises_id || '-',
-        r.asset.trade_as || '-',
-        r.hasDiscrepancy ? '⚠ Mismatch' : '✓ Verified',
-        r.inspectionMatch?.subsectionName || r.inspectionMatch?.shopName || 'Inspection',
-        r.asset.meter_serial_number || '-',
-        formatComparisonCell(r.asset.ct_ratio, r.inspectionMatch?.ctSizeAndRatio, r.ctMatch),
-        formatComparisonCell(r.asset.breaker_size, r.inspectionMatch?.breakerSize, r.breakerMatch)
-      ]),
-      columnStyles: verifiedColumnWidths,
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 2) {
-          const value = data.cell.raw as string;
-          if (value.includes('Mismatch')) {
-            data.cell.styles.textColor = hexToRgb(colors.warning);
-            data.cell.styles.fontStyle = 'bold';
-          } else if (value.includes('Verified')) {
-            data.cell.styles.textColor = hexToRgb(colors.success);
-            data.cell.styles.fontStyle = 'bold';
-          }
-        }
-        // Highlight mismatched values
-        if (data.section === 'body') {
-          const result = verifiedResults[data.row.index];
-          if (result) {
-            if (data.column.index === 5 && result.ctMatch === 'mismatch') {
-              data.cell.styles.fillColor = [254, 243, 199];
-            }
-            if (data.column.index === 6 && result.breakerMatch === 'mismatch') {
-              data.cell.styles.fillColor = [254, 243, 199];
-            }
-          }
-        }
-      },
+    // Create table with custom cell styling for status
+    const verifiedTableBody = verifiedResults.map(r => ({
+      premisesId: r.asset.premises_id || '-',
+      tradeAs: r.asset.trade_as || '-',
+      status: r.hasDiscrepancy ? '⚠ Mismatch' : '✓ Verified',
+      statusType: r.hasDiscrepancy ? 'warning' : 'success',
+      source: r.inspectionMatch?.subsectionName || r.inspectionMatch?.shopName || 'Inspection',
+      meterSerial: r.asset.meter_serial_number || '-',
+      ctRatio: formatComparisonCell(r.asset.ct_ratio, r.inspectionMatch?.ctSizeAndRatio, r.ctMatch),
+      ctMismatch: r.ctMatch === 'mismatch',
+      breaker: formatComparisonCell(r.asset.breaker_size, r.inspectionMatch?.breakerSize, r.breakerMatch),
+      breakerMismatch: r.breakerMatch === 'mismatch',
+    }));
+
+    // Build table manually for cell-level styling
+    const tableBody: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader' },
+        { text: 'Trade As', style: 'tableHeader' },
+        { text: 'Status', style: 'tableHeader' },
+        { text: 'Source', style: 'tableHeader' },
+        { text: 'Meter Serial', style: 'tableHeader' },
+        { text: 'CT Ratio', style: 'tableHeader' },
+        { text: 'Breaker', style: 'tableHeader' },
+      ],
+    ];
+
+    verifiedTableBody.forEach(row => {
+      tableBody.push([
+        { text: row.premisesId, style: 'tableBody' },
+        { text: row.tradeAs, style: 'tableBody' },
+        { 
+          text: row.status, 
+          style: 'tableBody', 
+          color: row.statusType === 'warning' ? COLORS.warning : COLORS.success,
+          bold: true 
+        },
+        { text: row.source, style: 'tableBody' },
+        { text: row.meterSerial, style: 'tableBody' },
+        { 
+          text: row.ctRatio, 
+          style: 'tableBody',
+          fillColor: row.ctMismatch ? '#fef3c7' : undefined,
+        },
+        { 
+          text: row.breaker, 
+          style: 'tableBody',
+          fillColor: row.breakerMismatch ? '#fef3c7' : undefined,
+        },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [55, 70, 50, 60, 55, 45, 45],
+        body: tableBody,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   } else {
-    doc.setFontSize(typography.scale.body);
-    doc.setTextColor(...RGB_COLORS.textMuted);
-    doc.text('No verified items found.', margins.left, tableY + 10);
+    content.push(createParagraph('No verified items found.', 'muted'));
   }
 
   // ===== DISCREPANCIES TABLE =====
   const discrepancies = comparisonResults.filter(r => r.hasDiscrepancy);
+  
   if (discrepancies.length > 0) {
-    doc.addPage();
-    const discrepancyHeaderY = addStandardHeader(doc, 'Discrepancies Detail', logoDataUrl, 'Asset Management System');
-    
-    tableY = discrepancyHeaderY;
-    tableY = addSectionHeader(doc, 'Value Mismatches Between Asset Register and Inspections', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Value Mismatches Between Asset Register and Inspections', 'primary'));
+    content.push(createSpacer(5));
 
-    // Column widths sum to exactly 180mm: 36 + 28 + 44 + 44 + 28 = 180
-    const discrepancyColumnWidths = {
-      0: { cellWidth: 36 },  // Premises ID
-      1: { cellWidth: 28 },  // Field
-      2: { cellWidth: 44 },  // Asset Value
-      3: { cellWidth: 44 },  // Inspection Value
-      4: { cellWidth: 28 },  // Status
-    };
+    const discrepancyRows: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Field', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Asset Register Value', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Inspection Value', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Status', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+      ],
+    ];
 
-    autoTable(doc, {
-      ...getTableOptionsWithSafeMargins(doc, tableY, 'Discrepancies (continued)', logoDataUrl, 'Asset Management System'),
-      head: [['Premises ID', 'Field', 'Asset Register Value', 'Inspection Value', 'Status']],
-      body: discrepancies.flatMap(r => {
-        const rows: string[][] = [];
-        if (r.ctMatch === 'mismatch') {
-          rows.push([
-            r.asset.premises_id || '-',
-            'CT Ratio',
-            r.asset.ct_ratio || '-',
-            r.inspectionMatch?.ctSizeAndRatio || '-',
-            'MISMATCH'
-          ]);
-        }
-        if (r.breakerMatch === 'mismatch') {
-          rows.push([
-            r.asset.premises_id || '-',
-            'Breaker Size',
-            r.asset.breaker_size || '-',
-            r.inspectionMatch?.breakerSize || '-',
-            'MISMATCH'
-          ]);
-        }
-        return rows;
-      }),
-      headStyles: {
-        fillColor: [254, 243, 199],
-        textColor: [146, 64, 14],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      columnStyles: discrepancyColumnWidths,
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 4) {
-          data.cell.styles.textColor = hexToRgb(colors.warning);
-          data.cell.styles.fontStyle = 'bold';
-        }
-      },
+    discrepancies.forEach(r => {
+      if (r.ctMatch === 'mismatch') {
+        discrepancyRows.push([
+          { text: r.asset.premises_id || '-', style: 'tableBody' },
+          { text: 'CT Ratio', style: 'tableBody' },
+          { text: r.asset.ct_ratio || '-', style: 'tableBody' },
+          { text: r.inspectionMatch?.ctSizeAndRatio || '-', style: 'tableBody' },
+          { text: 'MISMATCH', style: 'tableBody', color: COLORS.warning, bold: true },
+        ]);
+      }
+      if (r.breakerMatch === 'mismatch') {
+        discrepancyRows.push([
+          { text: r.asset.premises_id || '-', style: 'tableBody' },
+          { text: 'Breaker Size', style: 'tableBody' },
+          { text: r.asset.breaker_size || '-', style: 'tableBody' },
+          { text: r.inspectionMatch?.breakerSize || '-', style: 'tableBody' },
+          { text: 'MISMATCH', style: 'tableBody', color: COLORS.warning, bold: true },
+        ]);
+      }
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [70, 60, 90, 90, 50],
+        body: discrepancyRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
   // ===== UNVERIFIED ASSETS =====
   const unverified = comparisonResults.filter(r => !r.verified);
+  
   if (unverified.length > 0) {
-    doc.addPage();
-    const unverifiedHeaderY = addStandardHeader(doc, 'Unverified Assets', logoDataUrl, 'Asset Management System');
-    
-    tableY = unverifiedHeaderY;
-    tableY = addSectionHeader(doc, 'Assets Without Matching Inspection Data', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Assets Without Matching Inspection Data', 'primary'));
+    content.push(createSpacer(5));
 
-    // Column widths sum to exactly 180mm: 30 + 40 + 30 + 24 + 24 + 32 = 180
-    const unverifiedColumnWidths = {
-      0: { cellWidth: 30 },  // Premises ID
-      1: { cellWidth: 40 },  // Trade As
-      2: { cellWidth: 30 },  // Meter Serial
-      3: { cellWidth: 24 },  // CT Ratio
-      4: { cellWidth: 24 },  // Breaker Size
-      5: { cellWidth: 32 },  // Action Required
-    };
+    const unverifiedRows: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Trade As', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Meter Serial', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'CT Ratio', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Breaker Size', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Action Required', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+      ],
+    ];
 
-    autoTable(doc, {
-      ...getTableOptionsWithSafeMargins(doc, tableY, 'Unverified Assets (continued)', logoDataUrl, 'Asset Management System'),
-      head: [['Premises ID', 'Trade As', 'Meter Serial', 'CT Ratio', 'Breaker Size', 'Action Required']],
-      body: unverified.map(r => [
-        r.asset.premises_id || '-',
-        r.asset.trade_as || '-',
-        r.asset.meter_serial_number || '-',
-        r.asset.ct_ratio || '-',
-        r.asset.breaker_size || '-',
-        'Requires Inspection'
-      ]),
-      headStyles: {
-        fillColor: [254, 215, 170],
-        textColor: [154, 52, 18],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      columnStyles: unverifiedColumnWidths,
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 5) {
-          data.cell.styles.textColor = hexToRgb(colors.error);
-          data.cell.styles.fontStyle = 'italic';
-        }
-      },
+    unverified.forEach(r => {
+      unverifiedRows.push([
+        { text: r.asset.premises_id || '-', style: 'tableBody' },
+        { text: r.asset.trade_as || '-', style: 'tableBody' },
+        { text: r.asset.meter_serial_number || '-', style: 'tableBody' },
+        { text: r.asset.ct_ratio || '-', style: 'tableBody' },
+        { text: r.asset.breaker_size || '-', style: 'tableBody' },
+        { text: 'Requires Inspection', style: 'tableBody', color: COLORS.error, italics: true },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [60, 80, 60, 50, 50, 60],
+        body: unverifiedRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
-  // Add footers to all pages (skip cover page)
-  addFootersToAllPages(doc, true);
+  // Create document definition
+  const docDefinition = createBaseDocDefinition(
+    content,
+    {
+      title: `Asset Verification Report - ${siteName}`,
+      author: organizationName,
+      header: createPageHeader('Asset Verification Report', logoDataUrl, organizationName),
+      footer: createPageFooter('CONFIDENTIAL'),
+    }
+  );
 
-  // Log compliance and return checks
-  const complianceChecks = logComplianceCheck('assetVerificationReportGenerator', {
+  // Generate PDF blob
+  const blob = await generatePdfBlob(docDefinition);
+  const filename = generateDocumentFilename('Asset_Verification', siteName);
+
+  // Create compliance checks
+  const complianceChecks = createComplianceResult({
     hasCoverPage: true,
     logoPlacement: !!logoDataUrl,
     standardMargins: true,
@@ -428,12 +400,12 @@ export async function generateInspectionBasedReport(
     pageBreaks: true,
   });
 
-  const filename = generateDocumentFilename('Asset_Verification', siteName);
-  const blob = doc.output('blob');
-  
   return { blob, filename, complianceChecks };
 }
 
+/**
+ * Format comparison cell value for display
+ */
 function formatComparisonCell(
   assetValue: string | null | undefined, 
   inspectionValue: string | null | undefined, 
@@ -450,419 +422,341 @@ function formatComparisonCell(
 }
 
 /**
- * Generate Asset Verification Report PDF - Legacy version for backwards compatibility
+ * Generate Asset Verification Report PDF - Legacy version for backwards compatibility using pdfmake
  */
 export async function generateAssetVerificationReport(
   options: LegacyGeneratorOptions
 ): Promise<{ blob: Blob; filename: string }> {
-  const { siteName, comparisonResults, stats, companyLogoUrl } = options;
+  const { siteName, clientName, comparisonResults, stats, companyLogoUrl } = options;
   
-  const doc = new jsPDF();
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const contentWidth = getContentWidth();
-  
-  // Load logo if available
+  // Load branding
   let logoDataUrl: string | null = null;
-  if (companyLogoUrl) {
-    try {
-      logoDataUrl = await loadImage(companyLogoUrl);
-    } catch (e) {
-      console.error('Failed to load logo:', e);
-    }
-  }
+  let organizationName = 'Asset Management System';
   
-  const date = new Date().toLocaleDateString('en-GB', { 
-    year: 'numeric', 
-    month: 'long', 
-    day: 'numeric' 
-  });
+  if (companyLogoUrl) {
+    logoDataUrl = await imageUrlToBase64(companyLogoUrl);
+  } else {
+    const branding = await loadCompanyBranding();
+    logoDataUrl = branding.logoDataUrl;
+    organizationName = branding.organizationName;
+  }
 
-  // ===== PAGE 1: DEDICATED COVER PAGE =====
-  addCoverPage(doc, {
+  const matchRate = stats.total > 0 ? Math.round((stats.matchedNoDiscrepancy / stats.total) * 100) : 0;
+  
+  // Build document content
+  const content: Content[] = [];
+
+  // ===== COVER PAGE =====
+  content.push(...createCoverPage({
     title: 'Asset Verification Report',
     subtitle: 'Asset Register vs Subsection Data Comparison',
     siteName,
-    clientName: options.clientName,
+    clientName,
     reportType: 'Verification Report',
-    logoDataUrl,
-    organizationName: 'Asset Management System',
     reportDate: new Date(),
-  });
+    referenceNumber: generateReferenceNumber('AVR'),
+  }, logoDataUrl));
 
-  // ===== PAGE 2: EXECUTIVE SUMMARY WITH KPI DASHBOARD =====
-  doc.addPage();
-  addStandardHeader(doc, 'Executive Summary', logoDataUrl);
-  
-  let y = headers.height + margins.top + 10;
-  
-  // Section title
-  y = addSectionHeader(doc, 'Verification Overview', y);
+  // ===== PAGE 2: EXECUTIVE SUMMARY =====
+  content.push({ text: '', pageBreak: 'before' });
+  content.push(createSectionHeader('Verification Overview', 'primary'));
+  content.push(createSpacer(5));
 
-  // KPI Cards
-  const cardWidth = (contentWidth - (cards.margin * 3)) / 4;
-  const cardHeight = 28;
-  
-  const kpiData = [
-    { label: 'Total Assets', value: stats.total.toString(), color: RGB_COLORS.textMuted },
-    { label: 'Verified', value: stats.matchedNoDiscrepancy.toString(), color: RGB_COLORS.success },
-    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: RGB_COLORS.warning },
-    { label: 'Unverified', value: (stats.assetOnly + stats.subsectionOnly).toString(), color: RGB_COLORS.error },
-  ];
-  
-  kpiData.forEach((kpi, i) => {
-    const cardX = margins.left + i * (cardWidth + cards.margin);
-    drawKpiCard(doc, cardX, y, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
-  });
-  
-  y += cardHeight + 20;
-  
+  // KPI Dashboard
+  content.push(createKpiDashboard([
+    { value: stats.total, label: 'Total Assets', color: COLORS.textMuted },
+    { value: stats.matchedNoDiscrepancy, label: 'Verified', color: COLORS.success },
+    { value: stats.discrepancies, label: 'Discrepancies', color: COLORS.warning },
+    { value: stats.assetOnly + stats.subsectionOnly, label: 'Unverified', color: COLORS.error },
+  ]));
+
+  content.push(createSpacer(10));
+
   // Verification Rate Progress Bar
-  const matchRate = stats.total > 0 ? Math.round((stats.matchedNoDiscrepancy / stats.total) * 100) : 0;
-  
-  doc.setFontSize(typography.scale.body);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.setTextColor(...RGB_COLORS.textPrimary);
-  doc.text('Verification Rate', margins.left, y);
-  
-  const barX = margins.left + 40;
-  const barWidth = contentWidth - 60;
-  drawProgressBar(doc, barX, y - 4, barWidth, matchRate);
-  
-  y += 20;
-  
-  // Summary Statistics Table
-  y = addSectionHeader(doc, 'Summary Statistics', y);
-  
-  const summaryData = [
-    ['Total Assets in Register', stats.total.toString()],
-    ['Verified (No Discrepancies)', stats.matchedNoDiscrepancy.toString()],
-    ['Verified (With Discrepancies)', stats.discrepancies.toString()],
-    ['Assets Without Inspection', stats.assetOnly.toString()],
-    ['Inspections Without Asset', stats.subsectionOnly.toString()],
-    ['Potential Matches Found', (stats.potentialMatches || 0).toString()],
-    ['Verification Rate', `${matchRate}%`],
-  ];
-  
-  autoTable(doc, {
-    startY: y,
-    margin: { left: margins.left, right: margins.right },
-    head: [['Metric', 'Value']],
-    body: summaryData,
-    styles: {
-      fontSize: tables.body.fontSize,
-      cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-      lineColor: hexToRgb(tables.border.color),
-      lineWidth: tables.border.width,
-    },
-    headStyles: {
-      fillColor: RGB_COLORS.primary,
-      textColor: RGB_COLORS.white,
-      fontStyle: 'bold',
-      fontSize: tables.header.fontSize,
-    },
-    alternateRowStyles: {
-      fillColor: hexToRgb(tables.body.alternateRowColor),
-    },
-    columnStyles: {
-      0: { cellWidth: 120 },
-      1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
-    },
+  content.push({
+    columns: [
+      { text: 'Verification Rate:', style: 'body', width: 80, bold: true },
+      createProgressBar(matchRate, { width: 350, showLabel: true }),
+    ],
+    margin: [0, 0, 0, 15],
+  } as Content);
+
+  // Summary Statistics Section
+  content.push(createSectionHeader('Summary Statistics', 'secondary'));
+  content.push(createSpacer(5));
+
+  content.push(...createDataTable(
+    [
+      { header: 'Metric', dataKey: 'metric', width: '*' },
+      { header: 'Value', dataKey: 'value', width: 80, align: 'center' },
+    ],
+    [
+      { metric: 'Total Assets in Register', value: stats.total.toString() },
+      { metric: 'Verified (No Discrepancies)', value: stats.matchedNoDiscrepancy.toString() },
+      { metric: 'Verified (With Discrepancies)', value: stats.discrepancies.toString() },
+      { metric: 'Assets Without Inspection', value: stats.assetOnly.toString() },
+      { metric: 'Inspections Without Asset', value: stats.subsectionOnly.toString() },
+      { metric: 'Potential Matches Found', value: (stats.potentialMatches || 0).toString() },
+      { metric: 'Verification Rate', value: `${matchRate}%` },
+    ],
+    { zebraStripe: true }
+  ));
+
+  content.push(createSpacer(10));
+  content.push({
+    text: `Generated: ${formatPdfDate(new Date())}`,
+    style: 'caption',
+    margin: [0, 5, 0, 0],
   });
-  
-  y = (doc as any).lastAutoTable?.finalY + 15 || y + 50;
-  
-  // Report metadata
-  doc.setFontSize(typography.scale.caption);
-  doc.setTextColor(...RGB_COLORS.textMuted);
-  doc.setFont(typography.fonts.body, 'normal');
-  doc.text(`Generated: ${date}`, margins.left, y);
 
   // ===== VERIFIED ITEMS TABLE =====
-  doc.addPage();
-  addStandardHeader(doc, 'Verified Items', logoDataUrl);
-  
-  let tableY = headers.height + margins.top + 10;
-  tableY = addSectionHeader(doc, 'Matched Asset and Inspection Records', tableY);
-
   const matchedResults = comparisonResults.filter(r => r.matchType === 'matched');
   
+  content.push({ text: '', pageBreak: 'before' });
+  content.push(createSectionHeader('Matched Asset and Inspection Records', 'primary'));
+  content.push(createSpacer(5));
+
   if (matchedResults.length > 0) {
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      head: [[
-        'Premises ID',
-        'Status',
-        'Meter Serial (Asset)',
-        'Meter Serial (Insp)',
-        'CT Ratio (Asset)',
-        'CT Ratio (Insp)',
-        'Breaker'
-      ]],
-      body: matchedResults.map(r => [
-        r.asset?.premises_id || '-',
-        r.hasDiscrepancy ? '⚠ Mismatch' : '✓ Verified',
-        r.asset?.meter_serial_number || '-',
-        r.subsection?.meter_serial_number || '-',
-        r.asset?.ct_ratio || '-',
-        r.subsection?.ct_ratio || '-',
-        r.asset?.breaker_size || '-'
-      ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-      },
-      headStyles: {
-        fillColor: hexToRgb(tables.header.backgroundColor),
-        textColor: hexToRgb(tables.header.textColor),
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
-      columnStyles: {
-        1: { cellWidth: 20 },
-      },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 1) {
-          const value = data.cell.raw as string;
-          if (value.includes('Mismatch')) {
-            data.cell.styles.textColor = hexToRgb(colors.warning);
-            data.cell.styles.fontStyle = 'bold';
-          } else if (value.includes('Verified')) {
-            data.cell.styles.textColor = hexToRgb(colors.success);
-            data.cell.styles.fontStyle = 'bold';
-          }
-        }
-        if (data.section === 'body') {
-          const result = matchedResults[data.row.index];
-          if (result) {
-            if ((data.column.index === 2 || data.column.index === 3) && result.meterSerialMatch === 'mismatch') {
-              data.cell.styles.fillColor = [254, 243, 199];
-            }
-            if ((data.column.index === 4 || data.column.index === 5) && result.ctRatioMatch === 'mismatch') {
-              data.cell.styles.fillColor = [254, 243, 199];
-            }
-          }
-        }
-      },
+    const matchedTableBody: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader' },
+        { text: 'Status', style: 'tableHeader' },
+        { text: 'Meter (Asset)', style: 'tableHeader' },
+        { text: 'Meter (Insp)', style: 'tableHeader' },
+        { text: 'CT (Asset)', style: 'tableHeader' },
+        { text: 'CT (Insp)', style: 'tableHeader' },
+        { text: 'Breaker', style: 'tableHeader' },
+      ],
+    ];
+
+    matchedResults.forEach(r => {
+      matchedTableBody.push([
+        { text: r.asset?.premises_id || '-', style: 'tableBody' },
+        { 
+          text: r.hasDiscrepancy ? '⚠ Mismatch' : '✓ Verified', 
+          style: 'tableBody',
+          color: r.hasDiscrepancy ? COLORS.warning : COLORS.success,
+          bold: true,
+        },
+        { 
+          text: r.asset?.meter_serial_number || '-', 
+          style: 'tableBody',
+          fillColor: r.meterSerialMatch === 'mismatch' ? '#fef3c7' : undefined,
+        },
+        { 
+          text: r.subsection?.meter_serial_number || '-', 
+          style: 'tableBody',
+          fillColor: r.meterSerialMatch === 'mismatch' ? '#fef3c7' : undefined,
+        },
+        { 
+          text: r.asset?.ct_ratio || '-', 
+          style: 'tableBody',
+          fillColor: r.ctRatioMatch === 'mismatch' ? '#fef3c7' : undefined,
+        },
+        { 
+          text: r.subsection?.ct_ratio || '-', 
+          style: 'tableBody',
+          fillColor: r.ctRatioMatch === 'mismatch' ? '#fef3c7' : undefined,
+        },
+        { text: r.asset?.breaker_size || '-', style: 'tableBody' },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [55, 50, 55, 55, 50, 50, 45],
+        body: matchedTableBody,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   } else {
-    doc.setFontSize(typography.scale.body);
-    doc.setTextColor(...RGB_COLORS.textMuted);
-    doc.text('No verified items found.', margins.left, tableY + 10);
+    content.push(createParagraph('No verified items found.', 'muted'));
   }
 
   // ===== DISCREPANCIES =====
   const discrepancies = comparisonResults.filter(r => r.hasDiscrepancy);
+  
   if (discrepancies.length > 0) {
-    doc.addPage();
-    addStandardHeader(doc, 'Discrepancies Detail', logoDataUrl);
-    
-    tableY = headers.height + margins.top + 10;
-    tableY = addSectionHeader(doc, 'Value Mismatches', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Value Mismatches', 'primary'));
+    content.push(createSpacer(5));
 
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      head: [['Premises ID', 'Field', 'Asset Value', 'Inspection Value', 'Status']],
-      body: discrepancies.flatMap(r => {
-        const rows: string[][] = [];
-        if (r.meterSerialMatch === 'mismatch') {
-          rows.push([
-            r.asset?.premises_id || '-',
-            'Meter Serial',
-            r.asset?.meter_serial_number || '-',
-            r.subsection?.meter_serial_number || '-',
-            'MISMATCH'
-          ]);
-        }
-        if (r.ctRatioMatch === 'mismatch') {
-          rows.push([
-            r.asset?.premises_id || '-',
-            'CT Ratio',
-            r.asset?.ct_ratio || '-',
-            r.subsection?.ct_ratio || '-',
-            'MISMATCH'
-          ]);
-        }
-        return rows;
-      }),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-      },
-      headStyles: {
-        fillColor: [254, 243, 199],
-        textColor: [146, 64, 14],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      didParseCell: (data) => {
-        if (data.section === 'body' && data.column.index === 4) {
-          data.cell.styles.textColor = hexToRgb(colors.warning);
-          data.cell.styles.fontStyle = 'bold';
-        }
-      },
+    const discrepancyRows: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Field', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Asset Value', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Inspection Value', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+        { text: 'Status', style: 'tableHeader', fillColor: '#fef3c7', color: '#92400e' },
+      ],
+    ];
+
+    discrepancies.forEach(r => {
+      if (r.meterSerialMatch === 'mismatch') {
+        discrepancyRows.push([
+          { text: r.asset?.premises_id || '-', style: 'tableBody' },
+          { text: 'Meter Serial', style: 'tableBody' },
+          { text: r.asset?.meter_serial_number || '-', style: 'tableBody' },
+          { text: r.subsection?.meter_serial_number || '-', style: 'tableBody' },
+          { text: 'MISMATCH', style: 'tableBody', color: COLORS.warning, bold: true },
+        ]);
+      }
+      if (r.ctRatioMatch === 'mismatch') {
+        discrepancyRows.push([
+          { text: r.asset?.premises_id || '-', style: 'tableBody' },
+          { text: 'CT Ratio', style: 'tableBody' },
+          { text: r.asset?.ct_ratio || '-', style: 'tableBody' },
+          { text: r.subsection?.ct_ratio || '-', style: 'tableBody' },
+          { text: 'MISMATCH', style: 'tableBody', color: COLORS.warning, bold: true },
+        ]);
+      }
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: [70, 60, 90, 90, 50],
+        body: discrepancyRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
   // ===== UNMATCHED ASSETS =====
   const assetOnly = comparisonResults.filter(r => r.matchType === 'asset_only');
+  
   if (assetOnly.length > 0) {
-    doc.addPage();
-    addStandardHeader(doc, 'Unverified Assets', logoDataUrl);
-    
-    tableY = headers.height + margins.top + 10;
-    tableY = addSectionHeader(doc, 'Assets Without Matching Inspection', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Assets Without Matching Inspection', 'primary'));
+    content.push(createSpacer(5));
 
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      head: [['Premises ID', 'Trade As', 'Meter Serial', 'CT Ratio', 'Breaker Size']],
-      body: assetOnly.map(r => [
-        r.asset?.premises_id || '-',
-        r.asset?.trade_as || '-',
-        r.asset?.meter_serial_number || '-',
-        r.asset?.ct_ratio || '-',
-        r.asset?.breaker_size || '-'
-      ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-      },
-      headStyles: {
-        fillColor: [254, 215, 170],
-        textColor: [154, 52, 18],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
+    const assetOnlyRows: any[][] = [
+      [
+        { text: 'Premises ID', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Trade As', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Meter Serial', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'CT Ratio', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+        { text: 'Breaker Size', style: 'tableHeader', fillColor: '#fed7aa', color: '#9a3412' },
+      ],
+    ];
+
+    assetOnly.forEach(r => {
+      assetOnlyRows.push([
+        { text: r.asset?.premises_id || '-', style: 'tableBody' },
+        { text: r.asset?.trade_as || '-', style: 'tableBody' },
+        { text: r.asset?.meter_serial_number || '-', style: 'tableBody' },
+        { text: r.asset?.ct_ratio || '-', style: 'tableBody' },
+        { text: r.asset?.breaker_size || '-', style: 'tableBody' },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', '*', 80, 60, 60],
+        body: assetOnlyRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
   // ===== INSPECTIONS WITHOUT ASSETS =====
   const subsectionOnly = comparisonResults.filter(r => r.matchType === 'subsection_only' && !r.potentialAssetMatch);
+  
   if (subsectionOnly.length > 0) {
-    doc.addPage();
-    addStandardHeader(doc, 'Unmatched Inspections', logoDataUrl);
-    
-    tableY = headers.height + margins.top + 10;
-    tableY = addSectionHeader(doc, 'Inspections Without Matching Asset Record', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Inspections Without Matching Asset Record', 'primary'));
+    content.push(createSpacer(5));
 
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      head: [['Source Name', 'Tenant Name', 'Meter Serial', 'CT Ratio']],
-      body: subsectionOnly.map(r => [
-        r.subsection?.name || '-',
-        r.subsection?.tenant_name || '-',
-        r.subsection?.meter_serial_number || '-',
-        r.subsection?.ct_ratio || '-'
-      ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-      },
-      headStyles: {
-        fillColor: [191, 219, 254],
-        textColor: [30, 64, 175],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
+    const subsectionOnlyRows: any[][] = [
+      [
+        { text: 'Source Name', style: 'tableHeader', fillColor: '#bfdbfe', color: '#1e40af' },
+        { text: 'Tenant Name', style: 'tableHeader', fillColor: '#bfdbfe', color: '#1e40af' },
+        { text: 'Meter Serial', style: 'tableHeader', fillColor: '#bfdbfe', color: '#1e40af' },
+        { text: 'CT Ratio', style: 'tableHeader', fillColor: '#bfdbfe', color: '#1e40af' },
+      ],
+    ];
+
+    subsectionOnly.forEach(r => {
+      subsectionOnlyRows.push([
+        { text: r.subsection?.name || '-', style: 'tableBody' },
+        { text: r.subsection?.tenant_name || '-', style: 'tableBody' },
+        { text: r.subsection?.meter_serial_number || '-', style: 'tableBody' },
+        { text: r.subsection?.ct_ratio || '-', style: 'tableBody' },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', '*', 80, 60],
+        body: subsectionOnlyRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
   // ===== POTENTIAL MATCHES =====
   const potentialMatches = comparisonResults.filter(r => r.matchType === 'subsection_only' && r.potentialAssetMatch);
+  
   if (potentialMatches.length > 0) {
-    doc.addPage();
-    addStandardHeader(doc, 'Potential Matches', logoDataUrl);
-    
-    tableY = headers.height + margins.top + 10;
-    tableY = addSectionHeader(doc, 'Meter Serials Found in Asset Register', tableY);
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Meter Serials Found in Asset Register', 'primary'));
+    content.push(createSpacer(5));
 
-    autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      head: [['Source Name', 'Meter Serial', 'Found in Asset (Premises ID)', 'Asset Trade As']],
-      body: potentialMatches.map(r => [
-        r.subsection?.name || '-',
-        r.subsection?.meter_serial_number || '-',
-        r.potentialAssetMatch?.premises_id || '-',
-        r.potentialAssetMatch?.trade_as || '-'
-      ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-      },
-      headStyles: {
-        fillColor: [233, 213, 255],
-        textColor: [88, 28, 135],
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
+    const potentialMatchRows: any[][] = [
+      [
+        { text: 'Source Name', style: 'tableHeader', fillColor: '#e9d5ff', color: '#581c87' },
+        { text: 'Meter Serial', style: 'tableHeader', fillColor: '#e9d5ff', color: '#581c87' },
+        { text: 'Found in Asset (Premises ID)', style: 'tableHeader', fillColor: '#e9d5ff', color: '#581c87' },
+        { text: 'Asset Trade As', style: 'tableHeader', fillColor: '#e9d5ff', color: '#581c87' },
+      ],
+    ];
+
+    potentialMatches.forEach(r => {
+      potentialMatchRows.push([
+        { text: r.subsection?.name || '-', style: 'tableBody' },
+        { text: r.subsection?.meter_serial_number || '-', style: 'tableBody' },
+        { text: r.potentialAssetMatch?.premises_id || '-', style: 'tableBody' },
+        { text: r.potentialAssetMatch?.trade_as || '-', style: 'tableBody' },
+      ]);
     });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 80, 100, '*'],
+        body: potentialMatchRows,
+        dontBreakRows: true,
+      },
+      layout: getStandardTableLayout(),
+      margin: [0, 0, 0, 15],
+    } as Content);
   }
 
-  // Add footers to all pages (skip cover page)
-  addFootersToAllPages(doc, true);
+  // Create document definition
+  const docDefinition = createBaseDocDefinition(
+    content,
+    {
+      title: `Asset Verification Report - ${siteName}`,
+      author: organizationName,
+      header: createPageHeader('Asset Verification Report', logoDataUrl, organizationName),
+      footer: createPageFooter('CONFIDENTIAL'),
+    }
+  );
 
-  // Log compliance
-  logComplianceCheck('generateAssetVerificationReport (legacy)', {
-    hasCoverPage: true,
-    logoPlacement: !!logoDataUrl,
-    standardMargins: true,
-    typographyScale: true,
-    brandColors: true,
-    pageHeaders: true,
-    pageFooters: true,
-    tableStyles: true,
-    pageBreaks: true,
-  });
-
+  // Generate PDF blob
+  const blob = await generatePdfBlob(docDefinition);
   const filename = generateDocumentFilename('Asset_Verification', siteName);
-  const blob = doc.output('blob');
-  
-  return { blob, filename };
-}
 
-async function loadImage(url: string): Promise<string | null> {
-  return new Promise((resolve) => {
-    const img = new Image();
-    img.crossOrigin = 'anonymous';
-    img.onload = () => {
-      const canvas = document.createElement('canvas');
-      canvas.width = img.width;
-      canvas.height = img.height;
-      const ctx = canvas.getContext('2d');
-      if (ctx) {
-        ctx.drawImage(img, 0, 0);
-        resolve(canvas.toDataURL('image/png'));
-      } else {
-        resolve(null);
-      }
-    };
-    img.onerror = () => resolve(null);
-    img.src = url;
-  });
+  return { blob, filename };
 }
