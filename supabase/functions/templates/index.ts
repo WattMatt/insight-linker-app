@@ -5,13 +5,342 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+// Define template structures for each report type
+const reportTemplateStructures = {
+  'site-summary': {
+    name: 'Site Summary Report',
+    category: 'Sites',
+    description: 'Comprehensive overview of a site including all subsections, compliance status, and metrics',
+    coverPage: {
+      title: 'Site Summary Report',
+      subtitle: 'Comprehensive Site Overview',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'site-info',
+        name: 'Site Information',
+        items: [
+          { id: 'site-name', name: 'Site Name', type: 'text', required: true },
+          { id: 'address', name: 'Address', type: 'text', required: true },
+          { id: 'client', name: 'Client', type: 'text', required: true },
+          { id: 'site-type', name: 'Site Type', type: 'text', required: false },
+          { id: 'site-image', name: 'Site Image', type: 'image', required: false }
+        ]
+      },
+      {
+        id: 'compliance-summary',
+        name: 'Compliance Summary',
+        items: [
+          { id: 'total-subsections', name: 'Total Subsections', type: 'number', required: true },
+          { id: 'compliant-count', name: 'Compliant Subsections', type: 'number', required: true },
+          { id: 'non-compliant-count', name: 'Non-Compliant Subsections', type: 'number', required: true },
+          { id: 'pending-count', name: 'Pending Review', type: 'number', required: true },
+          { id: 'compliance-chart', name: 'Compliance Chart', type: 'chart', required: false }
+        ]
+      },
+      {
+        id: 'subsections-table',
+        name: 'Subsections Overview',
+        items: [
+          { id: 'subsections-list', name: 'Subsections Table', type: 'table', required: true, 
+            columns: ['Name', 'Tenant', 'Category', 'COC Status', 'Meter Serial'] }
+        ]
+      },
+      {
+        id: 'recent-inspections',
+        name: 'Recent Inspections',
+        items: [
+          { id: 'inspections-list', name: 'Inspections Table', type: 'table', required: false,
+            columns: ['Title', 'Date', 'Inspector', 'Status'] }
+        ]
+      },
+      {
+        id: 'notes',
+        name: 'Notes & Observations',
+        items: [
+          { id: 'general-notes', name: 'General Notes', type: 'textarea', required: false }
+        ]
+      }
+    ]
+  },
+  'subsection-report': {
+    name: 'Subsection/Tenant Report',
+    category: 'Subsections',
+    description: 'Detailed report for a specific subsection including documents, compliance, and inspection history',
+    coverPage: {
+      title: 'Subsection Report',
+      subtitle: 'Tenant Compliance Documentation',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'tenant-info',
+        name: 'Tenant Information',
+        items: [
+          { id: 'subsection-name', name: 'Subsection Name', type: 'text', required: true },
+          { id: 'tenant-name', name: 'Tenant Name', type: 'text', required: true },
+          { id: 'category', name: 'Category', type: 'text', required: false },
+          { id: 'description', name: 'Description', type: 'textarea', required: false }
+        ]
+      },
+      {
+        id: 'metering-info',
+        name: 'Metering Information',
+        items: [
+          { id: 'meter-serial', name: 'Meter Serial Number', type: 'text', required: false },
+          { id: 'ct-ratio', name: 'CT Ratio', type: 'text', required: false },
+          { id: 'metering-status', name: 'Metering Status', type: 'select', required: false,
+            options: ['Active', 'Inactive', 'Pending', 'Not Applicable'] }
+        ]
+      },
+      {
+        id: 'compliance-status',
+        name: 'Compliance Status',
+        items: [
+          { id: 'coc-status', name: 'COC Status', type: 'select', required: true,
+            options: ['Valid', 'Expired', 'Pending', 'Not Required'] },
+          { id: 'coc-number', name: 'COC Number', type: 'text', required: false },
+          { id: 'coc-issue-date', name: 'COC Issue Date', type: 'date', required: false },
+          { id: 'coc-document', name: 'COC Document', type: 'file', required: false }
+        ]
+      },
+      {
+        id: 'documents',
+        name: 'Documents',
+        items: [
+          { id: 'documents-list', name: 'Uploaded Documents', type: 'table', required: false,
+            columns: ['File Name', 'Category', 'Upload Date'] }
+        ]
+      },
+      {
+        id: 'inspection-history',
+        name: 'Inspection History',
+        items: [
+          { id: 'inspections-table', name: 'Past Inspections', type: 'table', required: false,
+            columns: ['Date', 'Type', 'Inspector', 'Status', 'Notes'] }
+        ]
+      }
+    ]
+  },
+  'floor-plan-report': {
+    name: 'Floor Plan Annotations Report',
+    category: 'Floor Plans',
+    description: 'Floor plan with all pins, defects, and annotations documented',
+    coverPage: {
+      title: 'Floor Plan Report',
+      subtitle: 'Site Annotations & Defects',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'floor-plan-image',
+        name: 'Floor Plan',
+        items: [
+          { id: 'floor-plan', name: 'Floor Plan Image', type: 'image', required: true },
+          { id: 'floor-plan-name', name: 'Floor Plan Name', type: 'text', required: true }
+        ]
+      },
+      {
+        id: 'pins-summary',
+        name: 'Annotations Summary',
+        items: [
+          { id: 'total-pins', name: 'Total Pins', type: 'number', required: true },
+          { id: 'open-defects', name: 'Open Defects', type: 'number', required: true },
+          { id: 'resolved-pins', name: 'Resolved', type: 'number', required: true },
+          { id: 'pins-chart', name: 'Status Chart', type: 'chart', required: false }
+        ]
+      },
+      {
+        id: 'pins-detail',
+        name: 'Pin Details',
+        items: [
+          { id: 'pins-table', name: 'All Pins', type: 'table', required: true,
+            columns: ['Pin #', 'Type', 'Title', 'Status', 'Priority', 'Assigned To', 'Due Date'] }
+        ]
+      },
+      {
+        id: 'defects-photos',
+        name: 'Defect Photos',
+        items: [
+          { id: 'photos-gallery', name: 'Photo Gallery', type: 'gallery', required: false }
+        ]
+      }
+    ]
+  },
+  'coc-validation-report': {
+    name: 'COC Validation Report',
+    category: 'Compliance',
+    description: 'Certificate of Compliance validation report with findings and status',
+    coverPage: {
+      title: 'COC Validation Report',
+      subtitle: 'Compliance Verification',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'validation-summary',
+        name: 'Validation Summary',
+        items: [
+          { id: 'validation-status', name: 'Validation Status', type: 'select', required: true,
+            options: ['Valid', 'Invalid', 'Pending Review', 'Expired'] },
+          { id: 'validated-date', name: 'Validation Date', type: 'date', required: true },
+          { id: 'validated-by', name: 'Validated By', type: 'text', required: false }
+        ]
+      },
+      {
+        id: 'document-info',
+        name: 'Document Information',
+        items: [
+          { id: 'coc-number', name: 'COC Number', type: 'text', required: true },
+          { id: 'issue-date', name: 'Issue Date', type: 'date', required: false },
+          { id: 'coc-type', name: 'COC Type', type: 'text', required: false },
+          { id: 'document-preview', name: 'Document Preview', type: 'image', required: false }
+        ]
+      },
+      {
+        id: 'findings',
+        name: 'Validation Findings',
+        items: [
+          { id: 'violations-list', name: 'Violations Found', type: 'table', required: false,
+            columns: ['Rule', 'Severity', 'Description', 'Recommendation'] },
+          { id: 'compliance-score', name: 'Compliance Score', type: 'number', required: false }
+        ]
+      },
+      {
+        id: 'recommendations',
+        name: 'Recommendations',
+        items: [
+          { id: 'action-items', name: 'Required Actions', type: 'textarea', required: false },
+          { id: 'next-review-date', name: 'Next Review Date', type: 'date', required: false }
+        ]
+      }
+    ]
+  },
+  'defect-report': {
+    name: 'Defects/Snags Report',
+    category: 'Defects',
+    description: 'Report of all defects and snags with status and rectification details',
+    coverPage: {
+      title: 'Defects Report',
+      subtitle: 'Snag List & Rectification Status',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'summary',
+        name: 'Defects Summary',
+        items: [
+          { id: 'total-defects', name: 'Total Defects', type: 'number', required: true },
+          { id: 'open-defects', name: 'Open', type: 'number', required: true },
+          { id: 'in-progress', name: 'In Progress', type: 'number', required: true },
+          { id: 'resolved', name: 'Resolved', type: 'number', required: true },
+          { id: 'status-chart', name: 'Status Chart', type: 'chart', required: false }
+        ]
+      },
+      {
+        id: 'risk-breakdown',
+        name: 'Risk Level Breakdown',
+        items: [
+          { id: 'high-risk', name: 'High Risk', type: 'number', required: false },
+          { id: 'medium-risk', name: 'Medium Risk', type: 'number', required: false },
+          { id: 'low-risk', name: 'Low Risk', type: 'number', required: false }
+        ]
+      },
+      {
+        id: 'defects-list',
+        name: 'Defects Detail',
+        items: [
+          { id: 'defects-table', name: 'All Defects', type: 'table', required: true,
+            columns: ['Title', 'Description', 'Risk Level', 'Status', 'Created', 'Rectified'] }
+        ]
+      },
+      {
+        id: 'photos',
+        name: 'Defect Photos',
+        items: [
+          { id: 'before-photos', name: 'Before Photos', type: 'gallery', required: false },
+          { id: 'after-photos', name: 'After Photos (Rectified)', type: 'gallery', required: false }
+        ]
+      }
+    ]
+  },
+  'asset-verification-report': {
+    name: 'Asset Verification Report',
+    category: 'Assets',
+    description: 'Meter register and asset verification documentation',
+    coverPage: {
+      title: 'Asset Verification Report',
+      subtitle: 'Meter Register & Asset Documentation',
+      showLogo: true,
+      showDate: true
+    },
+    sections: [
+      {
+        id: 'site-info',
+        name: 'Site Information',
+        items: [
+          { id: 'site-name', name: 'Site Name', type: 'text', required: true },
+          { id: 'verification-date', name: 'Verification Date', type: 'date', required: true },
+          { id: 'verified-by', name: 'Verified By', type: 'text', required: false }
+        ]
+      },
+      {
+        id: 'asset-summary',
+        name: 'Asset Summary',
+        items: [
+          { id: 'total-meters', name: 'Total Meters', type: 'number', required: true },
+          { id: 'verified-count', name: 'Verified', type: 'number', required: true },
+          { id: 'discrepancies', name: 'Discrepancies Found', type: 'number', required: true }
+        ]
+      },
+      {
+        id: 'meter-register',
+        name: 'Meter Register',
+        items: [
+          { id: 'meters-table', name: 'Meters List', type: 'table', required: true,
+            columns: ['Premises ID', 'Meter Serial', 'Old Serial', 'CT Ratio', 'Breaker Size', 'Type', 'Status'] }
+        ]
+      },
+      {
+        id: 'comparison',
+        name: 'Verification Comparison',
+        items: [
+          { id: 'comparison-table', name: 'Expected vs Actual', type: 'table', required: false,
+            columns: ['Premises ID', 'Expected Serial', 'Actual Serial', 'Match', 'Notes'] }
+        ]
+      },
+      {
+        id: 'discrepancy-notes',
+        name: 'Discrepancy Notes',
+        items: [
+          { id: 'notes', name: 'Notes', type: 'textarea', required: false },
+          { id: 'photos', name: 'Evidence Photos', type: 'gallery', required: false }
+        ]
+      },
+      {
+        id: 'signatures',
+        name: 'Signatures',
+        items: [
+          { id: 'verifier-signature', name: 'Verifier Signature', type: 'signature', required: true },
+          { id: 'witness-signature', name: 'Witness Signature', type: 'signature', required: false }
+        ]
+      }
+    ]
+  }
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders })
   }
 
   try {
-    // Validate API key from DocBuilder (optional - skip if not set)
     const authHeader = req.headers.get('Authorization')
     const expectedApiKey = Deno.env.get('DOCBUILDER_PUBLIC_TOKEN')
 
@@ -22,205 +351,137 @@ Deno.serve(async (req) => {
       )
     }
 
-    // Initialize Supabase client
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
     const supabase = createClient(supabaseUrl, supabaseKey)
 
-    // Fetch all clients
-    const { data: clients, error: clientsError } = await supabase
-      .from('clients')
-      .select('id, name, company_name, email, contact_person')
-      .order('name')
+    // Fetch all data in parallel
+    const [
+      { data: clients },
+      { data: sites },
+      { data: subsections },
+      { data: inspections },
+      { data: floorPlans },
+      { data: cocValidations },
+      { data: inspectionTemplates },
+      { data: snags },
+      { data: siteAssets }
+    ] = await Promise.all([
+      supabase.from('clients').select('id, name, company_name, email, contact_person').order('name'),
+      supabase.from('sites').select('id, name, address, site_type, client_id').order('name'),
+      supabase.from('subsections').select('id, name, description, category, tenant_name, coc_status, coc_number, meter_serial_number, site_id').order('name'),
+      supabase.from('inspections').select('id, title, status, inspection_date, inspector_name, site_id, subsection_id, template_id').order('created_at', { ascending: false }),
+      supabase.from('subsection_floor_plans').select('id, file_name, subsection_id').order('created_at', { ascending: false }),
+      supabase.from('coc_validations').select('id, status, validated_at, subsection_id, document_id').order('validated_at', { ascending: false }),
+      supabase.from('inspection_templates').select('id, name, category, description, sections_count, pages_count, sections, cover_page, tenants').order('name'),
+      supabase.from('snags').select('id, title, status, risk_level, subsection_id').order('created_at', { ascending: false }),
+      supabase.from('site_assets').select('id, premises_id, meter_serial_number, old_meter_serial_number, ct_ratio, breaker_size, meter_type, asset_category, site_id').order('premises_id')
+    ])
 
-    if (clientsError) throw clientsError
-
-    // Fetch all sites with client info
-    const { data: sites, error: sitesError } = await supabase
-      .from('sites')
-      .select('id, name, address, site_type, client_id')
-      .order('name')
-
-    if (sitesError) throw sitesError
-
-    // Fetch all subsections with site info
-    const { data: subsections, error: subsectionsError } = await supabase
-      .from('subsections')
-      .select('id, name, description, category, tenant_name, coc_status, coc_number, meter_serial_number, site_id')
-      .order('name')
-
-    if (subsectionsError) throw subsectionsError
-
-    // Fetch all inspections
-    const { data: inspections, error: inspectionsError } = await supabase
-      .from('inspections')
-      .select('id, title, status, inspection_date, inspector_name, site_id, subsection_id, template_id')
-      .order('created_at', { ascending: false })
-
-    if (inspectionsError) throw inspectionsError
-
-    // Fetch floor plans
-    const { data: floorPlans, error: floorPlansError } = await supabase
-      .from('subsection_floor_plans')
-      .select('id, file_name, subsection_id')
-      .order('created_at', { ascending: false })
-
-    if (floorPlansError) throw floorPlansError
-
-    // Fetch COC validations
-    const { data: cocValidations, error: cocError } = await supabase
-      .from('coc_validations')
-      .select('id, status, validated_at, subsection_id, document_id')
-      .order('validated_at', { ascending: false })
-
-    if (cocError) throw cocError
-
-    // Fetch inspection templates with full structure
-    const { data: templates, error: templatesError } = await supabase
-      .from('inspection_templates')
-      .select('id, name, category, description, sections_count, pages_count, sections, cover_page, tenants')
-      .order('name')
-
-    if (templatesError) throw templatesError
-
-    // Fetch snags for defect reports
-    const { data: snags, error: snagsError } = await supabase
-      .from('snags')
-      .select('id, title, status, risk_level, subsection_id')
-      .order('created_at', { ascending: false })
-
-    if (snagsError) throw snagsError
-
-    // Create lookup maps for joining
+    // Create lookup maps
     const clientMap = new Map(clients?.map(c => [c.id, c]) || [])
     const siteMap = new Map(sites?.map(s => [s.id, s]) || [])
     const subsectionMap = new Map(subsections?.map(s => [s.id, s]) || [])
 
-    // Build report types index
-    const reportTypes = [
-      {
-        id: 'site-summary',
-        name: 'Site Summary Report',
-        description: 'Comprehensive overview of a site including all subsections, compliance status, and metrics',
-        category: 'Sites',
-        requiredParams: ['siteId'],
-        availableItems: sites?.map(s => {
-          const client = clientMap.get(s.client_id)
-          return {
-            id: s.id,
-            name: s.name,
-            address: s.address,
-            client: client?.name || client?.company_name || null
-          }
-        }) || []
-      },
-      {
-        id: 'subsection-report',
-        name: 'Subsection/Tenant Report',
-        description: 'Detailed report for a specific subsection including documents, compliance, and inspection history',
-        category: 'Subsections',
-        requiredParams: ['subsectionId'],
-        availableItems: subsections?.map(s => {
-          const site = siteMap.get(s.site_id)
-          return {
-            id: s.id,
-            name: s.name,
-            tenant: s.tenant_name,
-            category: s.category,
-            cocStatus: s.coc_status,
-            site: site?.name || null
-          }
-        }) || []
-      },
-      {
-        id: 'inspection-report',
-        name: 'Inspection Report',
-        description: 'Full inspection report with all sections, items, photos, and signatures',
-        category: 'Inspections',
-        requiredParams: ['inspectionId'],
-        availableItems: inspections?.map(i => {
-          const site = siteMap.get(i.site_id)
-          const subsection = subsectionMap.get(i.subsection_id)
-          return {
-            id: i.id,
-            title: i.title,
-            status: i.status,
-            date: i.inspection_date,
-            inspector: i.inspector_name,
-            site: site?.name || null,
-            subsection: subsection?.name || null
-          }
-        }) || []
-      },
-      {
-        id: 'floor-plan-report',
-        name: 'Floor Plan Annotations Report',
-        description: 'Floor plan with all pins, defects, and annotations documented',
-        category: 'Floor Plans',
-        requiredParams: ['floorPlanId'],
-        availableItems: floorPlans?.map(fp => {
-          const subsection = subsectionMap.get(fp.subsection_id)
-          const site = subsection ? siteMap.get(subsection.site_id) : null
-          return {
-            id: fp.id,
-            fileName: fp.file_name,
-            subsection: subsection?.name || null,
-            site: site?.name || null
-          }
-        }) || []
-      },
-      {
-        id: 'coc-validation-report',
-        name: 'COC Validation Report',
-        description: 'Certificate of Compliance validation report with findings and status',
-        category: 'Compliance',
-        requiredParams: ['validationId'],
-        availableItems: cocValidations?.map(v => {
-          const subsection = subsectionMap.get(v.subsection_id)
-          const site = subsection ? siteMap.get(subsection.site_id) : null
-          return {
-            id: v.id,
-            status: v.status,
-            validatedAt: v.validated_at,
-            subsection: subsection?.name || null,
-            site: site?.name || null
-          }
-        }) || []
-      },
-      {
-        id: 'defect-report',
-        name: 'Defects/Snags Report',
-        description: 'Report of all defects and snags with status and rectification details',
-        category: 'Defects',
-        requiredParams: ['subsectionId'],
-        availableItems: snags?.map(s => {
-          const subsection = subsectionMap.get(s.subsection_id)
-          const site = subsection ? siteMap.get(subsection.site_id) : null
-          return {
-            id: s.id,
-            title: s.title,
-            status: s.status,
-            riskLevel: s.risk_level,
-            subsection: subsection?.name || null,
-            site: site?.name || null
-          }
-        }) || []
-      },
-      {
-        id: 'asset-verification-report',
-        name: 'Asset Verification Report',
-        description: 'Meter register and asset verification documentation',
-        category: 'Assets',
-        requiredParams: ['siteId'],
-        availableItems: sites?.map(s => ({
-          id: s.id,
-          name: s.name,
-          address: s.address
-        })) || []
+    // Build report types with full template structures and available data
+    const reportTypes = Object.entries(reportTemplateStructures).map(([id, template]) => {
+      let availableItems: any[] = []
+      
+      switch (id) {
+        case 'site-summary':
+        case 'asset-verification-report':
+          availableItems = sites?.map(s => {
+            const client = clientMap.get(s.client_id)
+            return { id: s.id, name: s.name, address: s.address, client: client?.name || null }
+          }) || []
+          break
+        case 'subsection-report':
+          availableItems = subsections?.map(s => {
+            const site = siteMap.get(s.site_id)
+            return { id: s.id, name: s.name, tenant: s.tenant_name, site: site?.name || null }
+          }) || []
+          break
+        case 'floor-plan-report':
+          availableItems = floorPlans?.map(fp => {
+            const subsection = subsectionMap.get(fp.subsection_id)
+            const site = subsection ? siteMap.get(subsection.site_id) : null
+            return { id: fp.id, fileName: fp.file_name, subsection: subsection?.name || null, site: site?.name || null }
+          }) || []
+          break
+        case 'coc-validation-report':
+          availableItems = cocValidations?.map(v => {
+            const subsection = subsectionMap.get(v.subsection_id)
+            const site = subsection ? siteMap.get(subsection.site_id) : null
+            return { id: v.id, status: v.status, subsection: subsection?.name || null, site: site?.name || null }
+          }) || []
+          break
+        case 'defect-report':
+          availableItems = snags?.map(s => {
+            const subsection = subsectionMap.get(s.subsection_id)
+            const site = subsection ? siteMap.get(subsection.site_id) : null
+            return { id: s.id, title: s.title, status: s.status, subsection: subsection?.name || null, site: site?.name || null }
+          }) || []
+          break
       }
-    ]
 
-    // Build summary stats
+      return {
+        id,
+        ...template,
+        requiredParams: id === 'site-summary' || id === 'asset-verification-report' ? ['siteId'] : 
+                        id === 'subsection-report' || id === 'defect-report' ? ['subsectionId'] :
+                        id === 'floor-plan-report' ? ['floorPlanId'] :
+                        id === 'coc-validation-report' ? ['validationId'] : [],
+        availableItems
+      }
+    })
+
+    // Add inspection report template
+    reportTypes.push({
+      id: 'inspection-report',
+      name: 'Inspection Report',
+      category: 'Inspections',
+      description: 'Full inspection report with all sections, items, photos, and signatures',
+      coverPage: {
+        title: 'Inspection Report',
+        subtitle: 'Detailed Inspection Documentation',
+        showLogo: true,
+        showDate: true
+      },
+      sections: [
+        {
+          id: 'inspection-info',
+          name: 'Inspection Information',
+          items: [
+            { id: 'title', name: 'Inspection Title', type: 'text', required: true },
+            { id: 'date', name: 'Inspection Date', type: 'date', required: true },
+            { id: 'inspector', name: 'Inspector Name', type: 'text', required: true },
+            { id: 'status', name: 'Status', type: 'select', required: true, options: ['Pending', 'In Progress', 'Completed'] }
+          ]
+        },
+        {
+          id: 'template-sections',
+          name: 'Template Sections',
+          items: [
+          { id: 'sections-content', name: 'Inspection Sections (loaded from template)', type: 'dynamic', required: true }
+          ]
+        },
+        {
+          id: 'signatures',
+          name: 'Signatures',
+          items: [
+            { id: 'inspector-signature', name: 'Inspector Signature', type: 'signature', required: true },
+            { id: 'client-signature', name: 'Client Signature', type: 'signature', required: false }
+          ]
+        }
+      ],
+      requiredParams: ['inspectionId'],
+      availableItems: inspections?.map(i => {
+        const site = siteMap.get(i.site_id)
+        const subsection = subsectionMap.get(i.subsection_id)
+        return { id: i.id, title: i.title, status: i.status, date: i.inspection_date, site: site?.name || null, subsection: subsection?.name || null }
+      }) || []
+    })
+
     const summary = {
       totalClients: clients?.length || 0,
       totalSites: sites?.length || 0,
@@ -228,8 +489,9 @@ Deno.serve(async (req) => {
       totalInspections: inspections?.length || 0,
       totalFloorPlans: floorPlans?.length || 0,
       totalCocValidations: cocValidations?.length || 0,
-      totalTemplates: templates?.length || 0,
-      totalSnags: snags?.length || 0
+      totalTemplates: inspectionTemplates?.length || 0,
+      totalSnags: snags?.length || 0,
+      totalAssets: siteAssets?.length || 0
     }
 
     return new Response(
@@ -238,7 +500,7 @@ Deno.serve(async (req) => {
         app: 'wm-compliance',
         summary,
         reportTypes,
-        inspectionTemplates: templates?.map(t => ({
+        inspectionTemplates: inspectionTemplates?.map(t => ({
           id: t.id,
           name: t.name,
           category: t.category,
