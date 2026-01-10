@@ -1,5 +1,4 @@
 import { useState, useMemo } from "react";
-
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -7,13 +6,31 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Search, AlertTriangle, CheckCircle2, XCircle, Database, Layers, FileText, RefreshCw, Download } from "lucide-react";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Search, AlertTriangle, CheckCircle2, Database, Layers, FileText, RefreshCw, Download, Image, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
+import { RobustImage } from "@/components/RobustImage";
 
 interface MeterRegisterProps {
   siteId: string;
   siteName: string;
+}
+
+interface InspectionTenant {
+  id: string;
+  shopName?: string;
+  shopNumber?: string;
+  meterSerialNumber?: string;
+  meterImage?: string;
+  ctRatioImage?: string;
+  ctSizeAndRatio?: string;
+  breakerSize?: string;
+}
+
+interface InspectionSource {
+  id: string;
+  title: string;
+  tenant: InspectionTenant;
 }
 
 interface MeterEntry {
@@ -21,6 +38,7 @@ interface MeterEntry {
   sources: {
     subsection?: { id: string; name: string; ct_ratio?: string };
     asset?: { id: string; premises_id: string; trade_as?: string; ct_ratio?: string; asset_category: string };
+    inspection?: InspectionSource;
   };
   hasDiscrepancy: boolean;
   discrepancyDetails?: string;
@@ -29,6 +47,7 @@ interface MeterEntry {
 export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
   const [search, setSearch] = useState("");
   const [activeView, setActiveView] = useState("all");
+  const [selectedImages, setSelectedImages] = useState<{ meterImage?: string; ctRatioImage?: string; title: string } | null>(null);
 
   // Fetch subsections with meter numbers
   const { data: subsections, refetch: refetchSubsections } = useQuery({
@@ -60,9 +79,25 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
     }
   });
 
+  // Fetch inspections with tenant meter data
+  const { data: inspections, refetch: refetchInspections } = useQuery({
+    queryKey: ['meter-register-inspections', siteId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inspections')
+        .select('id, title, json_data')
+        .eq('site_id', siteId)
+        .not('json_data', 'is', null);
+      
+      if (error) throw error;
+      return data || [];
+    }
+  });
+
   const handleRefresh = () => {
     refetchSubsections();
     refetchAssets();
+    refetchInspections();
     toast.success("Meter register refreshed");
   };
 
@@ -114,17 +149,52 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
       };
     });
 
-    // Check for discrepancies
-    meterMap.forEach((entry, serial) => {
-      const { subsection, asset } = entry.sources;
+    // Add inspection tenant meters (with images)
+    inspections?.forEach(inspection => {
+      const jsonData = inspection.json_data as Record<string, unknown> | null;
+      if (!jsonData) return;
       
-      // Check if only in one source
-      if (subsection && !asset) {
-        entry.hasDiscrepancy = true;
-        entry.discrepancyDetails = "Only in subsections (not in asset register)";
-      } else if (!subsection && asset) {
-        entry.hasDiscrepancy = true;
-        entry.discrepancyDetails = "Only in asset register (no subsection)";
+      const tenants = (jsonData.tenants as InspectionTenant[]) || [];
+      tenants.forEach(tenant => {
+        if (!tenant.meterSerialNumber) return;
+        const serial = tenant.meterSerialNumber.trim();
+        
+        if (!meterMap.has(serial)) {
+          meterMap.set(serial, {
+            meter_serial_number: serial,
+            sources: {},
+            hasDiscrepancy: false
+          });
+        }
+        
+        const entry = meterMap.get(serial)!;
+        // Only add if this inspection has images (prefer inspections with images)
+        if (!entry.sources.inspection || (tenant.meterImage || tenant.ctRatioImage)) {
+          entry.sources.inspection = {
+            id: inspection.id,
+            title: inspection.title,
+            tenant: tenant
+          };
+        }
+      });
+    });
+
+    // Check for discrepancies
+    meterMap.forEach((entry) => {
+      const { subsection, asset, inspection } = entry.sources;
+      const sourceCount = [subsection, asset, inspection].filter(Boolean).length;
+      
+      if (sourceCount === 1) {
+        if (subsection) {
+          entry.hasDiscrepancy = true;
+          entry.discrepancyDetails = "Only in subsections (missing from asset register & inspections)";
+        } else if (asset) {
+          entry.hasDiscrepancy = true;
+          entry.discrepancyDetails = "Only in asset register (no subsection or inspection)";
+        } else if (inspection) {
+          entry.hasDiscrepancy = true;
+          entry.discrepancyDetails = "Only in inspections (not registered in subsections or assets)";
+        }
       } else if (subsection && asset) {
         // Both exist - check for CT ratio mismatch
         const subCT = subsection.ct_ratio?.toLowerCase().replace(/\s/g, '');
@@ -140,7 +210,7 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
     return Array.from(meterMap.values()).sort((a, b) => 
       a.meter_serial_number.localeCompare(b.meter_serial_number)
     );
-  }, [subsections, assets]);
+  }, [subsections, assets, inspections]);
 
   // Filter based on search and view
   const filteredMeters = useMemo(() => {
@@ -148,13 +218,17 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
 
     // Filter by view
     if (activeView === "matched") {
-      filtered = filtered.filter(m => m.sources.subsection && m.sources.asset && !m.hasDiscrepancy);
+      filtered = filtered.filter(m => 
+        (m.sources.subsection || m.sources.asset || m.sources.inspection) && 
+        ([m.sources.subsection, m.sources.asset, m.sources.inspection].filter(Boolean).length >= 2) &&
+        !m.hasDiscrepancy
+      );
     } else if (activeView === "discrepancies") {
       filtered = filtered.filter(m => m.hasDiscrepancy);
-    } else if (activeView === "subsection-only") {
-      filtered = filtered.filter(m => m.sources.subsection && !m.sources.asset);
-    } else if (activeView === "asset-only") {
-      filtered = filtered.filter(m => !m.sources.subsection && m.sources.asset);
+    } else if (activeView === "with-images") {
+      filtered = filtered.filter(m => m.sources.inspection?.tenant.meterImage || m.sources.inspection?.tenant.ctRatioImage);
+    } else if (activeView === "no-images") {
+      filtered = filtered.filter(m => !m.sources.inspection?.tenant.meterImage && !m.sources.inspection?.tenant.ctRatioImage);
     }
 
     // Filter by search
@@ -164,7 +238,9 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
         m.meter_serial_number.toLowerCase().includes(searchLower) ||
         m.sources.subsection?.name.toLowerCase().includes(searchLower) ||
         m.sources.asset?.premises_id.toLowerCase().includes(searchLower) ||
-        m.sources.asset?.trade_as?.toLowerCase().includes(searchLower)
+        m.sources.asset?.trade_as?.toLowerCase().includes(searchLower) ||
+        m.sources.inspection?.tenant.shopName?.toLowerCase().includes(searchLower) ||
+        m.sources.inspection?.tenant.shopNumber?.toLowerCase().includes(searchLower)
       );
     }
 
@@ -174,14 +250,16 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
   // Stats
   const stats = useMemo(() => ({
     total: consolidatedMeters.length,
-    matched: consolidatedMeters.filter(m => m.sources.subsection && m.sources.asset && !m.hasDiscrepancy).length,
+    matched: consolidatedMeters.filter(m => 
+      ([m.sources.subsection, m.sources.asset, m.sources.inspection].filter(Boolean).length >= 2) && !m.hasDiscrepancy
+    ).length,
     discrepancies: consolidatedMeters.filter(m => m.hasDiscrepancy).length,
-    subsectionOnly: consolidatedMeters.filter(m => m.sources.subsection && !m.sources.asset).length,
-    assetOnly: consolidatedMeters.filter(m => !m.sources.subsection && m.sources.asset).length
+    withImages: consolidatedMeters.filter(m => m.sources.inspection?.tenant.meterImage || m.sources.inspection?.tenant.ctRatioImage).length,
+    noImages: consolidatedMeters.filter(m => !m.sources.inspection?.tenant.meterImage && !m.sources.inspection?.tenant.ctRatioImage).length
   }), [consolidatedMeters]);
 
   const handleExportCSV = () => {
-    const headers = ['Meter Serial', 'Subsection Name', 'Subsection CT', 'Asset Premises', 'Asset Trade As', 'Asset CT', 'Status', 'Discrepancy'];
+    const headers = ['Meter Serial', 'Subsection Name', 'Subsection CT', 'Asset Premises', 'Asset Trade As', 'Asset CT', 'Inspection Shop', 'Inspection CT', 'Has Meter Image', 'Has CT Image', 'Status', 'Discrepancy'];
     const rows = consolidatedMeters.map(m => [
       m.meter_serial_number,
       m.sources.subsection?.name || '',
@@ -189,7 +267,11 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
       m.sources.asset?.premises_id || '',
       m.sources.asset?.trade_as || '',
       m.sources.asset?.ct_ratio || '',
-      m.hasDiscrepancy ? 'Discrepancy' : (m.sources.subsection && m.sources.asset ? 'Matched' : 'Partial'),
+      m.sources.inspection?.tenant.shopName || m.sources.inspection?.tenant.shopNumber || '',
+      m.sources.inspection?.tenant.ctSizeAndRatio || '',
+      m.sources.inspection?.tenant.meterImage ? 'Yes' : 'No',
+      m.sources.inspection?.tenant.ctRatioImage ? 'Yes' : 'No',
+      m.hasDiscrepancy ? 'Discrepancy' : 'OK',
       m.discrepancyDetails || ''
     ]);
 
@@ -211,7 +293,7 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
         <div>
           <h3 className="text-lg font-semibold">Consolidated Meter Register</h3>
           <p className="text-sm text-muted-foreground">
-            All meter serial numbers from subsections and asset register
+            Meters from subsections, asset register &amp; inspections with images
           </p>
         </div>
         <div className="flex gap-2">
@@ -228,7 +310,7 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        <Card className="cursor-pointer hover:border-primary/50 transition-colors" onClick={() => setActiveView("all")}>
+        <Card className={`cursor-pointer hover:border-primary/50 transition-colors ${activeView === 'all' ? 'border-primary ring-1 ring-primary' : ''}`} onClick={() => setActiveView("all")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-primary/10">
@@ -242,7 +324,7 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:border-green-500/50 transition-colors" onClick={() => setActiveView("matched")}>
+        <Card className={`cursor-pointer hover:border-green-500/50 transition-colors ${activeView === 'matched' ? 'border-green-500 ring-1 ring-green-500' : ''}`} onClick={() => setActiveView("matched")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-green-500/10">
@@ -250,13 +332,13 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
               </div>
               <div>
                 <p className="text-2xl font-bold text-green-600">{stats.matched}</p>
-                <p className="text-xs text-muted-foreground">Matched</p>
+                <p className="text-xs text-muted-foreground">Matched (2+ sources)</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:border-amber-500/50 transition-colors" onClick={() => setActiveView("discrepancies")}>
+        <Card className={`cursor-pointer hover:border-amber-500/50 transition-colors ${activeView === 'discrepancies' ? 'border-amber-500 ring-1 ring-amber-500' : ''}`} onClick={() => setActiveView("discrepancies")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-amber-500/10">
@@ -270,29 +352,29 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:border-blue-500/50 transition-colors" onClick={() => setActiveView("subsection-only")}>
+        <Card className={`cursor-pointer hover:border-blue-500/50 transition-colors ${activeView === 'with-images' ? 'border-blue-500 ring-1 ring-blue-500' : ''}`} onClick={() => setActiveView("with-images")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="p-2 rounded-lg bg-blue-500/10">
-                <Layers className="h-5 w-5 text-blue-500" />
+                <Image className="h-5 w-5 text-blue-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-blue-600">{stats.subsectionOnly}</p>
-                <p className="text-xs text-muted-foreground">Subsection Only</p>
+                <p className="text-2xl font-bold text-blue-600">{stats.withImages}</p>
+                <p className="text-xs text-muted-foreground">With Images</p>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        <Card className="cursor-pointer hover:border-purple-500/50 transition-colors" onClick={() => setActiveView("asset-only")}>
+        <Card className={`cursor-pointer hover:border-gray-500/50 transition-colors ${activeView === 'no-images' ? 'border-gray-500 ring-1 ring-gray-500' : ''}`} onClick={() => setActiveView("no-images")}>
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="p-2 rounded-lg bg-purple-500/10">
-                <FileText className="h-5 w-5 text-purple-500" />
+              <div className="p-2 rounded-lg bg-gray-500/10">
+                <ClipboardList className="h-5 w-5 text-gray-500" />
               </div>
               <div>
-                <p className="text-2xl font-bold text-purple-600">{stats.assetOnly}</p>
-                <p className="text-xs text-muted-foreground">Asset Only</p>
+                <p className="text-2xl font-bold text-gray-600">{stats.noImages}</p>
+                <p className="text-xs text-muted-foreground">No Images</p>
               </div>
             </div>
           </CardContent>
@@ -307,10 +389,10 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
               <CardTitle className="text-base">Meter Details</CardTitle>
               <CardDescription>
                 {activeView === "all" && "Showing all meters"}
-                {activeView === "matched" && "Showing matched meters"}
+                {activeView === "matched" && "Showing matched meters (2+ sources)"}
                 {activeView === "discrepancies" && "Showing meters with discrepancies"}
-                {activeView === "subsection-only" && "Showing meters only in subsections"}
-                {activeView === "asset-only" && "Showing meters only in asset register"}
+                {activeView === "with-images" && "Showing meters with inspection images"}
+                {activeView === "no-images" && "Showing meters without images"}
                 {` (${filteredMeters.length} results)`}
               </CardDescription>
             </div>
@@ -331,16 +413,17 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
               <TableHeader>
                 <TableRow className="bg-muted/50">
                   <TableHead className="font-semibold">Meter Serial</TableHead>
-                  <TableHead className="font-semibold">Subsection</TableHead>
-                  <TableHead className="font-semibold">Asset Register</TableHead>
+                  <TableHead className="font-semibold">Sources</TableHead>
+                  <TableHead className="font-semibold">Inspection (Shop)</TableHead>
                   <TableHead className="font-semibold">CT Ratio</TableHead>
+                  <TableHead className="font-semibold">Images</TableHead>
                   <TableHead className="font-semibold">Status</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {filteredMeters.length === 0 ? (
                   <TableRow>
-                    <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                    <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                       No meters found
                     </TableCell>
                   </TableRow>
@@ -351,22 +434,30 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
                         {meter.meter_serial_number}
                       </TableCell>
                       <TableCell>
-                        {meter.sources.subsection ? (
-                          <div className="flex items-center gap-2">
-                            <Layers className="h-4 w-4 text-blue-500 shrink-0" />
-                            <span className="text-sm">{meter.sources.subsection.name}</span>
-                          </div>
-                        ) : (
-                          <span className="text-muted-foreground text-sm">-</span>
-                        )}
+                        <div className="flex flex-wrap gap-1">
+                          {meter.sources.subsection && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 border-blue-200">
+                              <Layers className="h-3 w-3 mr-1" />
+                              {meter.sources.subsection.name}
+                            </Badge>
+                          )}
+                          {meter.sources.asset && (
+                            <Badge variant="outline" className="text-xs bg-purple-50 text-purple-700 border-purple-200">
+                              <FileText className="h-3 w-3 mr-1" />
+                              {meter.sources.asset.premises_id}
+                            </Badge>
+                          )}
+                        </div>
                       </TableCell>
                       <TableCell>
-                        {meter.sources.asset ? (
+                        {meter.sources.inspection ? (
                           <div className="flex flex-col">
-                            <span className="text-sm font-medium">{meter.sources.asset.premises_id}</span>
-                            {meter.sources.asset.trade_as && (
-                              <span className="text-xs text-muted-foreground">{meter.sources.asset.trade_as}</span>
-                            )}
+                            <span className="text-sm font-medium">
+                              {meter.sources.inspection.tenant.shopName || meter.sources.inspection.tenant.shopNumber || 'Unnamed'}
+                            </span>
+                            <span className="text-xs text-muted-foreground truncate max-w-[150px]">
+                              {meter.sources.inspection.title}
+                            </span>
                           </div>
                         ) : (
                           <span className="text-muted-foreground text-sm">-</span>
@@ -384,27 +475,47 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
                               Asset: {meter.sources.asset.ct_ratio}
                             </Badge>
                           )}
+                          {meter.sources.inspection?.tenant.ctSizeAndRatio && (
+                            <Badge variant="outline" className="text-xs w-fit bg-green-50 text-green-700 border-green-200">
+                              Insp: {meter.sources.inspection.tenant.ctSizeAndRatio}
+                            </Badge>
+                          )}
                         </div>
+                      </TableCell>
+                      <TableCell>
+                        {meter.sources.inspection?.tenant.meterImage || meter.sources.inspection?.tenant.ctRatioImage ? (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="h-8"
+                            onClick={() => setSelectedImages({
+                              meterImage: meter.sources.inspection?.tenant.meterImage,
+                              ctRatioImage: meter.sources.inspection?.tenant.ctRatioImage,
+                              title: `${meter.meter_serial_number} - ${meter.sources.inspection?.tenant.shopName || 'Meter'}`
+                            })}
+                          >
+                            <Image className="h-4 w-4 mr-1" />
+                            View
+                          </Button>
+                        ) : (
+                          <span className="text-muted-foreground text-sm">None</span>
+                        )}
                       </TableCell>
                       <TableCell>
                         {meter.hasDiscrepancy ? (
                           <div className="flex flex-col gap-1">
                             <Badge variant="outline" className="bg-amber-100 text-amber-700 border-amber-300 w-fit">
                               <AlertTriangle className="h-3 w-3 mr-1" />
-                              Discrepancy
+                              Issue
                             </Badge>
                             {meter.discrepancyDetails && (
-                              <span className="text-xs text-amber-600">{meter.discrepancyDetails}</span>
+                              <span className="text-xs text-amber-600 max-w-[200px]">{meter.discrepancyDetails}</span>
                             )}
                           </div>
-                        ) : meter.sources.subsection && meter.sources.asset ? (
+                        ) : (
                           <Badge variant="outline" className="bg-green-100 text-green-700 border-green-300 w-fit">
                             <CheckCircle2 className="h-3 w-3 mr-1" />
-                            Matched
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline" className="bg-gray-100 text-gray-700 border-gray-300 w-fit">
-                            Partial
+                            OK
                           </Badge>
                         )}
                       </TableCell>
@@ -416,6 +527,37 @@ export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
           </div>
         </CardContent>
       </Card>
+
+      {/* Image Preview Dialog */}
+      <Dialog open={!!selectedImages} onOpenChange={() => setSelectedImages(null)}>
+        <DialogContent className="max-w-4xl">
+          <DialogHeader>
+            <DialogTitle>{selectedImages?.title}</DialogTitle>
+          </DialogHeader>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {selectedImages?.meterImage && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">Meter Image</p>
+                <RobustImage
+                  src={selectedImages.meterImage}
+                  alt="Meter"
+                  className="w-full h-auto rounded-lg border"
+                />
+              </div>
+            )}
+            {selectedImages?.ctRatioImage && (
+              <div className="space-y-2">
+                <p className="text-sm font-medium text-muted-foreground">CT Ratio Image</p>
+                <RobustImage
+                  src={selectedImages.ctRatioImage}
+                  alt="CT Ratio"
+                  className="w-full h-auto rounded-lg border"
+                />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
