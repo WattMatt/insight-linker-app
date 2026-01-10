@@ -1666,6 +1666,7 @@ const InspectionDetail = () => {
               inspectionData={inspection}
               siteName={siteData?.siteName || 'Unknown Site'}
               subsectionName={subsectionData?.name || 'Unknown Subsection'}
+              subsectionId={subsectionId || ''}
               pdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf || ''}
               pins={(inspection?.jsonData as any)?.siteDrawingPins || []}
               canvasData={(inspection?.jsonData as any)?.siteDrawingCanvas}

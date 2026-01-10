@@ -5,10 +5,12 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { CheckCircle2, Circle, FileDown } from "lucide-react";
+import { CheckCircle2, Eye } from "lucide-react";
 import { generateFortressTemplate } from "@/lib/fortressTemplate";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 
 interface ChecklistItem {
   id: string;
@@ -29,6 +31,12 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     initializeChecklist();
@@ -201,84 +209,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     }
   };
 
-  const exportToPDF = async () => {
-    try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      
-      // Title
-      doc.setFontSize(18);
-      doc.text('Fortress Site Close-Out Checklist', pageWidth / 2, 20, { align: 'center' });
-      
-      // Summary
-      doc.setFontSize(12);
-      doc.text(`Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`, 14, 35);
-      doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
-
-      let yPosition = 52;
-
-      // Generate table data for each section
-      Object.entries(sections).forEach(([sectionName, items]) => {
-        const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
-        const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
-        const sectionTotal = sectionApplicable.length;
-        const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
-
-        // Section header
-        if (yPosition > 250) {
-          doc.addPage();
-          yPosition = 20;
-        }
-
-        doc.setFontSize(14);
-        doc.setFont(undefined, 'bold');
-        doc.text(`${sectionName} (${sectionProgress}%)`, 14, yPosition);
-        yPosition += 8;
-
-        // Section items table
-        const tableData = items.map(item => [
-          item.status === 'not_applicable' ? 'N/A' : (item.is_checked ? '✓' : '☐'),
-          item.item_name,
-          item.status === 'not_applicable' ? 'Not Applicable' : (item.is_checked ? 'Complete' : 'Pending')
-        ]);
-
-        autoTable(doc, {
-          startY: yPosition,
-          head: [['Status', 'Item', 'Progress']],
-          body: tableData,
-          theme: 'grid',
-          headStyles: { fillColor: [59, 130, 246] },
-          columnStyles: {
-            0: { cellWidth: 15, halign: 'center' },
-            1: { cellWidth: 130 },
-            2: { cellWidth: 30, halign: 'center' }
-          },
-          styles: { fontSize: 9 },
-        });
-
-        yPosition = (doc as any).lastAutoTable.finalY + 10;
-      });
-
-      doc.save(`fortress-checklist-${new Date().getTime()}.pdf`);
-      toast.success('PDF exported successfully');
-    } catch (error) {
-      console.error('Error exporting PDF:', error);
-      toast.error('Failed to export PDF');
-    }
-  };
-
-  if (loading) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <div className="flex items-center justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-          </div>
-        </CardContent>
-      </Card>
-    );
-  }
-
+  // Calculate stats for PDF generation
   const applicableItems = checklistItems.filter(i => i.status !== 'not_applicable');
   const totalItems = applicableItems.length;
   const checkedItems = applicableItems.filter(i => i.is_checked).length;
@@ -293,6 +224,128 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     acc[item.section_name].push(item);
     return acc;
   }, {} as Record<string, ChecklistItem[]>);
+
+  const generatePDFDocument = (): { doc: jsPDF; fileName: string; blob: Blob } => {
+    const doc = new jsPDF();
+    const pageWidth = doc.internal.pageSize.getWidth();
+    const pageHeight = doc.internal.pageSize.getHeight();
+    
+    // Title
+    doc.setFontSize(18);
+    doc.text('Fortress Site Close-Out Checklist', pageWidth / 2, 20, { align: 'center' });
+    
+    // Summary
+    doc.setFontSize(12);
+    doc.text(`Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`, 14, 35);
+    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+
+    let yPosition = 52;
+
+    // Generate table data for each section
+    Object.entries(sections).forEach(([sectionName, items]) => {
+      const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
+      const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
+      const sectionTotal = sectionApplicable.length;
+      const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
+
+      // Section header
+      if (yPosition > 250) {
+        doc.addPage();
+        yPosition = 20;
+      }
+
+      doc.setFontSize(14);
+      doc.setFont(undefined, 'bold');
+      doc.text(`${sectionName} (${sectionProgress}%)`, 14, yPosition);
+      yPosition += 8;
+
+      // Section items table
+      const tableData = items.map(item => [
+        item.status === 'not_applicable' ? 'N/A' : (item.is_checked ? '✓' : '☐'),
+        item.item_name,
+        item.status === 'not_applicable' ? 'Not Applicable' : (item.is_checked ? 'Complete' : 'Pending')
+      ]);
+
+      autoTable(doc, {
+        startY: yPosition,
+        head: [['Status', 'Item', 'Progress']],
+        body: tableData,
+        theme: 'grid',
+        headStyles: { fillColor: [59, 130, 246] },
+        columnStyles: {
+          0: { cellWidth: 15, halign: 'center' },
+          1: { cellWidth: 130 },
+          2: { cellWidth: 30, halign: 'center' }
+        },
+        styles: { fontSize: 9 },
+      });
+
+      yPosition = (doc as any).lastAutoTable.finalY + 10;
+    });
+
+    const fileName = `fortress-checklist-${new Date().getTime()}.pdf`;
+    const blob = doc.output('blob');
+    
+    return { doc, fileName, blob };
+  };
+
+  const handlePreviewReport = async () => {
+    try {
+      setGenerating(true);
+      const result = generatePDFDocument();
+      
+      const url = URL.createObjectURL(result.blob);
+      setPreviewUrl(url);
+      setPreviewFileName(result.fileName);
+      setPdfBlob(result.blob);
+      setPreviewOpen(true);
+    } catch (error) {
+      console.error('Error generating PDF:', error);
+      toast.error('Failed to generate PDF');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!pdfBlob || !siteId) {
+      toast.error("Cannot save: missing data");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const result = await savePDFToDocuments({
+        blob: pdfBlob,
+        fileName: previewFileName,
+        siteId,
+        categoryName: getReportCategoryName("fortress-checklist"),
+      });
+
+      if (result.success) {
+        toast.success("Checklist saved to site documents!");
+      } else {
+        toast.error(result.error || "Failed to save checklist");
+      }
+    } catch (error) {
+      console.error("Error saving checklist:", error);
+      toast.error("Failed to save checklist");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <div className="flex items-center justify-center py-8">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -310,10 +363,11 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
               <Button 
                 variant="outline" 
                 size="sm"
-                onClick={exportToPDF}
+                onClick={handlePreviewReport}
+                disabled={generating}
               >
-                <FileDown className="h-4 w-4 mr-2" />
-                Export PDF
+                <Eye className="h-4 w-4 mr-2" />
+                {generating ? "Generating..." : "Preview Report"}
               </Button>
               <Button 
                 variant="outline" 
@@ -345,7 +399,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
                   </div>
 
                   <div className="space-y-2">
-                    {items.map((item, itemIndex) => (
+                    {items.map((item) => (
                       <div
                         key={item.item_id}
                         className={`flex items-start gap-3 p-3 rounded-lg transition-colors ${
@@ -397,6 +451,23 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
           </div>
         </CardContent>
       </Card>
+
+      <DocumentPreviewDialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl("");
+          }
+        }}
+        fileUrl={previewUrl}
+        fileName={previewFileName}
+        onSaveToDocuments={handleSaveToDocuments}
+        saveLocation="site"
+        contextName="Site Documents"
+        isSaving={saving}
+      />
     </div>
   );
 };

@@ -6,6 +6,8 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { pdfjs } from "react-pdf";
 import { Canvas as FabricCanvas } from "fabric";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 
 interface Pin {
   id: string;
@@ -21,6 +23,7 @@ interface SiteDrawingReportProps {
   inspectionData: any;
   siteName: string;
   subsectionName: string;
+  subsectionId: string;
   pdfUrl: string;
   pins: Pin[];
   canvasData?: string;
@@ -30,18 +33,29 @@ export const SiteDrawingReport = ({
   inspectionData,
   siteName,
   subsectionName,
+  subsectionId,
   pdfUrl,
   pins,
   canvasData,
 }: SiteDrawingReportProps) => {
   const [generating, setGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  const generateReport = async () => {
+  const generatePDFDocument = async (): Promise<{ doc: jsPDF; fileName: string; blob: Blob } | null> => {
     try {
-      setGenerating(true);
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
+
+      const date = new Date().toLocaleDateString('en-US', { 
+        year: 'numeric', 
+        month: 'long', 
+        day: 'numeric' 
+      });
 
       // ===== COVER PAGE =====
       doc.setFillColor(41, 128, 185);
@@ -61,11 +75,6 @@ export const SiteDrawingReport = ({
       doc.text('Watson Mattheus', pageWidth / 2, 135, { align: 'center' });
       
       doc.setFontSize(12);
-      const date = new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
-      });
       doc.text(`Generated: ${date}`, pageWidth / 2, 155, { align: 'center' });
       
       doc.setFontSize(14);
@@ -331,8 +340,31 @@ export const SiteDrawingReport = ({
         }
       }
 
-      doc.save(`${subsectionName}_Site_Drawing_Inspection_${date}.pdf`);
-      toast.success("Site drawing report generated successfully");
+      const fileName = `${subsectionName}_Site_Drawing_Inspection_${date.replace(/,?\s+/g, '_')}.pdf`;
+      const blob = doc.output('blob');
+      
+      return { doc, fileName, blob };
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      return null;
+    }
+  };
+
+  const handlePreviewReport = async () => {
+    try {
+      setGenerating(true);
+      const result = await generatePDFDocument();
+      
+      if (!result) {
+        toast.error("Failed to generate report");
+        return;
+      }
+      
+      const url = URL.createObjectURL(result.blob);
+      setPreviewUrl(url);
+      setPreviewFileName(result.fileName);
+      setPdfBlob(result.blob);
+      setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating report:", error);
       toast.error("Failed to generate report");
@@ -341,10 +373,57 @@ export const SiteDrawingReport = ({
     }
   };
 
+  const handleSaveToDocuments = async () => {
+    if (!pdfBlob || !subsectionId) {
+      toast.error("Cannot save: missing data");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const result = await savePDFToDocuments({
+        blob: pdfBlob,
+        fileName: previewFileName,
+        subsectionId,
+        categoryName: getReportCategoryName("site-drawing"),
+      });
+
+      if (result.success) {
+        toast.success("Report saved to documents!");
+      } else {
+        toast.error(result.error || "Failed to save report");
+      }
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Button onClick={generateReport} disabled={generating} variant="default">
-      <FileText className="mr-2 h-4 w-4" />
-      {generating ? "Generating PDF..." : "Generate PDF Report"}
-    </Button>
+    <>
+      <Button onClick={handlePreviewReport} disabled={generating} variant="default">
+        <FileText className="mr-2 h-4 w-4" />
+        {generating ? "Generating..." : "Preview Report"}
+      </Button>
+
+      <DocumentPreviewDialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl("");
+          }
+        }}
+        fileUrl={previewUrl}
+        fileName={previewFileName}
+        onSaveToDocuments={handleSaveToDocuments}
+        saveLocation="subsection"
+        contextName={subsectionName}
+        isSaving={saving}
+      />
+    </>
   );
 };

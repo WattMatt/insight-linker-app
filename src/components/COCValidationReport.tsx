@@ -3,12 +3,13 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, XCircle, AlertTriangle, FileDown, Save } from "lucide-react";
+import { CheckCircle2, XCircle, AlertTriangle, Eye } from "lucide-react";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
-import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useState } from "react";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 
 interface ValidationReport {
   cocNumber?: string;
@@ -77,6 +78,11 @@ interface COCValidationReportProps {
 export function COCValidationReport({ validation, subsectionName }: COCValidationReportProps) {
   const report = (validation.report_data || {}) as ValidationReport;
   const status = report.overallStatus || report.status || validation.status;
+  const [generating, setGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
   
   // Legacy format handling
@@ -108,90 +114,7 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
     }
   };
 
-  const exportToPDF = () => {
-    const doc = generatePDF();
-    const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
-    doc.save(fileName);
-  };
-
-  const saveToDocuments = async () => {
-    try {
-      setSaving(true);
-      toast.info("Saving report to documents...");
-
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) throw new Error("User not authenticated");
-
-      // Find or create "COC Validation Reports" category
-      const { data: categories } = await supabase
-        .from("document_categories")
-        .select("id, name")
-        .eq("subsection_id", validation.subsection_id);
-      
-      let categoryId = categories?.find(c => c.name === "COC Validation Reports")?.id;
-      
-      if (!categoryId) {
-        const { data: newCategory, error: categoryError } = await supabase
-          .from("document_categories")
-          .insert({ 
-            name: "COC Validation Reports", 
-            subsection_id: validation.subsection_id,
-            order_index: (categories?.length || 0) + 1
-          })
-          .select()
-          .single();
-        
-        if (categoryError) throw categoryError;
-        categoryId = newCategory.id;
-      }
-
-      // Generate PDF as blob
-      const doc = generatePDF();
-      const pdfBlob = doc.output('blob');
-      
-      // Upload to storage
-      const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${Date.now()}.pdf`;
-      const storagePath = `${validation.subsection_id}/COC Validation Reports/${fileName}`;
-      
-      const { data: uploadData, error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(storagePath, pdfBlob, {
-          contentType: 'application/pdf',
-          upsert: false
-        });
-
-      if (uploadError) throw uploadError;
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(storagePath);
-
-      // Create document record
-      const { error: docError } = await supabase
-        .from('subsection_documents')
-        .insert({
-          subsection_id: validation.subsection_id,
-          category_id: categoryId,
-          file_name: fileName,
-          file_url: urlData.publicUrl,
-          file_size: pdfBlob.size,
-          uploaded_by: user.id
-        });
-
-      if (docError) throw docError;
-
-      toast.success("Validation report saved to documents!");
-    } catch (error) {
-      console.error("Error saving report:", error);
-      toast.error("Failed to save report to documents");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const generatePDF = (): jsPDF => {
+  const generatePDF = (): { doc: jsPDF; fileName: string; blob: Blob } => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
@@ -338,7 +261,6 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
         ['Type of Registration', details.registrationType || 'Not Found'],
         ['Date of Registration', details.registrationDate || 'Not Found'],
       ].filter(([field, value]) => {
-        // Exclude fields with "Not Found" or placeholder values
         const lowerValue = value.toLowerCase();
         return !lowerValue.includes('not found') && 
                !lowerValue.includes('not provided') && 
@@ -420,20 +342,68 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       doc.setPage(i);
       doc.setFontSize(8);
       doc.setTextColor(128, 128, 128);
-      if (i > 1) { // Skip footer on cover page
+      if (i > 1) {
         doc.text(`Page ${i} of ${totalPages}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
         doc.text(`COC #${report.cocNumber || 'N/A'}`, pageWidth - 14, pageHeight - 10, { align: 'right' });
         doc.text(`Generated: ${new Date().toLocaleDateString()}`, 14, pageHeight - 10);
       }
     }
 
-    // Save PDF
-    return doc;
+    const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
+    const blob = doc.output('blob');
+    
+    return { doc, fileName, blob };
+  };
+
+  const handlePreviewReport = () => {
+    try {
+      setGenerating(true);
+      const result = generatePDF();
+      
+      const url = URL.createObjectURL(result.blob);
+      setPreviewUrl(url);
+      setPreviewFileName(result.fileName);
+      setPdfBlob(result.blob);
+      setPreviewOpen(true);
+    } catch (error) {
+      console.error("Error generating PDF:", error);
+      toast.error("Failed to generate report");
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!pdfBlob || !validation.subsection_id) {
+      toast.error("Cannot save: missing data");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const result = await savePDFToDocuments({
+        blob: pdfBlob,
+        fileName: previewFileName,
+        subsectionId: validation.subsection_id,
+        categoryName: getReportCategoryName("coc-validation"),
+      });
+
+      if (result.success) {
+        toast.success("Report saved to documents!");
+      } else {
+        toast.error(result.error || "Failed to save report");
+      }
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report");
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
-      {/* Header with Export Button */}
+      {/* Header with Preview Button */}
       <Card>
         <CardHeader className="pb-4">
           <div className="flex items-start justify-between">
@@ -448,16 +418,10 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
               )}
             </div>
             <div className="flex flex-col items-end gap-2">
-              <div className="flex gap-2">
-                <Button onClick={saveToDocuments} variant="outline" size="sm" disabled={saving}>
-                  <Save className="h-4 w-4 mr-2" />
-                  {saving ? "Saving..." : "Save to Documents"}
-                </Button>
-                <Button onClick={exportToPDF} variant="outline" size="sm">
-                  <FileDown className="h-4 w-4 mr-2" />
-                  Export PDF
-                </Button>
-              </div>
+              <Button onClick={handlePreviewReport} variant="outline" size="sm" disabled={generating}>
+                <Eye className="h-4 w-4 mr-2" />
+                {generating ? "Generating..." : "Preview Report"}
+              </Button>
               {getStatusIcon()}
               <Badge className={getStatusColor()}>
                 {status?.toUpperCase()}
@@ -499,6 +463,7 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
               </div>
             )}
 
+            {/* Legacy Summary */}
             {isLegacyFormat && report.summary && (
               <div>
                 <h4 className="font-semibold mb-2">Summary:</h4>
@@ -509,165 +474,35 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
         </Card>
       )}
 
-      {/* Detailed Verification Checks - Current vs Required */}
-      {report.checks && report.checks.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle>Detailed Verification Results</CardTitle>
-            <p className="text-sm text-muted-foreground mt-2">
-              Comparison of measured values against SANS 10142-1 requirements
-            </p>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {/* Failed Checks First */}
-              {report.checks.filter(check => check.result === 'Fail').length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-red-600 mb-3">❌ Failed Checks</h4>
-                  <div className="space-y-3">
-                    {report.checks
-                      .filter(check => check.result === 'Fail')
-                      .map((check, idx) => (
-                        <Alert key={idx} variant="destructive" className="border-red-300">
-                          <AlertDescription>
-                            <div className="space-y-2">
-                              <div className="flex items-start justify-between gap-4">
-                                <div className="flex-1">
-                                  <p className="font-semibold text-sm">
-                                    Clause {check.clause}: {check.description}
-                                  </p>
-                                  <Badge variant="outline" className="mt-1 text-xs">
-                                    {check.category}
-                                  </Badge>
-                                </div>
-                              </div>
-                              
-                              <div className="bg-white/50 dark:bg-black/50 rounded-md p-3 space-y-2">
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                  <div>
-                                    <span className="text-xs font-semibold uppercase text-red-700 dark:text-red-400">
-                                      Current Value:
-                                    </span>
-                                    <p className="text-sm mt-1 font-mono">{check.measuredValue}</p>
-                                  </div>
-                                  <div>
-                                    <span className="text-xs font-semibold uppercase text-green-700 dark:text-green-400">
-                                      Required:
-                                    </span>
-                                    <p className="text-sm mt-1 font-mono">{check.limit}</p>
-                                  </div>
-                                </div>
-                              </div>
-
-                              {check.remediation && check.remediation !== 'N/A' && (
-                                <div className="pt-2 border-t border-red-200">
-                                  <p className="text-xs font-semibold uppercase text-muted-foreground mb-1">
-                                    Remediation Required:
-                                  </p>
-                                  <p className="text-sm">{check.remediation}</p>
-                                </div>
-                              )}
-                            </div>
-                          </AlertDescription>
-                        </Alert>
-                      ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Passed Checks */}
-              {report.checks.filter(check => check.result === 'Pass').length > 0 && (
-                <div>
-                  <h4 className="font-semibold text-green-600 mb-3">✅ Passed Checks</h4>
-                  <div className="space-y-2">
-                    {report.checks
-                      .filter(check => check.result === 'Pass')
-                      .map((check, idx) => (
-                        <div key={idx} className="border border-green-200 rounded-md p-3 bg-green-50/50 dark:bg-green-950/20">
-                          <div className="flex items-start justify-between gap-4">
-                            <div className="flex-1">
-                              <p className="font-semibold text-sm">
-                                Clause {check.clause}: {check.description}
-                              </p>
-                              <Badge variant="outline" className="mt-1 text-xs bg-white dark:bg-black">
-                                {check.category}
-                              </Badge>
-                            </div>
-                            <CheckCircle2 className="h-5 w-5 text-green-600 shrink-0" />
-                          </div>
-                          
-                          <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-2 pt-2 border-t border-green-200">
-                            <div>
-                              <span className="text-xs font-semibold uppercase text-muted-foreground">
-                                Measured:
-                              </span>
-                              <p className="text-sm mt-1 font-mono">{check.measuredValue}</p>
-                            </div>
-                            <div>
-                              <span className="text-xs font-semibold uppercase text-muted-foreground">
-                                Required:
-                              </span>
-                              <p className="text-sm mt-1 font-mono">{check.limit}</p>
-                            </div>
-                          </div>
-                        </div>
-                      ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
       {/* Critical Failures */}
       {((report.criticalFailures && report.criticalFailures.length > 0) || 
         (isLegacyFormat && report.violations && report.violations.length > 0)) && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-red-600">
-              Summary of Critical Failures ({report.criticalFailures?.length || report.violations?.length || 0})
+        <Card className="border-red-200">
+          <CardHeader className="bg-red-50">
+            <CardTitle className="text-red-800 flex items-center gap-2">
+              <XCircle className="h-5 w-5" />
+              Critical Failures ({report.criticalFailures?.length || report.violations?.length})
             </CardTitle>
           </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {report.criticalFailures?.map((failure, idx) => (
-                <Alert key={idx} variant="destructive">
-                  <AlertDescription>
-                    <div className="space-y-2">
-                      <div className="flex items-start gap-2">
-                        <Badge variant="outline" className="shrink-0">
-                          {failure.category}
-                        </Badge>
-                        <div className="flex-1">
-                          <p className="font-semibold">{failure.clause}</p>
-                          <p className="text-sm mt-1">{failure.description}</p>
-                        </div>
-                      </div>
-                      <div className="pl-0 mt-2">
-                        <span className="font-semibold text-sm">Reason: </span>
-                        <span className="text-sm">{failure.reason}</span>
-                      </div>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              ))}
-              
-              {isLegacyFormat && report.violations?.map((violation, idx) => (
-                <Alert key={idx} variant="destructive">
-                  <AlertDescription>
-                    <div className="space-y-2">
-                      <p className="font-semibold">Clause {violation.clause}</p>
-                      <p className="text-sm">{violation.description}</p>
-                      <div className="mt-2">
-                        <span className="font-semibold text-sm">Evidence: </span>
-                        <span className="text-sm">{violation.evidence}</span>
-                      </div>
-                    </div>
-                  </AlertDescription>
-                </Alert>
-              ))}
-            </div>
+          <CardContent className="divide-y">
+            {(report.criticalFailures || report.violations || []).map((failure: any, index: number) => (
+              <div key={index} className="py-4 first:pt-6 last:pb-2">
+                <div className="flex items-start gap-3">
+                  <Badge variant="destructive" className="mt-0.5">
+                    {failure.clause}
+                  </Badge>
+                  <div className="flex-1">
+                    <p className="font-medium">{failure.description}</p>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      <span className="font-medium">Reason:</span> {failure.reason || failure.evidence}
+                    </p>
+                    {failure.category && (
+                      <Badge variant="outline" className="mt-2">{failure.category}</Badge>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </CardContent>
         </Card>
       )}
@@ -679,68 +514,41 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
             <CardTitle>Administrative Completeness</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {report.administrativeDetails.physicalAddress && 
-               !report.administrativeDetails.physicalAddress.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.physicalAddress.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.physicalAddress.toLowerCase().includes('n/a') && (
+            <div className="grid md:grid-cols-2 gap-4">
+              {report.administrativeDetails.physicalAddress && (
                 <div>
-                  <span className="font-semibold">Physical Address:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.physicalAddress}</p>
+                  <p className="text-sm text-muted-foreground">Physical Address</p>
+                  <p className="font-medium">{report.administrativeDetails.physicalAddress}</p>
                 </div>
               )}
-              {report.administrativeDetails.erfNumber && 
-               !report.administrativeDetails.erfNumber.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.erfNumber.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.erfNumber.toLowerCase().includes('n/a') && (
+              {report.administrativeDetails.erfNumber && (
                 <div>
-                  <span className="font-semibold">Erf / Lot No.:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.erfNumber}</p>
+                  <p className="text-sm text-muted-foreground">Erf / Lot No.</p>
+                  <p className="font-medium">{report.administrativeDetails.erfNumber}</p>
                 </div>
               )}
-              {report.administrativeDetails.registeredPerson && 
-               !report.administrativeDetails.registeredPerson.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.registeredPerson.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.registeredPerson.toLowerCase().includes('n/a') && (
+              {report.administrativeDetails.registeredPerson && (
                 <div>
-                  <span className="font-semibold">Registered Person Name:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.registeredPerson}</p>
+                  <p className="text-sm text-muted-foreground">Registered Person</p>
+                  <p className="font-medium">{report.administrativeDetails.registeredPerson}</p>
                 </div>
               )}
-              {report.administrativeDetails.idNumber && 
-               !report.administrativeDetails.idNumber.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.idNumber.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.idNumber.toLowerCase().includes('n/a') && (
+              {report.administrativeDetails.registrationNumber && (
                 <div>
-                  <span className="font-semibold">ID Number:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.idNumber}</p>
+                  <p className="text-sm text-muted-foreground">Registration Number</p>
+                  <p className="font-medium">{report.administrativeDetails.registrationNumber}</p>
                 </div>
               )}
-              {report.administrativeDetails.registrationNumber && 
-               !report.administrativeDetails.registrationNumber.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.registrationNumber.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.registrationNumber.toLowerCase().includes('n/a') && (
+              {report.administrativeDetails.registrationType && (
                 <div>
-                  <span className="font-semibold">Registration Number:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.registrationNumber}</p>
+                  <p className="text-sm text-muted-foreground">Type of Registration</p>
+                  <p className="font-medium">{report.administrativeDetails.registrationType}</p>
                 </div>
               )}
-              {report.administrativeDetails.registrationType && 
-               !report.administrativeDetails.registrationType.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.registrationType.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.registrationType.toLowerCase().includes('n/a') && (
+              {report.administrativeDetails.registrationDate && (
                 <div>
-                  <span className="font-semibold">Type of Registration:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.registrationType}</p>
-                </div>
-              )}
-              {report.administrativeDetails.registrationDate && 
-               !report.administrativeDetails.registrationDate.toLowerCase().includes('not found') &&
-               !report.administrativeDetails.registrationDate.toLowerCase().includes('not provided') &&
-               !report.administrativeDetails.registrationDate.toLowerCase().includes('n/a') && (
-                <div>
-                  <span className="font-semibold">Date of Registration:</span>
-                  <p className="text-muted-foreground">{report.administrativeDetails.registrationDate}</p>
+                  <p className="text-sm text-muted-foreground">Date of Registration</p>
+                  <p className="font-medium">{report.administrativeDetails.registrationDate}</p>
                 </div>
               )}
             </div>
@@ -756,40 +564,24 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {report.technicalEvaluation.map((item, idx) => (
-                <div key={idx}>
-                  {idx > 0 && <Separator className="my-4" />}
-                  <div className="space-y-2">
-                    <div className="flex items-start justify-between">
-                      <div>
-                        <h4 className="font-semibold">{item.section}</h4>
-                        <p className="text-sm text-muted-foreground">Clause {item.clause}</p>
-                      </div>
-                      <Badge
-                        variant={
-                          item.status === 'Pass' ? 'default' :
-                          item.status === 'Fail' ? 'destructive' :
-                          'secondary'
-                        }
-                      >
-                        {item.status}
-                      </Badge>
+              {report.technicalEvaluation.map((item, index) => (
+                <div key={index} className="border rounded-lg p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <div className="flex items-center gap-2">
+                      <Badge variant="outline">{item.section}</Badge>
+                      <span className="text-sm text-muted-foreground">Clause {item.clause}</span>
                     </div>
-                    <div>
-                      <span className="font-semibold text-sm">Requirement: </span>
-                      <span className="text-sm text-muted-foreground">{item.requirement}</span>
-                    </div>
-                    <div>
-                      <span className="font-semibold text-sm">Finding: </span>
-                      <span className="text-sm text-muted-foreground">{item.finding}</span>
-                    </div>
-                    {item.notes && (
-                      <div>
-                        <span className="font-semibold text-sm">Notes: </span>
-                        <span className="text-sm text-muted-foreground">{item.notes}</span>
-                      </div>
-                    )}
+                    <Badge 
+                      variant={item.status === 'Pass' ? 'default' : item.status === 'Fail' ? 'destructive' : 'secondary'}
+                    >
+                      {item.status}
+                    </Badge>
                   </div>
+                  <p className="font-medium">{item.requirement}</p>
+                  <p className="text-sm text-muted-foreground mt-1">{item.finding}</p>
+                  {item.notes && (
+                    <p className="text-sm text-muted-foreground mt-2 italic">{item.notes}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -804,23 +596,31 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
             <CardTitle>Recommendations</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="list-disc list-inside space-y-2">
-              {report.recommendations.map((rec, idx) => (
-                <li key={idx} className="text-muted-foreground">{rec}</li>
+            <ul className="list-disc pl-5 space-y-2">
+              {report.recommendations.map((rec, index) => (
+                <li key={index} className="text-muted-foreground">{rec}</li>
               ))}
             </ul>
           </CardContent>
         </Card>
       )}
 
-      {/* Validation Metadata */}
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-sm text-muted-foreground">
-            Validated on: {new Date(validation.validated_at).toLocaleString()}
-          </p>
-        </CardContent>
-      </Card>
+      <DocumentPreviewDialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl("");
+          }
+        }}
+        fileUrl={previewUrl}
+        fileName={previewFileName}
+        onSaveToDocuments={handleSaveToDocuments}
+        saveLocation="subsection"
+        contextName={subsectionName || "Subsection"}
+        isSaving={saving}
+      />
     </div>
   );
 }
