@@ -30,5 +30,8 @@ verify_jwt = true
 [functions.templates]
 verify_jwt = false
 
+[functions.save-template]
+verify_jwt = false
+
 [functions.fix-tenant-images]
 verify_jwt = true
