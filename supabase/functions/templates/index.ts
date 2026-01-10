@@ -75,10 +75,10 @@ Deno.serve(async (req) => {
 
     if (cocError) throw cocError
 
-    // Fetch inspection templates
+    // Fetch inspection templates with full structure
     const { data: templates, error: templatesError } = await supabase
       .from('inspection_templates')
-      .select('id, name, category, description, sections_count, pages_count')
+      .select('id, name, category, description, sections_count, pages_count, sections, cover_page, tenants')
       .order('name')
 
     if (templatesError) throw templatesError
@@ -238,7 +238,17 @@ Deno.serve(async (req) => {
         app: 'wm-compliance',
         summary,
         reportTypes,
-        inspectionTemplates: templates,
+        inspectionTemplates: templates?.map(t => ({
+          id: t.id,
+          name: t.name,
+          category: t.category,
+          description: t.description,
+          sectionsCount: t.sections_count,
+          pagesCount: t.pages_count,
+          sections: t.sections,
+          coverPage: t.cover_page,
+          tenants: t.tenants
+        })) || [],
         clients: clients?.map(c => ({
           id: c.id,
           name: c.name,
