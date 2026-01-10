@@ -385,52 +385,46 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 /**
  * Generate a PDF blob from a document definition
- * Uses getBase64 which is more reliable than getBlob/getBuffer in browsers
+ * Uses getBlob with Promise wrapper for reliable async operation
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
-  return new Promise((resolve, reject) => {
+  console.log('Creating PDF with pdfmake...');
+  
+  // Verify fonts are loaded
+  const instance = pdfMake as any;
+  if (!instance.vfs || Object.keys(instance.vfs).length === 0) {
+    console.error('pdfMake VFS not initialized');
+    throw new Error('PDF fonts not loaded. Please refresh the page and try again.');
+  }
+  
+  console.log('VFS keys count:', Object.keys(instance.vfs).length);
+  
+  const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+  
+  // Use Promise-based approach with getBlob
+  return new Promise<Blob>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      console.error('PDF generation timed out after 60 seconds');
+      reject(new Error('PDF generation timed out. Please try again.'));
+    }, 60000);
+    
     try {
-      console.log('Creating PDF with pdfmake...');
-      
-      // Verify fonts are loaded
-      const instance = pdfMake as any;
-      if (!instance.vfs || Object.keys(instance.vfs).length === 0) {
-        console.error('pdfMake VFS not initialized');
-        reject(new Error('PDF fonts not loaded. Please refresh the page and try again.'));
-        return;
-      }
-      
-      console.log('VFS keys count:', Object.keys(instance.vfs).length);
-      
-      const pdfDocGenerator = pdfMake.createPdf(docDefinition);
-      
-      // Use getBase64 which is most reliable in browser environments
-      const timeout = setTimeout(() => {
-        console.error('PDF generation timed out after 60 seconds');
-        reject(new Error('PDF generation timed out. Please try again.'));
-      }, 60000);
-      
-      pdfDocGenerator.getBase64((base64Data: string) => {
+      // pdfmake's getBlob accepts a callback
+      pdfDocGenerator.getBlob((blob: Blob) => {
         clearTimeout(timeout);
-        console.log('PDF base64 generated, length:', base64Data?.length || 0);
         
-        if (!base64Data || base64Data.length === 0) {
+        if (!blob || blob.size === 0) {
+          console.error('Generated PDF blob is empty');
           reject(new Error('Generated PDF is empty'));
           return;
         }
         
-        try {
-          // Convert base64 to blob
-          const blob = base64ToBlob(base64Data, 'application/pdf');
-          console.log('PDF blob created, size:', blob.size);
-          resolve(blob);
-        } catch (conversionError) {
-          console.error('Error converting base64 to blob:', conversionError);
-          reject(new Error('Failed to convert PDF data'));
-        }
-      });
+        console.log('PDF blob created successfully, size:', blob.size);
+        resolve(blob);
+      }, { autoPrint: false });
     } catch (error) {
-      console.error('PDF creation error:', error);
+      clearTimeout(timeout);
+      console.error('PDF getBlob error:', error);
       reject(error);
     }
   });
