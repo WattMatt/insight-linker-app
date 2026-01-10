@@ -26,3 +26,9 @@ verify_jwt = false
 
 [functions.verify-fix]
 verify_jwt = true
+
+[functions.templates]
+verify_jwt = false
+
+[functions.fix-tenant-images]
+verify_jwt = true
