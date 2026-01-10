@@ -28,7 +28,7 @@ import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, FileDown, Eye, Loader2, Pencil, Check, X } from "lucide-react";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { generateAssetVerificationReport } from "@/lib/assetVerificationReportGenerator";
+import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -325,30 +325,10 @@ export const AssetComparisonTable = ({
   const handleExportReport = async () => {
     setGenerating(true);
     try {
-      const reportStats = {
-        total: stats.total,
-        matched: stats.verified,
-        matchedNoDiscrepancy: stats.verifiedNoDiscrepancy,
-        discrepancies: stats.discrepancies,
-        assetOnly: stats.unverified,
-        subsectionOnly: 0,
-        potentialMatches: 0,
-      };
-      
-      // Convert to old format for report generator compatibility
-      const convertedResults = comparisonResults.map(r => ({
-        asset: r.asset,
-        subsection: null,
-        matchType: r.verified ? "matched" as const : "asset_only" as const,
-        meterSerialMatch: r.verified ? "match" as const : "na" as const,
-        ctRatioMatch: r.ctMatch,
-        hasDiscrepancy: r.hasDiscrepancy,
-      }));
-      
-      const result = await generateAssetVerificationReport({
+      const result = await generateInspectionBasedReport({
         siteName,
-        comparisonResults: convertedResults,
-        stats: reportStats,
+        comparisonResults,
+        stats,
         companyLogoUrl,
       });
       
@@ -372,30 +352,10 @@ export const AssetComparisonTable = ({
   const handlePreviewReport = async () => {
     setGenerating(true);
     try {
-      const reportStats = {
-        total: stats.total,
-        matched: stats.verified,
-        matchedNoDiscrepancy: stats.verifiedNoDiscrepancy,
-        discrepancies: stats.discrepancies,
-        assetOnly: stats.unverified,
-        subsectionOnly: 0,
-        potentialMatches: 0,
-      };
-      
-      // Convert to old format for report generator compatibility
-      const convertedResults = comparisonResults.map(r => ({
-        asset: r.asset,
-        subsection: null,
-        matchType: r.verified ? "matched" as const : "asset_only" as const,
-        meterSerialMatch: r.verified ? "match" as const : "na" as const,
-        ctRatioMatch: r.ctMatch,
-        hasDiscrepancy: r.hasDiscrepancy,
-      }));
-      
-      const result = await generateAssetVerificationReport({
+      const result = await generateInspectionBasedReport({
         siteName,
-        comparisonResults: convertedResults,
-        stats: reportStats,
+        comparisonResults,
+        stats,
         companyLogoUrl,
       });
       
