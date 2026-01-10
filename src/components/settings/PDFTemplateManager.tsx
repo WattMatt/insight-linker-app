@@ -51,11 +51,62 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
       accentColor: "blue"
     },
     sections: [
-      { id: "site-info", title: "Site Information", type: "table", enabled: true, order: 0, editable: true },
-      { id: "subsections", title: "Subsections Overview", type: "table", enabled: true, order: 1, editable: true },
-      { id: "compliance", title: "Compliance Summary", type: "kpi", enabled: true, order: 2, editable: true },
-      { id: "documents", title: "Documents", type: "table", enabled: true, order: 3, editable: true },
-      { id: "inspections", title: "Inspections", type: "table", enabled: true, order: 4, editable: true }
+      { 
+        id: "site-info", 
+        title: "Site Information", 
+        type: "table", 
+        enabled: true, 
+        order: 0, 
+        editable: true,
+        columns: [
+          { id: "name", label: "Site Name", field: "name", visible: true },
+          { id: "client", label: "Client", field: "client", visible: true },
+          { id: "address", label: "Address", field: "address", visible: true },
+        ]
+      },
+      { 
+        id: "subsections", 
+        title: "Subsections Overview", 
+        type: "table", 
+        enabled: true, 
+        order: 1, 
+        editable: true,
+        columns: [
+          { id: "name", label: "Shop Name", field: "name", visible: true },
+          { id: "tenant", label: "Tenant", field: "tenant", visible: true },
+          { id: "category", label: "Category", field: "category", visible: true },
+          { id: "cocStatus", label: "COC Status", field: "cocStatus", visible: true },
+          { id: "documents", label: "Documents", field: "documents", visible: true },
+        ]
+      },
+      { 
+        id: "compliance", 
+        title: "Compliance Summary", 
+        type: "kpi", 
+        enabled: true, 
+        order: 2, 
+        editable: true,
+        kpiItems: [
+          { id: "total", label: "Total Subsections", field: "totalSubsections", visible: true, color: "blue" },
+          { id: "pass", label: "COC Pass", field: "cocPass", visible: true, color: "green" },
+          { id: "missing", label: "Missing", field: "cocMissing", visible: true, color: "red" },
+          { id: "rate", label: "Compliance Rate", field: "complianceRate", visible: true, color: "purple" },
+        ]
+      },
+      { 
+        id: "inspections", 
+        title: "Recent Inspections", 
+        type: "table", 
+        enabled: true, 
+        order: 3, 
+        editable: true,
+        columns: [
+          { id: "title", label: "Title", field: "title", visible: true },
+          { id: "status", label: "Status", field: "status", visible: true },
+          { id: "inspector", label: "Inspector", field: "inspector", visible: true },
+          { id: "date", label: "Date", field: "date", visible: true },
+        ]
+      }
     ]
   },
   inspection: {
@@ -67,7 +118,20 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
       includeTableOfContents: true
     },
     sections: [
-      { id: "inspection-details", title: "Inspection Details", type: "table", enabled: true, order: 0, editable: true },
+      { 
+        id: "inspection-details", 
+        title: "Inspection Details", 
+        type: "table", 
+        enabled: true, 
+        order: 0, 
+        editable: true,
+        columns: [
+          { id: "title", label: "Title", field: "title", visible: true },
+          { id: "status", label: "Status", field: "status", visible: true },
+          { id: "inspector", label: "Inspector", field: "inspector", visible: true },
+          { id: "date", label: "Date", field: "date", visible: true },
+        ]
+      },
       { id: "findings", title: "Findings", type: "table", enabled: true, order: 1, editable: true },
       { id: "photos", title: "Photo Evidence", type: "table", enabled: true, order: 2, editable: true },
       { id: "signatures", title: "Signatures", type: "table", enabled: true, order: 3, editable: true }
@@ -82,7 +146,19 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
     },
     sections: [
       { id: "floor-plan-image", title: "Floor Plan", type: "table", enabled: true, order: 0, editable: false },
-      { id: "pins-summary", title: "Pins Summary", type: "kpi", enabled: true, order: 1, editable: true },
+      { 
+        id: "pins-summary", 
+        title: "Pins Summary", 
+        type: "kpi", 
+        enabled: true, 
+        order: 1, 
+        editable: true,
+        kpiItems: [
+          { id: "total", label: "Total Pins", field: "totalSubsections", visible: true, color: "blue" },
+          { id: "open", label: "Open", field: "cocMissing", visible: true, color: "orange" },
+          { id: "resolved", label: "Resolved", field: "cocPass", visible: true, color: "green" },
+        ]
+      },
       { id: "pins-table", title: "Pin Details", type: "table", enabled: true, order: 2, editable: true }
     ]
   },
@@ -94,9 +170,48 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
       accentColor: "purple"
     },
     sections: [
-      { id: "asset-summary", title: "Asset Summary", type: "kpi", enabled: true, order: 0, editable: true },
-      { id: "electrical-meters", title: "Electrical Meters", type: "table", enabled: true, order: 1, editable: true },
-      { id: "water-meters", title: "Water Meters", type: "table", enabled: true, order: 2, editable: true },
+      { 
+        id: "asset-summary", 
+        title: "Asset Summary", 
+        type: "kpi", 
+        enabled: true, 
+        order: 0, 
+        editable: true,
+        kpiItems: [
+          { id: "total", label: "Total Assets", field: "totalAssets", visible: true, color: "blue" },
+          { id: "verified", label: "Verified", field: "cocPass", visible: true, color: "green" },
+          { id: "pending", label: "Pending", field: "cocPending", visible: true, color: "orange" },
+        ]
+      },
+      { 
+        id: "electrical-meters", 
+        title: "Electrical Meters", 
+        type: "table", 
+        enabled: true, 
+        order: 1, 
+        editable: true,
+        columns: [
+          { id: "serial", label: "Serial Number", field: "serial", visible: true },
+          { id: "premises", label: "Premises ID", field: "premises", visible: true },
+          { id: "trade", label: "Trade As", field: "trade", visible: true },
+          { id: "breaker", label: "Breaker Size", field: "breaker", visible: true },
+          { id: "ct", label: "CT Ratio", field: "ct", visible: true },
+        ]
+      },
+      { 
+        id: "water-meters", 
+        title: "Water Meters", 
+        type: "table", 
+        enabled: true, 
+        order: 2, 
+        editable: true,
+        columns: [
+          { id: "serial", label: "Serial Number", field: "serial", visible: true },
+          { id: "premises", label: "Premises ID", field: "premises", visible: true },
+          { id: "trade", label: "Trade As", field: "trade", visible: true },
+          { id: "type", label: "Meter Type", field: "type", visible: true },
+        ]
+      },
       { id: "equipment", title: "Equipment", type: "table", enabled: true, order: 3, editable: true }
     ]
   },
@@ -109,8 +224,33 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
       includeTableOfContents: true
     },
     sections: [
-      { id: "compliance-summary", title: "Compliance Summary", type: "kpi", enabled: true, order: 0, editable: true },
-      { id: "coc-status", title: "COC Status by Site", type: "table", enabled: true, order: 1, editable: true },
+      { 
+        id: "compliance-summary", 
+        title: "Compliance Summary", 
+        type: "kpi", 
+        enabled: true, 
+        order: 0, 
+        editable: true,
+        kpiItems: [
+          { id: "total", label: "Total Subsections", field: "totalSubsections", visible: true, color: "blue" },
+          { id: "compliant", label: "Compliant", field: "cocPass", visible: true, color: "green" },
+          { id: "non-compliant", label: "Non-Compliant", field: "cocMissing", visible: true, color: "red" },
+          { id: "rate", label: "Compliance Rate", field: "complianceRate", visible: true, color: "purple" },
+        ]
+      },
+      { 
+        id: "coc-status", 
+        title: "COC Status by Site", 
+        type: "table", 
+        enabled: true, 
+        order: 1, 
+        editable: true,
+        columns: [
+          { id: "name", label: "Shop Name", field: "name", visible: true },
+          { id: "tenant", label: "Tenant", field: "tenant", visible: true },
+          { id: "cocStatus", label: "COC Status", field: "cocStatus", visible: true },
+        ]
+      },
       { id: "expiring-cocs", title: "Expiring Certificates", type: "table", enabled: true, order: 2, editable: true },
       { id: "non-compliant", title: "Non-Compliant Items", type: "table", enabled: true, order: 3, editable: true }
     ]

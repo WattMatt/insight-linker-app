@@ -1,5 +1,21 @@
 // Types for PDF Report Editor
 
+export interface TableColumn {
+  id: string;
+  label: string;
+  field: string;
+  visible: boolean;
+  width?: number;
+}
+
+export interface KPIItem {
+  id: string;
+  label: string;
+  field: string;
+  visible: boolean;
+  color?: 'blue' | 'green' | 'orange' | 'red' | 'purple' | 'muted';
+}
+
 export interface ReportSection {
   id: string;
   title: string;
@@ -9,6 +25,15 @@ export interface ReportSection {
   editable: boolean;
   data?: any;
   notes?: string;
+  
+  // Table configuration
+  columns?: TableColumn[];
+  
+  // KPI configuration
+  kpiItems?: KPIItem[];
+  
+  // Text content for text sections
+  textContent?: string;
 }
 
 export interface ReportCustomization {
