@@ -423,6 +423,15 @@ export const AssetComparisonTable = ({
 
   const getStatusBadge = (result: ComparisonResult) => {
     if (result.matchType === "asset_only") {
+      // Check if this asset has an inspection match even without subsection
+      if (result.inspectionMatch) {
+        return (
+          <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+            <CheckCircle2 className="h-3 w-3 mr-1" />
+            Verified via Inspection
+          </Badge>
+        );
+      }
       return (
         <Badge variant="outline" className="text-orange-600 border-orange-300 bg-orange-50">
           <XCircle className="h-3 w-3 mr-1" />
