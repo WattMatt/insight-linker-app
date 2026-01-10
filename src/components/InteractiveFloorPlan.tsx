@@ -5,7 +5,9 @@ import { FloorPlanPinsList } from "./FloorPlanPinsList";
 import { FloorPlanStatsWidget } from "./FloorPlanStatsWidget";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Upload, FileDown, Loader2, WifiOff } from "lucide-react";
+import { Upload, Eye, Loader2, WifiOff } from "lucide-react";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { generateFloorPlanReport } from "@/lib/floorPlanReportGenerator";
@@ -32,6 +34,8 @@ export const InteractiveFloorPlan = ({
   const [isLoading, setIsLoading] = useState(true);
   const [isUploading, setIsUploading] = useState(false);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
+  const [savingToDocuments, setSavingToDocuments] = useState(false);
   const [moveMode, setMoveMode] = useState<string | null>(null); // Pin ID being moved
   
   const {
@@ -372,14 +376,13 @@ export const InteractiveFloorPlan = ({
     toast.info("Click on the floor plan to move this pin");
   };
 
-  const handleGenerateReport = async () => {
+  const handlePreviewReport = async () => {
     if (!floorPlan) return;
 
     try {
       setIsGeneratingReport(true);
-      toast.info("Generating comprehensive report...");
+      toast.info("Generating report preview...");
 
-      // Fetch comments for all pins
       const pinsWithComments = await Promise.all(
         pins.map(async (pin) => {
           const { data: comments } = await supabase
@@ -388,14 +391,10 @@ export const InteractiveFloorPlan = ({
             .eq('pin_id', pin.id)
             .order('created_at', { ascending: true });
           
-          return {
-            ...pin,
-            comments: comments || [],
-          };
+          return { ...pin, comments: comments || [] };
         })
       );
 
-      // Capture canvas with pins
       const canvas = document.querySelector('canvas');
       let canvasDataUrl;
       if (canvas) {
@@ -411,13 +410,42 @@ export const InteractiveFloorPlan = ({
         canvasDataUrl,
       });
 
-      report.save(`floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`);
-      toast.success("Professional report generated successfully!");
+      const blob = report.output('blob');
+      const url = URL.createObjectURL(blob);
+      const filename = `floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`;
+      setPdfPreview({ url, blob, filename });
     } catch (error) {
       console.error("Error generating report:", error);
       toast.error("Failed to generate report");
     } finally {
       setIsGeneratingReport(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!pdfPreview) return;
+    
+    setSavingToDocuments(true);
+    try {
+      const result = await savePDFToDocuments({
+        blob: pdfPreview.blob,
+        fileName: pdfPreview.filename,
+        subsectionId,
+        categoryName: getReportCategoryName("floor-plan"),
+      });
+
+      if (result.success) {
+        toast.success("Floor plan report saved to documents!");
+        URL.revokeObjectURL(pdfPreview.url);
+        setPdfPreview(null);
+      } else {
+        toast.error(result.error || "Failed to save report");
+      }
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report");
+    } finally {
+      setSavingToDocuments(false);
     }
   };
 
@@ -493,7 +521,7 @@ export const InteractiveFloorPlan = ({
             />
           </label>
           <Button
-            onClick={handleGenerateReport}
+            onClick={handlePreviewReport}
             disabled={isGeneratingReport || pins.length === 0}
             size="sm"
             className="flex-1 sm:flex-initial"
@@ -501,9 +529,9 @@ export const InteractiveFloorPlan = ({
             {isGeneratingReport ? (
               <Loader2 className="w-4 h-4 sm:mr-2 animate-spin" />
             ) : (
-              <FileDown className="w-4 h-4 sm:mr-2" />
+              <Eye className="w-4 h-4 sm:mr-2" />
             )}
-            <span className="hidden sm:inline">Export Report</span>
+            <span className="hidden sm:inline">Preview Report</span>
           </Button>
         </div>
       </div>
@@ -574,6 +602,25 @@ export const InteractiveFloorPlan = ({
           onMove={handleMovePin}
           initialData={selectedPin}
           pinNumber={selectedPin.pin_number}
+        />
+      )}
+
+      {/* PDF Preview Dialog */}
+      {pdfPreview && (
+        <DocumentPreviewDialog
+          open={!!pdfPreview}
+          onOpenChange={(open) => {
+            if (!open) {
+              URL.revokeObjectURL(pdfPreview.url);
+              setPdfPreview(null);
+            }
+          }}
+          fileUrl={pdfPreview.url}
+          fileName={pdfPreview.filename}
+          onSaveToDocuments={handleSaveToDocuments}
+          saveLocation="subsection"
+          contextName={subsectionName}
+          isSaving={savingToDocuments}
         />
       )}
     </div>
