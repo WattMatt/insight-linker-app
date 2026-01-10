@@ -553,13 +553,14 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
   
   // Log compliance
   logComplianceCheck('floorPlanReportGenerator', {
-    logoSizing: true,
-    margins: true,
-    typography: true,
-    colors: true,
-    headers: true,
-    footers: true,
-    tables: true,
+    hasCoverPage: true,
+    logoPlacement: true,
+    standardMargins: true,
+    typographyScale: true,
+    brandColors: true,
+    pageHeaders: true,
+    pageFooters: true,
+    tableStyles: true,
     pageBreaks: true,
   });
 

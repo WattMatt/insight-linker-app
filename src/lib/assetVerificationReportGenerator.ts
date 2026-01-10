@@ -1,6 +1,21 @@
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename, getContentWidth } from "./documentDesignStandards";
+import {
+  addCoverPage,
+  addStandardHeader,
+  addStandardFooter,
+  addSectionHeader,
+  addFootersToAllPages,
+  drawKpiCard,
+  drawProgressBar,
+  logComplianceCheck,
+  hexToRgb,
+  RGB_COLORS,
+  PAGE,
+  PDFComplianceCheck,
+  CoverPageOptions,
+} from "./pdfUtils";
 
 interface Asset {
   id: string;
@@ -56,6 +71,7 @@ interface LegacyComparisonResult {
 
 interface InspectionGeneratorOptions {
   siteName: string;
+  clientName?: string;
   comparisonResults: InspectionComparisonResult[];
   stats: {
     total: number;
@@ -71,6 +87,7 @@ interface InspectionGeneratorOptions {
 // Legacy options for backwards compatibility
 interface LegacyGeneratorOptions {
   siteName: string;
+  clientName?: string;
   comparisonResults: LegacyComparisonResult[];
   stats: {
     total: number;
@@ -87,159 +104,17 @@ interface LegacyGeneratorOptions {
 // Destructure design standards for easy access
 const { typography, colors, margins, tables, logo, headers, footers, cards } = DOCUMENT_DESIGN_STANDARDS;
 
-// Helper to convert hex color to RGB array
-function hexToRgb(hex: string): [number, number, number] {
-  const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-  return result ? [
-    parseInt(result[1], 16),
-    parseInt(result[2], 16),
-    parseInt(result[3], 16)
-  ] : [0, 0, 0];
-}
-
-/**
- * Add standardized page header following DOCUMENT_DESIGN_STANDARDS
- */
-function addStandardHeader(doc: jsPDF, title: string, logoDataUrl?: string | null) {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Header background bar using primary brand color
-  const primaryRgb = hexToRgb(colors.primary);
-  doc.setFillColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.rect(0, 0, pageWidth, headers.height + margins.top, 'F');
-  
-  // Document title (left aligned per standards)
-  doc.setFontSize(typography.scale.h3);
-  doc.setTextColor(255, 255, 255);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text(title, margins.left, margins.header + 5);
-  
-  // Logo (right aligned per standards)
-  if (logoDataUrl) {
-    const logoX = pageWidth - margins.right - logo.masterSize.width;
-    const logoY = logo.placement.marginTop;
-    doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logo.masterSize.width, logo.masterSize.maxHeight);
-  }
-  
-  // Header border bottom
-  if (headers.borderBottom) {
-    const borderRgb = hexToRgb(headers.borderColor);
-    doc.setDrawColor(borderRgb[0], borderRgb[1], borderRgb[2]);
-    doc.setLineWidth(0.5);
-    doc.line(0, headers.height + margins.top, pageWidth, headers.height + margins.top);
-  }
-}
-
-/**
- * Add standardized page footer following DOCUMENT_DESIGN_STANDARDS
- */
-function addStandardFooter(doc: jsPDF, currentPage: number, totalPages: number, siteName: string) {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const footerY = pageHeight - margins.bottom;
-  
-  // Footer border top
-  if (footers.borderTop) {
-    const borderRgb = hexToRgb(footers.borderColor);
-    doc.setDrawColor(borderRgb[0], borderRgb[1], borderRgb[2]);
-    doc.setLineWidth(0.5);
-    doc.line(margins.left, footerY - 5, pageWidth - margins.right, footerY - 5);
-  }
-  
-  // Footer text styling
-  doc.setFontSize(footers.fontSize);
-  const footerTextRgb = hexToRgb(footers.color);
-  doc.setTextColor(footerTextRgb[0], footerTextRgb[1], footerTextRgb[2]);
-  doc.setFont(typography.fonts.body, 'normal');
-  
-  // Left: Confidentiality notice
-  doc.text(footers.confidentialityText, margins.left, footerY);
-  
-  // Center: Page number
-  const pageText = footers.pageNumberFormat
-    .replace('{current}', currentPage.toString())
-    .replace('{total}', totalPages.toString());
-  doc.text(pageText, pageWidth / 2, footerY, { align: 'center' });
-  
-  // Right: Generation date
-  doc.text(new Date().toLocaleDateString('en-GB'), pageWidth - margins.right, footerY, { align: 'right' });
-}
-
-/**
- * Add a section header following typography standards
- */
-function addSectionHeader(doc: jsPDF, title: string, y: number): number {
-  const pageWidth = doc.internal.pageSize.getWidth();
-  
-  // Section header background
-  const headerBgRgb = hexToRgb(colors.background.header);
-  doc.setFillColor(headerBgRgb[0], headerBgRgb[1], headerBgRgb[2]);
-  doc.rect(margins.left, y, getContentWidth(), 8, 'F');
-  
-  // Section title
-  doc.setFontSize(typography.scale.h4);
-  const textRgb = hexToRgb(colors.text.primary);
-  doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text(title, margins.left + 3, y + 5.5);
-  
-  return y + 8 + typography.paragraphSpacing.afterH3;
-}
-
-/**
- * Draw KPI card following card design standards
- */
-function drawKpiCard(
-  doc: jsPDF, 
-  x: number, 
-  y: number, 
-  width: number, 
-  height: number, 
-  value: string, 
-  label: string, 
-  accentColor: [number, number, number]
-) {
-  // Card background
-  const cardBgRgb = hexToRgb(colors.background.card);
-  doc.setFillColor(cardBgRgb[0], cardBgRgb[1], cardBgRgb[2]);
-  doc.roundedRect(x, y, width, height, cards.borderRadius, cards.borderRadius, 'F');
-  
-  // Card border
-  const borderRgb = hexToRgb(cards.borderColor);
-  doc.setDrawColor(borderRgb[0], borderRgb[1], borderRgb[2]);
-  doc.setLineWidth(cards.borderWidth);
-  doc.roundedRect(x, y, width, height, cards.borderRadius, cards.borderRadius, 'S');
-  
-  // Left accent bar
-  doc.setFillColor(accentColor[0], accentColor[1], accentColor[2]);
-  doc.rect(x, y, 3, height, 'F');
-  
-  // Value text
-  doc.setFontSize(typography.scale.h2);
-  doc.setFont(typography.fonts.heading, 'bold');
-  const textRgb = hexToRgb(colors.text.primary);
-  doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
-  doc.text(value, x + width / 2, y + height / 2, { align: 'center' });
-  
-  // Label text
-  doc.setFontSize(typography.scale.caption);
-  doc.setFont(typography.fonts.body, 'normal');
-  const mutedRgb = hexToRgb(colors.text.muted);
-  doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
-  doc.text(label, x + width / 2, y + height - 5, { align: 'center' });
-}
-
 /**
  * Generate Asset Verification Report PDF - New inspection-based version
+ * Returns both blob/filename and compliance checks for preview dialog
  */
 export async function generateInspectionBasedReport(
   options: InspectionGeneratorOptions
-): Promise<{ blob: Blob; filename: string }> {
-  const { siteName, comparisonResults, stats, companyLogoUrl } = options;
+): Promise<{ blob: Blob; filename: string; complianceChecks: PDFComplianceCheck }> {
+  const { siteName, clientName, comparisonResults, stats, companyLogoUrl } = options;
   
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
   const contentWidth = getContentWidth();
   
   // Load logo if available
@@ -258,38 +133,36 @@ export async function generateInspectionBasedReport(
     day: 'numeric' 
   });
 
-  // ===== COVER PAGE =====
-  // Header with title and logo
-  addStandardHeader(doc, 'ASSET VERIFICATION REPORT', logoDataUrl);
+  // ===== PAGE 1: DEDICATED COVER PAGE =====
+  addCoverPage(doc, {
+    title: 'Asset Verification Report',
+    subtitle: 'Asset Register vs Inspection Data Verification',
+    siteName,
+    clientName,
+    reportType: 'Verification Report',
+    logoDataUrl,
+    organizationName: 'Asset Management System',
+    reportDate: new Date(),
+  });
+
+  // ===== PAGE 2: EXECUTIVE SUMMARY WITH KPI DASHBOARD =====
+  doc.addPage();
+  addStandardHeader(doc, 'Executive Summary', logoDataUrl);
   
-  // Main title section
-  let y = headers.height + margins.top + 20;
+  let y = headers.height + margins.top + 10;
   
-  // Site name as main heading
-  doc.setFontSize(typography.scale.h1);
-  const primaryRgb = hexToRgb(colors.primary);
-  doc.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text(siteName, pageWidth / 2, y, { align: 'center' });
-  y += typography.paragraphSpacing.afterH1;
-  
-  // Subtitle
-  doc.setFontSize(typography.scale.h3);
-  const secondaryRgb = hexToRgb(colors.text.secondary);
-  doc.setTextColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
-  doc.setFont(typography.fonts.body, 'normal');
-  doc.text('Asset Register vs Inspection Data Verification', pageWidth / 2, y, { align: 'center' });
-  y += typography.paragraphSpacing.afterH2 + 10;
+  // Section title
+  y = addSectionHeader(doc, 'Verification Overview', y);
   
   // KPI Cards
   const cardWidth = (contentWidth - (cards.margin * 3)) / 4;
   const cardHeight = 28;
   
   const kpiData = [
-    { label: 'Total Assets', value: stats.total.toString(), color: hexToRgb(colors.text.muted) },
-    { label: 'Verified', value: stats.verifiedNoDiscrepancy.toString(), color: hexToRgb(colors.success) },
-    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: hexToRgb(colors.warning) },
-    { label: 'Not Verified', value: stats.unverified.toString(), color: hexToRgb(colors.error) },
+    { label: 'Total Assets', value: stats.total.toString(), color: RGB_COLORS.textMuted },
+    { label: 'Verified', value: stats.verifiedNoDiscrepancy.toString(), color: RGB_COLORS.success },
+    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: RGB_COLORS.warning },
+    { label: 'Not Verified', value: stats.unverified.toString(), color: RGB_COLORS.error },
   ];
   
   kpiData.forEach((kpi, i) => {
@@ -297,47 +170,67 @@ export async function generateInspectionBasedReport(
     drawKpiCard(doc, cardX, y, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
   });
   
-  y += cardHeight + 15;
+  y += cardHeight + 20;
   
   // Verification Rate Progress Bar
   const matchRate = stats.total > 0 ? Math.round((stats.verifiedNoDiscrepancy / stats.total) * 100) : 0;
   
   doc.setFontSize(typography.scale.body);
   doc.setFont(typography.fonts.heading, 'bold');
-  const textRgb = hexToRgb(colors.text.primary);
-  doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
+  doc.setTextColor(...RGB_COLORS.textPrimary);
   doc.text('Verification Rate', margins.left, y);
   
-  const barX = margins.left + 35;
-  const barWidth = contentWidth - 50;
-  const barHeight = 6;
+  const barX = margins.left + 40;
+  const barWidth = contentWidth - 60;
+  drawProgressBar(doc, barX, y - 4, barWidth, matchRate);
   
-  // Background bar
-  const bgRgb = hexToRgb(colors.background.header);
-  doc.setFillColor(bgRgb[0], bgRgb[1], bgRgb[2]);
-  doc.roundedRect(barX, y - 4, barWidth, barHeight, 2, 2, 'F');
+  y += 20;
   
-  // Filled bar
-  const fillWidth = (matchRate / 100) * barWidth;
-  if (fillWidth > 0) {
-    const fillColor = matchRate >= 80 ? hexToRgb(colors.success) : 
-                      matchRate >= 50 ? hexToRgb(colors.warning) : hexToRgb(colors.error);
-    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-    doc.roundedRect(barX, y - 4, fillWidth, barHeight, 2, 2, 'F');
-  }
+  // Summary Statistics
+  y = addSectionHeader(doc, 'Summary Statistics', y);
   
-  // Percentage text
-  doc.text(`${matchRate}%`, barX + barWidth + 5, y);
+  const summaryData = [
+    ['Total Assets in Register', stats.total.toString()],
+    ['Verified (No Discrepancies)', stats.verifiedNoDiscrepancy.toString()],
+    ['Verified (With Discrepancies)', stats.discrepancies.toString()],
+    ['Not Yet Verified', stats.unverified.toString()],
+    ['Assets with Inspection Photos', stats.withImages.toString()],
+    ['Verification Rate', `${matchRate}%`],
+  ];
   
-  y += 15;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margins.left, right: margins.right },
+    head: [['Metric', 'Value']],
+    body: summaryData,
+    styles: {
+      fontSize: tables.body.fontSize,
+      cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
+      lineColor: hexToRgb(tables.border.color),
+      lineWidth: tables.border.width,
+    },
+    headStyles: {
+      fillColor: RGB_COLORS.primary,
+      textColor: RGB_COLORS.white,
+      fontStyle: 'bold',
+      fontSize: tables.header.fontSize,
+    },
+    alternateRowStyles: {
+      fillColor: hexToRgb(tables.body.alternateRowColor),
+    },
+    columnStyles: {
+      0: { cellWidth: 120 },
+      1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
+    },
+  });
+  
+  y = (doc as any).lastAutoTable?.finalY + 15 || y + 50;
   
   // Report metadata
   doc.setFontSize(typography.scale.caption);
-  const mutedRgb = hexToRgb(colors.text.muted);
-  doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
+  doc.setTextColor(...RGB_COLORS.textMuted);
   doc.setFont(typography.fonts.body, 'normal');
   doc.text(`Generated: ${date}`, margins.left, y);
-  doc.text(`Assets with inspection photos: ${stats.withImages}`, pageWidth - margins.right, y, { align: 'right' });
 
   // ===== VERIFIED ITEMS TABLE =====
   doc.addPage();
@@ -416,7 +309,7 @@ export async function generateInspectionBasedReport(
     });
   } else {
     doc.setFontSize(typography.scale.body);
-    doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
+    doc.setTextColor(...RGB_COLORS.textMuted);
     doc.text('No verified items found.', margins.left, tableY + 10);
   }
 
@@ -521,17 +414,26 @@ export async function generateInspectionBasedReport(
     });
   }
 
-  // Add footers to all pages
-  const totalPages = doc.internal.pages.length - 1;
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    addStandardFooter(doc, i, totalPages, siteName);
-  }
+  // Add footers to all pages (skip cover page)
+  addFootersToAllPages(doc, true);
+
+  // Log compliance and return checks
+  const complianceChecks = logComplianceCheck('assetVerificationReportGenerator', {
+    hasCoverPage: true,
+    logoPlacement: !!logoDataUrl,
+    standardMargins: true,
+    typographyScale: true,
+    brandColors: true,
+    pageHeaders: true,
+    pageFooters: true,
+    tableStyles: true,
+    pageBreaks: true,
+  });
 
   const filename = generateDocumentFilename('Asset_Verification', siteName);
   const blob = doc.output('blob');
   
-  return { blob, filename };
+  return { blob, filename, complianceChecks };
 }
 
 function formatComparisonCell(

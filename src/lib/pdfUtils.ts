@@ -159,6 +159,202 @@ export function addCoverPageHeader(
   return y;
 }
 
+/**
+ * Options for the cover page
+ */
+export interface CoverPageOptions {
+  title: string;
+  subtitle?: string;
+  siteName: string;
+  clientName?: string;
+  reportType?: string;
+  logoDataUrl?: string | null;
+  organizationName?: string;
+  reportDate?: Date;
+  referenceNumber?: string;
+  preparedBy?: string;
+}
+
+/**
+ * Add a professional branded cover page following DOCUMENT_DESIGN_STANDARDS
+ * This is a DEDICATED cover page - no data content, just branding and metadata
+ */
+export function addCoverPage(
+  doc: jsPDF,
+  options: CoverPageOptions
+): void {
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const {
+    title,
+    subtitle,
+    siteName,
+    clientName,
+    reportType = 'Report',
+    logoDataUrl,
+    organizationName = 'Asset Management System',
+    reportDate = new Date(),
+    referenceNumber,
+    preparedBy,
+  } = options;
+
+  // Background decorative elements
+  // Top accent bar (primary brand color)
+  doc.setFillColor(...RGB_COLORS.primary);
+  doc.rect(0, 0, pageWidth, 8, 'F');
+  
+  // Bottom accent bar
+  doc.setFillColor(...RGB_COLORS.primary);
+  doc.rect(0, pageHeight - 8, pageWidth, 8, 'F');
+  
+  let y = 40;
+  
+  // ===== LOGO SECTION =====
+  if (logoDataUrl) {
+    try {
+      const logoWidth = logo.masterSize.width * 2;
+      const logoHeight = logo.masterSize.maxHeight * 2;
+      doc.addImage(logoDataUrl, 'PNG', (pageWidth - logoWidth) / 2, y, logoWidth, logoHeight);
+      y += logoHeight + 20;
+    } catch (e) {
+      console.warn('Failed to add logo to cover page:', e);
+      y += 10;
+    }
+  } else {
+    // Placeholder for organization name if no logo
+    doc.setFontSize(typography.scale.h3);
+    doc.setTextColor(...RGB_COLORS.textMuted);
+    doc.setFont(typography.fonts.heading, 'bold');
+    doc.text(organizationName, pageWidth / 2, y, { align: 'center' });
+    y += 25;
+  }
+  
+  // ===== REPORT TYPE BADGE =====
+  const badgeWidth = 60;
+  const badgeHeight = 10;
+  const badgeX = (pageWidth - badgeWidth) / 2;
+  doc.setFillColor(...RGB_COLORS.bgHeader);
+  doc.roundedRect(badgeX, y, badgeWidth, badgeHeight, 2, 2, 'F');
+  doc.setFontSize(typography.scale.caption);
+  doc.setTextColor(...RGB_COLORS.textSecondary);
+  doc.setFont(typography.fonts.body, 'bold');
+  doc.text(reportType.toUpperCase(), pageWidth / 2, y + 6.5, { align: 'center' });
+  y += badgeHeight + 15;
+  
+  // ===== MAIN TITLE =====
+  doc.setFontSize(28);
+  doc.setTextColor(...RGB_COLORS.primary);
+  doc.setFont(typography.fonts.heading, 'bold');
+  
+  // Split long titles
+  const titleLines = doc.splitTextToSize(title, pageWidth - 40);
+  titleLines.forEach((line: string) => {
+    doc.text(line, pageWidth / 2, y, { align: 'center' });
+    y += 12;
+  });
+  y += 5;
+  
+  // Decorative line under title
+  doc.setDrawColor(...RGB_COLORS.primary);
+  doc.setLineWidth(1);
+  doc.line(pageWidth / 2 - 40, y, pageWidth / 2 + 40, y);
+  y += 15;
+  
+  // ===== SUBTITLE =====
+  if (subtitle) {
+    doc.setFontSize(typography.scale.h3);
+    doc.setTextColor(...RGB_COLORS.textSecondary);
+    doc.setFont(typography.fonts.body, 'normal');
+    doc.text(subtitle, pageWidth / 2, y, { align: 'center' });
+    y += 15;
+  }
+  
+  // ===== SITE & CLIENT INFO BOX =====
+  y += 10;
+  const infoBoxWidth = 120;
+  const infoBoxX = (pageWidth - infoBoxWidth) / 2;
+  const infoBoxY = y;
+  let infoBoxHeight = 30;
+  
+  if (clientName) infoBoxHeight += 12;
+  
+  // Info box background
+  doc.setFillColor(...RGB_COLORS.bgCard);
+  doc.setDrawColor(...RGB_COLORS.cardBorder);
+  doc.setLineWidth(0.5);
+  doc.roundedRect(infoBoxX, infoBoxY, infoBoxWidth, infoBoxHeight, 3, 3, 'FD');
+  
+  // Left accent
+  doc.setFillColor(...RGB_COLORS.primary);
+  doc.rect(infoBoxX, infoBoxY + 3, 3, infoBoxHeight - 6, 'F');
+  
+  y = infoBoxY + 12;
+  
+  // Site name
+  doc.setFontSize(typography.scale.body);
+  doc.setTextColor(...RGB_COLORS.textMuted);
+  doc.setFont(typography.fonts.body, 'normal');
+  doc.text('SITE', infoBoxX + 10, y);
+  doc.setTextColor(...RGB_COLORS.textPrimary);
+  doc.setFont(typography.fonts.heading, 'bold');
+  doc.text(siteName, infoBoxX + 30, y);
+  y += 12;
+  
+  // Client name (if provided)
+  if (clientName) {
+    doc.setFontSize(typography.scale.body);
+    doc.setTextColor(...RGB_COLORS.textMuted);
+    doc.setFont(typography.fonts.body, 'normal');
+    doc.text('CLIENT', infoBoxX + 10, y);
+    doc.setTextColor(...RGB_COLORS.textPrimary);
+    doc.setFont(typography.fonts.heading, 'bold');
+    doc.text(clientName, infoBoxX + 35, y);
+    y += 12;
+  }
+  
+  y = infoBoxY + infoBoxHeight + 30;
+  
+  // ===== METADATA SECTION =====
+  const metadataY = pageHeight - 80;
+  
+  // Reference number (if provided)
+  if (referenceNumber) {
+    doc.setFontSize(typography.scale.caption);
+    doc.setTextColor(...RGB_COLORS.textMuted);
+    doc.setFont(typography.fonts.mono, 'normal');
+    doc.text(`REF: ${referenceNumber}`, pageWidth / 2, metadataY - 15, { align: 'center' });
+  }
+  
+  // Generation date
+  const formattedDate = reportDate.toLocaleDateString('en-GB', {
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric',
+  });
+  
+  doc.setFontSize(typography.scale.body);
+  doc.setTextColor(...RGB_COLORS.textSecondary);
+  doc.setFont(typography.fonts.body, 'normal');
+  doc.text(`Generated: ${formattedDate}`, pageWidth / 2, metadataY, { align: 'center' });
+  
+  // Prepared by
+  if (preparedBy) {
+    doc.text(`Prepared by: ${preparedBy}`, pageWidth / 2, metadataY + 8, { align: 'center' });
+  }
+  
+  // ===== CONFIDENTIALITY NOTICE =====
+  const footerY = pageHeight - 25;
+  doc.setFontSize(footers.fontSize);
+  doc.setTextColor(...RGB_COLORS.textMuted);
+  doc.setFont(typography.fonts.body, 'italic');
+  doc.text(footers.confidentialityText, pageWidth / 2, footerY, { align: 'center' });
+  
+  // Organization name at bottom
+  doc.setFontSize(typography.scale.caption);
+  doc.setFont(typography.fonts.body, 'normal');
+  doc.text(organizationName, pageWidth / 2, footerY + 8, { align: 'center' });
+}
+
 // ============================================================================
 // FOOTER FUNCTIONS
 // ============================================================================
@@ -619,32 +815,54 @@ export function drawProgressBar(
 // ============================================================================
 
 export interface PDFComplianceCheck {
-  logoSizing: boolean;
-  margins: boolean;
-  typography: boolean;
-  colors: boolean;
-  headers: boolean;
-  footers: boolean;
-  tables: boolean;
+  hasCoverPage: boolean;
+  logoPlacement: boolean;
+  standardMargins: boolean;
+  typographyScale: boolean;
+  brandColors: boolean;
+  pageHeaders: boolean;
+  pageFooters: boolean;
+  tableStyles: boolean;
   pageBreaks: boolean;
 }
 
 /**
- * Log compliance check for debugging
+ * Get default compliance checks (all false)
+ */
+export function getDefaultComplianceChecks(): PDFComplianceCheck {
+  return {
+    hasCoverPage: false,
+    logoPlacement: false,
+    standardMargins: false,
+    typographyScale: false,
+    brandColors: false,
+    pageHeaders: false,
+    pageFooters: false,
+    tableStyles: false,
+    pageBreaks: false,
+  };
+}
+
+/**
+ * Create compliance checks object with passed checks set to true
+ */
+export function createComplianceChecks(passedChecks: (keyof PDFComplianceCheck)[]): PDFComplianceCheck {
+  const checks = getDefaultComplianceChecks();
+  passedChecks.forEach(check => {
+    checks[check] = true;
+  });
+  return checks;
+}
+
+/**
+ * Log compliance check for debugging and return the check results
  */
 export function logComplianceCheck(
   generatorName: string,
   checks: Partial<PDFComplianceCheck>
-): void {
+): PDFComplianceCheck {
   const allChecks: PDFComplianceCheck = {
-    logoSizing: false,
-    margins: false,
-    typography: false,
-    colors: false,
-    headers: false,
-    footers: false,
-    tables: false,
-    pageBreaks: false,
+    ...getDefaultComplianceChecks(),
     ...checks,
   };
   
@@ -652,6 +870,26 @@ export function logComplianceCheck(
   const total = Object.keys(allChecks).length;
   
   console.log(`[PDF Compliance] ${generatorName}: ${passed}/${total} checks passed`, allChecks);
+  
+  return allChecks;
+}
+
+/**
+ * Get compliance check label for display
+ */
+export function getComplianceCheckLabel(key: keyof PDFComplianceCheck): string {
+  const labels: Record<keyof PDFComplianceCheck, string> = {
+    hasCoverPage: 'Cover Page',
+    logoPlacement: 'Logo Placement',
+    standardMargins: 'Standard Margins',
+    typographyScale: 'Typography Scale',
+    brandColors: 'Brand Colors',
+    pageHeaders: 'Page Headers',
+    pageFooters: 'Page Footers',
+    tableStyles: 'Table Styling',
+    pageBreaks: 'Page Breaks',
+  };
+  return labels[key];
 }
 
 // ============================================================================
