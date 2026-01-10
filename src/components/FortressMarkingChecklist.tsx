@@ -11,6 +11,20 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  drawProgressBar,
+  RGB_COLORS,
+  PAGE,
+  logComplianceCheck,
+  PDFComplianceCheck,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS } from "@/lib/documentDesignStandards";
+
+const { margins, typography, tables } = DOCUMENT_DESIGN_STANDARDS;
 
 interface ChecklistItem {
   id: string;
@@ -37,6 +51,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [complianceChecks, setComplianceChecks] = useState<PDFComplianceCheck | null>(null);
 
   useEffect(() => {
     initializeChecklist();
@@ -225,39 +240,76 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     return acc;
   }, {} as Record<string, ChecklistItem[]>);
 
-  const generatePDFDocument = (): { doc: jsPDF; fileName: string; blob: Blob } => {
+  const generatePDFDocument = (): { doc: jsPDF; fileName: string; blob: Blob; complianceChecks: PDFComplianceCheck } => {
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
     
-    // Title
-    doc.setFontSize(18);
-    doc.text('Fortress Site Close-Out Checklist', pageWidth / 2, 20, { align: 'center' });
+    // ===== COVER PAGE =====
+    addCoverPage(doc, {
+      title: 'Fortress Site Close-Out Checklist',
+      subtitle: `Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`,
+      siteName: 'Site Checklist',
+      reportType: 'Close-Out Checklist',
+      organizationName: 'Fortress',
+      reportDate: new Date(),
+    });
+
+    // ===== SUMMARY PAGE =====
+    doc.addPage();
+    addStandardHeader(doc, 'Checklist Summary', null);
     
-    // Summary
-    doc.setFontSize(12);
-    doc.text(`Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`, 14, 35);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, 14, 42);
+    let yPos = PAGE.contentStartY;
 
-    let yPosition = 52;
+    // Progress bar
+    doc.setFontSize(typography.scale.body);
+    doc.setFont(typography.fonts.heading, 'bold');
+    doc.setTextColor(...RGB_COLORS.textPrimary);
+    doc.text('Overall Progress', margins.left, yPos);
+    
+    drawProgressBar(doc, margins.left + 40, yPos - 4, PAGE.contentWidth - 60, completionPercentage);
+    yPos += 20;
 
-    // Generate table data for each section
+    // Summary stats
+    yPos = addSectionHeader(doc, 'Summary Statistics', yPos);
+    
+    autoTable(doc, {
+      startY: yPos,
+      head: [['Metric', 'Value']],
+      body: [
+        ['Total Items', totalItems.toString()],
+        ['Completed', checkedItems.toString()],
+        ['Pending', (totalItems - checkedItems).toString()],
+        ['Not Applicable', notApplicableCount.toString()],
+        ['Completion Rate', `${completionPercentage}%`],
+      ],
+      theme: 'grid',
+      headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
+      styles: { fontSize: 10, cellPadding: 4 },
+      margin: { left: margins.left, right: margins.right },
+      columnStyles: {
+        0: { cellWidth: 100 },
+        1: { cellWidth: 50, halign: 'center', fontStyle: 'bold' }
+      }
+    });
+
+    yPos = (doc as any).lastAutoTable.finalY + 15;
+
+    // ===== SECTION DETAIL PAGES =====
     Object.entries(sections).forEach(([sectionName, items]) => {
       const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
       const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
       const sectionTotal = sectionApplicable.length;
       const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
 
-      // Section header
-      if (yPosition > 250) {
+      // Check if we need a new page
+      if (yPos > pageHeight - 80) {
         doc.addPage();
-        yPosition = 20;
+        addStandardHeader(doc, 'Checklist Details', null);
+        yPos = PAGE.contentStartY;
       }
 
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.text(`${sectionName} (${sectionProgress}%)`, 14, yPosition);
-      yPosition += 8;
+      yPos = addSectionHeader(doc, `${sectionName} (${sectionProgress}%)`, yPos);
 
       // Section items table
       const tableData = items.map(item => [
@@ -267,26 +319,62 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       ]);
 
       autoTable(doc, {
-        startY: yPosition,
+        startY: yPos,
         head: [['Status', 'Item', 'Progress']],
         body: tableData,
         theme: 'grid',
-        headStyles: { fillColor: [59, 130, 246] },
+        headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
         columnStyles: {
           0: { cellWidth: 15, halign: 'center' },
           1: { cellWidth: 130 },
           2: { cellWidth: 30, halign: 'center' }
         },
         styles: { fontSize: 9 },
+        margin: { left: margins.left, right: margins.right },
+        didParseCell: (data) => {
+          if (data.section === 'body' && data.column.index === 0) {
+            const value = data.cell.raw as string;
+            if (value === '✓') {
+              data.cell.styles.textColor = RGB_COLORS.success;
+              data.cell.styles.fontStyle = 'bold';
+            } else if (value === 'N/A') {
+              data.cell.styles.textColor = RGB_COLORS.textMuted;
+            }
+          }
+          if (data.section === 'body' && data.column.index === 2) {
+            const value = data.cell.raw as string;
+            if (value === 'Complete') {
+              data.cell.styles.textColor = RGB_COLORS.success;
+            } else if (value === 'Pending') {
+              data.cell.styles.textColor = RGB_COLORS.warning;
+            }
+          }
+        }
       });
 
-      yPosition = (doc as any).lastAutoTable.finalY + 10;
+      yPos = (doc as any).lastAutoTable.finalY + 15;
+    });
+
+    // Add footers to all pages (skip cover page)
+    addFootersToAllPages(doc, true);
+
+    // Log compliance
+    const checks = logComplianceCheck('FortressMarkingChecklist', {
+      hasCoverPage: true,
+      logoPlacement: false,
+      standardMargins: true,
+      typographyScale: true,
+      brandColors: true,
+      pageHeaders: true,
+      pageFooters: true,
+      tableStyles: true,
+      pageBreaks: true,
     });
 
     const fileName = `fortress-checklist-${new Date().getTime()}.pdf`;
     const blob = doc.output('blob');
     
-    return { doc, fileName, blob };
+    return { doc, fileName, blob, complianceChecks: checks };
   };
 
   const handlePreviewReport = async () => {
@@ -298,6 +386,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
       setPdfBlob(result.blob);
+      setComplianceChecks(result.complianceChecks);
       setPreviewOpen(true);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -467,6 +556,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
         saveLocation="site"
         contextName="Site Documents"
         isSaving={saving}
+        complianceChecks={complianceChecks || undefined}
       />
     </div>
   );
