@@ -93,17 +93,11 @@ export function createCoverPage(
     });
   }
   
-  // Divider line
+  // Divider line - using simple text separator instead of canvas
   content.push({
-    canvas: [{
-      type: 'line',
-      x1: CONTENT_WIDTH_PT * 0.25,
-      y1: 0,
-      x2: CONTENT_WIDTH_PT * 0.75,
-      y2: 0,
-      lineWidth: 1,
-      lineColor: COLORS.accent,
-    }],
+    text: '━━━━━━━━━━━━━━━━━━━━',
+    alignment: 'center',
+    color: COLORS.accent,
     margin: [0, mmToPt(10), 0, mmToPt(15)],
   });
   
@@ -224,17 +218,11 @@ export function createPageHeader(
       margin: [mmToPt(15), mmToPt(10), mmToPt(15), mmToPt(5)],
     });
     
-    // Header border line
+    // Header border line - using horizontal rule instead of canvas
     headerContent.push({
-      canvas: [{
-        type: 'line',
-        x1: mmToPt(15),
-        y1: 0,
-        x2: CONTENT_WIDTH_PT + mmToPt(15),
-        y2: 0,
-        lineWidth: 0.5,
-        lineColor: COLORS.border,
-      }],
+      text: '',
+      margin: [mmToPt(15), 0, mmToPt(15), 0],
+      border: [false, false, false, true],
     });
     
     return headerContent;
@@ -255,17 +243,11 @@ export function createPageFooter(customLeftText?: string): DynamicContent {
     
     const footerContent: Content[] = [];
     
-    // Footer border line
+    // Footer border line - using horizontal rule instead of canvas  
     footerContent.push({
-      canvas: [{
-        type: 'line',
-        x1: mmToPt(15),
-        y1: 0,
-        x2: CONTENT_WIDTH_PT + mmToPt(15),
-        y2: 0,
-        lineWidth: 0.5,
-        lineColor: COLORS.border,
-      }],
+      text: '',
+      margin: [mmToPt(15), 0, mmToPt(15), 0],
+      border: [false, true, false, false],
     });
     
     // Footer content
@@ -672,15 +654,9 @@ export function createSpacer(heightMm: number = 10): Content {
  */
 export function createDivider(): Content {
   return {
-    canvas: [{
-      type: 'line',
-      x1: 0,
-      y1: 0,
-      x2: CONTENT_WIDTH_PT,
-      y2: 0,
-      lineWidth: 0.5,
-      lineColor: COLORS.border,
-    }],
+    text: '────────────────────────────────────────',
+    color: COLORS.border,
+    alignment: 'center',
     margin: [0, mmToPt(8), 0, mmToPt(8)],
   };
 }
