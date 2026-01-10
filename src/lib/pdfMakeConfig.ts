@@ -7,7 +7,7 @@
  */
 
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
 // pdfmake types - use 'any' for complex types until proper type definitions are available
 type TDocumentDefinitions = any;
@@ -17,19 +17,57 @@ type Content = any;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 
 // Initialize pdfmake with bundled fonts
-// pdfmake v0.3.x bundles Roboto fonts in vfs_fonts
+// pdfmake v0.3.x requires explicit font setup
 const pdfMakeInstance = pdfMake as any;
+const fontsModule = pdfFonts as any;
 
-// Initialize VFS - handle different module formats
-try {
-  if (pdfFonts && (pdfFonts as any).pdfMake?.vfs) {
-    pdfMakeInstance.vfs = (pdfFonts as any).pdfMake.vfs;
-  } else if (pdfFonts && typeof pdfFonts === 'object') {
-    // For ES module default export
-    pdfMakeInstance.vfs = pdfFonts;
+// Try multiple initialization strategies for different module formats
+const initializeFonts = () => {
+  // Strategy 1: pdfMake.vfs format (common in older versions)
+  if (fontsModule?.pdfMake?.vfs) {
+    pdfMakeInstance.vfs = fontsModule.pdfMake.vfs;
+    console.log('Fonts loaded via pdfMake.vfs');
+    return true;
   }
   
-  // Define fonts explicitly for pdfmake
+  // Strategy 2: default.pdfMake.vfs (ES module default export)
+  if (fontsModule?.default?.pdfMake?.vfs) {
+    pdfMakeInstance.vfs = fontsModule.default.pdfMake.vfs;
+    console.log('Fonts loaded via default.pdfMake.vfs');
+    return true;
+  }
+  
+  // Strategy 3: Direct vfs object
+  if (fontsModule?.vfs) {
+    pdfMakeInstance.vfs = fontsModule.vfs;
+    console.log('Fonts loaded via direct vfs');
+    return true;
+  }
+  
+  // Strategy 4: default.vfs
+  if (fontsModule?.default?.vfs) {
+    pdfMakeInstance.vfs = fontsModule.default.vfs;
+    console.log('Fonts loaded via default.vfs');
+    return true;
+  }
+  
+  // Strategy 5: Entire default as vfs (some bundlers)
+  if (fontsModule?.default && typeof fontsModule.default === 'object' && Object.keys(fontsModule.default).length > 0) {
+    pdfMakeInstance.vfs = fontsModule.default;
+    console.log('Fonts loaded via entire default object');
+    return true;
+  }
+  
+  console.error('Could not initialize pdfMake fonts - all strategies failed');
+  console.log('Available fontsModule keys:', Object.keys(fontsModule || {}));
+  return false;
+};
+
+// Initialize fonts on module load
+const fontsInitialized = initializeFonts();
+
+// Define font families if fonts were loaded
+if (fontsInitialized && pdfMakeInstance.vfs) {
   pdfMakeInstance.fonts = {
     Roboto: {
       normal: 'Roboto-Regular.ttf',
@@ -38,10 +76,6 @@ try {
       bolditalics: 'Roboto-MediumItalic.ttf'
     }
   };
-  
-  console.log('pdfMake fonts initialized');
-} catch (e) {
-  console.warn('pdfMake font initialization warning:', e);
 }
 
 // ============================================================================
@@ -358,22 +392,15 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
     try {
       console.log('Creating PDF with pdfmake...');
       
-      // Ensure fonts are properly configured
+      // Verify fonts are loaded
       const instance = pdfMake as any;
-      if (!instance.vfs) {
-        console.warn('VFS not found, attempting to reinitialize...');
-        try {
-          // Dynamic reimport as fallback
-          const fonts = require('pdfmake/build/vfs_fonts');
-          if (fonts?.pdfMake?.vfs) {
-            instance.vfs = fonts.pdfMake.vfs;
-          } else if (fonts.default) {
-            instance.vfs = fonts.default;
-          }
-        } catch (e) {
-          console.error('Failed to load fonts:', e);
-        }
+      if (!instance.vfs || Object.keys(instance.vfs).length === 0) {
+        console.error('pdfMake VFS not initialized');
+        reject(new Error('PDF fonts not loaded. Please refresh the page and try again.'));
+        return;
       }
+      
+      console.log('VFS keys count:', Object.keys(instance.vfs).length);
       
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
       
@@ -381,7 +408,7 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
       const timeout = setTimeout(() => {
         console.error('PDF generation timed out after 60 seconds');
         reject(new Error('PDF generation timed out. Please try again.'));
-      }, 60000); // Increased timeout to 60 seconds
+      }, 60000);
       
       pdfDocGenerator.getBase64((base64Data: string) => {
         clearTimeout(timeout);
