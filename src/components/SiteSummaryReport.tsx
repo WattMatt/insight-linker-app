@@ -16,8 +16,10 @@ import {
   drawKpiCard,
   drawProgressBar,
   logComplianceCheck,
+  getTableOptionsWithSafeMargins,
   RGB_COLORS,
   PAGE,
+  SAFE_BOTTOM_MARGIN,
   PDFComplianceCheck,
 } from "@/lib/pdfUtils";
 import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
@@ -409,23 +411,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     ];
     
     autoTable(doc, {
-      startY: cardY,
-      margin: { left: margins.left, right: margins.right },
-      tableWidth: contentWidth,
+      ...getTableOptionsWithSafeMargins(doc, cardY, 'Summary Statistics', null, 'Asset Management System'),
       head: [['Metric', 'Value']],
       body: summaryData,
-      styles: {
-        fontSize: 9,
-        cellPadding: { horizontal: 4, vertical: 3 },
-      },
-      headStyles: {
-        fillColor: RGB_COLORS.primary,
-        textColor: RGB_COLORS.white,
-        fontStyle: 'bold',
-      },
-      alternateRowStyles: {
-        fillColor: RGB_COLORS.tableAltRow,
-      },
       columnStyles: {
         0: { cellWidth: contentWidth - 40 },
         1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },

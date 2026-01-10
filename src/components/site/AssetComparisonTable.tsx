@@ -30,6 +30,7 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
+import { PDFComplianceCheck } from "@/lib/pdfUtils";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 
@@ -116,7 +117,7 @@ export const AssetComparisonTable = ({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "verified" | "discrepancies" | "unverified">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string; complianceChecks: PDFComplianceCheck } | null>(null);
   const [savingToDocuments, setSavingToDocuments] = useState(false);
   const siteId = useMemo(() => {
     // Extract siteId from URL or other context if available
@@ -340,7 +341,12 @@ export const AssetComparisonTable = ({
       });
       
       const url = URL.createObjectURL(result.blob);
-      setPdfPreview({ url, blob: result.blob, filename: result.filename });
+      setPdfPreview({ 
+        url, 
+        blob: result.blob, 
+        filename: result.filename,
+        complianceChecks: result.complianceChecks 
+      });
     } catch (error) {
       console.error("Error generating preview:", error);
       toast.error("Failed to generate preview");
@@ -728,6 +734,7 @@ export const AssetComparisonTable = ({
           saveLocation="site"
           contextName={siteName}
           isSaving={savingToDocuments}
+          complianceChecks={pdfPreview.complianceChecks}
         />
       )}
     </div>
