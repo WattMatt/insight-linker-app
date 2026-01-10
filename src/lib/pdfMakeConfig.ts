@@ -472,10 +472,11 @@ export function openPdfInNewWindow(docDefinition: TDocumentDefinitions): void {
 
 /**
  * Test PDF generation with a simple document
- * Opens a simple PDF in a new tab to verify pdfmake is working
+ * Downloads a simple PDF to verify pdfmake is working
  */
 export function testPdfGeneration(): void {
   console.log('Testing PDF generation...');
+  alert('Starting PDF test - will download a test PDF file');
   
   const testDoc: TDocumentDefinitions = {
     content: [
@@ -490,10 +491,13 @@ export function testPdfGeneration(): void {
   
   try {
     const pdfDocGenerator = pdfMake.createPdf(testDoc);
-    pdfDocGenerator.open();
-    console.log('Test PDF opened in new tab');
+    // Use download instead of open to avoid popup blocker issues
+    pdfDocGenerator.download('test-pdf.pdf');
+    console.log('Test PDF download started');
+    alert('PDF download started! Check your downloads folder.');
   } catch (error) {
     console.error('Test PDF generation failed:', error);
+    alert('PDF generation failed: ' + (error instanceof Error ? error.message : String(error)));
   }
 }
 
