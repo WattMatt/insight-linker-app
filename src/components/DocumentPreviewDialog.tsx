@@ -381,19 +381,19 @@ export function DocumentPreviewDialog({
         <div className="flex-1 overflow-hidden relative">
           <div 
             ref={containerRef}
-            className={`h-full overflow-hidden bg-muted/50 ${showCompliancePanel ? 'mr-64' : ''}`}
+            className={`h-full overflow-auto bg-muted/50 ${showCompliancePanel ? 'mr-64' : ''}`}
             onMouseDown={handleMouseDown}
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
             onAuxClick={handleAuxClick}
-            onWheel={handleWheel}
-            style={{ cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default') }}
+            onWheel={isPdf ? undefined : handleWheel}
+            style={{ cursor: isDragging ? 'grabbing' : (scale > 1 && !isPdf ? 'grab' : 'default') }}
           >
             <div 
               className="flex items-center justify-center min-h-full p-4"
-              style={{
-                transform: `translate(${position.x}px, ${position.y}px) scale(${isPdf ? 1 : scale})`,
+              style={isPdf ? undefined : {
+                transform: `translate(${position.x}px, ${position.y}px) scale(${scale})`,
                 transformOrigin: 'center center',
                 transition: isDragging ? 'none' : 'transform 0.1s ease-out'
               }}
