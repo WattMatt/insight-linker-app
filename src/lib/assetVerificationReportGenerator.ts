@@ -33,6 +33,7 @@ import {
   createStatusBadge,
 } from "./pdfTemplates";
 
+// Asset interface - matches AssetComparisonTable
 interface Asset {
   id: string;
   premises_id: string;
@@ -43,6 +44,7 @@ interface Asset {
   asset_category: string;
 }
 
+// InspectionMatch interface - matches InspectionTenantMatch from AssetComparisonTable
 interface InspectionMatch {
   inspectionId: string;
   inspectionTitle: string;
@@ -58,8 +60,8 @@ interface InspectionMatch {
   breakerImage?: string;
 }
 
-// New interface for inspection-based comparison
-export interface InspectionComparisonResult {
+// ComparisonResult interface - matches AssetComparisonTable.ComparisonResult
+export interface ComparisonResult {
   asset: Asset;
   inspectionMatch: InspectionMatch | null;
   verified: boolean;
@@ -67,6 +69,9 @@ export interface InspectionComparisonResult {
   breakerMatch: "match" | "mismatch" | "na";
   hasDiscrepancy: boolean;
 }
+
+// Legacy alias for backwards compatibility
+export type InspectionComparisonResult = ComparisonResult;
 
 // Legacy interface for backwards compatibility
 interface LegacyComparisonResult {
@@ -85,13 +90,10 @@ interface LegacyComparisonResult {
   potentialAssetMatch?: Asset;
 }
 
-// ComparisonResult from AssetComparisonTable - alias for compatibility
-export type ComparisonResult = InspectionComparisonResult;
-
 interface InspectionGeneratorOptions {
   siteName: string;
   clientName?: string;
-  comparisonResults: InspectionComparisonResult[];
+  comparisonResults: ComparisonResult[];
   stats: {
     total: number;
     verified: number;
