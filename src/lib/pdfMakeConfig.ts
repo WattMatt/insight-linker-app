@@ -336,7 +336,21 @@ export function createBaseDocDefinition(
 // ============================================================================
 
 /**
+ * Convert base64 string to Blob
+ */
+function base64ToBlob(base64: string, mimeType: string): Blob {
+  const byteCharacters = atob(base64);
+  const byteNumbers = new Array(byteCharacters.length);
+  for (let i = 0; i < byteCharacters.length; i++) {
+    byteNumbers[i] = byteCharacters.charCodeAt(i);
+  }
+  const byteArray = new Uint8Array(byteNumbers);
+  return new Blob([byteArray], { type: mimeType });
+}
+
+/**
  * Generate a PDF blob from a document definition
+ * Uses getBase64 which is more reliable than getBlob/getBuffer in browsers
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
   return new Promise((resolve, reject) => {
@@ -353,26 +367,30 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
       
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
       
-      // Use getBuffer instead of getBlob for better compatibility
-      // Then convert buffer to blob
+      // Use getBase64 which is most reliable in browser environments
       const timeout = setTimeout(() => {
-        console.error('PDF generation timed out after 30 seconds');
+        console.error('PDF generation timed out after 60 seconds');
         reject(new Error('PDF generation timed out. Please try again.'));
-      }, 30000);
+      }, 60000); // Increased timeout to 60 seconds
       
-      pdfDocGenerator.getBuffer((buffer: ArrayBuffer) => {
+      pdfDocGenerator.getBase64((base64Data: string) => {
         clearTimeout(timeout);
-        console.log('PDF buffer generated, size:', buffer.byteLength);
+        console.log('PDF base64 generated, length:', base64Data?.length || 0);
         
-        if (!buffer || buffer.byteLength === 0) {
+        if (!base64Data || base64Data.length === 0) {
           reject(new Error('Generated PDF is empty'));
           return;
         }
         
-        // Convert buffer to blob
-        const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' });
-        console.log('PDF blob created, size:', blob.size);
-        resolve(blob);
+        try {
+          // Convert base64 to blob
+          const blob = base64ToBlob(base64Data, 'application/pdf');
+          console.log('PDF blob created, size:', blob.size);
+          resolve(blob);
+        } catch (conversionError) {
+          console.error('Error converting base64 to blob:', conversionError);
+          reject(new Error('Failed to convert PDF data'));
+        }
       });
     } catch (error) {
       console.error('PDF creation error:', error);
