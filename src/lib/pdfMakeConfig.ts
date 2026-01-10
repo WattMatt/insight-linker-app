@@ -347,52 +347,52 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 /**
  * Generate a PDF blob from a document definition
- * Uses getBuffer which is more reliable than getBlob in browser environments
+ * Uses direct stream access for synchronous PDF generation
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
-  console.log('Creating PDF with pdfmake...');
+  console.log('Creating PDF with pdfmake (stream method)...');
   
   // Verify fonts are loaded
   const instance = pdfMake as any;
   const vfsKeys = Object.keys(instance.vfs || {});
-  console.log('VFS keys:', vfsKeys.slice(0, 5), '... total:', vfsKeys.length);
+  console.log('VFS available:', vfsKeys.length > 0);
   
   if (!instance.vfs || vfsKeys.length === 0) {
-    console.error('pdfMake VFS not initialized');
     throw new Error('PDF fonts not loaded. Please refresh the page and try again.');
   }
   
-  // Check if Roboto font files exist in VFS
-  const hasRobotoRegular = vfsKeys.some(k => k.includes('Roboto'));
-  console.log('Has Roboto fonts:', hasRobotoRegular);
-  
-  const pdfDocGenerator = pdfMake.createPdf(docDefinition);
-  
-  // Use getBuffer which is more reliable, then convert to Blob
   return new Promise<Blob>((resolve, reject) => {
-    const timeout = setTimeout(() => {
-      console.error('PDF generation timed out after 60 seconds');
-      reject(new Error('PDF generation timed out. Please try again.'));
-    }, 60000);
-    
     try {
-      pdfDocGenerator.getBuffer((buffer: ArrayBuffer) => {
-        clearTimeout(timeout);
-        
-        if (!buffer || buffer.byteLength === 0) {
-          console.error('Generated PDF buffer is empty');
-          reject(new Error('Generated PDF is empty'));
-          return;
+      const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
+      
+      // Access the internal document directly
+      const chunks: Uint8Array[] = [];
+      
+      // Get the internal pdfkit document
+      pdfDocGenerator.getStream({
+        // Capture stream data
+      }).on('data', (chunk: Uint8Array) => {
+        chunks.push(chunk);
+      }).on('end', () => {
+        console.log('Stream ended, chunks:', chunks.length);
+        // Combine all chunks into a single Uint8Array
+        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        const result = new Uint8Array(totalLength);
+        let offset = 0;
+        for (const chunk of chunks) {
+          result.set(chunk, offset);
+          offset += chunk.length;
         }
-        
-        console.log('PDF buffer created successfully, size:', buffer.byteLength);
-        const blob = new Blob([buffer], { type: 'application/pdf' });
-        console.log('PDF blob created, size:', blob.size);
+        const blob = new Blob([result], { type: 'application/pdf' });
+        console.log('PDF blob created from stream, size:', blob.size);
         resolve(blob);
+      }).on('error', (err: Error) => {
+        console.error('Stream error:', err);
+        reject(err);
       });
+      
     } catch (error) {
-      clearTimeout(timeout);
-      console.error('PDF getBuffer error:', error);
+      console.error('PDF generation error:', error);
       reject(error);
     }
   });
