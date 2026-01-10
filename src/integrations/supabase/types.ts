@@ -776,6 +776,45 @@ export type Database = {
           },
         ]
       }
+      pdf_report_templates: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          customization: Json
+          description: string | null
+          id: string
+          is_default: boolean | null
+          name: string
+          report_type: string
+          sections: Json
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          customization?: Json
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name: string
+          report_type: string
+          sections?: Json
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          customization?: Json
+          description?: string | null
+          id?: string
+          is_default?: boolean | null
+          name?: string
+          report_type?: string
+          sections?: Json
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pending_user_invites: {
         Row: {
           created_at: string
