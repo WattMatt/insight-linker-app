@@ -1,6 +1,7 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
 import { 
   ZoomIn, 
   ZoomOut, 
@@ -11,10 +12,16 @@ import {
   Maximize2,
   Minimize2,
   Save,
-  Loader2
+  Loader2,
+  CheckCircle2,
+  XCircle,
+  ChevronDown,
+  ChevronUp,
+  Shield
 } from 'lucide-react';
 import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
+import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfUtils';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -31,6 +38,8 @@ interface DocumentPreviewDialogProps {
   saveLocation?: 'site' | 'subsection';
   contextName?: string; // Site or subsection name for display
   isSaving?: boolean;
+  // Compliance checks
+  complianceChecks?: PDFComplianceCheck;
 }
 
 export function DocumentPreviewDialog({
@@ -42,6 +51,7 @@ export function DocumentPreviewDialog({
   saveLocation,
   contextName,
   isSaving = false,
+  complianceChecks,
 }: DocumentPreviewDialogProps) {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -51,10 +61,18 @@ export function DocumentPreviewDialog({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showCompliancePanel, setShowCompliancePanel] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
+
+  // Calculate compliance stats
+  const complianceStats = complianceChecks ? {
+    passed: Object.values(complianceChecks).filter(Boolean).length,
+    total: Object.keys(complianceChecks).length,
+    percentage: Math.round((Object.values(complianceChecks).filter(Boolean).length / Object.keys(complianceChecks).length) * 100),
+  } : null;
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -63,6 +81,7 @@ export function DocumentPreviewDialog({
       setRotation(0);
       setPosition({ x: 0, y: 0 });
       setCurrentPage(1);
+      setShowCompliancePanel(false);
     }
   }, [open, fileUrl]);
 
@@ -145,6 +164,77 @@ export function DocumentPreviewDialog({
     return "Save to Documents";
   };
 
+  const getComplianceBadgeVariant = () => {
+    if (!complianceStats) return 'secondary';
+    if (complianceStats.percentage === 100) return 'default';
+    if (complianceStats.percentage >= 70) return 'secondary';
+    return 'destructive';
+  };
+
+  const renderCompliancePanel = () => {
+    if (!complianceChecks || !showCompliancePanel) return null;
+
+    return (
+      <div className="absolute top-0 right-0 w-64 bg-background border-l shadow-lg z-10 h-full overflow-auto">
+        <div className="p-4 border-b bg-muted/50">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Shield className="h-4 w-4 text-primary" />
+              <span className="font-semibold text-sm">Standards Compliance</span>
+            </div>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-6 w-6"
+              onClick={() => setShowCompliancePanel(false)}
+            >
+              <XCircle className="h-4 w-4" />
+            </Button>
+          </div>
+          {complianceStats && (
+            <div className="mt-2">
+              <div className="flex items-center justify-between text-xs text-muted-foreground">
+                <span>{complianceStats.passed}/{complianceStats.total} checks passed</span>
+                <span className={`font-bold ${complianceStats.percentage === 100 ? 'text-green-600' : complianceStats.percentage >= 70 ? 'text-yellow-600' : 'text-red-600'}`}>
+                  {complianceStats.percentage}%
+                </span>
+              </div>
+              <div className="mt-1 h-1.5 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className={`h-full transition-all ${complianceStats.percentage === 100 ? 'bg-green-500' : complianceStats.percentage >= 70 ? 'bg-yellow-500' : 'bg-red-500'}`}
+                  style={{ width: `${complianceStats.percentage}%` }}
+                />
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <div className="p-3 space-y-2">
+          {(Object.keys(complianceChecks) as (keyof PDFComplianceCheck)[]).map((key) => {
+            const passed = complianceChecks[key];
+            return (
+              <div 
+                key={key} 
+                className={`flex items-center gap-2 p-2 rounded text-xs ${passed ? 'bg-green-50 text-green-800 dark:bg-green-950/30 dark:text-green-300' : 'bg-red-50 text-red-800 dark:bg-red-950/30 dark:text-red-300'}`}
+              >
+                {passed ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 flex-shrink-0" />
+                ) : (
+                  <XCircle className="h-3.5 w-3.5 flex-shrink-0" />
+                )}
+                <span>{getComplianceCheckLabel(key)}</span>
+              </div>
+            );
+          })}
+        </div>
+        
+        <div className="p-3 border-t text-xs text-muted-foreground">
+          <p>Compliance with DOCUMENT_DESIGN_STANDARDS ensures consistent branding, typography, and layout.</p>
+        </div>
+      </div>
+    );
+  };
+
   const renderContent = () => {
     if (isPdf) {
       return (
@@ -222,6 +312,31 @@ export function DocumentPreviewDialog({
               )}
             </div>
             <div className="flex items-center gap-1">
+              {/* Compliance badge */}
+              {complianceStats && (
+                <Button 
+                  variant="ghost" 
+                  size="sm"
+                  className="gap-1.5 px-2 h-8"
+                  onClick={() => setShowCompliancePanel(!showCompliancePanel)}
+                >
+                  <Badge 
+                    variant={getComplianceBadgeVariant()}
+                    className="text-xs py-0 px-1.5"
+                  >
+                    {complianceStats.passed}/{complianceStats.total}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground hidden sm:inline">Standards</span>
+                  {showCompliancePanel ? (
+                    <ChevronUp className="h-3 w-3" />
+                  ) : (
+                    <ChevronDown className="h-3 w-3" />
+                  )}
+                </Button>
+              )}
+              
+              <div className="w-px h-6 bg-border mx-1" />
+              
               <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom Out">
                 <ZoomOut className="h-4 w-4" />
               </Button>
@@ -262,28 +377,33 @@ export function DocumentPreviewDialog({
           </div>
         </DialogHeader>
 
-        {/* Document viewer */}
-        <div 
-          ref={containerRef}
-          className="flex-1 overflow-hidden bg-muted/50 relative"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
-          onAuxClick={handleAuxClick}
-          onWheel={handleWheel}
-          style={{ cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default') }}
-        >
+        {/* Document viewer with optional compliance panel */}
+        <div className="flex-1 overflow-hidden relative">
           <div 
-            className="flex items-center justify-center min-h-full p-4"
-            style={{
-              transform: `translate(${position.x}px, ${position.y}px) scale(${isPdf ? 1 : scale})`,
-              transformOrigin: 'center center',
-              transition: isDragging ? 'none' : 'transform 0.1s ease-out'
-            }}
+            ref={containerRef}
+            className={`h-full overflow-hidden bg-muted/50 ${showCompliancePanel ? 'mr-64' : ''}`}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onAuxClick={handleAuxClick}
+            onWheel={handleWheel}
+            style={{ cursor: isDragging ? 'grabbing' : (scale > 1 ? 'grab' : 'default') }}
           >
-            {renderContent()}
+            <div 
+              className="flex items-center justify-center min-h-full p-4"
+              style={{
+                transform: `translate(${position.x}px, ${position.y}px) scale(${isPdf ? 1 : scale})`,
+                transformOrigin: 'center center',
+                transition: isDragging ? 'none' : 'transform 0.1s ease-out'
+              }}
+            >
+              {renderContent()}
+            </div>
           </div>
+          
+          {/* Compliance panel */}
+          {renderCompliancePanel()}
         </div>
 
         {/* PDF pagination */}
