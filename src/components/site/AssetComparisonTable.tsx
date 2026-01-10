@@ -552,7 +552,7 @@ export const AssetComparisonTable = ({
               />
             </div>
             <Button
-              variant="outline"
+              variant="default"
               size="sm"
               onClick={handlePreviewReport}
               disabled={generating || comparisonResults.length === 0}
@@ -562,7 +562,7 @@ export const AssetComparisonTable = ({
               ) : (
                 <Eye className="h-4 w-4 mr-2" />
               )}
-              Preview Report
+              {generating ? "Generating..." : "Generate PDF"}
             </Button>
           </div>
         </CardContent>
