@@ -7,7 +7,7 @@
  */
 
 import pdfMake from 'pdfmake/build/pdfmake';
-import pdfFonts from 'pdfmake/build/vfs_fonts';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 
 // pdfmake types - use 'any' for complex types until proper type definitions are available
 type TDocumentDefinitions = any;
@@ -17,7 +17,13 @@ type Content = any;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 
 // Initialize pdfmake with bundled fonts
-pdfMake.vfs = pdfFonts.pdfMake ? pdfFonts.pdfMake.vfs : pdfFonts.vfs;
+// Handle different module export formats
+const vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).default?.pdfMake?.vfs || (pdfFonts as any).vfs;
+if (vfs) {
+  pdfMake.vfs = vfs;
+} else {
+  console.warn('pdfMake fonts not loaded - PDF generation may fail');
+}
 
 // ============================================================================
 // PAGE CONFIGURATION
@@ -317,11 +323,17 @@ export function createBaseDocDefinition(
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
   return new Promise((resolve, reject) => {
     try {
+      console.log('Creating PDF with pdfmake...');
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
-      pdfDocGenerator.getBlob((blob) => {
+      pdfDocGenerator.getBlob((blob: Blob) => {
+        console.log('PDF blob generated, size:', blob.size);
         resolve(blob);
+      }, (error: any) => {
+        console.error('PDF generation error:', error);
+        reject(error);
       });
     } catch (error) {
+      console.error('PDF creation error:', error);
       reject(error);
     }
   });
