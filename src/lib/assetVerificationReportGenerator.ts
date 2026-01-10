@@ -174,14 +174,15 @@ export async function generateInspectionBasedReport(
 
   content.push(createSpacer(10));
 
-  // Verification Rate Progress Bar
+  // Verification Rate Progress Bar - displayed as separate elements to avoid column/canvas conflicts
   content.push({
-    columns: [
-      { text: 'Verification Rate:', style: 'body', width: 80, bold: true },
-      createProgressBar(matchRate, { width: 350, showLabel: true }),
-    ],
-    margin: [0, 0, 0, 15],
-  } as Content);
+    text: `Verification Rate: ${matchRate}%`,
+    style: 'body',
+    bold: true,
+    margin: [0, 0, 0, 5],
+  });
+  content.push(createProgressBar(matchRate, { width: 350, showLabel: false }));
+  content.push(createSpacer(10));
 
   // Summary Statistics Section
   content.push(createSectionHeader('Summary Statistics', 'secondary'));
@@ -477,14 +478,15 @@ export async function generateAssetVerificationReport(
 
   content.push(createSpacer(10));
 
-  // Verification Rate Progress Bar
+  // Verification Rate Progress Bar - displayed as separate elements to avoid column/canvas conflicts
   content.push({
-    columns: [
-      { text: 'Verification Rate:', style: 'body', width: 80, bold: true },
-      createProgressBar(matchRate, { width: 350, showLabel: true }),
-    ],
-    margin: [0, 0, 0, 15],
-  } as Content);
+    text: `Verification Rate: ${matchRate}%`,
+    style: 'body',
+    bold: true,
+    margin: [0, 0, 0, 5],
+  });
+  content.push(createProgressBar(matchRate, { width: 350, showLabel: false }));
+  content.push(createSpacer(10));
 
   // Summary Statistics Section
   content.push(createSectionHeader('Summary Statistics', 'secondary'));
