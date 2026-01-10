@@ -353,19 +353,25 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
       
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
       
-      // pdfmake getBlob only takes a success callback
-      // Wrap in try-catch and add timeout for safety
+      // Use getBuffer instead of getBlob for better compatibility
+      // Then convert buffer to blob
       const timeout = setTimeout(() => {
+        console.error('PDF generation timed out after 30 seconds');
         reject(new Error('PDF generation timed out. Please try again.'));
-      }, 30000); // 30 second timeout
+      }, 30000);
       
-      pdfDocGenerator.getBlob((blob: Blob) => {
+      pdfDocGenerator.getBuffer((buffer: ArrayBuffer) => {
         clearTimeout(timeout);
-        console.log('PDF blob generated, size:', blob.size);
-        if (blob.size === 0) {
+        console.log('PDF buffer generated, size:', buffer.byteLength);
+        
+        if (!buffer || buffer.byteLength === 0) {
           reject(new Error('Generated PDF is empty'));
           return;
         }
+        
+        // Convert buffer to blob
+        const blob = new Blob([new Uint8Array(buffer)], { type: 'application/pdf' });
+        console.log('PDF blob created, size:', blob.size);
         resolve(blob);
       });
     } catch (error) {
