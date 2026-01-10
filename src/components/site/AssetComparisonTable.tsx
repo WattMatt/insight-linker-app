@@ -30,6 +30,7 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
+import { testPdfGeneration } from "@/lib/pdfMakeConfig";
 import { PDFComplianceCheck } from "@/lib/pdfTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -551,6 +552,13 @@ export const AssetComparisonTable = ({
                 className="pl-9"
               />
             </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => testPdfGeneration()}
+            >
+              Test PDF
+            </Button>
             <Button
               variant="default"
               size="sm"
