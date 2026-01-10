@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit } from "lucide-react";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -25,6 +25,7 @@ import {
   PAGE,
 } from "@/lib/pdfUtils";
 import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
+import { TemplatePreviewRenderer } from "@/components/templates/TemplatePreviewRenderer";
 
 interface TemplateSection {
   id: string;
@@ -69,16 +70,16 @@ interface InspectionTemplate {
 
 const ITEMS_PER_PAGE = 9;
 
-// Predefined template categories
+// Predefined template categories with icons and descriptions
 const TEMPLATE_CATEGORIES = [
-  { value: "all", label: "All Templates" },
-  { value: "General", label: "General" },
-  { value: "Medium Voltage", label: "Medium Voltage" },
-  { value: "Low Voltage", label: "Low Voltage" },
-  { value: "Generator", label: "Generator" },
-  { value: "Solar", label: "Solar" },
-  { value: "Progress", label: "Progress" },
-  { value: "Site Drawing", label: "Site Drawing" },
+  { value: "all", label: "All", icon: ClipboardList, description: "All inspection templates", color: "bg-gray-500" },
+  { value: "General", label: "General", icon: FileText, description: "General purpose inspections", color: "bg-blue-500" },
+  { value: "Medium Voltage", label: "MV", icon: Zap, description: "11kV+ equipment inspections", color: "bg-red-500" },
+  { value: "Low Voltage", label: "LV", icon: Gauge, description: "Distribution boards & meters", color: "bg-blue-600" },
+  { value: "Generator", label: "Generator", icon: HardDrive, description: "Genset FAT & commissioning", color: "bg-green-600" },
+  { value: "Solar", label: "Solar", icon: Sun, description: "PV system inspections", color: "bg-orange-500" },
+  { value: "Progress", label: "Progress", icon: ClipboardList, description: "Project progress reports", color: "bg-purple-600" },
+  { value: "Site Drawing", label: "Drawings", icon: Map, description: "Site drawing inspections", color: "bg-cyan-600" },
 ] as const;
 
 const InspectionTemplates = () => {
@@ -533,12 +534,20 @@ const InspectionTemplates = () => {
       </div>
 
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="space-y-4">
-        <TabsList className="grid w-full grid-cols-8">
-          {TEMPLATE_CATEGORIES.map((category) => (
-            <TabsTrigger key={category.value} value={category.value}>
-              {category.label}
-            </TabsTrigger>
-          ))}
+        <TabsList className="grid w-full grid-cols-8 h-auto p-1">
+          {TEMPLATE_CATEGORIES.map((category) => {
+            const Icon = category.icon;
+            return (
+              <TabsTrigger 
+                key={category.value} 
+                value={category.value}
+                className="flex flex-col gap-1 py-2 px-3 data-[state=active]:bg-primary data-[state=active]:text-primary-foreground"
+              >
+                <Icon className="h-4 w-4" />
+                <span className="text-xs">{category.label}</span>
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {TEMPLATE_CATEGORIES.map((category) => (
@@ -568,33 +577,48 @@ const InspectionTemplates = () => {
             ) : (
               <>
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-            {currentTemplates.map((template) => (
-              <Card key={template.id} className="hover:shadow-lg transition-shadow">
-                <CardHeader className="pb-3">
-                  <div className="flex items-start justify-between mb-2">
-                    <FileText className="h-5 w-5 text-primary" />
-                    <Badge variant="secondary">{template.category}</Badge>
-                  </div>
-                  <CardTitle className="text-lg">{template.name}</CardTitle>
-                  {template.description && (
-                    <CardDescription className="line-clamp-2">
-                      {template.description}
-                    </CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {/* Uniform template preview image */}
-                  <div className="w-full h-40 bg-muted rounded-md overflow-hidden flex items-center justify-center">
-                    {template.cover_page?.logo_url ? (
-                      <img 
-                        src={template.cover_page.logo_url} 
-                        alt={template.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <FileText className="h-16 w-16 text-muted-foreground" />
+            {currentTemplates.map((template) => {
+              const categoryConfig = TEMPLATE_CATEGORIES.find(c => c.value === template.category);
+              const CategoryIcon = categoryConfig?.icon || FileText;
+              
+              return (
+                <Card key={template.id} className="hover:shadow-lg transition-shadow group">
+                  <CardHeader className="pb-3">
+                    <div className="flex items-start justify-between mb-2">
+                      <div className={`p-2 rounded-lg ${categoryConfig?.color || 'bg-gray-500'} text-white`}>
+                        <CategoryIcon className="h-4 w-4" />
+                      </div>
+                      <Badge 
+                        variant="secondary" 
+                        className={`${categoryConfig?.color || 'bg-gray-500'} text-white border-0`}
+                      >
+                        {template.category}
+                      </Badge>
+                    </div>
+                    <CardTitle className="text-lg group-hover:text-primary transition-colors">{template.name}</CardTitle>
+                    {template.description && (
+                      <CardDescription className="line-clamp-2">
+                        {template.description}
+                      </CardDescription>
                     )}
-                  </div>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    {/* Category-colored preview area */}
+                    <div className={`w-full h-40 rounded-md overflow-hidden flex items-center justify-center relative ${categoryConfig?.color || 'bg-gray-500'} bg-opacity-10`}>
+                      <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/5"></div>
+                      {template.cover_page?.logo_url ? (
+                        <img 
+                          src={template.cover_page.logo_url} 
+                          alt={template.name}
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="text-center">
+                          <CategoryIcon className={`h-12 w-12 mx-auto mb-2 opacity-50`} style={{ color: categoryConfig?.color?.replace('bg-', '#').replace('-500', '') || '#6b7280' }} />
+                          <p className="text-xs text-muted-foreground font-medium">{template.category}</p>
+                        </div>
+                      )}
+                    </div>
                   <div className="flex gap-4 text-sm text-muted-foreground">
                     <div>
                       <span className="font-semibold text-foreground">
@@ -644,7 +668,8 @@ const InspectionTemplates = () => {
                   </div>
                 </CardContent>
               </Card>
-            ))}
+              );
+            })}
           </div>
 
           {/* Pagination Controls */}
@@ -693,7 +718,6 @@ const InspectionTemplates = () => {
         ))}
       </Tabs>
 
-      {/* Template Preview Dialog - WYSIWYG PDF Preview */}
       <Dialog open={!!previewTemplate} onOpenChange={() => setPreviewTemplate(null)}>
         <DialogContent className="max-w-4xl max-h-[90vh]">
           <DialogHeader>
@@ -701,271 +725,25 @@ const InspectionTemplates = () => {
               <FileText className="h-5 w-5 text-primary" />
               PDF Preview: {previewTemplate?.name}
             </DialogTitle>
-            <DialogDescription>
-              Exact preview of the generated PDF report
+            <DialogDescription className="flex items-center gap-2">
+              {previewTemplate && (
+                <>
+                  <Badge 
+                    variant="secondary" 
+                    className={`${TEMPLATE_CATEGORIES.find(c => c.value === previewTemplate.category)?.color || 'bg-gray-500'} text-white`}
+                  >
+                    {previewTemplate.category}
+                  </Badge>
+                  <span className="text-xs text-muted-foreground">
+                    {previewTemplate.sections_count || 0} sections • {previewTemplate.pages_count || 0} pages
+                  </span>
+                </>
+              )}
             </DialogDescription>
           </DialogHeader>
           
           <ScrollArea className="h-[65vh]">
-            <div className="space-y-4 pb-4">
-              {previewTemplate && (
-                <>
-                  {/* Cover Page - Professional & Ink-Friendly */}
-                  <div className="bg-white aspect-[210/297] border shadow-lg relative">
-                    {/* Top accent bar */}
-                    <div className="bg-[#2980b9] h-2 w-full"></div>
-                    
-                    {/* Logo placeholder */}
-                    <div className="absolute top-6 left-1/2 transform -translate-x-1/2 border-2 border-gray-300 w-24 h-12 flex items-center justify-center">
-                      <span className="text-[10px] text-gray-400">COMPANY LOGO</span>
-                    </div>
-                    
-                    <div className="pt-24 px-12 flex flex-col items-center">
-                      <h1 className="text-3xl font-bold text-center text-gray-900 mb-4">{previewTemplate.name}</h1>
-                      
-                      <div className="bg-gray-50 w-full py-3 text-center mb-8">
-                        <p className="text-base text-gray-700">{previewTemplate.cover_page?.subtitle || previewTemplate.category}</p>
-                      </div>
-                      
-                      {/* Information box */}
-                      <div className="border border-gray-300 w-full p-6 space-y-3 text-sm">
-                        <div className="flex">
-                          <span className="font-bold text-gray-900 w-32">Report Date:</span>
-                          <span className="text-gray-700">{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-bold text-gray-900 w-32">Inspector:</span>
-                          <span className="text-gray-700">Preview Inspector</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-bold text-gray-900 w-32">Project:</span>
-                          <span className="text-gray-700">Preview Project</span>
-                        </div>
-                        <div className="flex">
-                          <span className="font-bold text-gray-900 w-32">Location:</span>
-                          <span className="text-gray-700">Site Location Address</span>
-                        </div>
-                      </div>
-                    </div>
-                    
-                    {/* Bottom section */}
-                    <div className="absolute bottom-12 left-0 right-0 px-12">
-                      <div className="border-t border-gray-300 pt-4 text-center">
-                        <p className="font-bold text-gray-900 text-sm">{previewTemplate.cover_page?.company_name || 'Watson Mattheus'}</p>
-                        <p className="text-xs text-gray-600 mt-1">Inspection & Compliance Report</p>
-                      </div>
-                    </div>
-                    
-                    {/* Bottom accent bar */}
-                    <div className="bg-[#2980b9] h-2 w-full absolute bottom-0"></div>
-                  </div>
-
-                  {/* General Information Page */}
-                  <div className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
-                    <div className="bg-gray-100 -mx-8 px-8 py-3 mb-6">
-                      <h2 className="text-lg font-bold text-center">General Information</h2>
-                    </div>
-                    
-                    <div className="space-y-3 text-sm">
-                      <div className="flex">
-                        <span className="font-bold w-48">PROJECT NAME:</span>
-                        <span>Preview Project</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">INSPECTOR NAME:</span>
-                        <span>Preview Inspector</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">INSPECTION DATE:</span>
-                        <span>{new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' })}</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">CLIENT REPRESENTATIVE:</span>
-                        <span>Mock Client Rep</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">CONSULTANT NAME:</span>
-                        <span>Mock Consultant</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">CONTRACTOR NAME:</span>
-                        <span>Mock Contractor</span>
-                      </div>
-                      <div className="flex">
-                        <span className="font-bold w-48">LOCATION:</span>
-                        <span>Site Location Address</span>
-                      </div>
-                    </div>
-                    
-                    <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
-                      {previewTemplate.name} - Page 1
-                    </div>
-                  </div>
-
-                  {/* Section Pages */}
-                  {Array.isArray(previewTemplate.sections) && previewTemplate.sections.length > 0 ? (
-                    previewTemplate.sections.map((section, sectionIdx) => (
-                    <div key={`section-${section.id}`} className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
-                      <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
-                        <h2 className="text-sm font-bold text-center uppercase">{section.name}</h2>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {section.items?.map((item, itemIdx) => (
-                          <div key={item.id} className="border border-gray-300 p-4">
-                            <div className="font-bold text-sm mb-3 text-gray-900">
-                              {itemIdx + 1}. {item.name}
-                            </div>
-                            
-                            {/* Render field based on type */}
-                            {item.type === 'checklist' && (
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700">Status:</span>
-                                  <span className="text-xs text-gray-900 bg-green-50 px-3 py-1 rounded">
-                                    Pass
-                                  </span>
-                                </div>
-                                <div>
-                                  <span className="text-xs text-gray-700">Notes: This is a mock note for preview purposes</span>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {(item.type === 'text' || item.type === 'number') && (
-                              <div className="space-y-1">
-                                <span className="text-xs text-gray-700">Value: Sample {item.type} value</span>
-                              </div>
-                            )}
-                            
-                            {item.type === 'textarea' && (
-                              <div className="space-y-1">
-                                <span className="text-xs font-semibold text-gray-700">Notes:</span>
-                                <p className="text-xs text-gray-700">This is a sample note for preview purposes. Actual field will contain inspector notes and observations.</p>
-                              </div>
-                            )}
-                            
-                            {item.type === 'image' && (
-                              <div className="space-y-2">
-                                <span className="text-xs font-semibold text-gray-700">Photo:</span>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 w-32 h-24 flex flex-col items-center justify-center rounded">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-[10px]">Photo</div>
-                                    <div className="text-[10px]">Placeholder</div>
-                                  </div>
-                                </div>
-                              </div>
-                            )}
-                            
-                            {item.type === 'select' && item.options && (
-                              <div className="space-y-1">
-                                <span className="text-xs font-semibold text-gray-700">Selected:</span>
-                                <span className="text-xs text-gray-900 bg-blue-50 px-3 py-1 rounded">
-                                  {item.options[0]}
-                                </span>
-                              </div>
-                            )}
-                            
-                            {item.type === 'checkbox' && (
-                              <div className="flex items-center gap-2">
-                                <div className="w-4 h-4 border-2 border-gray-400 rounded flex items-center justify-center">
-                                  <div className="w-2 h-2 bg-blue-600 rounded-sm"></div>
-                                </div>
-                                <span className="text-xs text-gray-700">Checked</span>
-                              </div>
-                            )}
-                            
-                            {/* Fallback for any unhandled field types */}
-                            {!['checkbox', 'checklist', 'text', 'number', 'textarea', 'image', 'select'].includes(item.type) && (
-                              <div className="space-y-2">
-                                <div className="flex items-start gap-2">
-                                  <span className="text-xs font-semibold text-gray-700">Type:</span>
-                                  <span className="text-xs text-gray-900 bg-yellow-50 px-3 py-1 rounded">
-                                    {item.type} (Preview not implemented)
-                                  </span>
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
-                        {previewTemplate.name} - Page {sectionIdx + 2}
-                      </div>
-                    </div>
-                  ))
-                  ) : (
-                    <div className="bg-white aspect-[210/297] p-8 border shadow-lg flex items-center justify-center">
-                      <div className="text-center text-gray-500">
-                        <p className="text-lg font-semibold mb-2">No Sections Defined</p>
-                        <p className="text-sm">This template doesn't have any sections configured yet.</p>
-                        <p className="text-xs mt-2">Edit the template to add sections and fields.</p>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Tenants Page */}
-                  {previewTemplate.tenants && previewTemplate.tenants.length > 0 && (
-                    <div className="bg-white aspect-[210/297] p-8 border shadow-lg relative">
-                      <div className="bg-[#2980b9] text-white -mx-8 px-8 py-3 mb-6">
-                        <h2 className="text-sm font-bold text-center uppercase">Tenant Information</h2>
-                      </div>
-                      
-                      <div className="space-y-4">
-                        {previewTemplate.tenants.map((tenant, tenantIdx) => (
-                          <div key={tenant.id} className="border border-gray-300 p-4">
-                            <div className="font-bold text-sm mb-3 text-gray-900">
-                              Tenant {tenantIdx + 1}: {tenant.shopName || 'N/A'}
-                            </div>
-                            
-                            <div className="space-y-2 text-xs">
-                              <div className="flex">
-                                <span className="font-bold w-32">Shop Number:</span>
-                                <span>{tenant.shopNumber || 'N/A'}</span>
-                              </div>
-                              <div className="flex">
-                                <span className="font-bold w-32">Breaker Size:</span>
-                                <span>{tenant.breakerSize || 'N/A'}</span>
-                              </div>
-                              <div className="flex">
-                                <span className="font-bold w-32">CT Size & Ratio:</span>
-                                <span>{tenant.ctSizeAndRatio || 'N/A'}</span>
-                              </div>
-                            </div>
-
-                            <div className="mt-3 grid grid-cols-2 gap-2">
-                              <div>
-                                <p className="text-xs font-semibold text-gray-700 mb-1">Breaker Image:</p>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-[10px] font-semibold mb-1">BREAKER</div>
-                                    <div className="text-[8px]">Image Placeholder</div>
-                                  </div>
-                                </div>
-                              </div>
-                              <div>
-                                <p className="text-xs font-semibold text-gray-700 mb-1">CT Ratio Image:</p>
-                                <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-32 flex flex-col items-center justify-center rounded">
-                                  <div className="text-gray-400 text-center">
-                                    <div className="text-[10px] font-semibold mb-1">CT RATIO</div>
-                                    <div className="text-[8px]">Image Placeholder</div>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                      
-                      <div className="absolute bottom-4 left-0 right-0 text-center text-xs text-gray-500">
-                        {previewTemplate.name} - Tenants Page
-                      </div>
-                    </div>
-                  )}
-                </>
-              )}
-            </div>
+            {previewTemplate && <TemplatePreviewRenderer template={previewTemplate} />}
           </ScrollArea>
 
           <div className="flex justify-end gap-2 pt-4 border-t">
