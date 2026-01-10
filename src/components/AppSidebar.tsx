@@ -152,7 +152,11 @@ export function AppSidebar() {
                 .filter(item => !item.adminOnly || userRole === 'Admin')
                 .map((item) => (
                   <SidebarMenuItem key={item.title}>
-                    <SidebarMenuButton asChild className="h-12 md:h-10">
+                    <SidebarMenuButton 
+                      asChild 
+                      className="h-12 md:h-10"
+                      tooltip={item.title}
+                    >
                       <NavLink
                         to={item.url}
                         onClick={handleNavClick}
@@ -200,7 +204,11 @@ export function AppSidebar() {
           {/* Logout Button */}
           <SidebarMenu>
             <SidebarMenuItem>
-              <SidebarMenuButton onClick={handleLogout} className="h-12 md:h-10">
+              <SidebarMenuButton 
+                onClick={handleLogout} 
+                className="h-12 md:h-10"
+                tooltip="Logout"
+              >
                 <LogOut className="h-5 w-5 md:h-4 md:w-4" />
                 {(isMobile || !collapsed) && <span className="text-base md:text-sm">Logout</span>}
               </SidebarMenuButton>
