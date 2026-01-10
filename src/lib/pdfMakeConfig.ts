@@ -394,43 +394,23 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
     return blob;
     
   } catch (streamError) {
-    console.log('Stream method failed, trying getBlob with Promise wrapper...');
+    console.log('Stream method failed, trying Promise-based getBlob...');
     
-    // Fallback: wrap getBlob in a proper Promise with manual resolution
-    return new Promise<Blob>((resolve, reject) => {
-      let resolved = false;
+    // pdfmake 0.3 uses Promise-based getBlob()
+    try {
+      const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
+      const blob: Blob = await pdfDocGenerator.getBlob();
       
-      const timeout = setTimeout(() => {
-        if (!resolved) {
-          resolved = true;
-          reject(new Error('PDF generation timed out'));
-        }
-      }, 30000);
-      
-      try {
-        // Create a fresh PDF generator for the fallback
-        const fallbackGenerator = pdfMake.createPdf(docDefinition) as any;
-        
-        fallbackGenerator.getBlob((blob: Blob) => {
-          if (resolved) return;
-          resolved = true;
-          clearTimeout(timeout);
-          
-          if (blob && blob.size > 0) {
-            console.log('PDF blob via getBlob fallback, size:', blob.size);
-            resolve(blob);
-          } else {
-            reject(new Error('Generated PDF is empty'));
-          }
-        });
-      } catch (err) {
-        if (!resolved) {
-          resolved = true;
-          clearTimeout(timeout);
-          reject(err);
-        }
+      if (blob && blob.size > 0) {
+        console.log('PDF blob via getBlob, size:', blob.size);
+        return blob;
+      } else {
+        throw new Error('Generated PDF is empty');
       }
-    });
+    } catch (blobError) {
+      console.error('getBlob failed:', blobError);
+      throw blobError;
+    }
   }
 }
 
@@ -438,16 +418,9 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
  * Generate a PDF data URL from a document definition
  */
 export async function generatePdfDataUrl(docDefinition: TDocumentDefinitions): Promise<string> {
-  return new Promise((resolve, reject) => {
-    try {
-      const pdfDocGenerator = pdfMake.createPdf(docDefinition);
-      pdfDocGenerator.getDataUrl((dataUrl) => {
-        resolve(dataUrl);
-      });
-    } catch (error) {
-      reject(error);
-    }
-  });
+  const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
+  // pdfmake 0.3 uses Promise-based getDataUrl()
+  return await pdfDocGenerator.getDataUrl();
 }
 
 /**
@@ -474,9 +447,8 @@ export function openPdfInNewWindow(docDefinition: TDocumentDefinitions): void {
  * Test PDF generation with a simple document
  * Downloads a simple PDF to verify pdfmake is working
  */
-export function testPdfGeneration(): void {
+export async function testPdfGeneration(): Promise<void> {
   console.log('Testing PDF generation...');
-  alert('Starting PDF test - will download a test PDF file');
   
   const testDoc: TDocumentDefinitions = {
     content: [
@@ -490,11 +462,24 @@ export function testPdfGeneration(): void {
   };
   
   try {
-    const pdfDocGenerator = pdfMake.createPdf(testDoc);
-    // Use download instead of open to avoid popup blocker issues
-    pdfDocGenerator.download('test-pdf.pdf');
+    const pdfDocGenerator = pdfMake.createPdf(testDoc) as any;
+    
+    // pdfmake 0.3 uses Promise-based getBlob()
+    const blob: Blob = await pdfDocGenerator.getBlob();
+    console.log('Test PDF blob generated, size:', blob.size);
+    
+    // Create a download link
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'test-pdf.pdf';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
     console.log('Test PDF download started');
-    alert('PDF download started! Check your downloads folder.');
+    alert('PDF downloaded successfully! Check your downloads folder.');
   } catch (error) {
     console.error('Test PDF generation failed:', error);
     alert('PDF generation failed: ' + (error instanceof Error ? error.message : String(error)));
