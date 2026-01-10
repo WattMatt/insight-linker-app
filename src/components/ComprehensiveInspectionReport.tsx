@@ -1,12 +1,13 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { FileText } from "lucide-react";
+import { Eye } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
-import { renameInspectionImages } from "@/lib/imageNaming";
 import { fetchImageAsDataUrl } from "@/lib/imageUrlResolver";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
@@ -201,7 +202,7 @@ async function generatePDFInternal(options: {
   clientName?: string;
   snags?: any[];
   template: any;
-}): Promise<{ doc: jsPDF, fileName: string } | null> {
+}): Promise<{ doc: jsPDF, fileName: string, blob: Blob } | null> {
   const { inspectionData, siteName, subsectionName, templateId, subsectionId, siteLogoUrl, inspectionId, clientName, snags = [], template } = options;
   
   try {
@@ -391,7 +392,6 @@ async function generatePDFInternal(options: {
     const sections = template?.sections || [];
     for (let sectionIndex = 0; sectionIndex < sections.length; sectionIndex++) {
       const section = sections[sectionIndex];
-      // Try multiple key formats: numeric index, section key, or derived from name
       const sectionKey = section.key || section.name?.toLowerCase().replace(/\s+/g, '_');
       const sectionData = jsonData[sectionIndex] || jsonData[String(sectionIndex)] || jsonData[sectionKey] || {};
 
@@ -411,7 +411,6 @@ async function generatePDFInternal(options: {
       const items = section.items || [];
       for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
         const item = items[itemIndex];
-        // Try multiple key formats: numeric index, item key, or derived from name
         const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
         const itemData = sectionData[itemIndex] || sectionData[String(itemIndex)] || sectionData[itemKey] || {};
 
@@ -442,7 +441,6 @@ async function generatePDFInternal(options: {
           yPos += wrappedNotes.length * 4 + 2;
         }
 
-        // Item images - check multiple possible keys: photos, images, imageUrls
         const imageUrls = itemData.photos || itemData.images || itemData.imageUrls || [];
         if (imageUrls.length > 0) {
           const imgWidth = 45;
@@ -512,7 +510,6 @@ async function generatePDFInternal(options: {
         if (tenant.meterSerialNumber) { doc.text(`Meter S/N: ${tenant.meterSerialNumber}`, 25, yPos); yPos += 5; }
         if (tenant.controlStatus48V) { doc.text(`48V Control: ${tenant.controlStatus48V}`, 25, yPos); yPos += 5; }
 
-        // Tenant images
         const tenantImages = [];
         if (tenant.breakerImage) tenantImages.push({ label: 'Breaker', url: tenant.breakerImage });
         if (tenant.ctRatioImage) tenantImages.push({ label: 'CT Ratio', url: tenant.ctRatioImage });
@@ -525,13 +522,9 @@ async function generatePDFInternal(options: {
           let imagesEmbedded = 0;
           
           for (const img of tenantImages) {
-            if (!img.url) {
-              console.log(`Tenant ${tenant.shopName}: ${img.label} image URL is empty`);
-              continue;
-            }
+            if (!img.url) continue;
             
             try {
-              console.log(`Fetching tenant image: ${img.label} from ${img.url}`);
               const dataUrl = await fetchImageAsDataUrl(img.url);
               if (dataUrl) {
                 if (yPos + imgHeight > pageHeight - 30) {
@@ -539,7 +532,6 @@ async function generatePDFInternal(options: {
                   yPos = 20;
                   imgX = 25;
                 }
-                // Add label above image
                 doc.setFontSize(7);
                 doc.setFont(undefined, 'normal');
                 doc.text(img.label, imgX, yPos - 2);
@@ -551,11 +543,9 @@ async function generatePDFInternal(options: {
                   imgX = 25;
                   yPos += imgHeight + 10;
                 }
-              } else {
-                console.warn(`Failed to fetch tenant image for ${tenant.shopName}: ${img.label} - ${img.url}`);
               }
             } catch (error) {
-              console.error(`Error embedding tenant image for ${tenant.shopName}:`, img.label, error);
+              console.error(`Error embedding tenant image:`, error);
             }
           }
           
@@ -682,8 +672,9 @@ async function generatePDFInternal(options: {
 
     const fileDate = new Date().toLocaleDateString('en-ZA').replace(/\//g, '-');
     const fileName = `${subsectionName}_Inspection_Report_${fileDate}.pdf`;
+    const blob = doc.output('blob');
     
-    return { doc, fileName };
+    return { doc, fileName, blob };
   } catch (error) {
     console.error("Error generating PDF:", error);
     return null;
@@ -699,15 +690,6 @@ interface Snag {
   risk_level?: string;
   estimated_cost?: number;
   photos?: string[];
-}
-
-interface SignatureData {
-  id: string;
-  signer_type: string;
-  signer_name: string;
-  signer_email: string | null;
-  signature_data: string;
-  signed_at: string;
 }
 
 interface ComprehensiveInspectionReportProps {
@@ -734,10 +716,13 @@ export const ComprehensiveInspectionReport = ({
   snags = [],
 }: ComprehensiveInspectionReportProps) => {
   const [generating, setGenerating] = useState(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState<string>("");
+  const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
+  const [saving, setSaving] = useState(false);
 
-  // Use the standalone function for consistent PDF generation
-  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string } | null> => {
-    // Fetch template if needed
+  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string, blob: Blob } | null> => {
     let template: any = null;
     if (templateId) {
       const { data: templateData } = await supabase
@@ -753,7 +738,6 @@ export const ComprehensiveInspectionReport = ({
       return null;
     }
 
-    // Use the shared internal PDF generator
     return generatePDFInternal({
       inspectionData: { ...inspectionData, jsonData: inspectionData?.jsonData || inspectionData?.json_data },
       siteName,
@@ -768,122 +752,20 @@ export const ComprehensiveInspectionReport = ({
     });
   };
 
-  // Combined function: generates PDF, saves to documents, and downloads
-  const generateAndSave = async () => {
-    setGenerating(true);
+  const handlePreviewReport = async () => {
     try {
+      setGenerating(true);
       const result = await generatePDFDocument();
+      
       if (!result) {
         return;
       }
-
-      // If no subsectionId, just download the PDF
-      if (!subsectionId) {
-        result.doc.save(result.fileName);
-        toast.success("Report generated successfully");
-        return;
-      }
-
-      // Get current user
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        toast.error("User not authenticated");
-        result.doc.save(result.fileName);
-        return;
-      }
-
-      // Find or create "Inspection Reports" category
-      const { data: categories } = await supabase
-        .from("document_categories")
-        .select("id, name")
-        .eq("subsection_id", subsectionId);
       
-      let categoryId = categories?.find(c => c.name === "Inspection Reports")?.id;
-      
-      if (!categoryId) {
-        const { data: newCategory, error: categoryError } = await supabase
-          .from("document_categories")
-          .insert({ 
-            name: "Inspection Reports", 
-            subsection_id: subsectionId,
-            order_index: (categories?.length || 0) + 1
-          })
-          .select()
-          .single();
-        
-        if (categoryError) {
-          console.error("Category creation error:", categoryError);
-          result.doc.save(result.fileName);
-          toast.success("PDF downloaded (couldn't save to documents)");
-          return;
-        }
-        categoryId = newCategory.id;
-      }
-
-      // Convert PDF to blob
-      const pdfBlob = result.doc.output('blob');
-      
-      // Upload to storage
-      const storagePath = `${subsectionId}/Inspection Reports/${result.fileName}`;
-      
-      const { error: uploadError } = await supabase.storage
-        .from('documents')
-        .upload(storagePath, pdfBlob, {
-          contentType: 'application/pdf',
-          upsert: true
-        });
-
-      if (uploadError) {
-        console.error("Upload error:", uploadError);
-        result.doc.save(result.fileName);
-        toast.success("PDF downloaded (couldn't upload to storage)");
-        return;
-      }
-
-      // Get public URL
-      const { data: urlData } = supabase.storage
-        .from('documents')
-        .getPublicUrl(storagePath);
-
-      // Check if document already exists to avoid duplicates
-      const { data: existingDoc } = await supabase
-        .from('subsection_documents')
-        .select('id')
-        .eq('subsection_id', subsectionId)
-        .eq('file_name', result.fileName)
-        .maybeSingle();
-
-      if (!existingDoc) {
-        // Create document record
-        const { error: docError } = await supabase
-          .from('subsection_documents')
-          .insert({
-            subsection_id: subsectionId,
-            category_id: categoryId,
-            file_name: result.fileName,
-            file_url: urlData.publicUrl,
-            file_size: pdfBlob.size,
-            uploaded_by: user.id
-          });
-
-        if (docError) {
-          console.error("Document record error:", docError);
-        }
-      } else {
-        // Update existing document
-        await supabase
-          .from('subsection_documents')
-          .update({
-            file_url: urlData.publicUrl,
-            file_size: pdfBlob.size,
-            uploaded_at: new Date().toISOString()
-          })
-          .eq('id', existingDoc.id);
-      }
-
-      // Download the PDF
-      result.doc.save(result.fileName);
-      toast.success("PDF generated and saved to documents!");
+      const url = URL.createObjectURL(result.blob);
+      setPreviewUrl(url);
+      setPreviewFileName(result.fileName);
+      setPdfBlob(result.blob);
+      setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating report:", error);
       toast.error("Failed to generate report");
@@ -892,10 +774,57 @@ export const ComprehensiveInspectionReport = ({
     }
   };
 
+  const handleSaveToDocuments = async () => {
+    if (!pdfBlob || !subsectionId) {
+      toast.error("Cannot save: missing data");
+      return;
+    }
+
+    try {
+      setSaving(true);
+      const result = await savePDFToDocuments({
+        blob: pdfBlob,
+        fileName: previewFileName,
+        subsectionId,
+        categoryName: getReportCategoryName("inspection"),
+      });
+
+      if (result.success) {
+        toast.success("Report saved to documents!");
+      } else {
+        toast.error(result.error || "Failed to save report");
+      }
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report");
+    } finally {
+      setSaving(false);
+    }
+  };
+
   return (
-    <Button onClick={generateAndSave} disabled={generating} variant="default">
-      <FileText className="mr-2 h-4 w-4" />
-      {generating ? "Generating..." : "Generate PDF"}
-    </Button>
+    <>
+      <Button onClick={handlePreviewReport} disabled={generating} variant="default">
+        <Eye className="mr-2 h-4 w-4" />
+        {generating ? "Generating..." : "Preview Report"}
+      </Button>
+
+      <DocumentPreviewDialog
+        open={previewOpen}
+        onOpenChange={(open) => {
+          setPreviewOpen(open);
+          if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
+            setPreviewUrl("");
+          }
+        }}
+        fileUrl={previewUrl}
+        fileName={previewFileName}
+        onSaveToDocuments={handleSaveToDocuments}
+        saveLocation="subsection"
+        contextName={subsectionName}
+        isSaving={saving}
+      />
+    </>
   );
 };
