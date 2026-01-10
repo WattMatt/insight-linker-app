@@ -2843,6 +2843,9 @@ const SubsectionDetail = () => {
         {/* COC Docs & Metering Data Tab */}
         <TabsContent value="coc-metering" className="space-y-4">
           <div className="space-y-6">
+            {/* COC Compliance Rules Reference - At top for visibility */}
+            <COCComplianceRulesReference />
+            
             {/* Certificates of Compliance */}
             <Card>
               <CardHeader>
@@ -3553,10 +3556,6 @@ const SubsectionDetail = () => {
                 </div>
               </CardContent>
             </Card>
-
-            {/* COC Compliance Rules Reference */}
-            <COCComplianceRulesReference />
-
             {/* Metering Details & Documents */}
             <Card className="border-red-200">
               <CardHeader>
