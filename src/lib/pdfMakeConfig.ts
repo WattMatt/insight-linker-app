@@ -7,7 +7,7 @@
  */
 
 import pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import pdfFonts from 'pdfmake/build/vfs_fonts';
 
 // pdfmake types - use 'any' for complex types until proper type definitions are available
 type TDocumentDefinitions = any;
@@ -17,30 +17,31 @@ type Content = any;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 
 // Initialize pdfmake with bundled fonts
-// Handle different module export formats - pdfmake v0.3.x uses different structure
+// pdfmake v0.3.x bundles Roboto fonts in vfs_fonts
 const pdfMakeInstance = pdfMake as any;
 
-// Try all possible font locations for pdfmake compatibility
-const fontSource = pdfFonts as any;
-const vfs = fontSource.pdfMake?.vfs 
-  || fontSource.default?.pdfMake?.vfs 
-  || fontSource.vfs
-  || fontSource.default?.vfs
-  || (fontSource.default && typeof fontSource.default === 'object' ? fontSource.default : null);
-
-if (vfs) {
-  pdfMakeInstance.vfs = vfs;
-  console.log('pdfMake fonts loaded successfully');
-} else {
-  // Fallback: try to set fonts directly on pdfMake
-  try {
-    // For pdfmake v0.3.x with ES modules
-    if (fontSource.default) {
-      pdfMakeInstance.vfs = fontSource.default;
-    }
-  } catch (e) {
-    console.warn('pdfMake fonts not loaded - PDF generation may fail:', e);
+// Initialize VFS - handle different module formats
+try {
+  if (pdfFonts && (pdfFonts as any).pdfMake?.vfs) {
+    pdfMakeInstance.vfs = (pdfFonts as any).pdfMake.vfs;
+  } else if (pdfFonts && typeof pdfFonts === 'object') {
+    // For ES module default export
+    pdfMakeInstance.vfs = pdfFonts;
   }
+  
+  // Define fonts explicitly for pdfmake
+  pdfMakeInstance.fonts = {
+    Roboto: {
+      normal: 'Roboto-Regular.ttf',
+      bold: 'Roboto-Medium.ttf',
+      italics: 'Roboto-Italic.ttf',
+      bolditalics: 'Roboto-MediumItalic.ttf'
+    }
+  };
+  
+  console.log('pdfMake fonts initialized');
+} catch (e) {
+  console.warn('pdfMake font initialization warning:', e);
 }
 
 // ============================================================================
@@ -357,12 +358,21 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
     try {
       console.log('Creating PDF with pdfmake...');
       
-      // Check if fonts are loaded
-      const pdfMakeInstance = pdfMake as any;
-      if (!pdfMakeInstance.vfs || Object.keys(pdfMakeInstance.vfs).length === 0) {
-        console.error('pdfMake fonts not initialized');
-        reject(new Error('PDF fonts not loaded. Please refresh the page and try again.'));
-        return;
+      // Ensure fonts are properly configured
+      const instance = pdfMake as any;
+      if (!instance.vfs) {
+        console.warn('VFS not found, attempting to reinitialize...');
+        try {
+          // Dynamic reimport as fallback
+          const fonts = require('pdfmake/build/vfs_fonts');
+          if (fonts?.pdfMake?.vfs) {
+            instance.vfs = fonts.pdfMake.vfs;
+          } else if (fonts.default) {
+            instance.vfs = fonts.default;
+          }
+        } catch (e) {
+          console.error('Failed to load fonts:', e);
+        }
       }
       
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
