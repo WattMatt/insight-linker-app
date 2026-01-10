@@ -3,9 +3,11 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, Loader2, Link as LinkIcon } from "lucide-react";
+import { Upload, Loader2, Link as LinkIcon, Settings2, FileText } from "lucide-react";
+import { PDFTemplateManager } from "@/components/settings/PDFTemplateManager";
 
 interface Settings {
   id: string;
@@ -150,12 +152,25 @@ const Settings = () => {
       <div>
         <h1 className="text-3xl font-bold tracking-tight">Settings</h1>
         <p className="text-muted-foreground mt-2">
-          Manage your application's appearance and branding.
+          Manage your application's appearance, branding, and report templates.
         </p>
       </div>
 
-      {/* Branding Section */}
-      <Card>
+      <Tabs defaultValue="general" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="general" className="flex items-center gap-2">
+            <Settings2 className="h-4 w-4" />
+            General
+          </TabsTrigger>
+          <TabsTrigger value="pdf-templates" className="flex items-center gap-2">
+            <FileText className="h-4 w-4" />
+            PDF Templates
+          </TabsTrigger>
+        </TabsList>
+
+        <TabsContent value="general" className="space-y-6">
+          {/* Branding Section */}
+          <Card>
         <CardHeader>
           <CardTitle>Branding</CardTitle>
           <CardDescription>
@@ -294,8 +309,14 @@ const Settings = () => {
             </Button>
           </div>
 
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </TabsContent>
+
+      <TabsContent value="pdf-templates">
+        <PDFTemplateManager />
+      </TabsContent>
+    </Tabs>
     </div>
   );
 };
