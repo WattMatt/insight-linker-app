@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
-import { ReportCustomization, ReportSection } from "@/components/pdf-editor/types";
+import { ReportCustomization, ReportSection, TableColumn, KPIItem } from "@/components/pdf-editor/types";
+import { useSampleReportData } from "@/hooks/useSampleReportData";
 import { format } from "date-fns";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
@@ -7,17 +8,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import { 
-  GripVertical, 
   Eye, 
   EyeOff, 
   ChevronUp, 
   ChevronDown,
-  Check,
-  X,
   Palette,
-  Plus,
-  Trash2
+  Building2,
+  Loader2
 } from "lucide-react";
 import {
   Popover,
@@ -48,6 +47,7 @@ interface EditableTextProps {
   placeholder?: string;
   multiline?: boolean;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }
 
 const EditableText: React.FC<EditableTextProps> = ({ 
@@ -56,7 +56,8 @@ const EditableText: React.FC<EditableTextProps> = ({
   className, 
   placeholder,
   multiline = false,
-  style 
+  style,
+  disabled = false
 }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(value);
@@ -86,6 +87,14 @@ const EditableText: React.FC<EditableTextProps> = ({
       handleCancel();
     }
   };
+
+  if (disabled) {
+    return (
+      <span className={className} style={style}>
+        {value || placeholder || '—'}
+      </span>
+    );
+  }
 
   if (isEditing) {
     return (
@@ -134,6 +143,85 @@ const EditableText: React.FC<EditableTextProps> = ({
   );
 };
 
+// Editable column header component
+interface EditableColumnHeaderProps {
+  column: TableColumn;
+  accentColor: { primary: string; light: string; text: string };
+  onLabelChange: (newLabel: string) => void;
+  onVisibilityToggle: () => void;
+}
+
+const EditableColumnHeader: React.FC<EditableColumnHeaderProps> = ({
+  column,
+  accentColor,
+  onLabelChange,
+  onVisibilityToggle
+}) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [tempLabel, setTempLabel] = useState(column.label);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (isEditing && inputRef.current) {
+      inputRef.current.focus();
+      inputRef.current.select();
+    }
+  }, [isEditing]);
+
+  if (!column.visible) {
+    return (
+      <span 
+        className="flex-1 text-xs opacity-50 line-through cursor-pointer hover:opacity-75 flex items-center gap-1"
+        onClick={onVisibilityToggle}
+      >
+        <EyeOff className="h-2.5 w-2.5" />
+        {column.label}
+      </span>
+    );
+  }
+
+  if (isEditing) {
+    return (
+      <Input
+        ref={inputRef}
+        value={tempLabel}
+        onChange={(e) => setTempLabel(e.target.value)}
+        onBlur={() => {
+          onLabelChange(tempLabel);
+          setIsEditing(false);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            onLabelChange(tempLabel);
+            setIsEditing(false);
+          } else if (e.key === 'Escape') {
+            setTempLabel(column.label);
+            setIsEditing(false);
+          }
+        }}
+        className="flex-1 h-5 text-xs py-0 px-1"
+      />
+    );
+  }
+
+  return (
+    <span 
+      className="flex-1 text-xs font-medium cursor-text hover:bg-white/30 rounded px-0.5 transition-colors group flex items-center gap-1"
+      style={{ color: accentColor.text }}
+    >
+      <span onClick={() => setIsEditing(true)} className="flex-1 truncate">
+        {column.label}
+      </span>
+      <button 
+        onClick={(e) => { e.stopPropagation(); onVisibilityToggle(); }}
+        className="opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <Eye className="h-2.5 w-2.5" />
+      </button>
+    </span>
+  );
+};
+
 export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   customization,
   sections,
@@ -142,15 +230,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   onSectionsChange,
 }) => {
   const colors = ACCENT_COLORS.find(c => c.value === customization.accentColor) || ACCENT_COLORS[0];
-  const enabledSections = sections.filter(s => s.enabled).sort((a, b) => a.order - b.order);
-  const [draggedSection, setDraggedSection] = useState<string | null>(null);
-
-  const sampleData = {
-    siteName: "Example Site Name",
-    clientName: "Client Company Ltd",
-    reference: "REF-2026-0001",
-    date: format(new Date(), "dd MMMM yyyy"),
-  };
+  const sampleData = useSampleReportData(reportType as any);
 
   const handleSectionToggle = (sectionId: string) => {
     const updated = sections.map(s =>
@@ -173,13 +253,119 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
     onSectionsChange(reordered);
   };
 
+  const handleColumnLabelChange = (sectionId: string, columnId: string, newLabel: string) => {
+    const updated = sections.map(s => {
+      if (s.id === sectionId && s.columns) {
+        return {
+          ...s,
+          columns: s.columns.map(c => c.id === columnId ? { ...c, label: newLabel } : c)
+        };
+      }
+      return s;
+    });
+    onSectionsChange(updated);
+  };
+
+  const handleColumnVisibilityToggle = (sectionId: string, columnId: string) => {
+    const updated = sections.map(s => {
+      if (s.id === sectionId && s.columns) {
+        return {
+          ...s,
+          columns: s.columns.map(c => c.id === columnId ? { ...c, visible: !c.visible } : c)
+        };
+      }
+      return s;
+    });
+    onSectionsChange(updated);
+  };
+
+  const handleKPILabelChange = (sectionId: string, kpiId: string, newLabel: string) => {
+    const updated = sections.map(s => {
+      if (s.id === sectionId && s.kpiItems) {
+        return {
+          ...s,
+          kpiItems: s.kpiItems.map(k => k.id === kpiId ? { ...k, label: newLabel } : k)
+        };
+      }
+      return s;
+    });
+    onSectionsChange(updated);
+  };
+
+  const handleKPIVisibilityToggle = (sectionId: string, kpiId: string) => {
+    const updated = sections.map(s => {
+      if (s.id === sectionId && s.kpiItems) {
+        return {
+          ...s,
+          kpiItems: s.kpiItems.map(k => k.id === kpiId ? { ...k, visible: !k.visible } : k)
+        };
+      }
+      return s;
+    });
+    onSectionsChange(updated);
+  };
+
+  // Get sample row data for a table section based on its ID
+  const getSampleTableData = (sectionId: string): any[] => {
+    switch (sectionId) {
+      case 'subsections':
+        return sampleData.subsections.map(sub => ({
+          name: sub.name,
+          tenant: sub.tenantName || '—',
+          category: sub.category || '—',
+          cocStatus: sub.cocStatus || 'Missing',
+          documents: sub.documentCount.toString()
+        }));
+      case 'electrical-meters':
+      case 'water-meters':
+      case 'equipment':
+        return sampleData.assets.map(asset => ({
+          serial: asset.serialNumber || '—',
+          premises: asset.premisesId,
+          trade: asset.tradeAs || '—',
+          breaker: asset.breakerSize || '—',
+          ct: asset.ctRatio || '—',
+          type: asset.meterType || '—'
+        }));
+      case 'site-info':
+        return sampleData.site ? [{
+          name: sampleData.site.name,
+          client: sampleData.site.clientName,
+          address: sampleData.site.address || '—'
+        }] : [];
+      case 'inspections':
+        return sampleData.inspections.map(insp => ({
+          title: insp.title,
+          status: insp.status,
+          inspector: insp.inspectorName || '—',
+          date: insp.inspectionDate ? format(new Date(insp.inspectionDate), 'dd MMM yyyy') : '—'
+        }));
+      default:
+        return [];
+    }
+  };
+
+  // Get KPI values for a section
+  const getKPIValue = (field: string): number => {
+    switch (field) {
+      case 'totalSubsections': return sampleData.kpis.totalSubsections;
+      case 'cocPass': return sampleData.kpis.cocPass;
+      case 'cocMissing': return sampleData.kpis.cocMissing;
+      case 'cocPending': return sampleData.kpis.cocPending;
+      case 'complianceRate': return sampleData.kpis.complianceRate;
+      case 'totalAssets': return sampleData.kpis.totalAssets;
+      case 'totalInspections': return sampleData.kpis.totalInspections;
+      case 'completedInspections': return sampleData.kpis.completedInspections;
+      default: return 0;
+    }
+  };
+
   const renderPageWrapper = (children: React.ReactNode, pageNum: number, key: string) => (
     <div 
       key={key}
       className="flex-shrink-0 w-[320px] bg-white rounded-lg shadow-lg overflow-hidden border relative group"
       style={{ aspectRatio: '210/297' }}
     >
-      {/* Watermark */}
       {customization.includeWatermark && (
         <div 
           className="absolute inset-0 flex items-center justify-center pointer-events-none z-10"
@@ -244,10 +430,20 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
       </Popover>
       
       <div className="p-6 flex flex-col h-[calc(100%-16px)]">
-        {/* Logo placeholder */}
-        <div className="w-20 h-20 rounded bg-muted flex items-center justify-center text-xs text-muted-foreground mb-6 hover:bg-muted/80 cursor-pointer transition-colors">
-          Logo
-        </div>
+        {/* Logo - Real client logo or placeholder */}
+        {sampleData.loading ? (
+          <Skeleton className="w-20 h-20 rounded mb-6" />
+        ) : sampleData.site?.clientLogoUrl ? (
+          <img 
+            src={sampleData.site.clientLogoUrl} 
+            alt="Client Logo"
+            className="w-20 h-20 object-contain rounded mb-6"
+          />
+        ) : (
+          <div className="w-20 h-20 rounded bg-muted flex items-center justify-center mb-6">
+            <Building2 className="h-8 w-8 text-muted-foreground" />
+          </div>
+        )}
         
         {/* Title section - Editable */}
         <div className="flex-1 flex flex-col justify-center">
@@ -266,8 +462,17 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           />
           
           <div className="space-y-1">
-            <p className="text-sm font-medium">{sampleData.siteName}</p>
-            <p className="text-xs text-muted-foreground">{sampleData.clientName}</p>
+            {sampleData.loading ? (
+              <>
+                <Skeleton className="h-4 w-32" />
+                <Skeleton className="h-3 w-24" />
+              </>
+            ) : (
+              <>
+                <p className="text-sm font-medium">{sampleData.site?.name || 'Sample Site'}</p>
+                <p className="text-xs text-muted-foreground">{sampleData.site?.clientName || 'Sample Client'}</p>
+              </>
+            )}
           </div>
         </div>
         
@@ -282,7 +487,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           >
             <Switch checked={customization.includeDate} className="scale-75" />
             <span className={customization.includeDate ? "" : "line-through"}>
-              Date: {sampleData.date}
+              Date: {format(new Date(), "dd MMMM yyyy")}
             </span>
           </div>
           <div 
@@ -294,7 +499,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           >
             <Switch checked={customization.includeReference} className="scale-75" />
             <span className={customization.includeReference ? "" : "line-through"}>
-              Reference: {sampleData.reference}
+              Reference: REF-2026-0001
             </span>
           </div>
         </div>
@@ -304,6 +509,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 
   const renderTableOfContents = () => {
     if (!customization.includeTableOfContents) return null;
+    const enabledSections = sections.filter(s => s.enabled).sort((a, b) => a.order - b.order);
     
     return renderPageWrapper(
       <div className="p-6">
@@ -329,8 +535,6 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   };
 
   const renderExecutiveSummary = () => {
-    const hasContent = customization.executiveSummary?.trim();
-    
     return renderPageWrapper(
       <div className="p-6 h-full flex flex-col">
         <h2 
@@ -355,6 +559,152 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
     );
   };
 
+  const renderTableSection = (section: ReportSection) => {
+    const columns = section.columns || [];
+    const visibleColumns = columns.filter(c => c.visible);
+    const rowData = getSampleTableData(section.id);
+
+    if (sampleData.loading) {
+      return (
+        <div className="space-y-2">
+          <Skeleton className="h-6 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+          <Skeleton className="h-4 w-full" />
+        </div>
+      );
+    }
+
+    if (columns.length === 0) {
+      // Fallback for sections without column definitions
+      return (
+        <div className="text-xs text-muted-foreground italic text-center py-4">
+          No columns defined for this section
+        </div>
+      );
+    }
+
+    return (
+      <div className="space-y-1 overflow-hidden">
+        {/* Column Headers - All columns shown, hidden ones grayed */}
+        <div 
+          className="flex text-xs font-medium p-1.5 rounded gap-2"
+          style={{ backgroundColor: colors.light }}
+        >
+          {columns.map(col => (
+            <EditableColumnHeader
+              key={col.id}
+              column={col}
+              accentColor={colors}
+              onLabelChange={(newLabel) => handleColumnLabelChange(section.id, col.id, newLabel)}
+              onVisibilityToggle={() => handleColumnVisibilityToggle(section.id, col.id)}
+            />
+          ))}
+        </div>
+        
+        {/* Data Rows - Only visible columns */}
+        {rowData.length > 0 ? (
+          rowData.slice(0, 5).map((row, rowIdx) => (
+            <div key={rowIdx} className="flex text-xs p-1.5 border-b border-muted/50 gap-2">
+              {visibleColumns.map(col => (
+                <span key={col.id} className="flex-1 truncate text-muted-foreground">
+                  {row[col.field] || '—'}
+                </span>
+              ))}
+            </div>
+          ))
+        ) : (
+          <div className="text-xs text-muted-foreground italic text-center py-4">
+            No sample data available
+          </div>
+        )}
+        
+        {rowData.length > 5 && (
+          <div className="text-xs text-muted-foreground text-center pt-2">
+            ... and {rowData.length - 5} more rows
+          </div>
+        )}
+      </div>
+    );
+  };
+
+  const renderKPISection = (section: ReportSection) => {
+    const kpiItems = section.kpiItems || [];
+    const visibleKPIs = kpiItems.filter(k => k.visible);
+
+    if (sampleData.loading) {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          {[1, 2, 3, 4].map(i => (
+            <Skeleton key={i} className="h-16 rounded" />
+          ))}
+        </div>
+      );
+    }
+
+    if (kpiItems.length === 0) {
+      // Fallback for sections without KPI definitions
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          {['Total', 'Compliant', 'Pending', 'Issues'].map((label, i) => (
+            <div 
+              key={label}
+              className="p-3 rounded text-center"
+              style={{ backgroundColor: colors.light }}
+            >
+              <div className="text-lg font-bold" style={{ color: colors.primary }}>
+                {[sampleData.kpis.totalSubsections, sampleData.kpis.cocPass, sampleData.kpis.cocPending, sampleData.kpis.cocMissing][i]}
+              </div>
+              <div className="text-xs text-muted-foreground">{label}</div>
+            </div>
+          ))}
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-2 gap-3">
+        {kpiItems.map((kpi) => {
+          const value = getKPIValue(kpi.field);
+          const isHidden = !kpi.visible;
+
+          return (
+            <div 
+              key={kpi.id}
+              className={cn(
+                "p-3 rounded text-center group relative",
+                isHidden && "opacity-40"
+              )}
+              style={{ backgroundColor: colors.light }}
+            >
+              {/* Visibility toggle */}
+              <button
+                onClick={() => handleKPIVisibilityToggle(section.id, kpi.id)}
+                className="absolute top-1 right-1 opacity-0 group-hover:opacity-100 transition-opacity"
+              >
+                {kpi.visible ? (
+                  <Eye className="h-3 w-3 text-muted-foreground" />
+                ) : (
+                  <EyeOff className="h-3 w-3 text-muted-foreground" />
+                )}
+              </button>
+
+              <div className="text-lg font-bold" style={{ color: colors.primary }}>
+                {kpi.field === 'complianceRate' ? `${value}%` : value}
+              </div>
+              <EditableText
+                value={kpi.label}
+                onChange={(newLabel) => handleKPILabelChange(section.id, kpi.id, newLabel)}
+                className="text-xs text-muted-foreground block"
+                disabled={isHidden}
+              />
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
+
   const renderSectionPage = (section: ReportSection, pageIndex: number) => {
     const sectionIndex = sections.findIndex(s => s.id === section.id);
     const canMoveUp = sectionIndex > 0;
@@ -365,8 +715,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
         key={section.id}
         className={cn(
           "flex-shrink-0 w-[320px] bg-white rounded-lg shadow-lg overflow-hidden border relative group transition-all",
-          !section.enabled && "opacity-40 grayscale",
-          draggedSection === section.id && "ring-2 ring-primary"
+          !section.enabled && "opacity-40 grayscale"
         )}
         style={{ aspectRatio: '210/297' }}
       >
@@ -400,7 +749,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           </Button>
         </div>
 
-        {/* Enabled/Disabled badge */}
+        {/* Hidden badge */}
         {!section.enabled && (
           <div className="absolute inset-0 flex items-center justify-center z-10 bg-white/60">
             <Badge variant="secondary" className="text-xs">
@@ -434,48 +783,24 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             {section.title}
           </h2>
           
-          {/* Section content preview */}
-          {section.type === 'table' && (
-            <div className="space-y-1">
-              <div 
-                className="flex text-xs font-medium p-1.5 rounded"
-                style={{ backgroundColor: colors.light, color: colors.text }}
-              >
-                <span className="flex-1">Column 1</span>
-                <span className="flex-1">Column 2</span>
-                <span className="flex-1">Column 3</span>
-              </div>
-              {[1, 2, 3, 4].map(row => (
-                <div key={row} className="flex text-xs p-1.5 border-b border-muted/50">
-                  <span className="flex-1 text-muted-foreground">Data {row}A</span>
-                  <span className="flex-1 text-muted-foreground">Data {row}B</span>
-                  <span className="flex-1 text-muted-foreground">Data {row}C</span>
-                </div>
-              ))}
-            </div>
-          )}
-          
-          {section.type === 'kpi' && (
-            <div className="grid grid-cols-2 gap-3">
-              {['Total', 'Compliant', 'Pending', 'Issues'].map((label, i) => (
-                <div 
-                  key={label}
-                  className="p-3 rounded text-center"
-                  style={{ backgroundColor: colors.light }}
-                >
-                  <div className="text-lg font-bold" style={{ color: colors.primary }}>
-                    {[42, 38, 3, 1][i]}
-                  </div>
-                  <div className="text-xs text-muted-foreground">{label}</div>
-                </div>
-              ))}
-            </div>
-          )}
+          {/* Section content based on type */}
+          {section.type === 'table' && renderTableSection(section)}
+          {section.type === 'kpi' && renderKPISection(section)}
           
           {(section.type === 'text' || section.type === 'summary') && (
             <div className="space-y-2 text-xs text-muted-foreground">
-              <p>Lorem ipsum dolor sit amet, consectetur adipiscing elit.</p>
-              <p>Ut enim ad minim veniam, quis nostrud exercitation.</p>
+              <EditableText
+                value={section.textContent || ''}
+                onChange={(v) => {
+                  const updated = sections.map(s =>
+                    s.id === section.id ? { ...s, textContent: v } : s
+                  );
+                  onSectionsChange(updated);
+                }}
+                className="block w-full"
+                placeholder="Click to add content..."
+                multiline
+              />
             </div>
           )}
           
@@ -505,6 +830,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   };
 
   const renderNotesPage = () => {
+    const enabledSections = sections.filter(s => s.enabled);
     return renderPageWrapper(
       <div className="p-6 h-full flex flex-col">
         <h2 
@@ -531,9 +857,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 
   // Calculate page numbers
   let pageCounter = 1;
-  const tocPageNum = customization.includeTableOfContents ? pageCounter++ : null;
-  const execPageNum = pageCounter++;
-  const sectionStartPage = pageCounter;
+  const sectionStartPage = pageCounter + (customization.includeTableOfContents ? 2 : 1);
 
   return (
     <div className="space-y-4">
@@ -565,9 +889,17 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             <label htmlFor="watermark-toggle" className="text-sm cursor-pointer">Watermark</label>
           </div>
         </div>
-        <Badge variant="outline">
-          {1 + (customization.includeTableOfContents ? 1 : 0) + 1 + sections.length + 1} pages
-        </Badge>
+        <div className="flex items-center gap-2">
+          {sampleData.loading && (
+            <Badge variant="outline" className="gap-1">
+              <Loader2 className="h-3 w-3 animate-spin" />
+              Loading data...
+            </Badge>
+          )}
+          <Badge variant="outline">
+            {1 + (customization.includeTableOfContents ? 1 : 0) + 1 + sections.length + 1} pages
+          </Badge>
+        </div>
       </div>
 
       {/* Page Preview Scroll Container */}
@@ -597,7 +929,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 
       {/* Instructions */}
       <p className="text-xs text-muted-foreground text-center">
-        Click on text to edit • Hover over pages to show controls • Click accent bar to change color • Toggle sections with the eye icon
+        Click on text to edit • Click column headers to rename • Toggle visibility with eye icons • Hover over pages to show controls
       </p>
     </div>
   );

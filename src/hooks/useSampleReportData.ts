@@ -1,0 +1,256 @@
+import { useState, useEffect } from "react";
+import { supabase } from "@/integrations/supabase/client";
+
+export interface SampleSite {
+  id: string;
+  name: string;
+  clientName: string;
+  address: string | null;
+  logoUrl: string | null;
+  clientLogoUrl: string | null;
+}
+
+export interface SampleSubsection {
+  id: string;
+  name: string;
+  tenantName: string | null;
+  category: string | null;
+  cocStatus: string | null;
+  documentCount: number;
+}
+
+export interface SampleAsset {
+  id: string;
+  serialNumber: string | null;
+  premisesId: string;
+  tradeAs: string | null;
+  breakerSize: string | null;
+  ctRatio: string | null;
+  meterType: string | null;
+}
+
+export interface SampleInspection {
+  id: string;
+  title: string;
+  status: string;
+  inspectorName: string | null;
+  inspectionDate: string | null;
+  siteName: string;
+}
+
+export interface SampleKPIs {
+  totalSubsections: number;
+  cocPass: number;
+  cocMissing: number;
+  cocPending: number;
+  complianceRate: number;
+  totalAssets: number;
+  totalInspections: number;
+  completedInspections: number;
+}
+
+export interface SampleReportData {
+  site: SampleSite | null;
+  subsections: SampleSubsection[];
+  assets: SampleAsset[];
+  inspections: SampleInspection[];
+  kpis: SampleKPIs;
+  loading: boolean;
+  error: string | null;
+}
+
+type ReportType = 'site_summary' | 'inspection' | 'floor_plan' | 'asset_verification' | 'compliance';
+
+export const useSampleReportData = (reportType: ReportType): SampleReportData => {
+  const [site, setSite] = useState<SampleSite | null>(null);
+  const [subsections, setSubsections] = useState<SampleSubsection[]>([]);
+  const [assets, setAssets] = useState<SampleAsset[]>([]);
+  const [inspections, setInspections] = useState<SampleInspection[]>([]);
+  const [kpis, setKpis] = useState<SampleKPIs>({
+    totalSubsections: 0,
+    cocPass: 0,
+    cocMissing: 0,
+    cocPending: 0,
+    complianceRate: 0,
+    totalAssets: 0,
+    totalInspections: 0,
+    completedInspections: 0,
+  });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchSampleData = async () => {
+      try {
+        setLoading(true);
+        setError(null);
+
+        // Fetch a sample site with client info
+        const { data: siteData, error: siteError } = await supabase
+          .from("sites")
+          .select(`
+            id,
+            name,
+            address,
+            site_image_url,
+            client_logo_url,
+            clients!inner(name, logo_url)
+          `)
+          .limit(1)
+          .single();
+
+        if (siteError && siteError.code !== 'PGRST116') {
+          console.error("Error fetching site:", siteError);
+        }
+
+        if (siteData) {
+          const clientData = siteData.clients as any;
+          setSite({
+            id: siteData.id,
+            name: siteData.name,
+            clientName: clientData?.name || "Sample Client",
+            address: siteData.address,
+            logoUrl: siteData.site_image_url,
+            clientLogoUrl: clientData?.logo_url || siteData.client_logo_url,
+          });
+
+          // Fetch subsections for this site
+          const { data: subsectionsData } = await supabase
+            .from("subsections")
+            .select("id, name, tenant_name, category, coc_status")
+            .eq("site_id", siteData.id)
+            .limit(5);
+
+          if (subsectionsData) {
+            // Get document counts for each subsection
+            const subsectionsWithCounts = await Promise.all(
+              subsectionsData.map(async (sub) => {
+                const { count } = await supabase
+                  .from("subsection_documents")
+                  .select("*", { count: "exact", head: true })
+                  .eq("subsection_id", sub.id);
+
+                return {
+                  id: sub.id,
+                  name: sub.name,
+                  tenantName: sub.tenant_name,
+                  category: sub.category,
+                  cocStatus: sub.coc_status,
+                  documentCount: count || 0,
+                };
+              })
+            );
+            setSubsections(subsectionsWithCounts);
+          }
+
+          // Fetch assets for this site
+          const { data: assetsData } = await supabase
+            .from("site_assets")
+            .select("id, meter_serial_number, premises_id, trade_as, breaker_size, ct_ratio, meter_type")
+            .eq("site_id", siteData.id)
+            .limit(5);
+
+          if (assetsData) {
+            setAssets(
+              assetsData.map((asset) => ({
+                id: asset.id,
+                serialNumber: asset.meter_serial_number,
+                premisesId: asset.premises_id,
+                tradeAs: asset.trade_as,
+                breakerSize: asset.breaker_size,
+                ctRatio: asset.ct_ratio,
+                meterType: asset.meter_type,
+              }))
+            );
+          }
+
+          // Fetch inspections for this site
+          const { data: inspectionsData } = await supabase
+            .from("inspections")
+            .select("id, title, status, inspector_name, inspection_date")
+            .eq("site_id", siteData.id)
+            .limit(5);
+
+          if (inspectionsData) {
+            setInspections(
+              inspectionsData.map((insp) => ({
+                id: insp.id,
+                title: insp.title,
+                status: insp.status,
+                inspectorName: insp.inspector_name,
+                inspectionDate: insp.inspection_date,
+                siteName: siteData.name,
+              }))
+            );
+          }
+
+          // Calculate KPIs
+          const { count: totalSubs } = await supabase
+            .from("subsections")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id);
+
+          const { count: passCount } = await supabase
+            .from("subsections")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id)
+            .eq("coc_status", "Pass");
+
+          const { count: missingCount } = await supabase
+            .from("subsections")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id)
+            .or("coc_status.is.null,coc_status.eq.Missing");
+
+          const { count: totalAssetCount } = await supabase
+            .from("site_assets")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id);
+
+          const { count: totalInspCount } = await supabase
+            .from("inspections")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id);
+
+          const { count: completedInspCount } = await supabase
+            .from("inspections")
+            .select("*", { count: "exact", head: true })
+            .eq("site_id", siteData.id)
+            .eq("status", "Completed");
+
+          const total = totalSubs || 0;
+          const pass = passCount || 0;
+          const missing = missingCount || 0;
+
+          setKpis({
+            totalSubsections: total,
+            cocPass: pass,
+            cocMissing: missing,
+            cocPending: total - pass - missing,
+            complianceRate: total > 0 ? Math.round((pass / total) * 100 * 10) / 10 : 0,
+            totalAssets: totalAssetCount || 0,
+            totalInspections: totalInspCount || 0,
+            completedInspections: completedInspCount || 0,
+          });
+        }
+      } catch (err: any) {
+        console.error("Error fetching sample data:", err);
+        setError(err.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSampleData();
+  }, [reportType]);
+
+  return {
+    site,
+    subsections,
+    assets,
+    inspections,
+    kpis,
+    loading,
+    error,
+  };
+};
