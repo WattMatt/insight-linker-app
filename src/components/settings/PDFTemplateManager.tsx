@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
@@ -23,9 +24,11 @@ import {
   Save,
   GripVertical,
   ChevronUp,
-  ChevronDown
+  ChevronDown,
+  Eye
 } from "lucide-react";
 import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/components/pdf-editor/types";
+import { PDFTemplatePreview } from "./PDFTemplatePreview";
 import { Json } from "@/integrations/supabase/types";
 
 interface PDFTemplate {
@@ -324,79 +327,22 @@ export const PDFTemplateManager = () => {
                       </div>
                     </div>
 
-                    {/* Template Preview */}
-                    <div className="grid gap-6 md:grid-cols-2">
-                      {/* Cover Page Preview */}
-                      <div className="border rounded-lg p-4 space-y-3">
-                        <h4 className="font-medium text-sm text-muted-foreground">Cover Page</h4>
-                        <div className="bg-muted/30 rounded-lg p-4 min-h-[200px] flex flex-col items-center justify-center text-center">
-                          <h2 className="text-xl font-bold">{template.customization.coverTitle}</h2>
-                          <p className="text-muted-foreground">{template.customization.coverSubtitle}</p>
-                          <div className="flex gap-2 mt-4">
-                            {template.customization.includeDate && (
-                              <Badge variant="secondary">Date</Badge>
-                            )}
-                            {template.customization.includeReference && (
-                              <Badge variant="secondary">Reference #</Badge>
-                            )}
-                          </div>
-                          <Badge 
-                            className="mt-4 text-white" 
-                            style={{ backgroundColor: getAccentColor(template.customization.accentColor) }}
-                          >
-                            {template.customization.accentColor} theme
-                          </Badge>
-                        </div>
-                      </div>
-
-                      {/* Sections Preview */}
-                      <div className="border rounded-lg p-4 space-y-3">
-                        <h4 className="font-medium text-sm text-muted-foreground">
-                          Sections ({template.sections.filter(s => s.enabled).length} enabled)
-                        </h4>
-                        <div className="space-y-2">
-                          {template.sections
-                            .sort((a, b) => a.order - b.order)
-                            .map(section => (
-                              <div
-                                key={section.id}
-                                className={`flex items-center justify-between p-2 rounded-lg ${
-                                  section.enabled ? 'bg-muted/50' : 'bg-muted/20 opacity-50'
-                                }`}
-                              >
-                                <span className={section.enabled ? '' : 'line-through'}>
-                                  {section.title}
-                                </span>
-                                <div className="flex items-center gap-2">
-                                  <Badge variant="outline" className="text-xs">
-                                    {section.type}
-                                  </Badge>
-                                  {section.enabled ? (
-                                    <Badge variant="default" className="text-xs">On</Badge>
-                                  ) : (
-                                    <Badge variant="secondary" className="text-xs">Off</Badge>
-                                  )}
-                                </div>
-                              </div>
-                            ))}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Options Preview */}
+                    {/* Visual PDF Preview */}
                     <div className="border rounded-lg p-4 space-y-3">
-                      <h4 className="font-medium text-sm text-muted-foreground">Document Options</h4>
-                      <div className="flex flex-wrap gap-2">
-                        {template.customization.includeTableOfContents && (
-                          <Badge variant="outline">Table of Contents</Badge>
-                        )}
-                        {template.customization.includePageNumbers && (
-                          <Badge variant="outline">Page Numbers</Badge>
-                        )}
-                        {template.customization.includeWatermark && (
-                          <Badge variant="outline">Watermark: {template.customization.watermarkText}</Badge>
-                        )}
+                      <div className="flex items-center justify-between">
+                        <h4 className="font-medium text-sm text-muted-foreground flex items-center gap-2">
+                          <Eye className="h-4 w-4" />
+                          Report Preview
+                        </h4>
+                        <Badge variant="outline">
+                          {template.sections.filter(s => s.enabled).length} sections
+                        </Badge>
                       </div>
+                      <PDFTemplatePreview
+                        customization={template.customization}
+                        sections={template.sections}
+                        reportType={type.id}
+                      />
                     </div>
 
                     <p className="text-sm text-muted-foreground">
@@ -416,7 +362,7 @@ export const PDFTemplateManager = () => {
 
         {/* Edit Dialog */}
         <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-          <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="max-w-6xl max-h-[90vh] overflow-hidden flex flex-col">
             <DialogHeader>
               <DialogTitle>Edit {editingTemplate?.name}</DialogTitle>
               <DialogDescription>
@@ -425,12 +371,15 @@ export const PDFTemplateManager = () => {
             </DialogHeader>
 
             {editingTemplate && (
-              <Tabs defaultValue="cover" className="mt-4">
-                <TabsList className="grid grid-cols-3 w-full">
-                  <TabsTrigger value="cover">Cover Page</TabsTrigger>
-                  <TabsTrigger value="sections">Sections</TabsTrigger>
-                  <TabsTrigger value="options">Options</TabsTrigger>
-                </TabsList>
+              <div className="flex-1 grid grid-cols-2 gap-6 overflow-hidden mt-4">
+                {/* Left side: Controls */}
+                <ScrollArea className="h-[60vh]">
+                  <Tabs defaultValue="cover">
+                    <TabsList className="grid grid-cols-3 w-full mb-4">
+                      <TabsTrigger value="cover">Cover Page</TabsTrigger>
+                      <TabsTrigger value="sections">Sections</TabsTrigger>
+                      <TabsTrigger value="options">Options</TabsTrigger>
+                    </TabsList>
 
                 <TabsContent value="cover" className="mt-4 space-y-4">
                   <div className="grid gap-4">
@@ -651,10 +600,30 @@ export const PDFTemplateManager = () => {
                     </div>
                   </div>
                 </TabsContent>
-              </Tabs>
+                  </Tabs>
+                </ScrollArea>
+
+                {/* Right side: Live Preview */}
+                <div className="border rounded-lg p-4 bg-muted/20 overflow-hidden flex flex-col">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Eye className="h-4 w-4 text-muted-foreground" />
+                    <h4 className="font-medium text-sm">Live Preview</h4>
+                    {hasChanges && (
+                      <Badge variant="outline" className="text-xs">Unsaved changes</Badge>
+                    )}
+                  </div>
+                  <ScrollArea className="flex-1">
+                    <PDFTemplatePreview
+                      customization={customization}
+                      sections={sections}
+                      reportType={editingTemplate.report_type}
+                    />
+                  </ScrollArea>
+                </div>
+              </div>
             )}
 
-            <div className="flex justify-end gap-2 mt-6 pt-4 border-t">
+            <div className="flex justify-end gap-2 pt-4 border-t">
               <Button variant="outline" onClick={() => setEditDialogOpen(false)}>
                 Cancel
               </Button>
