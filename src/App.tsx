@@ -46,6 +46,7 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
+const APIClients = lazy(() => import("./pages/APIClients"));
 
 // Eagerly load components that appear on every page
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
@@ -348,7 +349,10 @@ const App = () => (
           <Route path="/admin-client-preview" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
           <Route path="/admin-contractor-preview" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
           <Route path="/admin/contractor-access-simulator" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
-          
+          <Route
+            path="/api-clients"
+            element={<ProtectedRoute><DashboardLayout><APIClients /></DashboardLayout></ProtectedRoute>}
+          />
           {/* Client Portal Routes */}
           <Route
             path="/client-portal"

@@ -41,6 +41,133 @@ export type Database = {
         }
         Relationships: []
       }
+      api_access_tokens: {
+        Row: {
+          access_token: string
+          client_id: string
+          created_at: string | null
+          expires_at: string
+          id: string
+          last_used_at: string | null
+          refresh_expires_at: string | null
+          refresh_token: string | null
+          scopes: string[] | null
+        }
+        Insert: {
+          access_token?: string
+          client_id: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          last_used_at?: string | null
+          refresh_expires_at?: string | null
+          refresh_token?: string | null
+          scopes?: string[] | null
+        }
+        Update: {
+          access_token?: string
+          client_id?: string
+          created_at?: string | null
+          expires_at?: string
+          id?: string
+          last_used_at?: string | null
+          refresh_expires_at?: string | null
+          refresh_token?: string | null
+          scopes?: string[] | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_access_tokens_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "api_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      api_clients: {
+        Row: {
+          client_id: string
+          client_secret: string
+          created_at: string | null
+          created_by: string | null
+          id: string
+          is_active: boolean | null
+          name: string
+          redirect_uris: string[] | null
+          scopes: string[] | null
+          updated_at: string | null
+        }
+        Insert: {
+          client_id?: string
+          client_secret?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          name: string
+          redirect_uris?: string[] | null
+          scopes?: string[] | null
+          updated_at?: string | null
+        }
+        Update: {
+          client_id?: string
+          client_secret?: string
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          redirect_uris?: string[] | null
+          scopes?: string[] | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      api_request_logs: {
+        Row: {
+          client_id: string | null
+          created_at: string | null
+          endpoint: string
+          id: string
+          ip_address: string | null
+          method: string
+          request_params: Json | null
+          status_code: number | null
+          user_agent: string | null
+        }
+        Insert: {
+          client_id?: string | null
+          created_at?: string | null
+          endpoint: string
+          id?: string
+          ip_address?: string | null
+          method: string
+          request_params?: Json | null
+          status_code?: number | null
+          user_agent?: string | null
+        }
+        Update: {
+          client_id?: string | null
+          created_at?: string | null
+          endpoint?: string
+          id?: string
+          ip_address?: string | null
+          method?: string
+          request_params?: Json | null
+          status_code?: number | null
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_request_logs_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "api_clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calendar_events: {
         Row: {
           created_at: string | null
@@ -2062,6 +2189,14 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      validate_api_token: {
+        Args: { token: string }
+        Returns: {
+          client_id: string
+          is_valid: boolean
+          scopes: string[]
+        }[]
       }
       validate_inspection_templates: {
         Args: never
