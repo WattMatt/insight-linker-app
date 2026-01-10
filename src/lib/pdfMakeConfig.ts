@@ -347,10 +347,10 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 
 /**
  * Generate a PDF blob from a document definition
- * Uses direct stream access for synchronous PDF generation
+ * Uses Promise-based getStream for browser environments
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
-  console.log('Creating PDF with pdfmake (stream method)...');
+  console.log('Creating PDF with pdfmake...');
   
   // Verify fonts are loaded
   const instance = pdfMake as any;
@@ -361,41 +361,77 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
     throw new Error('PDF fonts not loaded. Please refresh the page and try again.');
   }
   
-  return new Promise<Blob>((resolve, reject) => {
-    try {
-      const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
-      
-      // Access the internal document directly
-      const chunks: Uint8Array[] = [];
-      
-      // Get the internal pdfkit document
-      pdfDocGenerator.getStream({
-        // Capture stream data
-      }).on('data', (chunk: Uint8Array) => {
-        chunks.push(chunk);
-      }).on('end', () => {
-        console.log('Stream ended, chunks:', chunks.length);
-        // Combine all chunks into a single Uint8Array
-        const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
-        const result = new Uint8Array(totalLength);
-        let offset = 0;
-        for (const chunk of chunks) {
-          result.set(chunk, offset);
-          offset += chunk.length;
-        }
-        const blob = new Blob([result], { type: 'application/pdf' });
-        console.log('PDF blob created from stream, size:', blob.size);
-        resolve(blob);
-      }).on('error', (err: Error) => {
-        console.error('Stream error:', err);
-        reject(err);
-      });
-      
-    } catch (error) {
-      console.error('PDF generation error:', error);
-      reject(error);
+  const pdfDocGenerator = pdfMake.createPdf(docDefinition) as any;
+  
+  // In browser, getStream returns a Promise that resolves to a readable stream
+  try {
+    const stream = await pdfDocGenerator.getStream();
+    console.log('Got stream:', typeof stream);
+    
+    // Read the stream
+    const reader = stream.getReader();
+    const chunks: Uint8Array[] = [];
+    
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      chunks.push(value);
     }
-  });
+    
+    console.log('Stream chunks collected:', chunks.length);
+    
+    // Combine chunks into blob
+    const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+    const result = new Uint8Array(totalLength);
+    let offset = 0;
+    for (const chunk of chunks) {
+      result.set(chunk, offset);
+      offset += chunk.length;
+    }
+    
+    const blob = new Blob([result], { type: 'application/pdf' });
+    console.log('PDF blob created, size:', blob.size);
+    return blob;
+    
+  } catch (streamError) {
+    console.log('Stream method failed, trying getBlob with Promise wrapper...');
+    
+    // Fallback: wrap getBlob in a proper Promise with manual resolution
+    return new Promise<Blob>((resolve, reject) => {
+      let resolved = false;
+      
+      const timeout = setTimeout(() => {
+        if (!resolved) {
+          resolved = true;
+          reject(new Error('PDF generation timed out'));
+        }
+      }, 30000);
+      
+      try {
+        // Create a fresh PDF generator for the fallback
+        const fallbackGenerator = pdfMake.createPdf(docDefinition) as any;
+        
+        fallbackGenerator.getBlob((blob: Blob) => {
+          if (resolved) return;
+          resolved = true;
+          clearTimeout(timeout);
+          
+          if (blob && blob.size > 0) {
+            console.log('PDF blob via getBlob fallback, size:', blob.size);
+            resolve(blob);
+          } else {
+            reject(new Error('Generated PDF is empty'));
+          }
+        });
+      } catch (err) {
+        if (!resolved) {
+          resolved = true;
+          clearTimeout(timeout);
+          reject(err);
+        }
+      }
+    });
+  }
 }
 
 /**
