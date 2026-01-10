@@ -56,6 +56,21 @@ interface TenantImages {
   meterImage?: string;
 }
 
+export interface InspectionTenantMatch {
+  inspectionId: string;
+  inspectionTitle: string;
+  subsectionId: string | null;
+  subsectionName?: string;
+  shopName?: string;
+  shopNumber?: string;
+  meterSerialNumber: string;
+  ctSizeAndRatio?: string;
+  breakerSize?: string;
+  meterImage?: string;
+  ctRatioImage?: string;
+  breakerImage?: string;
+}
+
 export interface ComparisonResult {
   asset: Asset | null;
   subsection: Subsection | null;
@@ -66,12 +81,15 @@ export interface ComparisonResult {
   hasDiscrepancy: boolean;
   // For unmatched subsections: if their meter serial exists somewhere in asset register
   potentialAssetMatch?: Asset;
+  // Matched inspection tenant data
+  inspectionMatch?: InspectionTenantMatch;
 }
 
 interface AssetComparisonTableProps {
   assets: Asset[];
   subsections: Subsection[];
   subsectionImages?: Record<string, TenantImages>;
+  inspectionMeterMatches?: Map<string, InspectionTenantMatch>;
   siteName: string;
   companyLogoUrl?: string | null;
   onDataUpdated?: () => void;
@@ -124,6 +142,7 @@ export const AssetComparisonTable = ({
   assets,
   subsections,
   subsectionImages = {},
+  inspectionMeterMatches = new Map(),
   siteName,
   companyLogoUrl,
   onDataUpdated,
@@ -343,8 +362,18 @@ export const AssetComparisonTable = ({
       }
     }
 
+    // Add inspection matches to all results based on meter serial
+    results.forEach(result => {
+      if (result.asset?.meter_serial_number) {
+        const normalizedAssetMeter = normalizeMeterSerial(result.asset.meter_serial_number);
+        if (normalizedAssetMeter && inspectionMeterMatches.has(normalizedAssetMeter)) {
+          result.inspectionMatch = inspectionMeterMatches.get(normalizedAssetMeter);
+        }
+      }
+    });
+
     return results;
-  }, [assets, subsections, manualLinks, normalizeMeterSerial]);
+  }, [assets, subsections, manualLinks, normalizeMeterSerial, inspectionMeterMatches]);
 
   // Filter results
   const filteredResults = useMemo(() => {
@@ -748,6 +777,7 @@ export const AssetComparisonTable = ({
                 <TableHead>Asset / Subsection</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Link</TableHead>
+                <TableHead>Inspection Source</TableHead>
                 <TableHead>Meter Serial</TableHead>
                 <TableHead>CT Ratio</TableHead>
                 <TableHead>Breaker Size</TableHead>
@@ -757,7 +787,7 @@ export const AssetComparisonTable = ({
             <TableBody>
             {filteredResults.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
+                  <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
                     No results found
                   </TableCell>
                 </TableRow>
@@ -863,6 +893,68 @@ export const AssetComparisonTable = ({
                       )}
                       {result.matchType === "matched" && result.matchMethod !== "manual" && (
                         <span className="text-xs text-muted-foreground">Auto</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {result.inspectionMatch ? (
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-1">
+                            <Badge variant="outline" className="text-xs bg-emerald-50 text-emerald-700 border-emerald-200">
+                              <CheckCircle2 className="h-3 w-3 mr-1" />
+                              Verified
+                            </Badge>
+                          </div>
+                          <div className="text-xs text-muted-foreground">
+                            {result.inspectionMatch.subsectionName || result.inspectionMatch.shopName || result.inspectionMatch.shopNumber || 'Inspection'}
+                          </div>
+                          <div className="flex flex-wrap gap-1 mt-1">
+                            {result.inspectionMatch.ctSizeAndRatio && (
+                              <Badge variant="secondary" className="text-xs">
+                                CT: {result.inspectionMatch.ctSizeAndRatio}
+                              </Badge>
+                            )}
+                            {result.inspectionMatch.breakerSize && (
+                              <Badge variant="secondary" className="text-xs">
+                                Brk: {result.inspectionMatch.breakerSize}
+                              </Badge>
+                            )}
+                          </div>
+                          {(result.inspectionMatch.meterImage || result.inspectionMatch.ctRatioImage || result.inspectionMatch.breakerImage) && (
+                            <DropdownMenu>
+                              <DropdownMenuTrigger asChild>
+                                <Button variant="ghost" size="sm" className="h-6 px-2 text-xs gap-1">
+                                  <ImageIcon className="h-3 w-3" />
+                                  Photos
+                                </Button>
+                              </DropdownMenuTrigger>
+                              <DropdownMenuContent align="start">
+                                {result.inspectionMatch.meterImage && (
+                                  <DropdownMenuItem
+                                    onClick={() => setImageDialog({ url: result.inspectionMatch!.meterImage!, title: "Meter (Inspection)" })}
+                                  >
+                                    Meter Photo
+                                  </DropdownMenuItem>
+                                )}
+                                {result.inspectionMatch.ctRatioImage && (
+                                  <DropdownMenuItem
+                                    onClick={() => setImageDialog({ url: result.inspectionMatch!.ctRatioImage!, title: "CT Ratio (Inspection)" })}
+                                  >
+                                    CT Ratio Photo
+                                  </DropdownMenuItem>
+                                )}
+                                {result.inspectionMatch.breakerImage && (
+                                  <DropdownMenuItem
+                                    onClick={() => setImageDialog({ url: result.inspectionMatch!.breakerImage!, title: "Breaker (Inspection)" })}
+                                  >
+                                    Breaker Photo
+                                  </DropdownMenuItem>
+                                )}
+                              </DropdownMenuContent>
+                            </DropdownMenu>
+                          )}
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground text-sm">-</span>
                       )}
                     </TableCell>
                     <TableCell>

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -78,13 +78,13 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
     },
   });
 
-  // Fetch inspections with tenant images for each subsection
-  const { data: inspectionsWithImages = [] } = useQuery({
-    queryKey: ["site-inspections-images", siteId],
+  // Fetch inspections with tenant data (meter serial, CT ratio, breaker, images)
+  const { data: inspectionsWithTenants = [] } = useQuery({
+    queryKey: ["site-inspections-tenants", siteId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inspections")
-        .select("subsection_id, json_data")
+        .select("id, title, subsection_id, json_data")
         .eq("site_id", siteId)
         .not("json_data", "is", null);
 
@@ -93,8 +93,8 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
     },
   });
 
-  // Build a map of subsection ID -> tenant images
-  const subsectionImages = inspectionsWithImages.reduce<Record<string, { breakerImage?: string; ctRatioImage?: string; meterImage?: string }>>((acc, inspection) => {
+  // Build a map of subsection ID -> tenant images (for backward compatibility)
+  const subsectionImages = inspectionsWithTenants.reduce<Record<string, { breakerImage?: string; ctRatioImage?: string; meterImage?: string }>>((acc, inspection) => {
     if (!inspection.subsection_id || !inspection.json_data) return acc;
     
     const jsonData = inspection.json_data as { tenants?: Array<{ breakerImage?: string; ctRatioImage?: string; meterImage?: string }> };
@@ -119,6 +119,76 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
     return acc;
   }, {});
 
+  // Build a map of meter serial number -> inspection tenant data for matching to assets
+  interface InspectionTenantMatch {
+    inspectionId: string;
+    inspectionTitle: string;
+    subsectionId: string | null;
+    subsectionName?: string;
+    shopName?: string;
+    shopNumber?: string;
+    meterSerialNumber: string;
+    ctSizeAndRatio?: string;
+    breakerSize?: string;
+    meterImage?: string;
+    ctRatioImage?: string;
+    breakerImage?: string;
+  }
+
+  const inspectionMeterMatches = useMemo(() => {
+    const matches = new Map<string, InspectionTenantMatch>();
+    
+    inspectionsWithTenants.forEach(inspection => {
+      const jsonData = inspection.json_data as { 
+        tenants?: Array<{ 
+          id: string;
+          shopName?: string;
+          shopNumber?: string;
+          meterSerialNumber?: string;
+          ctSizeAndRatio?: string;
+          breakerSize?: string;
+          meterImage?: string;
+          ctRatioImage?: string;
+          breakerImage?: string;
+        }> 
+      };
+      
+      const tenants = jsonData?.tenants || [];
+      tenants.forEach(tenant => {
+        if (!tenant.meterSerialNumber) return;
+        
+        const normalizedSerial = tenant.meterSerialNumber.toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
+        if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
+        
+        // Find subsection name if available
+        const subsection = subsections.find(s => s.id === inspection.subsection_id);
+        
+        // Only keep the first match (or one with more images)
+        const existing = matches.get(normalizedSerial);
+        const hasMoreImages = (tenant.meterImage || tenant.ctRatioImage || tenant.breakerImage) && 
+                              !(existing?.meterImage || existing?.ctRatioImage || existing?.breakerImage);
+        
+        if (!existing || hasMoreImages) {
+          matches.set(normalizedSerial, {
+            inspectionId: inspection.id,
+            inspectionTitle: inspection.title,
+            subsectionId: inspection.subsection_id,
+            subsectionName: subsection?.name,
+            shopName: tenant.shopName,
+            shopNumber: tenant.shopNumber,
+            meterSerialNumber: tenant.meterSerialNumber,
+            ctSizeAndRatio: tenant.ctSizeAndRatio,
+            breakerSize: tenant.breakerSize,
+            meterImage: tenant.meterImage,
+            ctRatioImage: tenant.ctRatioImage,
+            breakerImage: tenant.breakerImage,
+          });
+        }
+      });
+    });
+    
+    return matches;
+  }, [inspectionsWithTenants, subsections]);
   const electricalAssets = assets.filter((a) => a.asset_category === "electrical_meter");
 
   const parseExcelFile = async (file: File): Promise<ParsedAsset[]> => {
@@ -458,6 +528,7 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
               assets={electricalAssets} 
               subsections={subsections}
               subsectionImages={subsectionImages}
+              inspectionMeterMatches={inspectionMeterMatches}
               siteName={siteName}
               onDataUpdated={() => {
                 refetch();
