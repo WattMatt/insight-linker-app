@@ -85,6 +85,9 @@ interface LegacyComparisonResult {
   potentialAssetMatch?: Asset;
 }
 
+// ComparisonResult from AssetComparisonTable - alias for compatibility
+export type ComparisonResult = InspectionComparisonResult;
+
 interface InspectionGeneratorOptions {
   siteName: string;
   clientName?: string;

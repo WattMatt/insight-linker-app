@@ -29,7 +29,7 @@ import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, 
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
+import { generateInspectionBasedReport, ComparisonResult as GeneratorComparisonResult } from "@/lib/assetVerificationReportGenerator";
 import { PDFComplianceCheck } from "@/lib/pdfTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
