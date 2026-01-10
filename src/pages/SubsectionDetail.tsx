@@ -33,6 +33,7 @@ import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 
 interface SubsectionData {
   name: string;
@@ -3552,6 +3553,9 @@ const SubsectionDetail = () => {
                 </div>
               </CardContent>
             </Card>
+
+            {/* COC Compliance Rules Reference */}
+            <COCComplianceRulesReference />
 
             {/* Metering Details & Documents */}
             <Card className="border-red-200">
