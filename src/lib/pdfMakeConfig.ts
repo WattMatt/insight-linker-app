@@ -17,12 +17,30 @@ type Content = any;
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 
 // Initialize pdfmake with bundled fonts
-// Handle different module export formats
-const vfs = (pdfFonts as any).pdfMake?.vfs || (pdfFonts as any).default?.pdfMake?.vfs || (pdfFonts as any).vfs;
+// Handle different module export formats - pdfmake v0.3.x uses different structure
+const pdfMakeInstance = pdfMake as any;
+
+// Try all possible font locations for pdfmake compatibility
+const fontSource = pdfFonts as any;
+const vfs = fontSource.pdfMake?.vfs 
+  || fontSource.default?.pdfMake?.vfs 
+  || fontSource.vfs
+  || fontSource.default?.vfs
+  || (fontSource.default && typeof fontSource.default === 'object' ? fontSource.default : null);
+
 if (vfs) {
-  pdfMake.vfs = vfs;
+  pdfMakeInstance.vfs = vfs;
+  console.log('pdfMake fonts loaded successfully');
 } else {
-  console.warn('pdfMake fonts not loaded - PDF generation may fail');
+  // Fallback: try to set fonts directly on pdfMake
+  try {
+    // For pdfmake v0.3.x with ES modules
+    if (fontSource.default) {
+      pdfMakeInstance.vfs = fontSource.default;
+    }
+  } catch (e) {
+    console.warn('pdfMake fonts not loaded - PDF generation may fail:', e);
+  }
 }
 
 // ============================================================================
@@ -324,13 +342,31 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
   return new Promise((resolve, reject) => {
     try {
       console.log('Creating PDF with pdfmake...');
+      
+      // Check if fonts are loaded
+      const pdfMakeInstance = pdfMake as any;
+      if (!pdfMakeInstance.vfs || Object.keys(pdfMakeInstance.vfs).length === 0) {
+        console.error('pdfMake fonts not initialized');
+        reject(new Error('PDF fonts not loaded. Please refresh the page and try again.'));
+        return;
+      }
+      
       const pdfDocGenerator = pdfMake.createPdf(docDefinition);
+      
+      // pdfmake getBlob only takes a success callback
+      // Wrap in try-catch and add timeout for safety
+      const timeout = setTimeout(() => {
+        reject(new Error('PDF generation timed out. Please try again.'));
+      }, 30000); // 30 second timeout
+      
       pdfDocGenerator.getBlob((blob: Blob) => {
+        clearTimeout(timeout);
         console.log('PDF blob generated, size:', blob.size);
+        if (blob.size === 0) {
+          reject(new Error('Generated PDF is empty'));
+          return;
+        }
         resolve(blob);
-      }, (error: any) => {
-        console.error('PDF generation error:', error);
-        reject(error);
       });
     } catch (error) {
       console.error('PDF creation error:', error);
