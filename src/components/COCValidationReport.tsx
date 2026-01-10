@@ -16,8 +16,10 @@ import {
   addFootersToAllPages,
   addSectionHeader,
   logComplianceCheck,
+  getTableOptionsWithSafeMargins,
   RGB_COLORS,
   PAGE,
+  SAFE_BOTTOM_MARGIN,
   PDFComplianceCheck,
 } from "@/lib/pdfUtils";
 import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
@@ -258,14 +260,14 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       });
       
       autoTable(doc, {
-        startY: yPosition,
-        margin: { left: margins.left, right: margins.right },
-        tableWidth: contentWidth,
+        ...getTableOptionsWithSafeMargins(doc, yPosition, 'Administrative Details', null, 'Electrical Compliance'),
         head: [['Field', 'Value']],
         body: adminData,
         theme: 'grid',
-        styles: { fontSize: 10 },
-        headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white }
+        columnStyles: {
+          0: { cellWidth: 50 },
+          1: { cellWidth: contentWidth - 50 },
+        },
       });
     }
 
@@ -283,19 +285,15 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       ]);
       
       autoTable(doc, {
-        startY: yPosition,
-        margin: { left: margins.left, right: margins.right },
-        tableWidth: contentWidth,
+        ...getTableOptionsWithSafeMargins(doc, yPosition, 'Technical Evaluation', null, 'Electrical Compliance'),
         head: [['Section', 'Requirement', 'Finding', 'Status']],
         body: techData,
         theme: 'grid',
-        styles: { fontSize: 9, cellPadding: 3 },
-        headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
         columnStyles: {
-          0: { cellWidth: 40 },
-          1: { cellWidth: 50 },
-          2: { cellWidth: 50 },
-          3: { cellWidth: 30 }
+          0: { cellWidth: 35 },
+          1: { cellWidth: 55 },
+          2: { cellWidth: 55 },
+          3: { cellWidth: 25 }
         }
       });
     }

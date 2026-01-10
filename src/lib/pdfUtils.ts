@@ -56,15 +56,25 @@ export const RGB_COLORS = {
 };
 
 // ============================================================================
-// PAGE DIMENSIONS
+// PAGE DIMENSIONS & SAFE MARGINS
 // ============================================================================
+
+/**
+ * SAFE_BOTTOM_MARGIN accounts for:
+ * - Page margin bottom (15mm)
+ * - Footer height (15mm) 
+ * - Safety buffer (7mm)
+ * = 37mm total clearance from page bottom
+ */
+export const SAFE_BOTTOM_MARGIN = margins.bottom + footers.height + 7; // 37mm
 
 export const PAGE = {
   width: 210, // A4 width in mm
   height: 297, // A4 height in mm
   margins,
   contentWidth: getContentWidth(),
-  contentStartY: margins.top + headers.height + 5,
+  contentStartY: margins.top + headers.height + 8,
+  safeBottomMargin: SAFE_BOTTOM_MARGIN,
 };
 
 // ============================================================================
@@ -74,13 +84,16 @@ export const PAGE = {
 /**
  * Add standardized page header following DOCUMENT_DESIGN_STANDARDS
  * - Left-aligned title with white text
- * - Right-aligned logo
+ * - Right-aligned logo (or fallback text if no logo)
  * - Primary brand color background
+ * 
+ * Returns: Y position where content should start (includes 8mm spacing)
  */
 export function addStandardHeader(
   doc: jsPDF, 
   title: string, 
-  logoDataUrl?: string | null
+  logoDataUrl?: string | null,
+  fallbackOrgName?: string
 ): number {
   const pageWidth = doc.internal.pageSize.getWidth();
   const headerHeight = headers.height + margins.top;
@@ -95,7 +108,7 @@ export function addStandardHeader(
   doc.setFont(typography.fonts.heading, 'bold');
   doc.text(title, margins.left, margins.header + 5);
   
-  // Logo (right aligned per standards)
+  // Logo (right aligned per standards) OR fallback organization name
   if (logoDataUrl) {
     try {
       const logoX = pageWidth - margins.right - logo.masterSize.width;
@@ -103,7 +116,20 @@ export function addStandardHeader(
       doc.addImage(logoDataUrl, 'PNG', logoX, logoY, logo.masterSize.width, logo.masterSize.maxHeight);
     } catch (e) {
       console.warn('Failed to add logo to header:', e);
+      // Add fallback text if logo fails
+      if (fallbackOrgName) {
+        doc.setFontSize(typography.scale.caption);
+        doc.setTextColor(...RGB_COLORS.white);
+        doc.setFont(typography.fonts.body, 'bold');
+        doc.text(fallbackOrgName, pageWidth - margins.right, margins.header + 5, { align: 'right' });
+      }
     }
+  } else if (fallbackOrgName) {
+    // No logo provided, use text branding
+    doc.setFontSize(typography.scale.caption);
+    doc.setTextColor(...RGB_COLORS.white);
+    doc.setFont(typography.fonts.body, 'bold');
+    doc.text(fallbackOrgName, pageWidth - margins.right, margins.header + 5, { align: 'right' });
   }
   
   // Header border bottom
@@ -113,7 +139,8 @@ export function addStandardHeader(
     doc.line(0, headerHeight, pageWidth, headerHeight);
   }
   
-  return headerHeight + 5;
+  // Return Y position with proper spacing for content to start
+  return headerHeight + 8;
 }
 
 /**
@@ -567,11 +594,30 @@ export function drawKpiCardRow(
 // ============================================================================
 
 /**
- * Standard table options following DOCUMENT_DESIGN_STANDARDS
+ * Get table options that ensure content doesn't bleed into footer.
+ * This is the PRIMARY function to use when creating tables.
+ * 
+ * @param startY - Starting Y position for the table
+ * @param headerTitle - Title to show on continuation pages
+ * @param logoDataUrl - Logo for continuation page headers
+ * @param fallbackOrgName - Organization name for text branding fallback
  */
-export function getStandardTableStyles(): Partial<UserOptions> {
+export function getTableOptionsWithSafeMargins(
+  doc: jsPDF,
+  startY: number,
+  headerTitle: string,
+  logoDataUrl?: string | null,
+  fallbackOrgName?: string
+): Partial<UserOptions> {
   return {
-    margin: { left: margins.left, right: margins.right },
+    startY,
+    margin: { 
+      left: margins.left, 
+      right: margins.right,
+      bottom: SAFE_BOTTOM_MARGIN, // Critical: prevents footer overlap
+    },
+    tableWidth: getContentWidth(),
+    showHead: 'everyPage',
     styles: {
       fontSize: tables.body.fontSize,
       cellPadding: { 
@@ -580,6 +626,50 @@ export function getStandardTableStyles(): Partial<UserOptions> {
       },
       lineColor: RGB_COLORS.tableBorder,
       lineWidth: tables.border.width,
+      overflow: 'linebreak', // Wrap text instead of clipping
+      minCellHeight: 8, // Minimum height to prevent cramped cells
+    },
+    headStyles: {
+      fillColor: RGB_COLORS.primary,
+      textColor: RGB_COLORS.white,
+      fontStyle: 'bold',
+      fontSize: tables.header.fontSize,
+      minCellHeight: 10,
+    },
+    alternateRowStyles: {
+      fillColor: RGB_COLORS.tableAltRow,
+    },
+    didDrawPage: (data) => {
+      // Add branded header on continuation pages
+      if (data.pageNumber > 1) {
+        addStandardHeader(doc, headerTitle, logoDataUrl, fallbackOrgName);
+        // Adjust margin.top for table content to start after header
+        data.settings.margin.top = headers.height + margins.top + 12;
+      }
+    },
+  };
+}
+
+/**
+ * Standard table options following DOCUMENT_DESIGN_STANDARDS
+ * @deprecated Use getTableOptionsWithSafeMargins for better footer handling
+ */
+export function getStandardTableStyles(): Partial<UserOptions> {
+  return {
+    margin: { 
+      left: margins.left, 
+      right: margins.right,
+      bottom: SAFE_BOTTOM_MARGIN,
+    },
+    styles: {
+      fontSize: tables.body.fontSize,
+      cellPadding: { 
+        horizontal: tables.cellPadding.horizontal, 
+        vertical: tables.cellPadding.vertical 
+      },
+      lineColor: RGB_COLORS.tableBorder,
+      lineWidth: tables.border.width,
+      overflow: 'linebreak',
     },
     headStyles: {
       fillColor: RGB_COLORS.tableHeader,

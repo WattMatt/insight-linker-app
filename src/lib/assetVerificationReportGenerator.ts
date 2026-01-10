@@ -12,8 +12,10 @@ import {
   hexToRgb,
   RGB_COLORS,
   PAGE,
+  SAFE_BOTTOM_MARGIN,
   PDFComplianceCheck,
   CoverPageOptions,
+  getTableOptionsWithSafeMargins,
 } from "./pdfUtils";
 
 interface Asset {
@@ -233,30 +235,28 @@ export async function generateInspectionBasedReport(
 
   // ===== VERIFIED ITEMS TABLE =====
   doc.addPage();
-  const verifiedHeaderY = addStandardHeader(doc, 'Verified Assets', logoDataUrl);
+  const verifiedHeaderY = addStandardHeader(doc, 'Verified Assets', logoDataUrl, 'Asset Management System');
   
-  let tableY = verifiedHeaderY + 5;
+  let tableY = verifiedHeaderY;
   tableY = addSectionHeader(doc, 'Verified via Inspection Data', tableY);
 
   const verifiedResults = comparisonResults.filter(r => r.verified);
   
-  // Calculate proper column widths - total should equal contentWidth (180mm)
-  // Premises ID: 35, Trade As: 45, Status: 20, Source: 25, Meter: 25, CT: 15, Breaker: 15 = 180
-  const columnWidths = {
-    0: { cellWidth: 35 },  // Premises ID
-    1: { cellWidth: 45 },  // Trade As
-    2: { cellWidth: 20 },  // Status
-    3: { cellWidth: 25 },  // Inspection Source
-    4: { cellWidth: 25 },  // Meter Serial
-    5: { cellWidth: 15 },  // CT Ratio
-    6: { cellWidth: 15 },  // Breaker
+  // Column widths sum to exactly 180mm (contentWidth)
+  // Premises ID: 28, Trade As: 38, Status: 22, Source: 28, Meter: 28, CT: 18, Breaker: 18 = 180
+  const verifiedColumnWidths = {
+    0: { cellWidth: 28 },  // Premises ID
+    1: { cellWidth: 38 },  // Trade As
+    2: { cellWidth: 22 },  // Status
+    3: { cellWidth: 28 },  // Inspection Source
+    4: { cellWidth: 28 },  // Meter Serial
+    5: { cellWidth: 18 },  // CT Ratio
+    6: { cellWidth: 18 },  // Breaker
   };
   
   if (verifiedResults.length > 0) {
     autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      tableWidth: contentWidth,
+      ...getTableOptionsWithSafeMargins(doc, tableY, 'Verified Assets (continued)', logoDataUrl, 'Asset Management System'),
       head: [[
         'Premises ID',
         'Trade As',
@@ -275,29 +275,7 @@ export async function generateInspectionBasedReport(
         formatComparisonCell(r.asset.ct_ratio, r.inspectionMatch?.ctSizeAndRatio, r.ctMatch),
         formatComparisonCell(r.asset.breaker_size, r.inspectionMatch?.breakerSize, r.breakerMatch)
       ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-        overflow: 'linebreak',
-      },
-      headStyles: {
-        fillColor: RGB_COLORS.primary,
-        textColor: RGB_COLORS.white,
-        fontStyle: 'bold',
-        fontSize: tables.header.fontSize,
-      },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
-      columnStyles: columnWidths,
-      didDrawPage: (data) => {
-        // Add header to continuation pages
-        if (data.pageNumber > 1) {
-          addStandardHeader(doc, 'Verified Assets (continued)', logoDataUrl);
-        }
-      },
+      columnStyles: verifiedColumnWidths,
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 2) {
           const value = data.cell.raw as string;
@@ -333,16 +311,22 @@ export async function generateInspectionBasedReport(
   const discrepancies = comparisonResults.filter(r => r.hasDiscrepancy);
   if (discrepancies.length > 0) {
     doc.addPage();
-    const discrepancyHeaderY = addStandardHeader(doc, 'Discrepancies Detail', logoDataUrl);
+    const discrepancyHeaderY = addStandardHeader(doc, 'Discrepancies Detail', logoDataUrl, 'Asset Management System');
     
-    tableY = discrepancyHeaderY + 5;
+    tableY = discrepancyHeaderY;
     tableY = addSectionHeader(doc, 'Value Mismatches Between Asset Register and Inspections', tableY);
 
-    // Column widths: Premises: 40, Field: 25, Asset Value: 40, Inspection Value: 40, Status: 25 = 170 (within 180)
+    // Column widths sum to exactly 180mm: 36 + 28 + 44 + 44 + 28 = 180
+    const discrepancyColumnWidths = {
+      0: { cellWidth: 36 },  // Premises ID
+      1: { cellWidth: 28 },  // Field
+      2: { cellWidth: 44 },  // Asset Value
+      3: { cellWidth: 44 },  // Inspection Value
+      4: { cellWidth: 28 },  // Status
+    };
+
     autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      tableWidth: contentWidth,
+      ...getTableOptionsWithSafeMargins(doc, tableY, 'Discrepancies (continued)', logoDataUrl, 'Asset Management System'),
       head: [['Premises ID', 'Field', 'Asset Register Value', 'Inspection Value', 'Status']],
       body: discrepancies.flatMap(r => {
         const rows: string[][] = [];
@@ -366,31 +350,13 @@ export async function generateInspectionBasedReport(
         }
         return rows;
       }),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-        overflow: 'linebreak',
-      },
       headStyles: {
         fillColor: [254, 243, 199],
         textColor: [146, 64, 14],
         fontStyle: 'bold',
         fontSize: tables.header.fontSize,
       },
-      columnStyles: {
-        0: { cellWidth: 40 },
-        1: { cellWidth: 25 },
-        2: { cellWidth: 40 },
-        3: { cellWidth: 40 },
-        4: { cellWidth: 25 },
-      },
-      didDrawPage: (data) => {
-        if (data.pageNumber > 1) {
-          addStandardHeader(doc, 'Discrepancies Detail (continued)', logoDataUrl);
-        }
-      },
+      columnStyles: discrepancyColumnWidths,
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 4) {
           data.cell.styles.textColor = hexToRgb(colors.warning);
@@ -404,16 +370,23 @@ export async function generateInspectionBasedReport(
   const unverified = comparisonResults.filter(r => !r.verified);
   if (unverified.length > 0) {
     doc.addPage();
-    const unverifiedHeaderY = addStandardHeader(doc, 'Unverified Assets', logoDataUrl);
+    const unverifiedHeaderY = addStandardHeader(doc, 'Unverified Assets', logoDataUrl, 'Asset Management System');
     
-    tableY = unverifiedHeaderY + 5;
+    tableY = unverifiedHeaderY;
     tableY = addSectionHeader(doc, 'Assets Without Matching Inspection Data', tableY);
 
-    // Column widths: Premises: 35, Trade: 40, Meter: 30, CT: 20, Breaker: 20, Action: 30 = 175 (within 180)
+    // Column widths sum to exactly 180mm: 30 + 40 + 30 + 24 + 24 + 32 = 180
+    const unverifiedColumnWidths = {
+      0: { cellWidth: 30 },  // Premises ID
+      1: { cellWidth: 40 },  // Trade As
+      2: { cellWidth: 30 },  // Meter Serial
+      3: { cellWidth: 24 },  // CT Ratio
+      4: { cellWidth: 24 },  // Breaker Size
+      5: { cellWidth: 32 },  // Action Required
+    };
+
     autoTable(doc, {
-      startY: tableY,
-      margin: { left: margins.left, right: margins.right },
-      tableWidth: contentWidth,
+      ...getTableOptionsWithSafeMargins(doc, tableY, 'Unverified Assets (continued)', logoDataUrl, 'Asset Management System'),
       head: [['Premises ID', 'Trade As', 'Meter Serial', 'CT Ratio', 'Breaker Size', 'Action Required']],
       body: unverified.map(r => [
         r.asset.premises_id || '-',
@@ -423,35 +396,13 @@ export async function generateInspectionBasedReport(
         r.asset.breaker_size || '-',
         'Requires Inspection'
       ]),
-      styles: {
-        fontSize: tables.body.fontSize,
-        cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
-        lineColor: hexToRgb(tables.border.color),
-        lineWidth: tables.border.width,
-        overflow: 'linebreak',
-      },
       headStyles: {
         fillColor: [254, 215, 170],
         textColor: [154, 52, 18],
         fontStyle: 'bold',
         fontSize: tables.header.fontSize,
       },
-      alternateRowStyles: {
-        fillColor: hexToRgb(tables.body.alternateRowColor),
-      },
-      columnStyles: {
-        0: { cellWidth: 35 },
-        1: { cellWidth: 40 },
-        2: { cellWidth: 30 },
-        3: { cellWidth: 20 },
-        4: { cellWidth: 20 },
-        5: { cellWidth: 30 },
-      },
-      didDrawPage: (data) => {
-        if (data.pageNumber > 1) {
-          addStandardHeader(doc, 'Unverified Assets (continued)', logoDataUrl);
-        }
-      },
+      columnStyles: unverifiedColumnWidths,
       didParseCell: (data) => {
         if (data.section === 'body' && data.column.index === 5) {
           data.cell.styles.textColor = hexToRgb(colors.error);

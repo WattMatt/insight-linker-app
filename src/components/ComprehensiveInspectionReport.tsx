@@ -15,8 +15,10 @@ import {
   addSectionHeader,
   addFullWidthSectionHeader,
   logComplianceCheck,
+  getTableOptionsWithSafeMargins,
   RGB_COLORS,
   PAGE,
+  SAFE_BOTTOM_MARGIN,
   PDFComplianceCheck,
 } from "@/lib/pdfUtils";
 import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
@@ -387,10 +389,11 @@ async function generatePDFInternal(options: {
 
     autoTable(doc, {
       startY: yPos,
+      margin: { left: 20, right: 20, bottom: SAFE_BOTTOM_MARGIN },
       head: [],
       body: infoItems.map(item => [item.label, item.value]),
       theme: 'striped',
-      styles: { fontSize: 10, cellPadding: 4 },
+      styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
       columnStyles: {
         0: { fontStyle: 'bold', cellWidth: 50 },
         1: { cellWidth: 'auto' }
