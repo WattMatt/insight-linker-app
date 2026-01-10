@@ -77,6 +77,7 @@ interface AssetComparisonTableProps {
 type EditingCell = {
   rowIndex: number;
   field: "meter_serial" | "ct_ratio" | "breaker_size";
+  source: "asset" | "inspection";
   value: string;
 } | null;
 
@@ -229,7 +230,7 @@ export const AssetComparisonTable = ({
     }
   };
 
-  const handleSaveEdit = async (result: ComparisonResult, field: string, newValue: string) => {
+  const handleSaveAssetEdit = async (result: ComparisonResult, field: string, newValue: string) => {
     if (!result.asset) return;
     
     setSaving(true);
@@ -254,6 +255,70 @@ export const AssetComparisonTable = ({
       toast.error("Failed to update asset");
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleSaveInspectionEdit = async (result: ComparisonResult, field: string, newValue: string) => {
+    if (!result.inspectionMatch) return;
+    
+    setSaving(true);
+    try {
+      // Fetch the current inspection data
+      const { data: inspection, error: fetchError } = await supabase
+        .from("inspections")
+        .select("json_data")
+        .eq("id", result.inspectionMatch.inspectionId)
+        .single();
+        
+      if (fetchError) throw fetchError;
+      
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const jsonData = (inspection?.json_data as any) || {};
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tenants = (jsonData.tenants as any[]) || [];
+      
+      // Find the tenant with matching meter serial
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const tenantIndex = tenants.findIndex((t: any) => {
+        const tenantSerial = normalizeMeterSerial(t.meterSerialNumber as string);
+        const matchSerial = normalizeMeterSerial(result.inspectionMatch?.meterSerialNumber);
+        return tenantSerial === matchSerial;
+      });
+      
+      if (tenantIndex === -1) {
+        toast.error("Could not find matching tenant in inspection");
+        return;
+      }
+      
+      // Update the specific field in the tenant
+      if (field === "meter_serial") tenants[tenantIndex].meterSerialNumber = newValue;
+      if (field === "ct_ratio") tenants[tenantIndex].ctSizeAndRatio = newValue;
+      if (field === "breaker_size") tenants[tenantIndex].breakerSize = newValue;
+      
+      // Save the updated json_data
+      const { error: updateError } = await supabase
+        .from("inspections")
+        .update({ json_data: { ...jsonData, tenants } })
+        .eq("id", result.inspectionMatch.inspectionId);
+        
+      if (updateError) throw updateError;
+      
+      toast.success("Inspection updated successfully");
+      setEditingCell(null);
+      onDataUpdated?.();
+    } catch (error) {
+      console.error("Error updating inspection:", error);
+      toast.error("Failed to update inspection");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleSaveEdit = async (result: ComparisonResult, field: string, newValue: string, source: "asset" | "inspection") => {
+    if (source === "asset") {
+      await handleSaveAssetEdit(result, field, newValue);
+    } else {
+      await handleSaveInspectionEdit(result, field, newValue);
     }
   };
 
@@ -352,55 +417,79 @@ export const AssetComparisonTable = ({
     inspectionValue: string | null | undefined,
     matchStatus: "match" | "mismatch" | "na"
   ) => {
-    const isEditing = editingCell?.rowIndex === rowIndex && editingCell?.field === field;
+    const isEditingAsset = editingCell?.rowIndex === rowIndex && editingCell?.field === field && editingCell?.source === "asset";
+    const isEditingInspection = editingCell?.rowIndex === rowIndex && editingCell?.field === field && editingCell?.source === "inspection";
     
-    if (isEditing) {
-      return (
-        <div className="flex items-center gap-1">
-          <Input
-            value={editingCell.value}
-            onChange={(e) => setEditingCell({ ...editingCell, value: e.target.value })}
-            className="h-7 text-xs w-24"
-            autoFocus
-          />
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={() => handleSaveEdit(result, field, editingCell.value)}
-            disabled={saving}
-          >
-            <Check className="h-3 w-3 text-green-600" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0"
-            onClick={() => setEditingCell(null)}
-          >
-            <X className="h-3 w-3 text-destructive" />
-          </Button>
-        </div>
-      );
-    }
+    const renderEditInput = (source: "asset" | "inspection") => (
+      <div className="flex items-center gap-1">
+        <Input
+          value={editingCell?.value || ""}
+          onChange={(e) => setEditingCell(prev => prev ? { ...prev, value: e.target.value } : null)}
+          className="h-7 text-xs w-24"
+          autoFocus
+        />
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={() => handleSaveEdit(result, field, editingCell?.value || "", source)}
+          disabled={saving}
+        >
+          {saving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Check className="h-3 w-3 text-green-600" />}
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="h-6 w-6 p-0"
+          onClick={() => setEditingCell(null)}
+        >
+          <X className="h-3 w-3 text-destructive" />
+        </Button>
+      </div>
+    );
 
     return (
       <div className="space-y-1">
+        {/* Asset Value Row */}
         <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">{assetValue || "-"}</span>
-          {matchStatus !== "na" && getValueBadge(matchStatus)}
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-            onClick={() => setEditingCell({ rowIndex, field, value: assetValue || "" })}
-          >
-            <Pencil className="h-3 w-3" />
-          </Button>
+          {isEditingAsset ? (
+            renderEditInput("asset")
+          ) : (
+            <>
+              <span className="text-sm font-medium">{assetValue || "-"}</span>
+              {matchStatus !== "na" && getValueBadge(matchStatus)}
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
+                onClick={() => setEditingCell({ rowIndex, field, source: "asset", value: assetValue || "" })}
+                title="Edit asset value"
+              >
+                <Pencil className="h-3 w-3" />
+              </Button>
+            </>
+          )}
         </div>
+        
+        {/* Inspection Value Row */}
         {inspectionValue && matchStatus !== "na" && (
-          <div className="text-xs text-muted-foreground">
-            Inspection: {inspectionValue}
+          <div className="flex items-center gap-1">
+            {isEditingInspection ? (
+              renderEditInput("inspection")
+            ) : (
+              <>
+                <span className="text-xs text-muted-foreground">Inspection: {inspectionValue}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
+                  onClick={() => setEditingCell({ rowIndex, field, source: "inspection", value: inspectionValue || "" })}
+                  title="Edit inspection value"
+                >
+                  <Pencil className="h-2.5 w-2.5" />
+                </Button>
+              </>
+            )}
           </div>
         )}
       </div>
