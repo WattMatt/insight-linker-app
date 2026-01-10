@@ -10,28 +10,25 @@ import { Switch } from "@/components/ui/switch";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Separator } from "@/components/ui/separator";
 import { 
   Eye, 
   EyeOff, 
   ChevronUp, 
   ChevronDown,
+  ChevronLeft,
+  ChevronRight,
   Palette,
   Building2,
-  Loader2,
   Plus,
   Trash2,
-  Edit2,
-  GripVertical,
   Calendar,
   Hash,
   MapPin,
   User,
   FileText,
-  CheckCircle,
-  XCircle,
-  AlertCircle,
-  Settings2
+  Maximize2,
+  ZoomIn,
+  ZoomOut
 } from "lucide-react";
 import {
   Popover,
@@ -90,26 +87,20 @@ const KPI_FIELD_OPTIONS = [
   { value: 'completedInspections', label: 'Completed Inspections' },
 ];
 
-// Inline editable text component
-interface EditableTextProps {
+// A4 dimensions in pixels (at 96 DPI)
+const A4_WIDTH = 595;
+const A4_HEIGHT = 842;
+
+// Inline editable cell component
+interface EditableCellProps {
   value: string;
   onChange: (value: string) => void;
   className?: string;
-  placeholder?: string;
-  multiline?: boolean;
   style?: React.CSSProperties;
-  disabled?: boolean;
+  multiline?: boolean;
 }
 
-const EditableText: React.FC<EditableTextProps> = ({ 
-  value, 
-  onChange, 
-  className, 
-  placeholder,
-  multiline = false,
-  style,
-  disabled = false
-}) => {
+const EditableCell: React.FC<EditableCellProps> = ({ value, onChange, className, style, multiline }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [tempValue, setTempValue] = useState(value);
   const inputRef = useRef<HTMLInputElement | HTMLTextAreaElement>(null);
@@ -130,40 +121,29 @@ const EditableText: React.FC<EditableTextProps> = ({
     setIsEditing(false);
   };
 
-  const handleCancel = () => {
-    setTempValue(value);
-    setIsEditing(false);
-  };
-
-  if (disabled) {
-    return <span className={className} style={style}>{value || placeholder || '—'}</span>;
-  }
-
   if (isEditing) {
     return multiline ? (
-      <Textarea
-        ref={inputRef as React.RefObject<HTMLTextAreaElement>}
+      <textarea
+        ref={inputRef as any}
         value={tempValue}
         onChange={(e) => setTempValue(e.target.value)}
         onBlur={handleSave}
-        onKeyDown={(e) => {
-          if (e.key === 'Escape') handleCancel();
-        }}
-        className={cn("resize-none", className)}
+        onKeyDown={(e) => e.key === 'Escape' && setIsEditing(false)}
+        className={cn("w-full border rounded px-1 py-0.5 text-inherit resize-none bg-white", className)}
         style={style}
-        rows={4}
+        rows={3}
       />
     ) : (
-      <Input
-        ref={inputRef as React.RefObject<HTMLInputElement>}
+      <input
+        ref={inputRef as any}
         value={tempValue}
         onChange={(e) => setTempValue(e.target.value)}
         onBlur={handleSave}
         onKeyDown={(e) => {
           if (e.key === 'Enter') handleSave();
-          if (e.key === 'Escape') handleCancel();
+          if (e.key === 'Escape') setIsEditing(false);
         }}
-        className={cn("h-auto py-1", className)}
+        className={cn("w-full border rounded px-1 py-0.5 text-inherit bg-white", className)}
         style={style}
       />
     );
@@ -173,14 +153,14 @@ const EditableText: React.FC<EditableTextProps> = ({
     <span
       onClick={() => setIsEditing(true)}
       className={cn(
-        "cursor-text hover:bg-primary/10 px-1 py-0.5 rounded transition-all border border-transparent hover:border-primary/30",
-        !value && "text-muted-foreground italic",
+        "cursor-text hover:bg-blue-50 px-1 py-0.5 rounded transition-all inline-block",
+        !value && "text-gray-400 italic",
         className
       )}
       style={style}
       title="Click to edit"
     >
-      {value || placeholder || 'Click to edit...'}
+      {value || 'Click to edit'}
     </span>
   );
 };
@@ -194,6 +174,8 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 }) => {
   const colors = ACCENT_COLORS.find(c => c.value === customization.accentColor) || ACCENT_COLORS[0];
   const sampleData = useSampleReportData(reportType as any);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [zoom, setZoom] = useState(0.8);
   
   // Dialog states
   const [addColumnDialog, setAddColumnDialog] = useState<{ open: boolean; sectionId: string | null }>({ open: false, sectionId: null });
@@ -203,27 +185,51 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   const [newKPIField, setNewKPIField] = useState('totalSubsections');
   const [newKPIColor, setNewKPIColor] = useState('blue');
 
-  // Section handlers
-  const handleSectionToggle = (sectionId: string) => {
-    const updated = sections.map(s => s.id === sectionId ? { ...s, enabled: !s.enabled } : s);
-    onSectionsChange(updated);
+  // Sample data for mock content - using real data from first project
+  const siteName = sampleData.site?.name || 'Evaton Mall';
+  const clientName = sampleData.site?.clientName || 'Fortress Fund Managers';
+  const siteAddress = sampleData.site?.address || 'Golden Highway, Evaton West, Gauteng';
+  const clientLogo = sampleData.site?.clientLogoUrl;
+
+  // Get subsections data
+  const subsectionsData = sampleData.subsections.length > 0 
+    ? sampleData.subsections 
+    : [
+        { name: 'SHOP 001', tenantName: 'RUSSELS', category: 'LS', cocStatus: 'Pass' },
+        { name: 'SHOP 002', tenantName: 'NB CELLULAR', category: 'LS', cocStatus: 'Missing' },
+        { name: 'SHOP 003', tenantName: 'JEFFREY MEYER OPTOMETRIST', category: 'LS', cocStatus: 'Pass' },
+        { name: 'SHOP T005A', tenantName: 'YOUBAR HAIR AND NAILS', category: 'Line Shop', cocStatus: 'Missing' },
+        { name: 'SHOP F02', tenantName: 'FOOD LOVERS MARKET', category: 'Anchor', cocStatus: 'Pending' },
+        { name: 'SHOP L01A', tenantName: 'CLICKS PHARMACY', category: 'LS', cocStatus: 'Pass' },
+        { name: 'SHOP L02', tenantName: 'PEP STORES', category: 'LS', cocStatus: 'Missing' },
+        { name: 'SHOP L03', tenantName: 'CASH CRUSADERS', category: 'LS', cocStatus: 'Missing' },
+      ];
+
+  // Get assets data
+  const assetsData = sampleData.assets.length > 0
+    ? sampleData.assets
+    : [
+        { serialNumber: '35778057', premisesId: 'YA - BULK METER', tradeAs: 'BULK SUPPLY', breakerSize: '1000A', ctRatio: '1000/5A' },
+        { serialNumber: '35778055', premisesId: 'YA - SHOP 050', tradeAs: 'SHOPRITE', breakerSize: '800A', ctRatio: '800/5A' },
+        { serialNumber: '36084016', premisesId: 'YA - SHOP 004', tradeAs: 'ACKERMANS', breakerSize: '63A', ctRatio: '—' },
+      ];
+
+  // KPI values
+  const kpiValues = {
+    totalSubsections: sampleData.kpis.totalSubsections || 116,
+    cocPass: sampleData.kpis.cocPass || 2,
+    cocMissing: sampleData.kpis.cocMissing || 114,
+    cocPending: sampleData.kpis.cocPending || 0,
+    complianceRate: sampleData.kpis.complianceRate || 1.7,
+    totalAssets: sampleData.kpis.totalAssets || 45,
   };
 
-  const handleSectionMove = (sectionId: string, direction: 'up' | 'down') => {
-    const sorted = [...sections].sort((a, b) => a.order - b.order);
-    const idx = sorted.findIndex(s => s.id === sectionId);
-    const newIdx = direction === 'up' ? idx - 1 : idx + 1;
-    if (newIdx < 0 || newIdx >= sorted.length) return;
-    [sorted[idx], sorted[newIdx]] = [sorted[newIdx], sorted[idx]];
-    onSectionsChange(sorted.map((s, i) => ({ ...s, order: i })));
-  };
-
+  // Handlers
   const handleSectionTitleChange = (sectionId: string, title: string) => {
     const updated = sections.map(s => s.id === sectionId ? { ...s, title } : s);
     onSectionsChange(updated);
   };
 
-  // Column handlers
   const handleColumnLabelChange = (sectionId: string, columnId: string, label: string) => {
     const updated = sections.map(s => {
       if (s.id === sectionId && s.columns) {
@@ -238,16 +244,6 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
     const updated = sections.map(s => {
       if (s.id === sectionId && s.columns) {
         return { ...s, columns: s.columns.map(c => c.id === columnId ? { ...c, visible: !c.visible } : c) };
-      }
-      return s;
-    });
-    onSectionsChange(updated);
-  };
-
-  const handleColumnDelete = (sectionId: string, columnId: string) => {
-    const updated = sections.map(s => {
-      if (s.id === sectionId && s.columns && s.columns.length > 1) {
-        return { ...s, columns: s.columns.filter(c => c.id !== columnId) };
       }
       return s;
     });
@@ -273,31 +269,10 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
     setNewColumnLabel('');
   };
 
-  // KPI handlers
   const handleKPILabelChange = (sectionId: string, kpiId: string, label: string) => {
     const updated = sections.map(s => {
       if (s.id === sectionId && s.kpiItems) {
         return { ...s, kpiItems: s.kpiItems.map(k => k.id === kpiId ? { ...k, label } : k) };
-      }
-      return s;
-    });
-    onSectionsChange(updated);
-  };
-
-  const handleKPIVisibilityToggle = (sectionId: string, kpiId: string) => {
-    const updated = sections.map(s => {
-      if (s.id === sectionId && s.kpiItems) {
-        return { ...s, kpiItems: s.kpiItems.map(k => k.id === kpiId ? { ...k, visible: !k.visible } : k) };
-      }
-      return s;
-    });
-    onSectionsChange(updated);
-  };
-
-  const handleKPIDelete = (sectionId: string, kpiId: string) => {
-    const updated = sections.map(s => {
-      if (s.id === sectionId && s.kpiItems && s.kpiItems.length > 1) {
-        return { ...s, kpiItems: s.kpiItems.filter(k => k.id !== kpiId) };
       }
       return s;
     });
@@ -322,141 +297,64 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
     onSectionsChange(updated);
     setAddKPIDialog({ open: false, sectionId: null });
     setNewKPILabel('');
-    setNewKPIField('totalSubsections');
-    setNewKPIColor('blue');
   };
 
-  // Get sample data for tables
-  const getSampleTableData = (sectionId: string): Record<string, string>[] => {
-    if (sectionId.includes('subsection') || sectionId === 'coc-status') {
-      return sampleData.subsections.length > 0
-        ? sampleData.subsections.slice(0, 5).map(s => ({
-            name: s.name,
-            tenant: s.tenantName || '—',
-            category: s.category || '—',
-            cocStatus: s.cocStatus || 'Missing',
-          }))
-        : [
-            { name: 'SHOP 001', tenant: 'Sample Store', category: 'LS', cocStatus: 'Pass' },
-            { name: 'SHOP 002', tenant: 'Retail Outlet', category: 'Line Shop', cocStatus: 'Missing' },
-            { name: 'SHOP 003', tenant: 'Food Court', category: 'LS', cocStatus: 'Pending' },
-            { name: 'SHOP 004', tenant: 'Electronics Hub', category: 'Anchor', cocStatus: 'Pass' },
-            { name: 'SHOP 005', tenant: 'Fashion Boutique', category: 'LS', cocStatus: 'Missing' },
-          ];
-    }
-    if (sectionId.includes('meter') || sectionId.includes('asset')) {
-      return sampleData.assets.length > 0
-        ? sampleData.assets.slice(0, 5).map(a => ({
-            serial: a.serialNumber || '—',
-            premises: a.premisesId,
-            trade: a.tradeAs || '—',
-            breaker: a.breakerSize || '—',
-            ct: a.ctRatio || '—',
-          }))
-        : [
-            { serial: '35778057', premises: 'BULK METER', trade: 'YA-BULK', breaker: '1000A', ct: '1000/5A' },
-            { serial: '35778055', premises: 'SHOP-050', trade: 'SHOPRITE', breaker: '800A', ct: '800/5A' },
-            { serial: '36084016', premises: 'SHOP-004', trade: 'ACKERMANS', breaker: '63A', ct: '—' },
-          ];
-    }
-    if (sectionId.includes('inspection')) {
-      return sampleData.inspections.length > 0
-        ? sampleData.inspections.slice(0, 5).map(i => ({
-            title: i.title,
-            status: i.status,
-            inspector: i.inspectorName || '—',
-            date: i.inspectionDate ? format(new Date(i.inspectionDate), 'dd MMM yyyy') : '—',
-          }))
-        : [
-            { title: 'Electrical Inspection', status: 'Completed', inspector: 'John Smith', date: '10 Jan 2026' },
-            { title: 'Safety Audit', status: 'In Progress', inspector: 'Jane Doe', date: '08 Jan 2026' },
-          ];
-    }
-    if (sectionId.includes('document')) {
-      return [
-        { name: 'COC Certificate', type: 'PDF', category: 'Compliance', uploaded: '05 Jan 2026' },
-        { name: 'Floor Plan', type: 'Image', category: 'Site Documents', uploaded: '03 Jan 2026' },
-        { name: 'Test Report', type: 'PDF', category: 'Technical', uploaded: '01 Jan 2026' },
-      ];
-    }
-    return [];
-  };
+  // Page wrapper with A4 aspect ratio
+  const PageWrapper: React.FC<{ children: React.ReactNode; pageNum: number }> = ({ children, pageNum }) => (
+    <div 
+      className="bg-white shadow-xl relative flex-shrink-0"
+      style={{ 
+        width: A4_WIDTH * zoom, 
+        height: A4_HEIGHT * zoom,
+        transform: `scale(1)`,
+        transformOrigin: 'top center'
+      }}
+    >
+      {/* Watermark */}
+      {customization.includeWatermark && (
+        <div 
+          className="absolute inset-0 flex items-center justify-center pointer-events-none"
+          style={{ 
+            transform: 'rotate(-45deg)',
+            fontSize: 48 * zoom,
+            fontWeight: 'bold',
+            color: 'rgba(0,0,0,0.04)',
+            letterSpacing: '0.1em'
+          }}
+        >
+          {customization.watermarkText || 'DRAFT'}
+        </div>
+      )}
+      
+      {/* Content */}
+      <div className="absolute inset-0 overflow-hidden" style={{ padding: 40 * zoom }}>
+        {children}
+      </div>
+      
+      {/* Page number */}
+      {customization.includePageNumbers && (
+        <div 
+          className="absolute bottom-4 left-0 right-0 text-center text-gray-400"
+          style={{ fontSize: 10 * zoom }}
+        >
+          Page {pageNum}
+        </div>
+      )}
+    </div>
+  );
 
-  // Get KPI value
-  const getKPIValue = (field: string): string | number => {
-    const vals: Record<string, number> = {
-      totalSubsections: sampleData.kpis.totalSubsections || 116,
-      cocPass: sampleData.kpis.cocPass || 2,
-      cocMissing: sampleData.kpis.cocMissing || 114,
-      cocPending: sampleData.kpis.cocPending || 0,
-      complianceRate: sampleData.kpis.complianceRate || 1.7,
-      totalAssets: sampleData.kpis.totalAssets || 45,
-      totalInspections: sampleData.kpis.totalInspections || 12,
-      completedInspections: sampleData.kpis.completedInspections || 8,
-    };
-    const val = vals[field] ?? 0;
-    return field === 'complianceRate' ? `${val}%` : val;
-  };
-
-  // Auto-generate columns if not defined
-  const getColumnsForSection = (section: ReportSection): TableColumn[] => {
-    if (section.columns?.length) return section.columns;
-    
-    if (section.id.includes('subsection') || section.id === 'coc-status') {
-      return [
-        { id: 'name', label: 'Shop Name', field: 'name', visible: true },
-        { id: 'tenant', label: 'Tenant', field: 'tenant', visible: true },
-        { id: 'category', label: 'Category', field: 'category', visible: true },
-        { id: 'cocStatus', label: 'COC Status', field: 'cocStatus', visible: true },
-      ];
-    }
-    if (section.id.includes('meter') || section.id.includes('asset')) {
-      return [
-        { id: 'serial', label: 'Serial Number', field: 'serial', visible: true },
-        { id: 'premises', label: 'Premises ID', field: 'premises', visible: true },
-        { id: 'trade', label: 'Trade As', field: 'trade', visible: true },
-        { id: 'breaker', label: 'Breaker Size', field: 'breaker', visible: true },
-        { id: 'ct', label: 'CT Ratio', field: 'ct', visible: true },
-      ];
-    }
-    if (section.id.includes('inspection')) {
-      return [
-        { id: 'title', label: 'Title', field: 'title', visible: true },
-        { id: 'status', label: 'Status', field: 'status', visible: true },
-        { id: 'inspector', label: 'Inspector', field: 'inspector', visible: true },
-        { id: 'date', label: 'Date', field: 'date', visible: true },
-      ];
-    }
-    if (section.id.includes('document')) {
-      return [
-        { id: 'name', label: 'Document Name', field: 'name', visible: true },
-        { id: 'type', label: 'Type', field: 'type', visible: true },
-        { id: 'category', label: 'Category', field: 'category', visible: true },
-        { id: 'uploaded', label: 'Uploaded', field: 'uploaded', visible: true },
-      ];
-    }
-    return [
-      { id: 'col1', label: 'Column 1', field: 'col1', visible: true },
-      { id: 'col2', label: 'Column 2', field: 'col2', visible: true },
-    ];
-  };
-
-  // Render Cover Page - Full width document style
+  // Cover Page
   const renderCoverPage = () => (
-    <div className="bg-white rounded-lg shadow-md mb-6 overflow-hidden">
-      {/* Accent bar */}
+    <PageWrapper pageNum={1}>
+      {/* Top accent bar */}
       <Popover>
         <PopoverTrigger asChild>
           <div 
-            className="h-3 cursor-pointer hover:opacity-80 transition-opacity relative group"
-            style={{ backgroundColor: colors.primary }}
-          >
-            <div className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity bg-black/20">
-              <Palette className="h-4 w-4 text-white" />
-            </div>
-          </div>
+            className="absolute top-0 left-0 right-0 cursor-pointer hover:opacity-80 transition-opacity"
+            style={{ height: 8 * zoom, backgroundColor: colors.primary }}
+          />
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-3" align="start">
+        <PopoverContent className="w-auto p-3">
           <p className="text-sm font-medium mb-2">Accent Color</p>
           <div className="flex gap-2">
             {ACCENT_COLORS.map(color => (
@@ -464,537 +362,445 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
                 key={color.value}
                 onClick={() => onCustomizationChange({ accentColor: color.value as any })}
                 className={cn(
-                  "w-8 h-8 rounded-full transition-transform hover:scale-110",
-                  customization.accentColor === color.value && "ring-2 ring-offset-2 ring-primary"
+                  "w-6 h-6 rounded-full transition-transform hover:scale-110",
+                  customization.accentColor === color.value && "ring-2 ring-offset-1 ring-gray-400"
                 )}
                 style={{ backgroundColor: color.primary }}
-                title={color.name}
               />
             ))}
           </div>
         </PopoverContent>
       </Popover>
 
-      <div className="p-8 md:p-12">
-        <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-6 mb-12">
-          {/* Logo */}
-          <div className="flex-shrink-0">
-            {sampleData.loading ? (
-              <Skeleton className="w-32 h-20 rounded" />
-            ) : sampleData.site?.clientLogoUrl ? (
-              <img 
-                src={sampleData.site.clientLogoUrl} 
-                alt="Client Logo"
-                className="h-20 w-auto object-contain rounded"
-              />
-            ) : (
-              <div 
-                className="w-32 h-20 rounded flex flex-col items-center justify-center"
-                style={{ backgroundColor: colors.light }}
-              >
-                <Building2 className="h-8 w-8 mb-1" style={{ color: colors.primary }} />
-                <span className="text-xs" style={{ color: colors.text }}>Client Logo</span>
-              </div>
-            )}
-          </div>
-
-          {/* Settings panel */}
-          <div className="flex flex-col gap-2 text-sm">
-            <Label className="flex items-center gap-2 cursor-pointer">
-              <Switch 
-                checked={customization.includeDate}
-                onCheckedChange={(v) => onCustomizationChange({ includeDate: v })}
-              />
-              Include Date
-            </Label>
-            <Label className="flex items-center gap-2 cursor-pointer">
-              <Switch 
-                checked={customization.includeReference}
-                onCheckedChange={(v) => onCustomizationChange({ includeReference: v })}
-              />
-              Include Reference
-            </Label>
-          </div>
-        </div>
-
-        {/* Title & Subtitle */}
-        <div className="mb-12">
-          <h1 className="text-4xl md:text-5xl font-bold mb-4" style={{ color: colors.primary }}>
-            <EditableText
-              value={customization.coverTitle}
-              onChange={(v) => onCustomizationChange({ coverTitle: v })}
-              placeholder="Report Title"
-              className="text-4xl md:text-5xl font-bold"
+      <div className="h-full flex flex-col" style={{ paddingTop: 20 * zoom }}>
+        {/* Logo */}
+        <div className="mb-auto">
+          {clientLogo ? (
+            <img 
+              src={clientLogo} 
+              alt="Client Logo"
+              style={{ height: 60 * zoom, objectFit: 'contain' }}
             />
-          </h1>
-          <p className="text-xl text-muted-foreground">
-            <EditableText
-              value={customization.coverSubtitle}
-              onChange={(v) => onCustomizationChange({ coverSubtitle: v })}
-              placeholder="Report Subtitle"
-              className="text-xl"
-            />
-          </p>
-        </div>
-
-        {/* Site Info */}
-        <div className="space-y-3 text-lg mb-12">
-          <div className="flex items-center gap-3">
-            <Building2 className="h-5 w-5" style={{ color: colors.primary }} />
-            <span className="font-semibold">{sampleData.site?.name || 'Sample Site Name'}</span>
-          </div>
-          <div className="flex items-center gap-3">
-            <User className="h-5 w-5" style={{ color: colors.primary }} />
-            <span>{sampleData.site?.clientName || 'Client Name'}</span>
-          </div>
-          {sampleData.site?.address && (
-            <div className="flex items-center gap-3">
-              <MapPin className="h-5 w-5" style={{ color: colors.primary }} />
-              <span className="text-muted-foreground">{sampleData.site.address}</span>
+          ) : (
+            <div 
+              className="rounded flex items-center justify-center"
+              style={{ 
+                width: 120 * zoom, 
+                height: 60 * zoom, 
+                backgroundColor: colors.light 
+              }}
+            >
+              <Building2 style={{ width: 24 * zoom, height: 24 * zoom, color: colors.primary }} />
             </div>
           )}
         </div>
 
-        {/* Date & Reference */}
-        <div className="pt-6 border-t flex flex-wrap gap-6 text-sm text-muted-foreground">
-          {customization.includeDate && (
+        {/* Title section */}
+        <div className="flex-1 flex flex-col justify-center">
+          <h1 style={{ fontSize: 32 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 8 * zoom }}>
+            <EditableCell
+              value={customization.coverTitle}
+              onChange={(v) => onCustomizationChange({ coverTitle: v })}
+            />
+          </h1>
+          <p style={{ fontSize: 16 * zoom, color: '#6b7280', marginBottom: 40 * zoom }}>
+            <EditableCell
+              value={customization.coverSubtitle}
+              onChange={(v) => onCustomizationChange({ coverSubtitle: v })}
+            />
+          </p>
+
+          {/* Site details */}
+          <div style={{ fontSize: 14 * zoom }}>
+            <div className="flex items-center gap-2 mb-2">
+              <Building2 style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
+              <span className="font-semibold">{siteName}</span>
+            </div>
+            <div className="flex items-center gap-2 mb-2">
+              <User style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
+              <span>{clientName}</span>
+            </div>
             <div className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
+              <MapPin style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
+              <span className="text-gray-500">{siteAddress}</span>
+            </div>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="pt-4 border-t border-gray-200 flex gap-6" style={{ fontSize: 11 * zoom }}>
+          {customization.includeDate && (
+            <div className="flex items-center gap-1 text-gray-500">
+              <Calendar style={{ width: 12 * zoom, height: 12 * zoom }} />
               <span>{format(new Date(), 'dd MMMM yyyy')}</span>
             </div>
           )}
           {customization.includeReference && (
-            <div className="flex items-center gap-2">
-              <Hash className="h-4 w-4" />
-              <span>REF-{format(new Date(), 'yyyy')}-{String(Math.floor(Math.random() * 9999)).padStart(4, '0')}</span>
+            <div className="flex items-center gap-1 text-gray-500">
+              <Hash style={{ width: 12 * zoom, height: 12 * zoom }} />
+              <span>REF-2026-0001</span>
             </div>
           )}
         </div>
       </div>
-    </div>
+    </PageWrapper>
   );
 
-  // Render Table of Contents
-  const renderTableOfContents = () => {
+  // Table of Contents Page
+  const renderTOCPage = () => {
     if (!customization.includeTableOfContents) return null;
     const enabledSections = sections.filter(s => s.enabled).sort((a, b) => a.order - b.order);
     
     return (
-      <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold" style={{ color: colors.primary }}>Table of Contents</h2>
-          <Button 
-            variant="ghost" 
-            size="sm"
-            onClick={() => onCustomizationChange({ includeTableOfContents: false })}
-          >
-            <EyeOff className="h-4 w-4 mr-1" />
-            Hide
-          </Button>
-        </div>
-        <div className="space-y-3">
+      <PageWrapper pageNum={2}>
+        <h2 style={{ fontSize: 20 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 20 * zoom }}>
+          Table of Contents
+        </h2>
+        <div style={{ fontSize: 12 * zoom }}>
           {enabledSections.map((section, idx) => (
-            <div key={section.id} className="flex justify-between items-center py-2 border-b border-dashed">
+            <div key={section.id} className="flex justify-between py-2 border-b border-dashed border-gray-200">
               <span>{idx + 1}. {section.title}</span>
-              <span className="text-muted-foreground text-sm">Page {idx + 2}</span>
+              <span className="text-gray-400">{idx + 3}</span>
             </div>
           ))}
         </div>
-      </div>
+      </PageWrapper>
     );
   };
 
-  // Render Executive Summary
-  const renderExecutiveSummary = () => (
-    <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-      <h2 className="text-2xl font-bold mb-4" style={{ color: colors.primary }}>Executive Summary</h2>
-      <Textarea
-        value={customization.executiveSummary}
-        onChange={(e) => onCustomizationChange({ executiveSummary: e.target.value })}
-        placeholder="Enter executive summary content that will appear in all reports of this type. This section provides a high-level overview of the report findings..."
-        className="min-h-[120px] border-dashed"
-      />
-    </div>
+  // Executive Summary Page
+  const renderExecutiveSummaryPage = () => (
+    <PageWrapper pageNum={customization.includeTableOfContents ? 3 : 2}>
+      <h2 style={{ fontSize: 18 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 16 * zoom }}>
+        Executive Summary
+      </h2>
+      <div style={{ fontSize: 11 * zoom, lineHeight: 1.6 }}>
+        <EditableCell
+          value={customization.executiveSummary || 'This report provides a comprehensive overview of the electrical compliance status for ' + siteName + '. The assessment covers all subsections, certificates of compliance (COCs), and metering infrastructure.'}
+          onChange={(v) => onCustomizationChange({ executiveSummary: v })}
+          multiline
+          className="w-full"
+        />
+      </div>
+
+      {/* Quick Stats */}
+      <div className="mt-8 grid grid-cols-4 gap-3" style={{ marginTop: 24 * zoom }}>
+        {[
+          { label: 'Total Subsections', value: kpiValues.totalSubsections, color: colors },
+          { label: 'COC Pass', value: kpiValues.cocPass, color: { primary: '#16a34a', light: '#dcfce7' } },
+          { label: 'COC Missing', value: kpiValues.cocMissing, color: { primary: '#ea580c', light: '#ffedd5' } },
+          { label: 'Compliance Rate', value: `${kpiValues.complianceRate}%`, color: { primary: '#9333ea', light: '#f3e8ff' } },
+        ].map((stat, idx) => (
+          <div 
+            key={idx}
+            className="rounded text-center"
+            style={{ 
+              padding: 12 * zoom, 
+              backgroundColor: stat.color.light,
+            }}
+          >
+            <div style={{ fontSize: 20 * zoom, fontWeight: 'bold', color: stat.color.primary }}>
+              {stat.value}
+            </div>
+            <div style={{ fontSize: 9 * zoom, color: '#6b7280', marginTop: 4 * zoom }}>
+              <EditableCell value={stat.label} onChange={() => {}} />
+            </div>
+          </div>
+        ))}
+      </div>
+    </PageWrapper>
   );
 
-  // Render a Table Section
-  const renderTableSection = (section: ReportSection) => {
-    const columns = getColumnsForSection(section);
-    const visibleColumns = columns.filter(c => c.visible);
-    const data = getSampleTableData(section.id);
+  // Subsections Table Page
+  const renderSubsectionsPage = () => {
+    const section = sections.find(s => s.id === 'subsections' || s.type === 'table');
+    const columns = section?.columns || [
+      { id: 'name', label: 'Shop Name', field: 'name', visible: true },
+      { id: 'tenant', label: 'Tenant', field: 'tenantName', visible: true },
+      { id: 'category', label: 'Category', field: 'category', visible: true },
+      { id: 'status', label: 'COC Status', field: 'cocStatus', visible: true },
+    ];
+    const visibleCols = columns.filter(c => c.visible);
 
     return (
-      <div 
-        key={section.id}
-        className={cn(
-          "bg-white rounded-lg shadow-md p-8 mb-6 transition-opacity",
-          !section.enabled && "opacity-50"
-        )}
-      >
-        {/* Section Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold" style={{ color: colors.primary }}>
-            <EditableText
-              value={section.title}
-              onChange={(v) => handleSectionTitleChange(section.id, v)}
-              className="text-2xl font-bold"
+      <PageWrapper pageNum={customization.includeTableOfContents ? 4 : 3}>
+        <div className="flex items-center justify-between" style={{ marginBottom: 16 * zoom }}>
+          <h2 style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary }}>
+            <EditableCell
+              value={section?.title || 'Subsections Overview'}
+              onChange={(v) => section && handleSectionTitleChange(section.id, v)}
             />
           </h2>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'up')}>
-              <ChevronUp className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'down')}>
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleSectionToggle(section.id)}>
-              {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-          </div>
+          <button
+            onClick={() => setAddColumnDialog({ open: true, sectionId: section?.id || 'subsections' })}
+            className="text-gray-400 hover:text-gray-600"
+            style={{ padding: 4 * zoom }}
+          >
+            <Plus style={{ width: 14 * zoom, height: 14 * zoom }} />
+          </button>
         </div>
 
         {/* Table */}
-        <div className="border rounded-lg overflow-hidden">
-          <table className="w-full">
+        <div className="border border-gray-200 rounded overflow-hidden">
+          <table className="w-full" style={{ fontSize: 9 * zoom }}>
             <thead>
               <tr style={{ backgroundColor: colors.light }}>
-                {columns.map((col) => (
+                {visibleCols.map((col) => (
                   <th 
                     key={col.id} 
-                    className={cn(
-                      "px-4 py-3 text-left border-b group",
-                      !col.visible && "opacity-50 bg-muted"
-                    )}
+                    className="text-left border-b border-gray-200 group"
+                    style={{ padding: `${8 * zoom}px ${6 * zoom}px`, color: colors.text }}
                   >
-                    <div className="flex items-center gap-2">
-                      <EditableText
+                    <div className="flex items-center gap-1">
+                      <EditableCell
                         value={col.label}
-                        onChange={(v) => handleColumnLabelChange(section.id, col.id, v)}
-                        className="font-semibold text-sm"
-                        style={{ color: colors.text }}
+                        onChange={(v) => section && handleColumnLabelChange(section.id, col.id, v)}
+                        className="font-semibold"
                       />
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleColumnVisibilityToggle(section.id, col.id)}
-                          className="p-1 hover:bg-white/50 rounded"
-                          title={col.visible ? "Hide column" : "Show column"}
-                        >
-                          {col.visible ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
-                        </button>
-                        {columns.length > 1 && (
-                          <button
-                            onClick={() => handleColumnDelete(section.id, col.id)}
-                            className="p-1 hover:bg-red-100 rounded text-red-600"
-                            title="Remove column"
-                          >
-                            <Trash2 className="h-3 w-3" />
-                          </button>
-                        )}
-                      </div>
+                      <button 
+                        onClick={() => section && handleColumnVisibilityToggle(section.id, col.id)}
+                        className="opacity-0 group-hover:opacity-100"
+                      >
+                        <Eye style={{ width: 10 * zoom, height: 10 * zoom }} className="text-gray-400" />
+                      </button>
                     </div>
                   </th>
                 ))}
-                <th className="px-2 py-3 border-b w-10" style={{ backgroundColor: colors.light }}>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setAddColumnDialog({ open: true, sectionId: section.id })}
-                    className="h-6 w-6 p-0"
-                    title="Add column"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                </th>
               </tr>
             </thead>
             <tbody>
-              {data.map((row, idx) => (
-                <tr key={idx} className="hover:bg-muted/30">
-                  {visibleColumns.map((col) => (
-                    <td key={col.id} className="px-4 py-3 border-b text-sm">
-                      {col.field === 'cocStatus' || col.field === 'status' ? (
-                        <Badge variant={
-                          row[col.field] === 'Pass' || row[col.field] === 'Completed' ? 'default' :
-                          row[col.field] === 'Missing' ? 'destructive' : 'secondary'
-                        }>
-                          {row[col.field] || '—'}
-                        </Badge>
+              {subsectionsData.slice(0, 12).map((row, idx) => (
+                <tr key={idx} className="hover:bg-gray-50">
+                  {visibleCols.map((col) => (
+                    <td 
+                      key={col.id} 
+                      className="border-b border-gray-100"
+                      style={{ padding: `${6 * zoom}px` }}
+                    >
+                      {col.field === 'cocStatus' ? (
+                        <span 
+                          className="px-2 py-0.5 rounded text-white"
+                          style={{ 
+                            fontSize: 8 * zoom,
+                            backgroundColor: 
+                              (row as any)[col.field] === 'Pass' ? '#16a34a' :
+                              (row as any)[col.field] === 'Missing' ? '#dc2626' : '#ea580c'
+                          }}
+                        >
+                          {(row as any)[col.field]}
+                        </span>
                       ) : (
-                        <span className="text-muted-foreground">{row[col.field] || '—'}</span>
+                        <EditableCell 
+                          value={(row as any)[col.field] || '—'} 
+                          onChange={() => {}} 
+                        />
                       )}
                     </td>
                   ))}
-                  <td className="px-2 py-3 border-b"></td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Hidden columns indicator */}
-        {columns.filter(c => !c.visible).length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <span className="text-xs text-muted-foreground">Hidden columns:</span>
-            {columns.filter(c => !c.visible).map(col => (
-              <Badge 
-                key={col.id} 
-                variant="outline" 
-                className="text-xs cursor-pointer hover:bg-muted"
-                onClick={() => handleColumnVisibilityToggle(section.id, col.id)}
-              >
-                <EyeOff className="h-3 w-3 mr-1" />
-                {col.label}
-              </Badge>
-            ))}
-          </div>
-        )}
-      </div>
+        <div className="text-right text-gray-400" style={{ fontSize: 9 * zoom, marginTop: 8 * zoom }}>
+          Showing {Math.min(12, subsectionsData.length)} of {subsectionsData.length} subsections
+        </div>
+      </PageWrapper>
     );
   };
 
-  // Render a KPI Section
-  const renderKPISection = (section: ReportSection) => {
-    const kpis = section.kpiItems || [
-      { id: 'total', label: 'Total', field: 'totalSubsections', visible: true, color: 'blue' },
-      { id: 'pass', label: 'Compliant', field: 'cocPass', visible: true, color: 'green' },
-      { id: 'missing', label: 'Missing', field: 'cocMissing', visible: true, color: 'orange' },
-      { id: 'rate', label: 'Compliance Rate', field: 'complianceRate', visible: true, color: 'purple' },
-    ];
-    const visibleKPIs = kpis.filter(k => k.visible);
+  // Assets/Meters Page
+  const renderAssetsPage = () => (
+    <PageWrapper pageNum={customization.includeTableOfContents ? 5 : 4}>
+      <h2 style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 16 * zoom }}>
+        <EditableCell value="Electrical Meters Register" onChange={() => {}} />
+      </h2>
 
-    return (
-      <div 
-        key={section.id}
-        className={cn(
-          "bg-white rounded-lg shadow-md p-8 mb-6 transition-opacity",
-          !section.enabled && "opacity-50"
-        )}
-      >
-        {/* Section Header */}
-        <div className="flex items-center justify-between mb-6">
-          <h2 className="text-2xl font-bold" style={{ color: colors.primary }}>
-            <EditableText
-              value={section.title}
-              onChange={(v) => handleSectionTitleChange(section.id, v)}
-              className="text-2xl font-bold"
-            />
-          </h2>
-          <div className="flex items-center gap-1">
-            <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'up')}>
-              <ChevronUp className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'down')}>
-              <ChevronDown className="h-4 w-4" />
-            </Button>
-            <Button variant="ghost" size="sm" onClick={() => handleSectionToggle(section.id)}>
-              {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-            </Button>
-          </div>
-        </div>
-
-        {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {visibleKPIs.map((kpi) => {
-            const kpiColor = KPI_COLOR_OPTIONS.find(c => c.value === kpi.color) || KPI_COLOR_OPTIONS[0];
-            return (
-              <div 
-                key={kpi.id}
-                className="p-6 rounded-lg border-2 relative group transition-shadow hover:shadow-md"
-                style={{ backgroundColor: kpiColor.light, borderColor: `${kpiColor.primary}30` }}
-              >
-                {/* Controls */}
-                <div className="absolute top-2 right-2 flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button
-                    onClick={() => handleKPIVisibilityToggle(section.id, kpi.id)}
-                    className="p-1 hover:bg-white/50 rounded"
-                    title="Hide KPI"
-                  >
-                    <Eye className="h-3 w-3" />
-                  </button>
-                  {kpis.length > 1 && (
-                    <button
-                      onClick={() => handleKPIDelete(section.id, kpi.id)}
-                      className="p-1 hover:bg-red-100 rounded text-red-600"
-                      title="Remove KPI"
-                    >
-                      <Trash2 className="h-3 w-3" />
-                    </button>
-                  )}
-                </div>
-
-                <div className="text-4xl font-bold mb-2" style={{ color: kpiColor.primary }}>
-                  {getKPIValue(kpi.field)}
-                </div>
-                <EditableText
-                  value={kpi.label}
-                  onChange={(v) => handleKPILabelChange(section.id, kpi.id, v)}
-                  className="text-sm font-medium text-muted-foreground"
-                />
-              </div>
-            );
-          })}
-
-          {/* Add KPI button */}
-          <button
-            onClick={() => setAddKPIDialog({ open: true, sectionId: section.id })}
-            className="p-6 rounded-lg border-2 border-dashed border-muted-foreground/30 flex flex-col items-center justify-center hover:border-primary/50 hover:bg-muted/30 transition-all"
-          >
-            <Plus className="h-8 w-8 text-muted-foreground mb-2" />
-            <span className="text-sm text-muted-foreground">Add KPI</span>
-          </button>
-        </div>
-
-        {/* Hidden KPIs */}
-        {kpis.filter(k => !k.visible).length > 0 && (
-          <div className="mt-4 flex flex-wrap gap-2 items-center">
-            <span className="text-xs text-muted-foreground">Hidden KPIs:</span>
-            {kpis.filter(k => !k.visible).map(kpi => (
-              <Badge 
-                key={kpi.id} 
-                variant="outline" 
-                className="text-xs cursor-pointer hover:bg-muted"
-                onClick={() => handleKPIVisibilityToggle(section.id, kpi.id)}
-              >
-                <EyeOff className="h-3 w-3 mr-1" />
-                {kpi.label}
-              </Badge>
+      <div className="border border-gray-200 rounded overflow-hidden">
+        <table className="w-full" style={{ fontSize: 9 * zoom }}>
+          <thead>
+            <tr style={{ backgroundColor: colors.light }}>
+              {['Serial Number', 'Premises ID', 'Trade As', 'Breaker Size', 'CT Ratio'].map((label) => (
+                <th 
+                  key={label}
+                  className="text-left border-b border-gray-200"
+                  style={{ padding: `${8 * zoom}px ${6 * zoom}px`, color: colors.text }}
+                >
+                  <EditableCell value={label} onChange={() => {}} className="font-semibold" />
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {assetsData.map((asset, idx) => (
+              <tr key={idx} className="hover:bg-gray-50">
+                <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
+                  <EditableCell value={asset.serialNumber || '—'} onChange={() => {}} />
+                </td>
+                <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
+                  <EditableCell value={asset.premisesId} onChange={() => {}} />
+                </td>
+                <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
+                  <EditableCell value={asset.tradeAs || '—'} onChange={() => {}} />
+                </td>
+                <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
+                  <EditableCell value={asset.breakerSize || '—'} onChange={() => {}} />
+                </td>
+                <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
+                  <EditableCell value={asset.ctRatio || '—'} onChange={() => {}} />
+                </td>
+              </tr>
             ))}
-          </div>
-        )}
+          </tbody>
+        </table>
       </div>
-    );
-  };
+    </PageWrapper>
+  );
 
-  // Render a Text Section
-  const renderTextSection = (section: ReportSection) => (
-    <div 
-      key={section.id}
-      className={cn(
-        "bg-white rounded-lg shadow-md p-8 mb-6 transition-opacity",
-        !section.enabled && "opacity-50"
-      )}
-    >
-      <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold" style={{ color: colors.primary }}>
-          <EditableText
-            value={section.title}
-            onChange={(v) => handleSectionTitleChange(section.id, v)}
-            className="text-2xl font-bold"
-          />
-        </h2>
-        <div className="flex items-center gap-1">
-          <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'up')}>
-            <ChevronUp className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => handleSectionMove(section.id, 'down')}>
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-          <Button variant="ghost" size="sm" onClick={() => handleSectionToggle(section.id)}>
-            {section.enabled ? <Eye className="h-4 w-4" /> : <EyeOff className="h-4 w-4" />}
-          </Button>
+  // Notes Page
+  const renderNotesPage = () => (
+    <PageWrapper pageNum={customization.includeTableOfContents ? 6 : 5}>
+      <h2 style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 16 * zoom }}>
+        <EditableCell value="Notes & Observations" onChange={() => {}} />
+      </h2>
+      <div style={{ fontSize: 11 * zoom, lineHeight: 1.6 }}>
+        <EditableCell
+          value={customization.customNotes || 'Add any notes or observations that should appear at the end of all reports of this type. Click here to edit...'}
+          onChange={(v) => onCustomizationChange({ customNotes: v })}
+          multiline
+          className="w-full"
+        />
+      </div>
+
+      {/* Signature block */}
+      <div className="mt-auto pt-8" style={{ marginTop: 'auto', paddingTop: 60 * zoom }}>
+        <div className="grid grid-cols-2 gap-8">
+          <div>
+            <div className="border-b border-gray-300 mb-2" style={{ height: 40 * zoom }} />
+            <div style={{ fontSize: 10 * zoom }} className="text-gray-600">
+              <EditableCell value="Inspector Signature" onChange={() => {}} />
+            </div>
+            <div style={{ fontSize: 9 * zoom }} className="text-gray-400">
+              Date: _______________
+            </div>
+          </div>
+          <div>
+            <div className="border-b border-gray-300 mb-2" style={{ height: 40 * zoom }} />
+            <div style={{ fontSize: 10 * zoom }} className="text-gray-600">
+              <EditableCell value="Client Representative" onChange={() => {}} />
+            </div>
+            <div style={{ fontSize: 9 * zoom }} className="text-gray-400">
+              Date: _______________
+            </div>
+          </div>
         </div>
       </div>
-      <Textarea
-        value={section.textContent || ''}
-        onChange={(e) => {
-          const updated = sections.map(s => s.id === section.id ? { ...s, textContent: e.target.value } : s);
-          onSectionsChange(updated);
-        }}
-        placeholder="Enter text content for this section. Notes, observations, or any additional information..."
-        className="min-h-[100px] border-dashed"
-      />
-    </div>
+    </PageWrapper>
   );
 
-  // Render Custom Notes
-  const renderCustomNotes = () => (
-    <div className="bg-white rounded-lg shadow-md p-8 mb-6">
-      <h2 className="text-2xl font-bold mb-4" style={{ color: colors.primary }}>Notes & Observations</h2>
-      <Textarea
-        value={customization.customNotes}
-        onChange={(e) => onCustomizationChange({ customNotes: e.target.value })}
-        placeholder="Add any notes or observations that should appear at the end of all reports of this type..."
-        className="min-h-[100px] border-dashed"
-      />
-    </div>
-  );
+  // Build pages array
+  const pages = [
+    { id: 'cover', render: renderCoverPage },
+    ...(customization.includeTableOfContents ? [{ id: 'toc', render: renderTOCPage }] : []),
+    { id: 'summary', render: renderExecutiveSummaryPage },
+    { id: 'subsections', render: renderSubsectionsPage },
+    { id: 'assets', render: renderAssetsPage },
+    { id: 'notes', render: renderNotesPage },
+  ];
 
-  // Render a section based on type
-  const renderSection = (section: ReportSection) => {
-    switch (section.type) {
-      case 'table':
-        return renderTableSection(section);
-      case 'kpi':
-        return renderKPISection(section);
-      case 'text':
-        return renderTextSection(section);
-      default:
-        return null;
-    }
-  };
+  const totalPages = pages.length;
 
   return (
     <div className="flex flex-col h-full">
       {/* Toolbar */}
-      <div className="flex items-center justify-between gap-4 p-4 bg-muted/30 border-b flex-wrap">
+      <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 border-b flex-wrap">
         <div className="flex items-center gap-4">
-          <Label className="flex items-center gap-2 cursor-pointer">
+          <Label className="flex items-center gap-2 cursor-pointer text-sm">
             <Switch 
               checked={customization.includeTableOfContents}
               onCheckedChange={(v) => onCustomizationChange({ includeTableOfContents: v })}
             />
-            <span className="text-sm">Table of Contents</span>
+            TOC
           </Label>
-          <Label className="flex items-center gap-2 cursor-pointer">
+          <Label className="flex items-center gap-2 cursor-pointer text-sm">
             <Switch 
               checked={customization.includePageNumbers}
               onCheckedChange={(v) => onCustomizationChange({ includePageNumbers: v })}
             />
-            <span className="text-sm">Page Numbers</span>
+            Page #
           </Label>
-          <Label className="flex items-center gap-2 cursor-pointer">
+          <Label className="flex items-center gap-2 cursor-pointer text-sm">
             <Switch 
               checked={customization.includeWatermark}
               onCheckedChange={(v) => onCustomizationChange({ includeWatermark: v })}
             />
-            <span className="text-sm">Watermark</span>
+            Watermark
           </Label>
-          {customization.includeWatermark && (
-            <Input
-              value={customization.watermarkText}
-              onChange={(e) => onCustomizationChange({ watermarkText: e.target.value })}
-              placeholder="Watermark text"
-              className="w-32 h-8"
-            />
-          )}
         </div>
-        <div className="text-sm text-muted-foreground">
-          Click on any text to edit • Changes apply to all future reports
+        
+        {/* Zoom controls */}
+        <div className="flex items-center gap-2">
+          <Button variant="ghost" size="sm" onClick={() => setZoom(z => Math.max(0.5, z - 0.1))}>
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <span className="text-sm w-12 text-center">{Math.round(zoom * 100)}%</span>
+          <Button variant="ghost" size="sm" onClick={() => setZoom(z => Math.min(1.5, z + 0.1))}>
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+        </div>
+
+        {/* Page navigation */}
+        <div className="flex items-center gap-2">
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setCurrentPage(p => Math.max(0, p - 1))}
+            disabled={currentPage === 0}
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm px-2">
+            Page {currentPage + 1} of {totalPages}
+          </span>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            onClick={() => setCurrentPage(p => Math.min(totalPages - 1, p + 1))}
+            disabled={currentPage === totalPages - 1}
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
         </div>
       </div>
 
-      {/* Document Preview */}
-      <ScrollArea className="flex-1 bg-muted/50">
-        <div className="max-w-4xl mx-auto py-8 px-4">
-          {sampleData.loading ? (
-            <div className="space-y-6">
-              <Skeleton className="h-64 w-full rounded-lg" />
-              <Skeleton className="h-48 w-full rounded-lg" />
-              <Skeleton className="h-48 w-full rounded-lg" />
-            </div>
-          ) : (
-            <>
-              {renderCoverPage()}
-              {renderTableOfContents()}
-              {renderExecutiveSummary()}
-              {sections
-                .sort((a, b) => a.order - b.order)
-                .map(section => renderSection(section))}
-              {renderCustomNotes()}
-            </>
-          )}
+      {/* Page thumbnails sidebar + main view */}
+      <div className="flex-1 flex overflow-hidden">
+        {/* Thumbnails */}
+        <div className="w-24 bg-muted/50 border-r overflow-y-auto p-2 space-y-2">
+          {pages.map((page, idx) => (
+            <button
+              key={page.id}
+              onClick={() => setCurrentPage(idx)}
+              className={cn(
+                "w-full aspect-[210/297] bg-white rounded shadow-sm border-2 transition-all overflow-hidden",
+                currentPage === idx ? "border-primary" : "border-transparent hover:border-gray-300"
+              )}
+            >
+              <div className="w-full h-full flex items-center justify-center text-xs text-gray-400">
+                {idx + 1}
+              </div>
+            </button>
+          ))}
         </div>
-      </ScrollArea>
+
+        {/* Main page view */}
+        <ScrollArea className="flex-1 bg-gray-100">
+          <div className="flex justify-center items-start p-8 min-h-full">
+            {pages[currentPage]?.render()}
+          </div>
+        </ScrollArea>
+      </div>
 
       {/* Add Column Dialog */}
       <Dialog open={addColumnDialog.open} onOpenChange={(open) => setAddColumnDialog({ open, sectionId: null })}>
@@ -1063,7 +869,6 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
                       newKPIColor === color.value && "ring-2 ring-offset-2 ring-primary"
                     )}
                     style={{ backgroundColor: color.primary }}
-                    title={color.name}
                   />
                 ))}
               </div>
