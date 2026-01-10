@@ -347,6 +347,7 @@ export function createKpiDashboard(kpis: KpiItem[]): Content {
 
 /**
  * Create a progress bar visualization
+ * Returns a stack that can be used in columns or standalone
  */
 export function createProgressBar(
   percentage: number,
@@ -361,35 +362,41 @@ export function createProgressBar(
   const height = options?.height || 10;
   const color = options?.color || COLORS.success;
   const clampedPercent = Math.max(0, Math.min(100, percentage));
-  const filledWidth = (width * clampedPercent) / 100;
+  const filledWidth = Math.max(0, (width * clampedPercent) / 100);
   
-  const content: Content[] = [{
-    canvas: [
-      // Background
-      {
-        type: 'rect',
-        x: 0,
-        y: 0,
-        w: width,
-        h: height,
-        r: 2,
-        color: COLORS.bgHeader,
-      },
-      // Filled portion
-      {
-        type: 'rect',
-        x: 0,
-        y: 0,
-        w: filledWidth,
-        h: height,
-        r: 2,
-        color: color,
-      },
-    ],
-  }];
+  // Build canvas elements array - pdfmake requires this to be a proper array
+  const canvasElements: any[] = [
+    // Background
+    {
+      type: 'rect',
+      x: 0,
+      y: 0,
+      w: width,
+      h: height,
+      r: 2,
+      color: COLORS.bgHeader,
+    },
+  ];
+  
+  // Only add filled portion if there's something to fill
+  if (filledWidth > 0) {
+    canvasElements.push({
+      type: 'rect',
+      x: 0,
+      y: 0,
+      w: filledWidth,
+      h: height,
+      r: 2,
+      color: color,
+    });
+  }
+  
+  const stackContent: Content[] = [
+    { canvas: canvasElements },
+  ];
   
   if (options?.showLabel) {
-    content.push({
+    stackContent.push({
       text: `${Math.round(clampedPercent)}%`,
       fontSize: 8,
       color: COLORS.textMuted,
@@ -398,7 +405,10 @@ export function createProgressBar(
     });
   }
   
-  return { stack: content };
+  return { 
+    stack: stackContent,
+    width: width,
+  };
 }
 
 // ============================================================================
