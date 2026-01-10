@@ -5,14 +5,15 @@ import {
   hexToRgb,
   RGB_COLORS,
   PAGE,
+  addCoverPage,
   addStandardHeader,
-  addStandardFooter,
   addFootersToAllPages,
   addSectionHeader,
   addFullWidthSectionHeader,
   getStandardTableStyles,
   addPrimaryHeaderTable,
   logComplianceCheck,
+  drawKpiCard,
 } from "./pdfUtils";
 
 const { typography, colors, margins, tables, footers } = DOCUMENT_DESIGN_STANDARDS;
@@ -62,31 +63,8 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
 
   const pageWidth = doc.internal.pageSize.getWidth();
   const pageHeight = doc.internal.pageSize.getHeight();
+  const contentWidth = pageWidth - (2 * margins.left);
   let yPos = margins.top;
-
-  // Cover Page - Using design standards
-  doc.setFillColor(...RGB_COLORS.primary);
-  doc.rect(0, 0, pageWidth, 80, "F");
-  
-  doc.setTextColor(...RGB_COLORS.white);
-  doc.setFontSize(typography.scale.h1);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text("Floor Plan Inspection Report", pageWidth / 2, 35, { align: "center" });
-  
-  doc.setFontSize(typography.scale.h3);
-  doc.setFont(typography.fonts.body, 'normal');
-  doc.text(data.projectName, pageWidth / 2, 50, { align: "center" });
-  doc.text(data.siteName, pageWidth / 2, 60, { align: "center" });
-  doc.text(data.subsectionName, pageWidth / 2, 70, { align: "center" });
-
-  doc.setTextColor(...RGB_COLORS.textPrimary);
-  yPos = 100;
-
-  doc.setFontSize(typography.scale.h4);
-  doc.text(`Report Generated: ${new Date().toLocaleDateString('en-GB')}`, margins.left, yPos);
-  yPos += 10;
-  doc.text(`Total Items: ${data.pins.length}`, margins.left, yPos);
-  yPos += 10;
 
   const snags = data.pins.filter(p => p.pin_type === 'snag');
   const observations = data.pins.filter(p => p.pin_type === 'observation');
@@ -100,13 +78,15 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
     resolved: data.pins.filter(p => p.status === 'resolved').length,
   };
 
-  doc.text(`Snags: ${snags.length}`, margins.left, yPos);
-  yPos += 7;
-  doc.text(`Observations: ${observations.length}`, margins.left, yPos);
-  yPos += 10;
-  
-  doc.setFontSize(typography.scale.body);
-  doc.text(`Status: ${statusCount.open} Open, ${statusCount.in_progress} In Progress, ${statusCount.finished} Finished, ${statusCount.closed + statusCount.resolved} Closed`, margins.left, yPos);
+  // ===== PAGE 1: DEDICATED COVER PAGE =====
+  addCoverPage(doc, {
+    title: 'Floor Plan Inspection Report',
+    subtitle: `${data.subsectionName}`,
+    siteName: data.siteName,
+    reportType: 'Floor Plan Report',
+    organizationName: data.projectName,
+    reportDate: new Date(),
+  });
 
   // Executive Summary Page
   doc.addPage();

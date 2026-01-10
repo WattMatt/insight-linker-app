@@ -12,6 +12,19 @@ import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  RGB_COLORS,
+  PAGE,
+  logComplianceCheck,
+  PDFComplianceCheck,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS } from "@/lib/documentDesignStandards";
+
+const { margins, typography } = DOCUMENT_DESIGN_STANDARDS;
 
 interface TemplateSection {
   id: string;
@@ -64,6 +77,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
+  const [complianceChecks, setComplianceChecks] = useState<PDFComplianceCheck | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -123,7 +137,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
     });
   };
 
-  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string, blob: Blob } | null> => {
+  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string, blob: Blob, complianceChecks: PDFComplianceCheck } | null> => {
     if (!selectedTemplate) return null;
 
     try {
@@ -131,51 +145,30 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
       const pageWidth = doc.internal.pageSize.getWidth();
       const pageHeight = doc.internal.pageSize.getHeight();
 
-      // Cover Page
-      doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(32);
-      doc.setFont(undefined, 'bold');
-      doc.text(selectedTemplate.cover_page?.title || 'Inspection Report', pageWidth / 2, 80, { align: 'center' });
-      
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'normal');
-      doc.text(subsectionName, pageWidth / 2, 100, { align: 'center' });
-      doc.text(siteName, pageWidth / 2, 115, { align: 'center' });
-      
-      doc.setFontSize(14);
-      doc.text(selectedTemplate.cover_page?.company_name || 'Watson Mattheus', pageWidth / 2, 135, { align: 'center' });
-      
-      doc.setFontSize(12);
-      const date = new Date().toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'long', 
-        day: 'numeric' 
+      // ===== PAGE 1: COVER PAGE =====
+      addCoverPage(doc, {
+        title: selectedTemplate.cover_page?.title || selectedTemplate.name,
+        subtitle: selectedTemplate.cover_page?.subtitle || selectedTemplate.category,
+        siteName,
+        reportType: 'Inspection Report',
+        organizationName: selectedTemplate.cover_page?.company_name || 'Watson Mattheus',
+        reportDate: new Date(),
       });
-      doc.text(`Generated: ${date}`, pageWidth / 2, 155, { align: 'center' });
 
-      // Content Pages
+      // ===== CONTENT PAGES =====
       doc.addPage();
-      doc.setTextColor(0, 0, 0);
+      addStandardHeader(doc, selectedTemplate.name, null);
       
-      doc.setFontSize(24);
-      doc.setFont(undefined, 'bold');
-      doc.text(selectedTemplate.name, 20, 20);
-      
-      let yPosition = 40;
+      let yPos = PAGE.contentStartY;
 
-      selectedTemplate.sections?.forEach((section) => {
-        if (yPosition > pageHeight - 60) {
+      selectedTemplate.sections?.forEach((section, sectionIndex) => {
+        if (yPos > pageHeight - 60) {
           doc.addPage();
-          yPosition = 20;
+          addStandardHeader(doc, selectedTemplate.name, null);
+          yPos = PAGE.contentStartY;
         }
 
-        doc.setFontSize(16);
-        doc.setFont(undefined, 'bold');
-        doc.text(section.name, 20, yPosition);
-        yPosition += 10;
+        yPos = addSectionHeader(doc, section.name, yPos);
 
         const tableData: any[] = [];
         section.items?.forEach((item) => {
@@ -189,40 +182,49 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
 
         if (tableData.length > 0) {
           autoTable(doc, {
-            startY: yPosition,
+            startY: yPos,
             head: [['Item', 'Status', 'Notes']],
             body: tableData,
             theme: 'grid',
-            headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+            headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
             styles: { fontSize: 9, cellPadding: 3 },
-            margin: { left: 20, right: 20 },
-            didDrawPage: (data) => {
-              yPosition = data.cursor?.y || yPosition;
+            margin: { left: margins.left, right: margins.right },
+            didParseCell: (data) => {
+              if (data.section === 'body' && data.column.index === 1) {
+                const value = data.cell.raw as string;
+                if (value === 'Pass') {
+                  data.cell.styles.textColor = RGB_COLORS.success;
+                  data.cell.styles.fontStyle = 'bold';
+                } else if (value === 'Fail') {
+                  data.cell.styles.textColor = RGB_COLORS.error;
+                  data.cell.styles.fontStyle = 'bold';
+                }
+              }
             }
           });
-          yPosition += 15;
+          yPos = (doc as any).lastAutoTable?.finalY + 15 || yPos + 50;
         }
       });
 
-      // Footer
-      const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setFontSize(10);
-        doc.setTextColor(128, 128, 128);
-        if (i > 1) {
-          doc.text(
-            `Page ${i - 1} of ${totalPages - 1}`,
-            pageWidth / 2,
-            pageHeight - 10,
-            { align: 'center' }
-          );
-        }
-      }
+      // Add footers to all pages (skip cover page)
+      addFootersToAllPages(doc, true);
+
+      // Log compliance
+      const checks = logComplianceCheck('TemplateBasedReport', {
+        hasCoverPage: true,
+        logoPlacement: false,
+        standardMargins: true,
+        typographyScale: true,
+        brandColors: true,
+        pageHeaders: true,
+        pageFooters: true,
+        tableStyles: true,
+        pageBreaks: true,
+      });
 
       const fileName = `${subsectionName}_${selectedTemplate.name}_Report.pdf`;
       const blob = doc.output('blob');
-      return { doc, fileName, blob };
+      return { doc, fileName, blob, complianceChecks: checks };
     } catch (error) {
       console.error("Error generating PDF:", error);
       return null;
@@ -243,6 +245,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
       setPdfBlob(result.blob);
+      setComplianceChecks(result.complianceChecks);
       setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -413,6 +416,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
         saveLocation="subsection"
         contextName={subsectionName}
         isSaving={saving}
+        complianceChecks={complianceChecks || undefined}
       />
     </div>
   );

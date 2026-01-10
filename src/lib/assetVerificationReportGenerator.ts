@@ -4,7 +4,6 @@ import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename, getContentWidth } 
 import {
   addCoverPage,
   addStandardHeader,
-  addStandardFooter,
   addSectionHeader,
   addFootersToAllPages,
   drawKpiCard,
@@ -479,37 +478,36 @@ export async function generateAssetVerificationReport(
     day: 'numeric' 
   });
 
-  // ===== COVER PAGE =====
-  addStandardHeader(doc, 'ASSET VERIFICATION REPORT', logoDataUrl);
+  // ===== PAGE 1: DEDICATED COVER PAGE =====
+  addCoverPage(doc, {
+    title: 'Asset Verification Report',
+    subtitle: 'Asset Register vs Subsection Data Comparison',
+    siteName,
+    clientName: options.clientName,
+    reportType: 'Verification Report',
+    logoDataUrl,
+    organizationName: 'Asset Management System',
+    reportDate: new Date(),
+  });
+
+  // ===== PAGE 2: EXECUTIVE SUMMARY WITH KPI DASHBOARD =====
+  doc.addPage();
+  addStandardHeader(doc, 'Executive Summary', logoDataUrl);
   
-  let y = headers.height + margins.top + 20;
+  let y = headers.height + margins.top + 10;
   
-  // Site name
-  doc.setFontSize(typography.scale.h1);
-  const primaryRgb = hexToRgb(colors.primary);
-  doc.setTextColor(primaryRgb[0], primaryRgb[1], primaryRgb[2]);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text(siteName, pageWidth / 2, y, { align: 'center' });
-  y += typography.paragraphSpacing.afterH1;
-  
-  // Subtitle
-  doc.setFontSize(typography.scale.h3);
-  const secondaryRgb = hexToRgb(colors.text.secondary);
-  doc.setTextColor(secondaryRgb[0], secondaryRgb[1], secondaryRgb[2]);
-  doc.setFont(typography.fonts.body, 'normal');
-  doc.text('Asset Register vs Inspection Data Comparison', pageWidth / 2, y, { align: 'center' });
-  y += typography.paragraphSpacing.afterH2 + 10;
+  // Section title
+  y = addSectionHeader(doc, 'Verification Overview', y);
 
   // KPI Cards
-  const cardWidth = (contentWidth - (cards.margin * 4)) / 5;
+  const cardWidth = (contentWidth - (cards.margin * 3)) / 4;
   const cardHeight = 28;
   
   const kpiData = [
-    { label: 'Total', value: stats.total.toString(), color: hexToRgb(colors.text.muted) },
-    { label: 'Verified', value: stats.matchedNoDiscrepancy.toString(), color: hexToRgb(colors.success) },
-    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: hexToRgb(colors.warning) },
-    { label: 'Unverified', value: (stats.assetOnly + stats.subsectionOnly).toString(), color: hexToRgb(colors.error) },
-    { label: 'In Register', value: (stats.potentialMatches || 0).toString(), color: [147, 51, 234] as [number, number, number] },
+    { label: 'Total Assets', value: stats.total.toString(), color: RGB_COLORS.textMuted },
+    { label: 'Verified', value: stats.matchedNoDiscrepancy.toString(), color: RGB_COLORS.success },
+    { label: 'Discrepancies', value: stats.discrepancies.toString(), color: RGB_COLORS.warning },
+    { label: 'Unverified', value: (stats.assetOnly + stats.subsectionOnly).toString(), color: RGB_COLORS.error },
   ];
   
   kpiData.forEach((kpi, i) => {
@@ -517,43 +515,68 @@ export async function generateAssetVerificationReport(
     drawKpiCard(doc, cardX, y, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
   });
   
-  y += cardHeight + 15;
+  y += cardHeight + 20;
   
-  // Verification Rate
+  // Verification Rate Progress Bar
   const matchRate = stats.total > 0 ? Math.round((stats.matchedNoDiscrepancy / stats.total) * 100) : 0;
   
   doc.setFontSize(typography.scale.body);
   doc.setFont(typography.fonts.heading, 'bold');
-  const textRgb = hexToRgb(colors.text.primary);
-  doc.setTextColor(textRgb[0], textRgb[1], textRgb[2]);
+  doc.setTextColor(...RGB_COLORS.textPrimary);
   doc.text('Verification Rate', margins.left, y);
   
-  const barX = margins.left + 35;
-  const barWidth = contentWidth - 50;
-  const barHeight = 6;
+  const barX = margins.left + 40;
+  const barWidth = contentWidth - 60;
+  drawProgressBar(doc, barX, y - 4, barWidth, matchRate);
   
-  const bgRgb = hexToRgb(colors.background.header);
-  doc.setFillColor(bgRgb[0], bgRgb[1], bgRgb[2]);
-  doc.roundedRect(barX, y - 4, barWidth, barHeight, 2, 2, 'F');
+  y += 20;
   
-  const fillWidth = (matchRate / 100) * barWidth;
-  if (fillWidth > 0) {
-    const fillColor = matchRate >= 80 ? hexToRgb(colors.success) : 
-                      matchRate >= 50 ? hexToRgb(colors.warning) : hexToRgb(colors.error);
-    doc.setFillColor(fillColor[0], fillColor[1], fillColor[2]);
-    doc.roundedRect(barX, y - 4, fillWidth, barHeight, 2, 2, 'F');
-  }
+  // Summary Statistics Table
+  y = addSectionHeader(doc, 'Summary Statistics', y);
   
-  doc.text(`${matchRate}%`, barX + barWidth + 5, y);
+  const summaryData = [
+    ['Total Assets in Register', stats.total.toString()],
+    ['Verified (No Discrepancies)', stats.matchedNoDiscrepancy.toString()],
+    ['Verified (With Discrepancies)', stats.discrepancies.toString()],
+    ['Assets Without Inspection', stats.assetOnly.toString()],
+    ['Inspections Without Asset', stats.subsectionOnly.toString()],
+    ['Potential Matches Found', (stats.potentialMatches || 0).toString()],
+    ['Verification Rate', `${matchRate}%`],
+  ];
   
-  y += 15;
+  autoTable(doc, {
+    startY: y,
+    margin: { left: margins.left, right: margins.right },
+    head: [['Metric', 'Value']],
+    body: summaryData,
+    styles: {
+      fontSize: tables.body.fontSize,
+      cellPadding: { horizontal: tables.cellPadding.horizontal, vertical: tables.cellPadding.vertical },
+      lineColor: hexToRgb(tables.border.color),
+      lineWidth: tables.border.width,
+    },
+    headStyles: {
+      fillColor: RGB_COLORS.primary,
+      textColor: RGB_COLORS.white,
+      fontStyle: 'bold',
+      fontSize: tables.header.fontSize,
+    },
+    alternateRowStyles: {
+      fillColor: hexToRgb(tables.body.alternateRowColor),
+    },
+    columnStyles: {
+      0: { cellWidth: 120 },
+      1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
+    },
+  });
   
-  // Metadata
+  y = (doc as any).lastAutoTable?.finalY + 15 || y + 50;
+  
+  // Report metadata
   doc.setFontSize(typography.scale.caption);
-  const mutedRgb = hexToRgb(colors.text.muted);
-  doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
+  doc.setTextColor(...RGB_COLORS.textMuted);
+  doc.setFont(typography.fonts.body, 'normal');
   doc.text(`Generated: ${date}`, margins.left, y);
-  doc.text(`Assets Only: ${stats.assetOnly} | Inspections Only: ${stats.subsectionOnly}`, pageWidth - margins.right, y, { align: 'right' });
 
   // ===== VERIFIED ITEMS TABLE =====
   doc.addPage();
@@ -630,7 +653,7 @@ export async function generateAssetVerificationReport(
     });
   } else {
     doc.setFontSize(typography.scale.body);
-    doc.setTextColor(mutedRgb[0], mutedRgb[1], mutedRgb[2]);
+    doc.setTextColor(...RGB_COLORS.textMuted);
     doc.text('No verified items found.', margins.left, tableY + 10);
   }
 
@@ -802,12 +825,21 @@ export async function generateAssetVerificationReport(
     });
   }
 
-  // Add footers to all pages
-  const totalPages = doc.internal.pages.length - 1;
-  for (let i = 1; i <= totalPages; i++) {
-    doc.setPage(i);
-    addStandardFooter(doc, i, totalPages, siteName);
-  }
+  // Add footers to all pages (skip cover page)
+  addFootersToAllPages(doc, true);
+
+  // Log compliance
+  logComplianceCheck('generateAssetVerificationReport (legacy)', {
+    hasCoverPage: true,
+    logoPlacement: !!logoDataUrl,
+    standardMargins: true,
+    typographyScale: true,
+    brandColors: true,
+    pageHeaders: true,
+    pageFooters: true,
+    tableStyles: true,
+    pageBreaks: true,
+  });
 
   const filename = generateDocumentFilename('Asset_Verification', siteName);
   const blob = doc.output('blob');

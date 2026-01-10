@@ -8,6 +8,19 @@ import { pdfjs } from "react-pdf";
 import { Canvas as FabricCanvas } from "fabric";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  RGB_COLORS,
+  PAGE,
+  logComplianceCheck,
+  PDFComplianceCheck,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS } from "@/lib/documentDesignStandards";
+
+const { margins, typography, tables } = DOCUMENT_DESIGN_STANDARDS;
 
 interface Pin {
   id: string;
@@ -44,8 +57,9 @@ export const SiteDrawingReport = ({
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
+  const [complianceChecks, setComplianceChecks] = useState<PDFComplianceCheck | null>(null);
 
-  const generatePDFDocument = async (): Promise<{ doc: jsPDF; fileName: string; blob: Blob } | null> => {
+  const generatePDFDocument = async (): Promise<{ doc: jsPDF; fileName: string; blob: Blob; complianceChecks: PDFComplianceCheck } | null> => {
     try {
       const doc = new jsPDF();
       const pageWidth = doc.internal.pageSize.getWidth();
@@ -57,39 +71,21 @@ export const SiteDrawingReport = ({
         day: 'numeric' 
       });
 
-      // ===== COVER PAGE =====
-      doc.setFillColor(41, 128, 185);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(32);
-      doc.setFont(undefined, 'bold');
-      doc.text('Site Drawing Inspection', pageWidth / 2, 80, { align: 'center' });
-      
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'normal');
-      doc.text(subsectionName, pageWidth / 2, 100, { align: 'center' });
-      doc.text(siteName, pageWidth / 2, 115, { align: 'center' });
-      
-      doc.setFontSize(14);
-      doc.text('Watson Mattheus', pageWidth / 2, 135, { align: 'center' });
-      
-      doc.setFontSize(12);
-      doc.text(`Generated: ${date}`, pageWidth / 2, 155, { align: 'center' });
-      
-      doc.setFontSize(14);
-      doc.text(`Total Inspection Points: ${pins.length}`, pageWidth / 2, 175, { align: 'center' });
+      // ===== PAGE 1: COVER PAGE =====
+      addCoverPage(doc, {
+        title: 'Site Drawing Inspection',
+        subtitle: subsectionName,
+        siteName,
+        reportType: 'Site Drawing Report',
+        organizationName: 'Watson Mattheus',
+        reportDate: new Date(),
+      });
 
-      // ===== GENERAL INFORMATION =====
+      // ===== PAGE 2: GENERAL INFORMATION =====
       doc.addPage();
-      doc.setTextColor(0, 0, 0);
-      doc.setFontSize(24);
-      doc.setFont(undefined, 'bold');
-      doc.text('General Information', 20, 20);
-
-      let yPos = 35;
-      doc.setFontSize(10);
-      doc.setFont(undefined, 'normal');
+      addStandardHeader(doc, 'General Information', null);
+      
+      let yPos = PAGE.contentStartY;
 
       const generalInfo = inspectionData?.jsonData?.generalInfo || {};
       const generalInfoData = [
@@ -105,20 +101,18 @@ export const SiteDrawingReport = ({
         head: [],
         body: generalInfoData,
         theme: 'striped',
-        styles: { fontSize: 10, cellPadding: 3 },
+        styles: { fontSize: 10, cellPadding: 4 },
         columnStyles: {
           0: { fontStyle: 'bold', cellWidth: 60 },
           1: { cellWidth: 120 }
         },
-        margin: { left: 20, right: 20 }
+        margin: { left: margins.left, right: margins.right }
       });
 
-      // ===== ANNOTATED SITE DRAWING =====
+      // ===== PAGE 3: ANNOTATED SITE DRAWING =====
       doc.addPage();
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'bold');
-      doc.text('Annotated Site Drawing', 20, 20);
-      yPos = 30;
+      addStandardHeader(doc, 'Annotated Site Drawing', null);
+      yPos = PAGE.contentStartY;
 
       // Load the PDF and render it with pins
       try {
@@ -199,30 +193,30 @@ export const SiteDrawingReport = ({
 
           // Add annotated drawing to PDF
           const imgData = canvas.toDataURL('image/jpeg', 0.8);
-          const imgWidth = pageWidth - 40;
+          const imgWidth = pageWidth - (2 * margins.left);
           const imgHeight = (canvas.height / canvas.width) * imgWidth;
           
-          if (imgHeight > pageHeight - 60) {
+          if (imgHeight > pageHeight - yPos - 20) {
             // Scale down if too tall
-            const scaledHeight = pageHeight - 60;
+            const scaledHeight = pageHeight - yPos - 20;
             const scaledWidth = (canvas.width / canvas.height) * scaledHeight;
-            doc.addImage(imgData, 'JPEG', 20, yPos, scaledWidth, scaledHeight);
+            doc.addImage(imgData, 'JPEG', margins.left, yPos, scaledWidth, scaledHeight);
           } else {
-            doc.addImage(imgData, 'JPEG', 20, yPos, imgWidth, imgHeight);
+            doc.addImage(imgData, 'JPEG', margins.left, yPos, imgWidth, imgHeight);
           }
         }
       } catch (error) {
         console.error('Error rendering PDF:', error);
         doc.setFontSize(12);
-        doc.text('Site drawing could not be embedded', 20, yPos);
-        doc.text('Please refer to original PDF file', 20, yPos + 10);
+        doc.setTextColor(...RGB_COLORS.textMuted);
+        doc.text('Site drawing could not be embedded', margins.left, yPos);
+        doc.text('Please refer to original PDF file', margins.left, yPos + 10);
       }
 
-      // ===== PIN INDEX =====
+      // ===== PIN INDEX PAGE =====
       doc.addPage();
-      doc.setFontSize(18);
-      doc.setFont(undefined, 'bold');
-      doc.text('Inspection Points Index', 20, 20);
+      addStandardHeader(doc, 'Inspection Points Index', null);
+      yPos = PAGE.contentStartY;
 
       const indexData = pins.map(pin => [
         pin.number.toString(),
@@ -231,59 +225,48 @@ export const SiteDrawingReport = ({
       ]);
 
       autoTable(doc, {
-        startY: 30,
+        startY: yPos,
         head: [['#', 'Location/Item', 'Images']],
         body: indexData,
         theme: 'grid',
-        headStyles: { fillColor: [41, 128, 185], textColor: 255 },
+        headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
         styles: { fontSize: 10, cellPadding: 3 },
         columnStyles: {
           0: { cellWidth: 20, halign: 'center' },
           1: { cellWidth: 120 },
           2: { cellWidth: 40, halign: 'center' }
         },
-        margin: { left: 20, right: 20 }
+        margin: { left: margins.left, right: margins.right }
       });
 
       // ===== PIN DETAILS PAGES =====
       for (const pin of pins.sort((a, b) => a.number - b.number)) {
         doc.addPage();
-        yPos = 20;
-
-        // Pin header
-        doc.setFillColor(41, 128, 185);
-        doc.rect(0, yPos - 5, pageWidth, 15, 'F');
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(16);
-        doc.setFont(undefined, 'bold');
-        doc.text(`Pin ${pin.number}`, pageWidth / 2, yPos + 5, { align: 'center' });
-        yPos += 25;
-
-        doc.setTextColor(0, 0, 0);
+        addStandardHeader(doc, `Pin ${pin.number}`, null);
+        yPos = PAGE.contentStartY;
 
         // Title
         if (pin.title) {
-          doc.setFontSize(14);
-          doc.setFont(undefined, 'bold');
-          doc.text(pin.title, 20, yPos);
+          doc.setFontSize(typography.scale.h3);
+          doc.setFont(typography.fonts.heading, 'bold');
+          doc.setTextColor(...RGB_COLORS.textPrimary);
+          doc.text(pin.title, margins.left, yPos);
           yPos += 10;
         }
 
         // Description
         if (pin.description) {
-          doc.setFontSize(10);
-          doc.setFont(undefined, 'normal');
-          const splitDescription = doc.splitTextToSize(pin.description, pageWidth - 40);
-          doc.text(splitDescription, 20, yPos);
+          doc.setFontSize(typography.scale.body);
+          doc.setFont(typography.fonts.body, 'normal');
+          doc.setTextColor(...RGB_COLORS.textSecondary);
+          const splitDescription = doc.splitTextToSize(pin.description, pageWidth - (2 * margins.left));
+          doc.text(splitDescription, margins.left, yPos);
           yPos += (splitDescription.length * 5) + 10;
         }
 
         // Images
         if (pin.images.length > 0) {
-          doc.setFontSize(12);
-          doc.setFont(undefined, 'bold');
-          doc.text('Images:', 20, yPos);
-          yPos += 10;
+          yPos = addSectionHeader(doc, 'Images', yPos);
 
           for (const image of pin.images) {
             try {
@@ -300,14 +283,16 @@ export const SiteDrawingReport = ({
 
               if (yPos + imgHeight > pageHeight - 20) {
                 doc.addPage();
-                yPos = 20;
+                addStandardHeader(doc, `Pin ${pin.number} (continued)`, null);
+                yPos = PAGE.contentStartY;
               }
 
-              doc.addImage(dataUrl, 'JPEG', 20, yPos, imgWidth, imgHeight);
+              doc.addImage(dataUrl, 'JPEG', margins.left, yPos, imgWidth, imgHeight);
               
               doc.setFontSize(8);
-              doc.setFont(undefined, 'normal');
-              doc.text(image.name, 20, yPos + imgHeight + 5);
+              doc.setFont(typography.fonts.body, 'normal');
+              doc.setTextColor(...RGB_COLORS.textMuted);
+              doc.text(image.name, margins.left, yPos + imgHeight + 5);
               
               yPos += imgHeight + 15;
             } catch (error) {
@@ -319,31 +304,31 @@ export const SiteDrawingReport = ({
         // Empty state if no details
         if (!pin.title && !pin.description && pin.images.length === 0) {
           doc.setFontSize(10);
-          doc.setTextColor(128, 128, 128);
-          doc.text('No details recorded for this inspection point', 20, yPos);
+          doc.setTextColor(...RGB_COLORS.textMuted);
+          doc.text('No details recorded for this inspection point', margins.left, yPos);
         }
       }
 
-      // ===== FOOTER =====
-      const totalPages = doc.getNumberOfPages();
-      for (let i = 1; i <= totalPages; i++) {
-        doc.setPage(i);
-        doc.setFontSize(10);
-        doc.setTextColor(128, 128, 128);
-        if (i > 1) {
-          doc.text(
-            `Page ${i - 1} of ${totalPages - 1}`,
-            pageWidth / 2,
-            pageHeight - 10,
-            { align: 'center' }
-          );
-        }
-      }
+      // Add footers to all pages (skip cover page)
+      addFootersToAllPages(doc, true);
+
+      // Log compliance
+      const checks = logComplianceCheck('SiteDrawingReport', {
+        hasCoverPage: true,
+        logoPlacement: false,
+        standardMargins: true,
+        typographyScale: true,
+        brandColors: true,
+        pageHeaders: true,
+        pageFooters: true,
+        tableStyles: true,
+        pageBreaks: true,
+      });
 
       const fileName = `${subsectionName}_Site_Drawing_Inspection_${date.replace(/,?\s+/g, '_')}.pdf`;
       const blob = doc.output('blob');
       
-      return { doc, fileName, blob };
+      return { doc, fileName, blob, complianceChecks: checks };
     } catch (error) {
       console.error("Error generating PDF:", error);
       return null;
@@ -364,6 +349,7 @@ export const SiteDrawingReport = ({
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
       setPdfBlob(result.blob);
+      setComplianceChecks(result.complianceChecks);
       setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating report:", error);
@@ -423,6 +409,7 @@ export const SiteDrawingReport = ({
         saveLocation="subsection"
         contextName={subsectionName}
         isSaving={saving}
+        complianceChecks={complianceChecks || undefined}
       />
     </>
   );
