@@ -63,21 +63,6 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
     },
   });
 
-  // Fetch subsections for comparison
-  const { data: subsections = [] } = useQuery({
-    queryKey: ["site-subsections-for-comparison", siteId],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("subsections")
-        .select("id, name, meter_serial_number, ct_ratio, tenant_name")
-        .eq("site_id", siteId)
-        .order("name");
-
-      if (error) throw error;
-      return data || [];
-    },
-  });
-
   // Fetch inspections with tenant data (meter serial, CT ratio, breaker, images)
   const { data: inspectionsWithTenants = [] } = useQuery({
     queryKey: ["site-inspections-tenants", siteId],
@@ -93,31 +78,19 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
     },
   });
 
-  // Build a map of subsection ID -> tenant images (for backward compatibility)
-  const subsectionImages = inspectionsWithTenants.reduce<Record<string, { breakerImage?: string; ctRatioImage?: string; meterImage?: string }>>((acc, inspection) => {
-    if (!inspection.subsection_id || !inspection.json_data) return acc;
-    
-    const jsonData = inspection.json_data as { tenants?: Array<{ breakerImage?: string; ctRatioImage?: string; meterImage?: string }> };
-    const tenants = jsonData.tenants || [];
-    
-    // Get the first tenant with images (or combine from all tenants)
-    for (const tenant of tenants) {
-      if (!acc[inspection.subsection_id]) {
-        acc[inspection.subsection_id] = {};
-      }
-      if (tenant.breakerImage && !acc[inspection.subsection_id].breakerImage) {
-        acc[inspection.subsection_id].breakerImage = tenant.breakerImage;
-      }
-      if (tenant.ctRatioImage && !acc[inspection.subsection_id].ctRatioImage) {
-        acc[inspection.subsection_id].ctRatioImage = tenant.ctRatioImage;
-      }
-      if (tenant.meterImage && !acc[inspection.subsection_id].meterImage) {
-        acc[inspection.subsection_id].meterImage = tenant.meterImage;
-      }
-    }
-    
-    return acc;
-  }, {});
+  // Fetch subsection names for display purposes
+  const { data: subsections = [] } = useQuery({
+    queryKey: ["site-subsections-names", siteId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subsections")
+        .select("id, name")
+        .eq("site_id", siteId);
+
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   // Build a map of meter serial number -> inspection tenant data for matching to assets
   interface InspectionTenantMatch {
@@ -526,13 +499,11 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
           <TabsContent value="verification">
             <AssetComparisonTable 
               assets={electricalAssets} 
-              subsections={subsections}
-              subsectionImages={subsectionImages}
               inspectionMeterMatches={inspectionMeterMatches}
               siteName={siteName}
               onDataUpdated={() => {
                 refetch();
-                queryClient.invalidateQueries({ queryKey: ["site-subsections-for-comparison", siteId] });
+                queryClient.invalidateQueries({ queryKey: ["site-inspections-tenants", siteId] });
               }}
             />
           </TabsContent>
