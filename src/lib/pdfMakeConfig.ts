@@ -467,6 +467,56 @@ export function openPdfInNewWindow(docDefinition: TDocumentDefinitions): void {
 }
 
 // ============================================================================
+// TEST FUNCTION
+// ============================================================================
+
+/**
+ * Test PDF generation with a simple document
+ * Opens a simple PDF in a new tab to verify pdfmake is working
+ */
+export function testPdfGeneration(): void {
+  console.log('Testing PDF generation...');
+  
+  const testDoc: TDocumentDefinitions = {
+    content: [
+      { text: 'PDF Generation Test', fontSize: 24, bold: true, margin: [0, 0, 0, 20] },
+      { text: 'If you can see this, pdfmake is working correctly!', fontSize: 14 },
+      { text: `Generated at: ${new Date().toISOString()}`, fontSize: 10, margin: [0, 20, 0, 0] },
+    ],
+    defaultStyle: {
+      font: 'Roboto',
+    },
+  };
+  
+  try {
+    const pdfDocGenerator = pdfMake.createPdf(testDoc);
+    pdfDocGenerator.open();
+    console.log('Test PDF opened in new tab');
+  } catch (error) {
+    console.error('Test PDF generation failed:', error);
+  }
+}
+
+/**
+ * Generate a test PDF blob to verify blob generation works
+ */
+export async function testPdfBlobGeneration(): Promise<Blob> {
+  console.log('Testing PDF blob generation...');
+  
+  const testDoc: TDocumentDefinitions = {
+    content: [
+      { text: 'PDF Blob Generation Test', fontSize: 24, bold: true },
+      { text: 'This PDF was generated as a blob.', fontSize: 14 },
+    ],
+    defaultStyle: {
+      font: 'Roboto',
+    },
+  };
+  
+  return generatePdfBlob(testDoc);
+}
+
+// ============================================================================
 // UTILITY EXPORTS
 // ============================================================================
 
