@@ -346,11 +346,56 @@ function base64ToBlob(base64: string, mimeType: string): Blob {
 }
 
 /**
+ * Recursively find and validate canvas elements in document definition
+ */
+function validateCanvasElements(obj: any, path: string = 'root'): string[] {
+  const issues: string[] = [];
+  
+  if (obj === null || obj === undefined) return issues;
+  
+  if (Array.isArray(obj)) {
+    obj.forEach((item, index) => {
+      issues.push(...validateCanvasElements(item, `${path}[${index}]`));
+    });
+  } else if (typeof obj === 'object') {
+    if ('canvas' in obj) {
+      const canvas = obj.canvas;
+      if (!Array.isArray(canvas)) {
+        issues.push(`${path}.canvas is not an array: ${typeof canvas}`);
+      } else {
+        canvas.forEach((element: any, i: number) => {
+          if (typeof element !== 'object' || element === null) {
+            issues.push(`${path}.canvas[${i}] is not an object: ${typeof element}`);
+          }
+        });
+      }
+    }
+    
+    // Recurse into object properties
+    for (const key of Object.keys(obj)) {
+      if (key !== 'canvas') { // Don't recurse into canvas array items
+        issues.push(...validateCanvasElements(obj[key], `${path}.${key}`));
+      }
+    }
+  }
+  
+  return issues;
+}
+
+/**
  * Generate a PDF blob from a document definition
  * Uses Promise-based getStream for browser environments
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
   console.log('Creating PDF with pdfmake...');
+  
+  // Validate canvas elements before generating
+  const canvasIssues = validateCanvasElements(docDefinition);
+  if (canvasIssues.length > 0) {
+    console.error('Canvas validation issues found:', canvasIssues);
+    throw new Error(`Invalid canvas elements: ${canvasIssues.join(', ')}`);
+  }
+  console.log('Canvas validation passed');
   
   // Verify fonts are loaded
   const instance = pdfMake as any;
