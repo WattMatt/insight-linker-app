@@ -8,7 +8,19 @@ import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  drawKpiCard,
+  drawProgressBar,
+  logComplianceCheck,
+  RGB_COLORS,
+  PAGE,
+  PDFComplianceCheck,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
 interface SiteSummaryReportProps {
   siteId: string;
   siteName: string;
@@ -289,67 +301,25 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const doc = new jsPDF();
     const pageWidth = doc.internal.pageSize.getWidth();
     const pageHeight = doc.internal.pageSize.getHeight();
+    const contentWidth = getContentWidth();
+    const { margins } = DOCUMENT_DESIGN_STANDARDS;
 
-    // ===== TITLE PAGE =====
-    // Dark header bar
-    doc.setFillColor(44, 62, 80); // Dark blue-gray
-    doc.rect(0, 0, pageWidth, 30, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(18);
-    doc.setFont(undefined, 'bold');
-    doc.text(clientName.toUpperCase(), pageWidth / 2, 20, { align: 'center' });
-    
-    // White background for rest
-    doc.setFillColor(245, 245, 245);
-    doc.rect(0, 30, pageWidth, pageHeight - 30, 'F');
-    
-    doc.setTextColor(33, 33, 33);
-    doc.setFontSize(48);
-    doc.setFont(undefined, 'bold');
-    doc.text(siteName, pageWidth / 2, 120, { align: 'center' });
-    
-    doc.setFontSize(20);
-    doc.setTextColor(128, 128, 128);
-    doc.setFont(undefined, 'normal');
-    doc.text("Site Summary Report", pageWidth / 2, 140, { align: 'center' });
-    
-    // Horizontal line
-    doc.setDrawColor(200, 200, 200);
-    doc.setLineWidth(0.5);
-    doc.line(60, 160, pageWidth - 60, 160);
-    
-    // Info table
-    doc.setFontSize(11);
-    doc.setTextColor(100, 100, 100);
-    doc.text("Date of Report", 70, 180);
-    doc.setTextColor(33, 33, 33);
-    const reportDate = new Date().toLocaleDateString('en-ZA').replace(/\//g, '/');
-    doc.text(reportDate, pageWidth - 70, 180, { align: 'right' });
-    
-    doc.setTextColor(100, 100, 100);
-    doc.text("Total Subsections", 70, 195);
-    doc.setTextColor(33, 33, 33);
-    doc.text(subsections.length.toString(), pageWidth - 70, 195, { align: 'right' });
-    
-    // Footer
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text(`${siteName} - Site Summary Report`, pageWidth / 2, pageHeight - 10, { align: 'center' });
+    // ===== PAGE 1: COVER PAGE using pdfUtils =====
+    addCoverPage(doc, {
+      title: 'Site Summary Report',
+      subtitle: 'Comprehensive Site Health & Compliance Overview',
+      siteName: siteName,
+      clientName: clientName,
+      reportType: 'Summary Report',
+      organizationName: 'Asset Management System',
+      reportDate: new Date(),
+    });
 
-    // ===== HEALTH OVERVIEW PAGE =====
+    // ===== PAGE 2: HEALTH OVERVIEW PAGE =====
     doc.addPage();
-    doc.setFillColor(245, 245, 245);
-    doc.rect(0, 0, pageWidth, pageHeight, 'F');
+    const headerY = addStandardHeader(doc, 'Site Health Overview', null);
     
-    // Title with blue underline
-    doc.setTextColor(63, 81, 181); // Blue
-    doc.setFontSize(18);
-    doc.setFont(undefined, 'bold');
-    doc.text("Site Health Overview", 20, 25);
-    doc.setDrawColor(63, 81, 181);
-    doc.setLineWidth(1);
-    doc.line(20, 28, pageWidth - 20, 28);
+    let cardY = headerY + 10;
     
     // Calculate health metrics
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
@@ -373,30 +343,37 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const meteringData = Math.round((meteringInstalled / subsections.length) * 100) || 0;
     const snagsPercentage = Math.round((subsectionsWithSnags.size / subsections.length) * 100) || 0;
     
-    // Draw 4 health metric cards with improved styling
-    const cardWidth = 46;
-    const cardHeight = 58;
-    const cardSpacing = 4;
-    const startX = 12;
-    let cardY = 45;
+    // Draw 4 health metric cards with pdfUtils drawKpiCard
+    const cardWidth = (contentWidth - (5 * 3)) / 4;
+    const cardHeight = 32;
     
-    // Use professional color scheme
-    drawHealthCard(doc, startX, cardY, cardWidth, cardHeight, "OVERALL HEALTH", overallHealth, "", 46, 125, 50); // Green
-    drawHealthCard(doc, startX + cardWidth + cardSpacing, cardY, cardWidth, cardHeight, "COC COMPLIANCE", cocCompliance, `${cocCompliant} of ${cocRequired} required`, 255, 152, 0); // Orange
-    drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 2, cardY, cardWidth, cardHeight, "METERING DATA", meteringData, `${meteringInstalled} of ${subsections.length} installed`, 33, 150, 243); // Blue
-    drawHealthCard(doc, startX + (cardWidth + cardSpacing) * 3, cardY, cardWidth, cardHeight, "OPEN SNAGS", 100 - snagsPercentage, `${totalSnags} total snags`, 244, 67, 54); // Red
+    cardY = addSectionHeader(doc, 'Health Metrics', cardY);
     
+    const kpiData = [
+      { value: `${overallHealth}%`, label: 'Overall Health', color: RGB_COLORS.success },
+      { value: `${cocCompliance}%`, label: 'COC Compliance', color: RGB_COLORS.warning },
+      { value: `${meteringData}%`, label: 'Metering Data', color: RGB_COLORS.primary },
+      { value: `${100 - snagsPercentage}%`, label: 'Snag Free', color: RGB_COLORS.error },
+    ];
+    
+    kpiData.forEach((kpi, i) => {
+      const cardX = margins.left + i * (cardWidth + 5);
+      drawKpiCard(doc, cardX, cardY, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
+    });
+    
+    cardY += cardHeight + 15;
+    
+    // Progress bar for overall health
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(...RGB_COLORS.textPrimary);
+    doc.text('Overall Health Rate:', margins.left, cardY);
+    drawProgressBar(doc, margins.left + 45, cardY - 4, contentWidth - 65, overallHealth);
+    
+    cardY += 20;
+
     // Health by Category section
-    cardY = 118;
-    doc.setTextColor(63, 81, 181);
-    doc.setFontSize(16);
-    doc.setFont(undefined, 'bold');
-    doc.text("Health by Category", 20, cardY);
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.5);
-    doc.line(20, cardY + 3, pageWidth - 20, cardY + 3);
-    
-    cardY = 133;
+    cardY = addSectionHeader(doc, 'Health by Category', cardY);
     
     // Group by category
     const categoryGroups = subsections.reduce((acc, sub) => {
@@ -407,44 +384,71 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       return acc;
     }, {} as Record<string, { total: number; compliant: number }>);
     
-    // Abbreviate category names using our utility
     const categories = Object.keys(categoryGroups).slice(0, 4);
     categories.forEach((cat, idx) => {
       const data = categoryGroups[cat];
       const percentage = Math.round((data.compliant / data.total) * 100) || 0;
-      const xPos = startX + (cardWidth + cardSpacing) * idx;
+      const xPos = margins.left + (cardWidth + 5) * idx;
       const abbrev = getCategoryAbbreviation(cat);
-      const color = percentage >= 80 ? [46, 125, 50] : percentage >= 60 ? [255, 152, 0] : [244, 67, 54];
-      drawHealthCard(doc, xPos, cardY, cardWidth, cardHeight, abbrev, percentage, `${data.compliant}/${data.total} compliant`, color[0], color[1], color[2]);
+      const color: [number, number, number] = percentage >= 80 ? RGB_COLORS.success : percentage >= 60 ? RGB_COLORS.warning : RGB_COLORS.error;
+      drawKpiCard(doc, xPos, cardY, cardWidth, cardHeight, `${percentage}%`, abbrev, color);
     });
     
-    // Footer
-    doc.setFontSize(9);
-    doc.setTextColor(150, 150, 150);
-    doc.text("Page 1", pageWidth / 2, pageHeight - 10, { align: 'center' });
+    cardY += cardHeight + 15;
+    
+    // Summary Statistics Table
+    cardY = addSectionHeader(doc, 'Summary Statistics', cardY);
+    
+    const summaryData = [
+      ['Total Subsections', subsections.length.toString()],
+      ['COC Required', cocRequired.toString()],
+      ['COC Compliant', cocCompliant.toString()],
+      ['Metering Installed', meteringInstalled.toString()],
+      ['Total Snags', totalSnags.toString()],
+      ['Overall Health Rate', `${overallHealth}%`],
+    ];
+    
+    autoTable(doc, {
+      startY: cardY,
+      margin: { left: margins.left, right: margins.right },
+      tableWidth: contentWidth,
+      head: [['Metric', 'Value']],
+      body: summaryData,
+      styles: {
+        fontSize: 9,
+        cellPadding: { horizontal: 4, vertical: 3 },
+      },
+      headStyles: {
+        fillColor: RGB_COLORS.primary,
+        textColor: RGB_COLORS.white,
+        fontStyle: 'bold',
+      },
+      alternateRowStyles: {
+        fillColor: RGB_COLORS.tableAltRow,
+      },
+      columnStyles: {
+        0: { cellWidth: contentWidth - 40 },
+        1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
+      },
+    });
 
     // ===== SUBSECTION DETAIL PAGES =====
     let pageNumber = 2;
     
     for (let i = 0; i < subsections.length; i += 2) {
       doc.addPage();
-      doc.setFillColor(245, 245, 245);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
+      const subsectionHeaderY = addStandardHeader(doc, 'Subsection Details', null);
       
       // Calculate compliance for first subsection
       const isFirstCompliant = calculateSubsectionCompliance(subsections[i], allInspections, subsectionDocuments);
-      renderSubsectionCard(doc, subsections[i], 15, allInspections, subsectionDocuments, isFirstCompliant);
+      renderSubsectionCard(doc, subsections[i], subsectionHeaderY + 5, allInspections, subsectionDocuments, isFirstCompliant);
       
       // Second subsection on page (if exists)
       if (i + 1 < subsections.length) {
         const isSecondCompliant = calculateSubsectionCompliance(subsections[i + 1], allInspections, subsectionDocuments);
-        renderSubsectionCard(doc, subsections[i + 1], 140, allInspections, subsectionDocuments, isSecondCompliant);
+        renderSubsectionCard(doc, subsections[i + 1], subsectionHeaderY + 120, allInspections, subsectionDocuments, isSecondCompliant);
       }
       
-      // Footer
-      doc.setFontSize(9);
-      doc.setTextColor(150, 150, 150);
-      doc.text(`Page ${pageNumber}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
       pageNumber++;
     }
 
@@ -452,16 +456,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     if (cocValidations.length > 0) {
       // Add annexes divider page
       doc.addPage();
-      doc.setFillColor(44, 62, 80);
+      doc.setFillColor(...RGB_COLORS.primary);
       doc.rect(0, 0, pageWidth, pageHeight, 'F');
       
       doc.setTextColor(255, 255, 255);
       doc.setFontSize(32);
-      doc.setFont(undefined, 'bold');
+      doc.setFont('helvetica', 'bold');
       doc.text('ANNEXES', pageWidth / 2, pageHeight / 2 - 10, { align: 'center' });
       
       doc.setFontSize(16);
-      doc.setFont(undefined, 'normal');
+      doc.setFont('helvetica', 'normal');
       doc.text('COC Verification Reports', pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
       
       doc.setFontSize(12);
@@ -475,16 +479,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         
         // Annex Cover Page
         doc.addPage();
-        doc.setFillColor(63, 81, 181);
+        doc.setFillColor(...RGB_COLORS.primary);
         doc.rect(0, 0, pageWidth, pageHeight, 'F');
         
         doc.setTextColor(255, 255, 255);
         doc.setFontSize(24);
-        doc.setFont(undefined, 'bold');
+        doc.setFont('helvetica', 'bold');
         doc.text(`ANNEX ${annexNumber}`, pageWidth / 2, 60, { align: 'center' });
         
         doc.setFontSize(20);
-        doc.setFont(undefined, 'normal');
+        doc.setFont('helvetica', 'normal');
         doc.text('COC Verification Report', pageWidth / 2, 85, { align: 'center' });
         
         if (report.cocNumber) {
@@ -497,7 +501,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         
         // Status Badge
         doc.setFontSize(28);
-        doc.setFont(undefined, 'bold');
+        doc.setFont('helvetica', 'bold');
         const statusText = status?.toUpperCase() || 'UNKNOWN';
         let statusColor: [number, number, number] = [200, 200, 200];
         if (status?.toLowerCase() === 'pass') statusColor = [76, 175, 80];
@@ -506,6 +510,22 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         doc.text(statusText, pageWidth / 2, 155, { align: 'center' });
       });
     }
+
+    // Add footers to all pages (skip cover page)
+    addFootersToAllPages(doc, true);
+    
+    // Log compliance
+    logComplianceCheck('SiteSummaryReport', {
+      hasCoverPage: true,
+      logoPlacement: false,
+      standardMargins: true,
+      typographyScale: true,
+      brandColors: true,
+      pageHeaders: true,
+      pageFooters: true,
+      tableStyles: true,
+      pageBreaks: true,
+    });
 
     // Generate blob
     const pdfBlob = doc.output('blob');

@@ -8,7 +8,18 @@ import { supabase } from "@/integrations/supabase/client";
 import { fetchImageAsDataUrl } from "@/lib/imageUrlResolver";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  addFullWidthSectionHeader,
+  logComplianceCheck,
+  RGB_COLORS,
+  PAGE,
+  PDFComplianceCheck,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
 // Standalone interface for external use
 export interface GenerateReportOptions {
   inspectionId: string;

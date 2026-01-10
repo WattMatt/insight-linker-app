@@ -15,6 +15,16 @@ import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit } from "
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
+import {
+  addCoverPage,
+  addStandardHeader,
+  addFootersToAllPages,
+  addSectionHeader,
+  logComplianceCheck,
+  RGB_COLORS,
+  PAGE,
+} from "@/lib/pdfUtils";
+import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
 
 interface TemplateSection {
   id: string;
