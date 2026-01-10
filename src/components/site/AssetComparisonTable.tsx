@@ -25,7 +25,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, FileDown, Eye, Loader2, Pencil, Check, X } from "lucide-react";
+import { Search, CheckCircle2, AlertTriangle, XCircle, Image as ImageIcon, Eye, Loader2, Pencil, Check, X } from "lucide-react";
+import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
@@ -115,7 +116,13 @@ export const AssetComparisonTable = ({
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "verified" | "discrepancies" | "unverified">("all");
   const [imageDialog, setImageDialog] = useState<{ url: string; title: string } | null>(null);
-  const [pdfPreview, setPdfPreview] = useState<{ url: string; filename: string } | null>(null);
+  const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
+  const [savingToDocuments, setSavingToDocuments] = useState(false);
+  const siteId = useMemo(() => {
+    // Extract siteId from URL or other context if available
+    const match = window.location.pathname.match(/sites\/([a-f0-9-]+)/);
+    return match ? match[1] : undefined;
+  }, []);
   const [generating, setGenerating] = useState(false);
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [saving, setSaving] = useState(false);
@@ -322,33 +329,6 @@ export const AssetComparisonTable = ({
     }
   };
 
-  const handleExportReport = async () => {
-    setGenerating(true);
-    try {
-      const result = await generateInspectionBasedReport({
-        siteName,
-        comparisonResults,
-        stats,
-        companyLogoUrl,
-      });
-      
-      // Download the blob
-      const url = URL.createObjectURL(result.blob);
-      const link = document.createElement("a");
-      link.href = url;
-      link.download = result.filename;
-      link.click();
-      URL.revokeObjectURL(url);
-      
-      toast.success("Report exported successfully");
-    } catch (error) {
-      console.error("Error generating report:", error);
-      toast.error("Failed to generate report");
-    } finally {
-      setGenerating(false);
-    }
-  };
-
   const handlePreviewReport = async () => {
     setGenerating(true);
     try {
@@ -360,12 +340,42 @@ export const AssetComparisonTable = ({
       });
       
       const url = URL.createObjectURL(result.blob);
-      setPdfPreview({ url, filename: result.filename });
+      setPdfPreview({ url, blob: result.blob, filename: result.filename });
     } catch (error) {
       console.error("Error generating preview:", error);
       toast.error("Failed to generate preview");
     } finally {
       setGenerating(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!pdfPreview || !siteId) {
+      toast.error("Unable to save: missing context");
+      return;
+    }
+    
+    setSavingToDocuments(true);
+    try {
+      const result = await savePDFToDocuments({
+        blob: pdfPreview.blob,
+        fileName: pdfPreview.filename,
+        siteId,
+        categoryName: getReportCategoryName("asset-verification"),
+      });
+
+      if (result.success) {
+        toast.success("Asset verification report saved to documents!");
+        URL.revokeObjectURL(pdfPreview.url);
+        setPdfPreview(null);
+      } else {
+        toast.error(result.error || "Failed to save report");
+      }
+    } catch (error) {
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report to documents");
+    } finally {
+      setSavingToDocuments(false);
     }
   };
 
@@ -535,34 +545,19 @@ export const AssetComparisonTable = ({
                 className="pl-9"
               />
             </div>
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handlePreviewReport}
-                disabled={generating || comparisonResults.length === 0}
-              >
-                {generating ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <Eye className="h-4 w-4 mr-2" />
-                )}
-                Preview
-              </Button>
-              <Button
-                variant="default"
-                size="sm"
-                onClick={handleExportReport}
-                disabled={generating || comparisonResults.length === 0}
-              >
-                {generating ? (
-                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                ) : (
-                  <FileDown className="h-4 w-4 mr-2" />
-                )}
-                Export PDF
-              </Button>
-            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handlePreviewReport}
+              disabled={generating || comparisonResults.length === 0}
+            >
+              {generating ? (
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              ) : (
+                <Eye className="h-4 w-4 mr-2" />
+              )}
+              Preview Report
+            </Button>
           </div>
         </CardContent>
       </Card>
@@ -729,6 +724,10 @@ export const AssetComparisonTable = ({
           }}
           fileUrl={pdfPreview.url}
           fileName={pdfPreview.filename}
+          onSaveToDocuments={handleSaveToDocuments}
+          saveLocation="site"
+          contextName={siteName}
+          isSaving={savingToDocuments}
         />
       )}
     </div>

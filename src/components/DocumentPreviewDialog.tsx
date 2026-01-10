@@ -9,7 +9,9 @@ import {
   ChevronLeft, 
   ChevronRight,
   Maximize2,
-  Minimize2
+  Minimize2,
+  Save,
+  Loader2
 } from 'lucide-react';
 import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
@@ -24,13 +26,22 @@ interface DocumentPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   fileUrl: string;
   fileName: string;
+  // New props for save functionality
+  onSaveToDocuments?: () => Promise<void>;
+  saveLocation?: 'site' | 'subsection';
+  contextName?: string; // Site or subsection name for display
+  isSaving?: boolean;
 }
 
 export function DocumentPreviewDialog({
   open,
   onOpenChange,
   fileUrl,
-  fileName
+  fileName,
+  onSaveToDocuments,
+  saveLocation,
+  contextName,
+  isSaving = false,
 }: DocumentPreviewDialogProps) {
   const [scale, setScale] = useState(1);
   const [rotation, setRotation] = useState(0);
@@ -127,6 +138,13 @@ export function DocumentPreviewDialog({
 
   const toggleFullscreen = () => setIsFullscreen(prev => !prev);
 
+  const getSaveButtonLabel = () => {
+    if (isSaving) return "Saving...";
+    if (saveLocation === 'site') return "Save to Site Documents";
+    if (saveLocation === 'subsection') return "Save to Subsection Documents";
+    return "Save to Documents";
+  };
+
   const renderContent = () => {
     if (isPdf) {
       return (
@@ -193,9 +211,16 @@ export function DocumentPreviewDialog({
         {/* Header */}
         <DialogHeader className="p-4 border-b flex-shrink-0">
           <div className="flex items-center justify-between">
-            <DialogTitle className="text-sm font-medium truncate max-w-[50%]">
-              {fileName}
-            </DialogTitle>
+            <div className="flex flex-col">
+              <DialogTitle className="text-sm font-medium truncate max-w-[40%]">
+                {fileName}
+              </DialogTitle>
+              {contextName && saveLocation && (
+                <span className="text-xs text-muted-foreground mt-0.5">
+                  {saveLocation === 'site' ? 'Site' : 'Subsection'}: {contextName}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-1">
               <Button variant="ghost" size="icon" onClick={handleZoomOut} title="Zoom Out">
                 <ZoomOut className="h-4 w-4" />
@@ -212,9 +237,27 @@ export function DocumentPreviewDialog({
               <Button variant="ghost" size="icon" onClick={toggleFullscreen} title="Fullscreen">
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
+              <div className="w-px h-6 bg-border mx-1" />
               <Button variant="ghost" size="icon" onClick={() => downloadFile(fileUrl, fileName)} title="Download">
                 <Download className="h-4 w-4" />
               </Button>
+              {onSaveToDocuments && (
+                <Button 
+                  variant="default" 
+                  size="sm" 
+                  onClick={onSaveToDocuments} 
+                  disabled={isSaving}
+                  className="ml-1"
+                  title={getSaveButtonLabel()}
+                >
+                  {isSaving ? (
+                    <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  ) : (
+                    <Save className="h-4 w-4 mr-2" />
+                  )}
+                  Save
+                </Button>
+              )}
             </div>
           </div>
         </DialogHeader>
