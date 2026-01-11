@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings } from "lucide-react";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings, Upload } from "lucide-react";
 import { toast } from "sonner";
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
@@ -26,6 +26,8 @@ import {
 } from "@/lib/pdfUtils";
 import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
 import { TemplatePreviewRenderer } from "@/components/templates/TemplatePreviewRenderer";
+import PDFTemplateUploader from "@/components/PDFTemplateUploader";
+import PDFTemplateExportDialog from "@/components/PDFTemplateExportDialog";
 
 interface TemplateSection {
   id: string;
@@ -89,6 +91,8 @@ const InspectionTemplates = () => {
   const [currentPage, setCurrentPage] = useState(1);
   const [selectedCategory, setSelectedCategory] = useState("all");
   const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
+  const [showUploader, setShowUploader] = useState(false);
+  const [exportTemplate, setExportTemplate] = useState<InspectionTemplate | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -522,9 +526,13 @@ const InspectionTemplates = () => {
           </p>
         </div>
         <div className="flex gap-2">
+          <Button variant="outline" onClick={() => setShowUploader(!showUploader)}>
+            <Upload className="mr-2 h-4 w-4" />
+            Import PDF
+          </Button>
           <Button variant="outline" onClick={() => navigate("/inspection-templates/validate")}>
             <FileText className="mr-2 h-4 w-4" />
-            Validate Templates
+            Validate
           </Button>
           <Button onClick={() => navigate("/inspection-templates/new")}>
             <Plus className="mr-2 h-4 w-4" />
@@ -532,6 +540,16 @@ const InspectionTemplates = () => {
           </Button>
         </div>
       </div>
+
+      {/* PDF Uploader */}
+      {showUploader && (
+        <PDFTemplateUploader 
+          onTemplateSaved={() => {
+            fetchTemplates();
+            setShowUploader(false);
+          }}
+        />
+      )}
 
       <Tabs value={selectedCategory} onValueChange={setSelectedCategory} className="space-y-4">
         <TabsList className="grid w-full grid-cols-8 h-auto p-1">
