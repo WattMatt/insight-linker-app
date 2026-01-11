@@ -598,20 +598,30 @@ const InspectionDetail = () => {
     }
   };
 
-  const fetchInspectionData = async () => {
+  const fetchInspectionData = async (retryCount = 0) => {
+    const maxRetries = 2;
+    
     try {
       setLoading(true);
 
       // First verify the session is valid
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
-        console.error("Session error:", sessionError);
-        toast.error("Your session has expired. Please log in again.");
-        navigate('/auth');
-        return;
+        console.error("[InspectionDetail] Session error:", sessionError, "| inspectionId:", inspectionId);
+        
+        // Try to refresh the session before giving up
+        const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
+        if (refreshError || !refreshData.session) {
+          console.error("[InspectionDetail] Session refresh failed:", refreshError);
+          toast.error("Your session has expired. Please log in again.");
+          navigate('/auth');
+          return;
+        }
+        console.log("[InspectionDetail] Session refreshed successfully");
       }
 
-      // Fetch inspection
+      // Fetch inspection with detailed logging
+      console.log("[InspectionDetail] Fetching inspection:", inspectionId);
       const { data: inspData, error: inspError } = await supabase
         .from('inspections')
         .select(`
@@ -636,7 +646,15 @@ const InspectionDetail = () => {
         .maybeSingle();
 
       if (inspError) {
-        console.error("Error fetching inspection:", inspError);
+        console.error("[InspectionDetail] Error fetching inspection:", inspError, "| Code:", inspError.code, "| Details:", inspError.details);
+        
+        // Retry on network or transient errors
+        if (retryCount < maxRetries && (inspError.code === 'PGRST000' || inspError.message?.includes('network') || inspError.message?.includes('timeout'))) {
+          console.log(`[InspectionDetail] Retrying... (${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000 * (retryCount + 1)));
+          return fetchInspectionData(retryCount + 1);
+        }
+        
         // Check for permission/RLS errors
         if (inspError.code === 'PGRST116' || inspError.message?.includes('permission')) {
           toast.error("You don't have permission to view this inspection");
@@ -657,7 +675,15 @@ const InspectionDetail = () => {
       }
       
       if (!inspData) {
-        console.error("Inspection not found for ID:", inspectionId);
+        console.error("[InspectionDetail] Inspection not found for ID:", inspectionId);
+        
+        // Retry once in case of race condition
+        if (retryCount < maxRetries) {
+          console.log(`[InspectionDetail] Inspection not found, retrying... (${retryCount + 1}/${maxRetries})`);
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          return fetchInspectionData(retryCount + 1);
+        }
+        
         toast.error("Inspection not found");
         // Navigate based on available parameters
         if (isContractorPortal) {
@@ -669,6 +695,8 @@ const InspectionDetail = () => {
         }
         return;
       }
+      
+      console.log("[InspectionDetail] Successfully loaded inspection:", inspData.title);
 
       // Fetch template separately if template_id exists
       let templateData = null;
