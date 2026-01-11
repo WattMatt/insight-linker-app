@@ -35,3 +35,9 @@ verify_jwt = false
 
 [functions.fix-tenant-images]
 verify_jwt = true
+
+[functions.api-reports]
+verify_jwt = false
+
+[functions.template-sync]
+verify_jwt = false
