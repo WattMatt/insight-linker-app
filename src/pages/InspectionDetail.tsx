@@ -602,6 +602,15 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
+      // First verify the session is valid
+      const { data: { session }, error: sessionError } = await supabase.auth.getSession();
+      if (sessionError || !session) {
+        console.error("Session error:", sessionError);
+        toast.error("Your session has expired. Please log in again.");
+        navigate('/auth');
+        return;
+      }
+
       // Fetch inspection
       const { data: inspData, error: inspError } = await supabase
         .from('inspections')
@@ -626,8 +635,29 @@ const InspectionDetail = () => {
         .eq('id', inspectionId)
         .maybeSingle();
 
-      if (inspError || !inspData) {
+      if (inspError) {
         console.error("Error fetching inspection:", inspError);
+        // Check for permission/RLS errors
+        if (inspError.code === 'PGRST116' || inspError.message?.includes('permission')) {
+          toast.error("You don't have permission to view this inspection");
+        } else if (inspError.code === '42501') {
+          toast.error("Access denied. Please contact an administrator.");
+        } else {
+          toast.error("Error loading inspection. Please try refreshing the page.");
+        }
+        // Navigate based on available parameters
+        if (isContractorPortal) {
+          navigate(`/contractor${previewSiteId ? `?preview=${previewSiteId}` : ''}`);
+        } else if (subsectionId) {
+          navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
+        } else {
+          navigate('/inspections');
+        }
+        return;
+      }
+      
+      if (!inspData) {
+        console.error("Inspection not found for ID:", inspectionId);
         toast.error("Inspection not found");
         // Navigate based on available parameters
         if (isContractorPortal) {
@@ -635,7 +665,7 @@ const InspectionDetail = () => {
         } else if (subsectionId) {
           navigate(`${(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`)}/subsections/${subsectionId}`);
         } else {
-          navigate('/contractor');
+          navigate('/inspections');
         }
         return;
       }
