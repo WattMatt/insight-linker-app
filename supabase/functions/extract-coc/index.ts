@@ -69,8 +69,13 @@ Extract ALL information from this TWO-PAGE ECA Certificate of Compliance documen
 
 ### PAGE 1: Certificate Details
 
-**1. Certificate Identification:**
-- Certificate No. (e.g., "ECA 642760")
+**1. Certificate Identification (MOST CRITICAL - READ VERY CAREFULLY):**
+- **Certificate No. (REQUIRED)**: Look for "Certificate No." or "Cert No." typically in the TOP RIGHT corner of page 1
+  - This is a UNIQUE identifier for this specific certificate
+  - Common formats: "ECA 642760", "642 760", "ECA-2024-001234"
+  - READ EACH DIGIT EXTREMELY CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9
+  - The number is usually 6 digits, sometimes with "ECA" prefix
+  - DO NOT use numbers from any other field - only the Certificate Number field
 - Certificate type: "Initial Certificate" or "Supplementary Certificate"
 - Supplement No. (if supplementary)
 - Initial Certificate No. it supplements (if applicable)
@@ -215,11 +220,16 @@ Extract the circuit/point counts from the table. Each item has "New" and "Existi
 
 ## 📤 JSON Output Format
 
+CRITICAL: The cocNumber field MUST contain the UNIQUE Certificate Number from this specific document.
+- Look in the TOP RIGHT area of page 1 for "Certificate No." or "Cert No."
+- Each COC has a different number - verify you are reading THIS document's number, not a cached or generic value
+- Common format: 6 digits, optionally prefixed with "ECA" (e.g., "642760", "ECA 642760")
+
 Return ONLY this JSON structure with ALL extracted data:
 
 \`\`\`json
 {
-  "cocNumber": "string",
+  "cocNumber": "string - THE UNIQUE CERTIFICATE NUMBER FROM THIS DOCUMENT",
   "cocType": "Initial Certificate | Supplementary Certificate",
   "cocIssueDate": "YYYY-MM-DD",
   "supplementDetails": {
@@ -530,7 +540,14 @@ serve(async (req) => {
                 },
                 {
                   type: 'text',
-                  text: EXTRACTION_PROMPT + '\n\nIMPORTANT: Read each date digit VERY carefully. The document may have handwritten or stamped dates. Extract the COC issue date from the signature section on page 1.'
+                  text: EXTRACTION_PROMPT + `
+
+CRITICAL EXTRACTION RULES:
+1. COC NUMBER: Look in the TOP RIGHT corner of page 1 for "Certificate No." or "Cert No." - this is UNIQUE to this document
+2. READ EACH DIGIT CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9
+3. Each COC has a DIFFERENT certificate number - make sure you extract THIS document's number
+4. COC ISSUE DATE: From the signature section on page 1
+5. Do NOT reuse data from other documents - extract fresh from THIS PDF`
                 }
               ]
             }
