@@ -708,38 +708,108 @@ serve(async (req) => {
                 'Confidence:', validationResult.confidenceScore,
                 'Checks:', validationResult.summary?.totalChecks);
 
-    // Update subsection with COC details if extracted
-    if (validationResult.cocNumber || validationResult.cocIssueDate) {
-      const updateData: any = {};
-      if (validationResult.cocNumber) {
-        updateData.coc_number = validationResult.cocNumber;
-      }
-      if (validationResult.cocIssueDate) {
-        updateData.coc_issue_date = validationResult.cocIssueDate;
-      }
-      if (validationResult.cocType) {
-        updateData.coc_type = validationResult.cocType;
-      }
-      // Map overall status to coc_status
-      if (validationResult.overallStatus) {
-        const statusMap: Record<string, string> = {
-          'Pass': 'valid',
-          'Fail': 'invalid',
-          'Incomplete': 'pending',
-          'Error': 'pending'
-        };
-        updateData.coc_status = statusMap[validationResult.overallStatus] || 'pending';
-      }
+    // Map overall status to coc_status (using DB constraint values)
+    // Subsections use: valid, invalid, pending, Failed, Approved, Missing
+    // Documents use: pending, approved, rejected
+    const subsectionStatusMap: Record<string, string> = {
+      'Pass': 'Approved',
+      'Fail': 'Failed',
+      'Incomplete': 'pending',
+      'Error': 'pending'
+    };
+    const documentStatusMap: Record<string, string> = {
+      'Pass': 'approved',
+      'Fail': 'rejected',
+      'Incomplete': 'pending',
+      'Error': 'pending'
+    };
+    const mappedSubsectionStatus = subsectionStatusMap[validationResult.overallStatus] || 'pending';
+    const mappedDocumentStatus = documentStatusMap[validationResult.overallStatus] || 'pending';
+
+    // CRITICAL: Update the DOCUMENT with extracted COC details (per-document data)
+    // This ensures each document retains its own extracted data
+    const documentUpdateData: any = {};
+    if (validationResult.cocNumber) {
+      documentUpdateData.coc_number = validationResult.cocNumber;
+    }
+    if (validationResult.cocIssueDate) {
+      documentUpdateData.coc_issue_date = validationResult.cocIssueDate;
+    }
+    if (validationResult.cocType) {
+      // Map to DB constraint values: 'initial' or 'supplementary'
+      const cocType = (validationResult.cocType || '').toLowerCase();
+      documentUpdateData.coc_type = cocType.includes('supplementary') ? 'supplementary' : 'initial';
+    }
+    documentUpdateData.coc_status = mappedDocumentStatus;
+
+    if (Object.keys(documentUpdateData).length > 0) {
+      const { error: docUpdateError } = await supabase
+        .from('subsection_documents')
+        .update(documentUpdateData)
+        .eq('id', documentId);
       
-      const { error: updateError } = await supabase
-        .from('subsections')
-        .update(updateData)
-        .eq('id', subsectionId);
-      
-      if (updateError) {
-        console.error('Failed to update subsection with COC details:', updateError);
+      if (docUpdateError) {
+        console.error('Failed to update document with COC details:', docUpdateError);
       } else {
-        console.log('Updated subsection with COC details:', updateData);
+        console.log('Updated document', documentId, 'with COC details:', documentUpdateData);
+      }
+    }
+
+    // Update subsection with COC details - only if this is a VALID/better COC
+    // Priority: valid > invalid > pending > missing
+    // Also update if subsection has no COC data yet
+    if (validationResult.cocNumber || validationResult.cocIssueDate) {
+      const { data: currentSubsection } = await supabase
+        .from('subsections')
+        .select('coc_number, coc_status, coc_issue_date')
+        .eq('id', subsectionId)
+        .single();
+
+      // Determine if we should update the subsection
+      // Update if: no current COC, or this one is valid and current is not, or this is newer
+      const statusPriority: Record<string, number> = {
+        'valid': 4,
+        'Approved': 4,
+        'invalid': 3,
+        'Failed': 3,
+        'pending': 2,
+        'Missing': 1,
+        '': 0
+      };
+      
+      const currentPriority = statusPriority[currentSubsection?.coc_status || ''] || 0;
+      const newPriority = statusPriority[mappedSubsectionStatus] || 0;
+      
+      // Update subsection if: no current data, new is higher priority, or same priority but newer date
+      const shouldUpdate = !currentSubsection?.coc_number || 
+                          newPriority > currentPriority ||
+                          (newPriority === currentPriority && validationResult.cocIssueDate > (currentSubsection?.coc_issue_date || ''));
+
+      if (shouldUpdate) {
+        const subsectionUpdateData: any = {};
+        if (validationResult.cocNumber) {
+          subsectionUpdateData.coc_number = validationResult.cocNumber;
+        }
+        if (validationResult.cocIssueDate) {
+          subsectionUpdateData.coc_issue_date = validationResult.cocIssueDate;
+        }
+        if (validationResult.cocType) {
+          subsectionUpdateData.coc_type = validationResult.cocType;
+        }
+        subsectionUpdateData.coc_status = mappedSubsectionStatus;
+        
+        const { error: updateError } = await supabase
+          .from('subsections')
+          .update(subsectionUpdateData)
+          .eq('id', subsectionId);
+        
+        if (updateError) {
+          console.error('Failed to update subsection with COC details:', updateError);
+        } else {
+          console.log('Updated subsection with best COC details:', subsectionUpdateData);
+        }
+      } else {
+        console.log('Subsection already has better/newer COC data, skipping update');
       }
     }
 
