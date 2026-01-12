@@ -1674,6 +1674,18 @@ const InspectionDetail = () => {
     );
   }
 
+  // Handle case where inspection exists but template is still loading or doesn't exist
+  if (!template) {
+    return (
+      <div className="flex items-center justify-center h-full">
+        <div className="text-center">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent mx-auto mb-4"></div>
+          <p className="text-muted-foreground">Loading inspection template...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       {/* Breadcrumbs */}
