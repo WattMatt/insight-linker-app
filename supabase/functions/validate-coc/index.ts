@@ -17,6 +17,14 @@ and maintain audit trails for regulatory compliance.
 
 ## 📜 COC TYPE HIERARCHY & COMPLIANCE RULES (CRITICAL - APPLY FIRST)
 
+### 0. COC TYPE MUST BE MARKED (CRITICAL - CHECK FIRST)
+- **CHECK ID:** COC-TYPE-001
+- On the certificate, there are checkboxes/tick boxes for: Initial, Supplementary, Temporary
+- The certificate issuer MUST tick/mark ONE of these boxes to indicate the certificate type
+- If NO checkbox is ticked/marked, this is an AUTOMATIC FAIL - the certificate is incomplete
+- Do NOT guess or infer the type from other information - look for an EXPLICIT tick/mark
+- If cocType cannot be determined from a visible tick/mark, set cocType to null and FAIL
+
 ### 1. INITIAL COC REQUIREMENT (Baseline Rule)
 - Every premises MUST have a valid Initial COC issued
 - Without an Initial COC, no Supplementary or Temporary COC can render the premises compliant
@@ -262,7 +270,8 @@ Scan the entire document and extract:
 \`\`\`json
 {
   "cocNumber": "string (EXACT value from certificate)",
-  "cocType": "Initial | Supplementary | Temporary",
+  "cocType": "Initial | Supplementary | Temporary | null (null if checkbox NOT ticked)",
+  "cocTypeMarked": true | false,
   "cocFormat": "ECA | ECSA | DOL | Other",
   "evaluationDate": "YYYY-MM-DD (today's date)",
   "cocIssueDate": "YYYY-MM-DD | null",
@@ -270,11 +279,12 @@ Scan the entire document and extract:
   "initialCocReference": "string | null (REQUIRED for Supplementary/Temporary)",
   "initialCocValid": true | false | null,
   "hierarchyValidation": {
-    "cocTypeIdentified": "Initial | Supplementary | Temporary",
+    "cocTypeIdentified": "Initial | Supplementary | Temporary | null",
+    "cocTypeMarked": true | false,
     "initialCocExists": true | false,
     "initialCocReferenced": true | false | null,
     "initialCocNumber": "string | null",
-    "hierarchyStatus": "Valid | Invalid - No Initial COC | Invalid - Missing Reference",
+    "hierarchyStatus": "Valid | Invalid - COC Type Not Marked | Invalid - No Initial COC | Invalid - Missing Reference",
     "hierarchyNotes": "string explaining hierarchy validation result"
   },
   "overallStatus": "Pass | Fail | Incomplete",
@@ -295,6 +305,16 @@ Scan the entire document and extract:
       "category": "Safety-Critical | Mandatory | Administrative | Recommended",
       "severity": "Critical | Major | Minor",
       "sansReference": "SANS 10142-1:2020 Clause X.X.X"
+    },
+    {
+      "checkId": "COC-TYPE-001",
+      "clause": "Hierarchy",
+      "description": "COC Type Checkbox Marked",
+      "result": "Pass | Fail",
+      "measuredValue": "Ticked: Initial/Supplementary/Temporary | Not Ticked",
+      "category": "Mandatory",
+      "severity": "Critical",
+      "remediation": "The certificate type checkbox must be ticked by the issuer. If not marked, the certificate is incomplete and invalid."
     },
     {
       "checkId": "COC-INIT-001",
@@ -455,7 +475,8 @@ Scan the entire document and extract:
    - Suggest corrective actions
 
 ## 🚨 Red Flags (Automatic FAIL)
-**COC Hierarchy Failures:**
+**COC Type & Hierarchy Failures:**
+- COC Type checkbox NOT ticked/marked → Non-compliant (certificate incomplete)
 - Supplementary COC without Initial COC reference → Non-compliant
 - Temporary COC without Initial COC reference → Non-compliant
 
@@ -830,18 +851,24 @@ serve(async (req) => {
         
         // CRITICAL: Set is_compliant based on validation result AND hierarchy rules
         // A subsection is ONLY compliant if:
-        // 1. The COC validation passed (status = Approved)
-        // 2. Hierarchy rules are satisfied (Initial COC exists and is valid for Supplementary/Temporary)
+        // 1. The COC Type checkbox was marked on the certificate
+        // 2. The COC validation passed (status = Approved)
+        // 3. Hierarchy rules are satisfied (Initial COC exists and is valid for Supplementary/Temporary)
+        const cocTypeMarked = validationResult.cocTypeMarked !== false && 
+                              validationResult.hierarchyValidation?.cocTypeMarked !== false &&
+                              validationResult.cocType !== null;
         const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
+                               validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - COC Type Not Marked' &&
                                validationResult.initialCocValid !== false;
         const validationPassed = mappedSubsectionStatus === 'Approved';
         const hasCriticalFailures = (validationResult.criticalFailures?.length || 0) > 0;
         
-        // is_compliant = validation passed AND hierarchy valid AND no critical failures
-        subsectionUpdateData.is_compliant = validationPassed && hierarchyValid && !hasCriticalFailures;
+        // is_compliant = COC type marked AND validation passed AND hierarchy valid AND no critical failures
+        subsectionUpdateData.is_compliant = cocTypeMarked && validationPassed && hierarchyValid && !hasCriticalFailures;
         
         console.log('Compliance determination:', {
+          cocTypeMarked,
           validationPassed,
           hierarchyValid,
           hasCriticalFailures,
@@ -863,12 +890,16 @@ serve(async (req) => {
       } else {
         // Even if we don't update COC details, we should still update is_compliant if this validation failed
         // This ensures failed validations always mark the subsection as non-compliant
+        const cocTypeMarked = validationResult.cocTypeMarked !== false && 
+                              validationResult.hierarchyValidation?.cocTypeMarked !== false &&
+                              validationResult.cocType !== null;
         const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
+                               validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - COC Type Not Marked' &&
                                validationResult.initialCocValid !== false;
         const validationPassed = mappedSubsectionStatus === 'Approved';
         const hasCriticalFailures = (validationResult.criticalFailures?.length || 0) > 0;
-        const isCompliant = validationPassed && hierarchyValid && !hasCriticalFailures;
+        const isCompliant = cocTypeMarked && validationPassed && hierarchyValid && !hasCriticalFailures;
         
         // If this validation failed, mark as non-compliant regardless of other COC data
         if (!isCompliant) {
