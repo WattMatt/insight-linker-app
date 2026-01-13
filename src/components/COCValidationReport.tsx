@@ -406,9 +406,9 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
               )}
             </div>
             <div className="flex flex-col items-end gap-2">
-              <Button onClick={handlePreviewReport} variant="outline" size="sm" disabled={generating}>
+              <Button onClick={handlePreviewReport} variant="default" size="sm" disabled={generating}>
                 <Eye className="h-4 w-4 mr-2" />
-                {generating ? "Generating..." : "Preview Report"}
+                {generating ? "Generating..." : "Preview & Save Report"}
               </Button>
               {getStatusIcon()}
               <Badge className={getStatusColor()}>
