@@ -23,10 +23,14 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 - READ EACH DIGIT EXTREMELY CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9, 5≠6
 - This is a UNIQUE identifier - each document has a DIFFERENT number
 
-### 2. CERTIFICATE TYPE
-📍 LOCATION: Near certificate number or in header
-- Options: "Initial Certificate" or "Supplementary Certificate"
-- May have checkboxes ☐ ☑
+### 2. CERTIFICATE TYPE (CRITICAL - DETERMINES VALIDATION RULES)
+📍 LOCATION: Near certificate number or in header area
+- THREE POSSIBLE TYPES - Look for checkboxes ☐ ☑ or text indicating:
+  a) "Initial Certificate" - First/original COC for installation (most common)
+  b) "Supplementary Certificate" - Additional work on existing installation
+  c) "Temporary Certificate" - Provisional compliance, time-limited
+- IF SUPPLEMENTARY: MUST find reference to Initial COC number
+- IF TEMPORARY: Look for expiry date or validity period
 
 ### 3. INSTALLATION IDENTIFICATION SECTION
 📍 LOCATION: Upper portion of page, labeled section
@@ -64,12 +68,17 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 \`\`\`json
 {
   "cocNumber": "EXACT certificate number from top right",
-  "cocType": "Initial Certificate | Supplementary Certificate",
+  "cocType": "Initial | Supplementary | Temporary",
   "cocIssueDate": "YYYY-MM-DD from registered person signature section",
   "supplementDetails": {
-    "supplementNo": "if supplementary",
-    "initialCertificateNo": "if supplementary",
-    "issuedOn": "if supplementary"
+    "supplementNo": "sequence number if supplementary (e.g., 1, 2, 3)",
+    "initialCertificateNo": "REQUIRED if Supplementary/Temporary - the original COC number this references",
+    "issuedOn": "date of initial certificate if supplementary"
+  },
+  "temporaryDetails": {
+    "expiryDate": "YYYY-MM-DD if temporary certificate",
+    "validityPeriod": "e.g., '30 days' or '3 months'",
+    "reason": "why temporary was issued"
   },
   "administrativeDetails": {
     "physicalAddress": "full address",
@@ -304,20 +313,29 @@ Use EXTREME care when reading numbers and dates.
 - READ EACH DIGIT VERY CAREFULLY: 0≠6≠8, 1≠7, 2≠3
 - Common format: "ECA 1738009" or just "1738009"
 
-### PRIORITY 2: Issue Date (cocIssueDate) 
+### PRIORITY 2: Certificate Type (CRITICAL - 3 TYPES EXIST)
+📍 Near certificate number or in header area
+- Look for checkboxes or text indicating:
+  a) "Initial" or "Initial Certificate" - First COC for installation
+  b) "Supplementary" or "Supplementary Certificate" - Additional work referencing Initial
+  c) "Temporary" or "Temporary Certificate" - Provisional compliance with expiry
+- IF SUPPLEMENTARY: You MUST find the Initial COC number it references
+- IF TEMPORARY: Look for expiry date and the Initial COC it references
+
+### PRIORITY 3: Issue Date (cocIssueDate) 
 📍 PAGE 1 - Declaration section, date next to registered person's signature
 - Usually at the bottom of "Declaration by Registered Person"
 - Format: DD.MM.YYYY → convert to YYYY-MM-DD
 
-### PRIORITY 3: Physical Address
+### PRIORITY 4: Physical Address
 📍 PAGE 1 - Under "INSTALLATION IDENTIFICATION"
 - Full street address including building/shop info
 
-### PRIORITY 4: Registered Person Details
+### PRIORITY 5: Registered Person Details
 📍 PAGE 1 - "Declaration by Registered Person" section
 - Full name, ID number, registration number, type
 
-### PRIORITY 5: Test Results (from Page 2)
+### PRIORITY 6: Test Results (from Page 2)
 📍 PAGE 2 - Section 4 table
 - Earth loop impedance (Ω), Insulation resistance (MΩ), etc.
 
@@ -325,12 +343,17 @@ Use EXTREME care when reading numbers and dates.
 \`\`\`json
 {
   "cocNumber": "string - CERTIFICATE NUMBER FROM TOP RIGHT",
-  "cocType": "Initial Certificate | Supplementary Certificate",
+  "cocType": "Initial | Supplementary | Temporary",
   "cocIssueDate": "YYYY-MM-DD",
   "supplementDetails": {
-    "supplementNo": "string or null",
-    "initialCertificateNo": "string or null",
-    "issuedOn": "YYYY-MM-DD or null"
+    "supplementNo": "sequence number if supplementary (1, 2, 3) or null",
+    "initialCertificateNo": "REQUIRED if Supplementary/Temporary - original COC number or null",
+    "issuedOn": "date of initial certificate or null"
+  },
+  "temporaryDetails": {
+    "expiryDate": "YYYY-MM-DD if temporary or null",
+    "validityPeriod": "e.g., '30 days' if temporary or null",
+    "reason": "reason for temporary if stated or null"
   },
   "administrativeDetails": {
     "physicalAddress": "full address string",

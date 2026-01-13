@@ -6,8 +6,9 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, XCircle, AlertTriangle, FileText, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, X, Sparkles, RotateCcw } from "lucide-react";
-import { useState, useCallback } from "react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { CheckCircle2, XCircle, AlertTriangle, FileText, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, X, Sparkles, RotateCcw, Clock, FileCheck, FilePlus } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
 import { Document, Page, pdfjs } from 'react-pdf';
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
@@ -33,6 +34,13 @@ interface ExtractedData {
     supplementNo?: string;
     initialCertificateNo?: string;
     issuedOn?: string;
+  };
+  
+  // Temporary Details (if temporary certificate)
+  temporaryDetails?: {
+    expiryDate?: string;
+    validityPeriod?: string;
+    reason?: string;
   };
   
   // Administrative Details
@@ -217,23 +225,54 @@ export function COCPreviewApproval({
   onExtract,
   onDataUpdate
 }: COCPreviewApprovalProps) {
-  const [editedData, setEditedData] = useState<ExtractedData>(extractedData || {
-    cocNumber: '',
-    cocIssueDate: '',
-    cocType: '',
-    administrativeDetails: {},
-    registeredPersonContact: {},
-    electricalContractor: {},
-    recipient: {},
-    testReport: {},
-    installationDetails: {},
-    inspectionChecks: {},
-    testResults: {},
-    responsibility: {},
-    scopeOfWork: '',
-    comments: '',
-    confidence: 'low'
+  // Helper to normalize cocType from various extraction formats
+  const normalizeCocType = (type?: string): string => {
+    if (!type) return '';
+    const normalized = type.toLowerCase().trim();
+    if (normalized.includes('initial')) return 'Initial';
+    if (normalized.includes('supplementary')) return 'Supplementary';
+    if (normalized.includes('temporary')) return 'Temporary';
+    return type; // Return original if no match
+  };
+
+  const [editedData, setEditedData] = useState<ExtractedData>(() => {
+    if (!extractedData) {
+      return {
+        cocNumber: '',
+        cocIssueDate: '',
+        cocType: '',
+        administrativeDetails: {},
+        registeredPersonContact: {},
+        electricalContractor: {},
+        recipient: {},
+        testReport: {},
+        installationDetails: {},
+        inspectionChecks: {},
+        testResults: {},
+        responsibility: {},
+        scopeOfWork: '',
+        comments: '',
+        confidence: 'low'
+      };
+    }
+    
+    // Normalize cocType from extraction
+    return {
+      ...extractedData,
+      cocType: normalizeCocType(extractedData.cocType)
+    };
   });
+
+  // Sync when extractedData changes (e.g., after re-extraction)
+  useEffect(() => {
+    if (extractedData) {
+      setEditedData(prev => ({
+        ...prev,
+        ...extractedData,
+        cocType: normalizeCocType(extractedData.cocType)
+      }));
+    }
+  }, [extractedData]);
 
   // PDF viewer state
   const [numPages, setNumPages] = useState<number>(0);
@@ -442,6 +481,20 @@ export function COCPreviewApproval({
     if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push("Physical Address");
     if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push("Registered Person");
     if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push("Registration Number");
+    
+    // CONDITIONAL: Supplementary/Temporary require Initial COC Reference
+    if (editedData.cocType === 'Supplementary' || editedData.cocType === 'Temporary') {
+      if (!editedData.supplementDetails?.initialCertificateNo?.trim()) {
+        missing.push("Initial COC Reference (required for " + editedData.cocType + ")");
+      }
+    }
+    
+    // CONDITIONAL: Temporary requires Expiry Date
+    if (editedData.cocType === 'Temporary') {
+      if (!editedData.temporaryDetails?.expiryDate?.trim()) {
+        missing.push("Expiry Date (required for Temporary)");
+      }
+    }
     
     return {
       isComplete: missing.length === 0,
@@ -718,12 +771,56 @@ export function COCPreviewApproval({
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Certificate Type <span className="text-destructive">*</span>
                     </Label>
-                    <Input
+                    <Select
                       value={editedData.cocType || ''}
-                      onChange={(e) => setEditedData({ ...editedData, cocType: e.target.value })}
-                      className="h-9"
-                      placeholder="Initial / Supplementary"
-                    />
+                      onValueChange={(value) => setEditedData({ ...editedData, cocType: value })}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue placeholder="Select certificate type" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="Initial">
+                          <div className="flex items-center gap-2">
+                            <FileCheck className="h-4 w-4 text-green-600" />
+                            Initial Certificate
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="Supplementary">
+                          <div className="flex items-center gap-2">
+                            <FilePlus className="h-4 w-4 text-blue-600" />
+                            Supplementary Certificate
+                          </div>
+                        </SelectItem>
+                        <SelectItem value="Temporary">
+                          <div className="flex items-center gap-2">
+                            <Clock className="h-4 w-4 text-amber-600" />
+                            Temporary Certificate
+                          </div>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                    {editedData.cocType && (
+                      <div className="mt-1">
+                        {editedData.cocType === 'Initial' && (
+                          <Badge className="bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300">
+                            <FileCheck className="h-3 w-3 mr-1" />
+                            Initial - Original installation COC
+                          </Badge>
+                        )}
+                        {editedData.cocType === 'Supplementary' && (
+                          <Badge className="bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300">
+                            <FilePlus className="h-3 w-3 mr-1" />
+                            Supplementary - Requires Initial COC Reference
+                          </Badge>
+                        )}
+                        {editedData.cocType === 'Temporary' && (
+                          <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
+                            <Clock className="h-3 w-3 mr-1" />
+                            Temporary - Time-limited, requires Initial COC
+                          </Badge>
+                        )}
+                      </div>
+                    )}
                   </div>
                   <div className="space-y-1 col-span-2">
                     <Label className="text-xs font-semibold flex items-center gap-1">
@@ -781,6 +878,102 @@ export function COCPreviewApproval({
                       </div>
                     )}
                   </div>
+                  
+                  {/* Supplementary/Temporary Details - Show when applicable */}
+                  {(editedData.cocType === 'Supplementary' || editedData.cocType === 'Temporary') && (
+                    <div className="col-span-2 border-t pt-3 mt-2 space-y-3">
+                      <div className="flex items-center gap-2 text-sm font-medium">
+                        {editedData.cocType === 'Supplementary' ? (
+                          <FilePlus className="h-4 w-4 text-blue-600" />
+                        ) : (
+                          <Clock className="h-4 w-4 text-amber-600" />
+                        )}
+                        {editedData.cocType === 'Supplementary' ? 'Supplementary Certificate Details' : 'Temporary Certificate Details'}
+                      </div>
+                      
+                      <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1">
+                          <Label className="text-xs font-semibold flex items-center gap-1">
+                            Initial COC Reference <span className="text-destructive">*</span>
+                          </Label>
+                          <Input
+                            value={editedData.supplementDetails?.initialCertificateNo || ''}
+                            onChange={(e) => setEditedData({
+                              ...editedData,
+                              supplementDetails: {
+                                ...editedData.supplementDetails,
+                                initialCertificateNo: e.target.value
+                              }
+                            })}
+                            className="h-9 font-mono"
+                            placeholder="Original COC number"
+                          />
+                          <p className="text-xs text-muted-foreground">
+                            The original Initial COC this certificate references
+                          </p>
+                        </div>
+                        
+                        {editedData.cocType === 'Supplementary' && (
+                          <div className="space-y-1">
+                            <Label className="text-xs font-semibold">
+                              Supplement Number
+                            </Label>
+                            <Input
+                              value={editedData.supplementDetails?.supplementNo || ''}
+                              onChange={(e) => setEditedData({
+                                ...editedData,
+                                supplementDetails: {
+                                  ...editedData.supplementDetails,
+                                  supplementNo: e.target.value
+                                }
+                              })}
+                              className="h-9"
+                              placeholder="e.g., 1, 2, 3"
+                            />
+                          </div>
+                        )}
+                        
+                        {editedData.cocType === 'Temporary' && (
+                          <>
+                            <div className="space-y-1">
+                              <Label className="text-xs font-semibold flex items-center gap-1">
+                                Expiry Date <span className="text-destructive">*</span>
+                              </Label>
+                              <Input
+                                type="date"
+                                value={editedData.temporaryDetails?.expiryDate || ''}
+                                onChange={(e) => setEditedData({
+                                  ...editedData,
+                                  temporaryDetails: {
+                                    ...editedData.temporaryDetails,
+                                    expiryDate: e.target.value
+                                  }
+                                })}
+                                className="h-9"
+                              />
+                            </div>
+                            <div className="space-y-1 col-span-2">
+                              <Label className="text-xs font-semibold">
+                                Reason for Temporary
+                              </Label>
+                              <Input
+                                value={editedData.temporaryDetails?.reason || ''}
+                                onChange={(e) => setEditedData({
+                                  ...editedData,
+                                  temporaryDetails: {
+                                    ...editedData.temporaryDetails,
+                                    reason: e.target.value
+                                  }
+                                })}
+                                className="h-9"
+                                placeholder="Why was a temporary certificate issued?"
+                              />
+                            </div>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
