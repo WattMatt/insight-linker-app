@@ -419,45 +419,52 @@ export function COCPreviewApproval({
         setEditedData(prev => {
           const updated = { ...prev };
           
-          if (missing.includes('cocNumber') && newData.cocNumber) {
-            updated.cocNumber = newData.cocNumber;
+          if (missing.includes('cocNumber') && (newData.cocNumber || newData['COC Number'])) {
+            updated.cocNumber = newData.cocNumber || newData['COC Number'];
             updatedCount++;
           }
-          if (missing.includes('cocType') && newData.cocType) {
-            updated.cocType = newData.cocType;
+          if (missing.includes('cocType') && (newData.cocType || newData['COC Type'])) {
+            updated.cocType = newData.cocType || newData['COC Type'];
             updatedCount++;
           }
-          if (missing.includes('cocIssueDate') && newData.cocIssueDate) {
-            updated.cocIssueDate = newData.cocIssueDate;
-            updated.testReport = { ...updated.testReport, issueDate: newData.cocIssueDate };
+          if (missing.includes('cocIssueDate') && (newData.cocIssueDate || newData['Issue Date'])) {
+            const issueDate = newData.cocIssueDate || newData['Issue Date'];
+            updated.cocIssueDate = issueDate;
+            updated.testReport = { ...updated.testReport, issueDate };
             updatedCount++;
           }
-          if (missing.includes('physicalAddress') && newData.physicalAddress) {
-            updated.administrativeDetails = { ...updated.administrativeDetails, physicalAddress: newData.physicalAddress };
+          if (missing.includes('physicalAddress') && (newData.physicalAddress || newData['Physical Address'])) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, physicalAddress: newData.physicalAddress || newData['Physical Address'] };
             updatedCount++;
           }
-          if (missing.includes('registeredPerson') && newData.registeredPerson) {
-            updated.administrativeDetails = { ...updated.administrativeDetails, registeredPerson: newData.registeredPerson };
+          if (missing.includes('registeredPerson') && (newData.registeredPerson || newData['Registered Person'])) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, registeredPerson: newData.registeredPerson || newData['Registered Person'] };
             updatedCount++;
           }
-          if (missing.includes('registrationNumber') && newData.registrationNumber) {
-            updated.administrativeDetails = { ...updated.administrativeDetails, registrationNumber: newData.registrationNumber };
+          if (missing.includes('registrationNumber') && (newData.registrationNumber || newData['Registration Number'])) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, registrationNumber: newData.registrationNumber || newData['Registration Number'] };
             updatedCount++;
           }
-          // Handle conditional fields for Supplementary/Temporary COCs
-          if (missing.includes('initialCertificateNo') && (newData.initialCertificateNo || newData.supplementDetails?.initialCertificateNo)) {
-            updated.supplementDetails = { 
-              ...updated.supplementDetails, 
-              initialCertificateNo: newData.initialCertificateNo || newData.supplementDetails?.initialCertificateNo 
-            };
-            updatedCount++;
+          // Handle conditional fields for Supplementary/Temporary COCs - check both internal and display names
+          if (missing.includes('initialCertificateNo')) {
+            const initialCertRef = newData.initialCertificateNo || newData['Initial COC Reference'] || newData.supplementDetails?.initialCertificateNo;
+            if (initialCertRef) {
+              updated.supplementDetails = { 
+                ...updated.supplementDetails, 
+                initialCertificateNo: initialCertRef
+              };
+              updatedCount++;
+            }
           }
-          if (missing.includes('expiryDate') && (newData.expiryDate || newData.temporaryDetails?.expiryDate)) {
-            updated.temporaryDetails = { 
-              ...updated.temporaryDetails, 
-              expiryDate: newData.expiryDate || newData.temporaryDetails?.expiryDate 
-            };
-            updatedCount++;
+          if (missing.includes('expiryDate')) {
+            const expiryDate = newData.expiryDate || newData['Expiry Date'] || newData.temporaryDetails?.expiryDate;
+            if (expiryDate) {
+              updated.temporaryDetails = { 
+                ...updated.temporaryDetails, 
+                expiryDate: expiryDate
+              };
+              updatedCount++;
+            }
           }
           
           return updated;
