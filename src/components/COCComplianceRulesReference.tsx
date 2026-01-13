@@ -112,13 +112,6 @@ export const COCComplianceRulesReference = () => {
           {/* Non-Compliance Conditions */}
           <AccordionItem value="non-compliance">
             <AccordionTrigger className="hover:no-underline">
-              Create all the core COC verification files now. Start with: 1. src/types/cocValidation.ts - Type
-              definitions 2. src/lib/cocScoringEngine.ts - SANS compliance rules and scoring 3. src/lib/cocDataMapper.ts
-              - Extract and map COC data 4. src/components/COCVerificationForm.tsx - Main verification form UI 5.
-              src/components/VerificationItemCard.tsx - Individual verification items 6.
-              src/lib/cocVerificationService.ts - Database operations 7. Database migration for coc_verification_results
-              table with RLS Then update COCDocsMetering page to integrate the verification workflow. Generate the code
-              now.
               <div className="flex items-center gap-2">
                 <FileWarning className="h-4 w-4 text-red-600" />
                 <span className="font-medium">4. Non-Compliance Conditions</span>
