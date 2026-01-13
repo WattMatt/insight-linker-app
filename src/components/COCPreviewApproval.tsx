@@ -6,12 +6,22 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { CheckCircle2, XCircle, AlertTriangle, FileText, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useState } from "react";
+import { CheckCircle2, XCircle, AlertTriangle, FileText, RefreshCw, ZoomIn, ZoomOut, ChevronLeft, ChevronRight, X, Sparkles, RotateCcw } from "lucide-react";
+import { useState, useCallback } from "react";
 import { Document, Page, pdfjs } from 'react-pdf';
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+// Field display names for user-friendly messaging
+const FIELD_DISPLAY_NAMES: Record<string, string> = {
+  'cocNumber': 'COC Number',
+  'cocIssueDate': 'Issue Date',
+  'physicalAddress': 'Physical Address',
+  'registeredPerson': 'Registered Person',
+  'registrationNumber': 'Registration Number',
+};
 interface ExtractedData {
   // Core Certificate Identification
   cocNumber?: string;
@@ -194,6 +204,7 @@ interface COCPreviewApprovalProps {
   onReject: () => void;
   isProcessing?: boolean;
   onExtract?: () => void;
+  onDataUpdate?: (data: ExtractedData) => void;
 }
 
 export function COCPreviewApproval({ 
@@ -203,7 +214,8 @@ export function COCPreviewApproval({
   onApprove, 
   onReject,
   isProcessing = false,
-  onExtract
+  onExtract,
+  onDataUpdate
 }: COCPreviewApprovalProps) {
   const [editedData, setEditedData] = useState<ExtractedData>(extractedData || {
     cocNumber: '',
@@ -231,6 +243,188 @@ export function COCPreviewApproval({
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [pdfLoadError, setPdfLoadError] = useState<string | null>(null);
+  const [retryingFields, setRetryingFields] = useState<string[]>([]);
+  const [isRetryingAll, setIsRetryingAll] = useState(false);
+
+  // Get list of missing required fields
+  const getMissingFields = useCallback(() => {
+    const missing: string[] = [];
+    if (!editedData.cocNumber?.trim()) missing.push('cocNumber');
+    if (!editedData.cocIssueDate?.trim() && !editedData.testReport?.issueDate?.trim()) missing.push('cocIssueDate');
+    if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push('physicalAddress');
+    if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push('registeredPerson');
+    if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push('registrationNumber');
+    return missing;
+  }, [editedData]);
+
+  // Re-extract specific fields
+  const handleRetryField = async (fieldName: string) => {
+    setRetryingFields(prev => [...prev, fieldName]);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-coc', {
+        body: { 
+          documentUrl, 
+          fileName: documentName,
+          retryFields: [FIELD_DISPLAY_NAMES[fieldName] || fieldName]
+        }
+      });
+
+      if (error) {
+        toast.error(`Failed to re-extract ${FIELD_DISPLAY_NAMES[fieldName] || fieldName}`);
+        console.error('Retry extraction error:', error);
+        return;
+      }
+
+      if (data?.extractedData) {
+        const newData = data.extractedData;
+        let updated = false;
+        
+        // Map the response to the correct field
+        if (fieldName === 'cocNumber' && newData.cocNumber) {
+          setEditedData(prev => ({ ...prev, cocNumber: newData.cocNumber }));
+          updated = true;
+        }
+        if (fieldName === 'cocIssueDate' && newData.cocIssueDate) {
+          setEditedData(prev => ({ 
+            ...prev, 
+            cocIssueDate: newData.cocIssueDate,
+            testReport: { ...prev.testReport, issueDate: newData.cocIssueDate }
+          }));
+          updated = true;
+        }
+        if (fieldName === 'physicalAddress' && newData.physicalAddress) {
+          setEditedData(prev => ({
+            ...prev,
+            administrativeDetails: { ...prev.administrativeDetails, physicalAddress: newData.physicalAddress }
+          }));
+          updated = true;
+        }
+        if (fieldName === 'registeredPerson' && newData.registeredPerson) {
+          setEditedData(prev => ({
+            ...prev,
+            administrativeDetails: { ...prev.administrativeDetails, registeredPerson: newData.registeredPerson }
+          }));
+          updated = true;
+        }
+        if (fieldName === 'registrationNumber' && newData.registrationNumber) {
+          setEditedData(prev => ({
+            ...prev,
+            administrativeDetails: { ...prev.administrativeDetails, registrationNumber: newData.registrationNumber }
+          }));
+          updated = true;
+        }
+
+        if (updated) {
+          toast.success(`${FIELD_DISPLAY_NAMES[fieldName] || fieldName} extracted successfully!`);
+        } else {
+          toast.warning(`Could not find ${FIELD_DISPLAY_NAMES[fieldName] || fieldName} in document`);
+        }
+      }
+    } catch (err) {
+      console.error('Field retry error:', err);
+      toast.error('Failed to re-extract field');
+    } finally {
+      setRetryingFields(prev => prev.filter(f => f !== fieldName));
+    }
+  };
+
+  // Re-extract all missing fields
+  const handleRetryAllMissing = async () => {
+    const missing = getMissingFields();
+    if (missing.length === 0) {
+      toast.info('All required fields are already filled');
+      return;
+    }
+
+    setIsRetryingAll(true);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('extract-coc', {
+        body: { 
+          documentUrl, 
+          fileName: documentName,
+          retryFields: missing.map(f => FIELD_DISPLAY_NAMES[f] || f)
+        }
+      });
+
+      if (error) {
+        toast.error('Failed to re-extract missing fields');
+        console.error('Retry all error:', error);
+        return;
+      }
+
+      if (data?.extractedData) {
+        const newData = data.extractedData;
+        let updatedCount = 0;
+        
+        setEditedData(prev => {
+          const updated = { ...prev };
+          
+          if (missing.includes('cocNumber') && newData.cocNumber) {
+            updated.cocNumber = newData.cocNumber;
+            updatedCount++;
+          }
+          if (missing.includes('cocIssueDate') && newData.cocIssueDate) {
+            updated.cocIssueDate = newData.cocIssueDate;
+            updated.testReport = { ...updated.testReport, issueDate: newData.cocIssueDate };
+            updatedCount++;
+          }
+          if (missing.includes('physicalAddress') && newData.physicalAddress) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, physicalAddress: newData.physicalAddress };
+            updatedCount++;
+          }
+          if (missing.includes('registeredPerson') && newData.registeredPerson) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, registeredPerson: newData.registeredPerson };
+            updatedCount++;
+          }
+          if (missing.includes('registrationNumber') && newData.registrationNumber) {
+            updated.administrativeDetails = { ...updated.administrativeDetails, registrationNumber: newData.registrationNumber };
+            updatedCount++;
+          }
+          
+          return updated;
+        });
+
+        if (updatedCount > 0) {
+          toast.success(`Extracted ${updatedCount} of ${missing.length} missing fields`);
+        } else {
+          toast.warning('Could not extract any additional fields. Please fill manually.');
+        }
+      }
+    } catch (err) {
+      console.error('Retry all error:', err);
+      toast.error('Failed to re-extract fields');
+    } finally {
+      setIsRetryingAll(false);
+    }
+  };
+
+  // Render a re-extract button for a field
+  const renderRetryButton = (fieldName: string, isEmpty: boolean) => {
+    if (!isEmpty) return null;
+    
+    const isRetrying = retryingFields.includes(fieldName);
+    
+    return (
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="h-6 px-2 text-xs gap-1"
+        onClick={() => handleRetryField(fieldName)}
+        disabled={isRetrying || isProcessing}
+        title={`Re-extract ${FIELD_DISPLAY_NAMES[fieldName] || fieldName} using AI`}
+      >
+        {isRetrying ? (
+          <RefreshCw className="h-3 w-3 animate-spin" />
+        ) : (
+          <Sparkles className="h-3 w-3" />
+        )}
+        {isRetrying ? 'Extracting...' : 'Re-extract'}
+      </Button>
+    );
+  };
 
   // Validation: Check if minimum required fields are filled
   const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
@@ -454,13 +648,27 @@ export function COCPreviewApproval({
               <Alert variant="destructive">
                 <XCircle className="h-4 w-4" />
                 <AlertDescription>
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <p className="font-semibold">Please complete the following required fields:</p>
                     <ul className="list-disc list-inside text-sm">
                       {missingFields.map((field, idx) => (
                         <li key={idx}>{field}</li>
                       ))}
                     </ul>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="mt-2 gap-2"
+                      onClick={handleRetryAllMissing}
+                      disabled={isRetryingAll || isProcessing}
+                    >
+                      {isRetryingAll ? (
+                        <RefreshCw className="h-4 w-4 animate-spin" />
+                      ) : (
+                        <RotateCcw className="h-4 w-4" />
+                      )}
+                      {isRetryingAll ? 'Re-extracting...' : 'Re-extract All Missing Fields'}
+                    </Button>
                   </div>
                 </AlertDescription>
               </Alert>
@@ -497,6 +705,7 @@ export function COCPreviewApproval({
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Certificate No. <span className="text-destructive">*</span>
+                      {renderRetryButton('cocNumber', !editedData.cocNumber?.trim())}
                     </Label>
                     <Input
                       value={editedData.cocNumber || ''}
@@ -519,6 +728,7 @@ export function COCPreviewApproval({
                   <div className="space-y-1 col-span-2">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Issue Date <span className="text-destructive">*</span>
+                      {renderRetryButton('cocIssueDate', !editedData.cocIssueDate?.trim() && !editedData.testReport?.issueDate?.trim())}
                       {extractedData?.confidence === 'low' && (
                         <Badge variant="outline" className="ml-2 text-[10px]">
                           <AlertTriangle className="h-3 w-3 mr-1" />
@@ -583,6 +793,7 @@ export function COCPreviewApproval({
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Physical Address <span className="text-destructive">*</span>
+                      {renderRetryButton('physicalAddress', !editedData.administrativeDetails?.physicalAddress?.trim())}
                     </Label>
                     <Input
                       value={editedData.administrativeDetails?.physicalAddress || ''}
@@ -671,6 +882,7 @@ export function COCPreviewApproval({
                   <div className="space-y-1 col-span-2">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Name <span className="text-destructive">*</span>
+                      {renderRetryButton('registeredPerson', !editedData.administrativeDetails?.registeredPerson?.trim())}
                     </Label>
                     <Input
                       value={editedData.administrativeDetails?.registeredPerson || ''}
@@ -688,6 +900,7 @@ export function COCPreviewApproval({
                   <div className="space-y-1">
                     <Label className="text-xs font-semibold flex items-center gap-1">
                       Registration Number <span className="text-destructive">*</span>
+                      {renderRetryButton('registrationNumber', !editedData.administrativeDetails?.registrationNumber?.trim())}
                     </Label>
                     <Input
                       value={editedData.administrativeDetails?.registrationNumber || ''}
