@@ -414,8 +414,9 @@ const SubsectionDetail = () => {
         return;
       }
 
-      if (validationData?.validation) {
-        const result = validationData.validation;
+      // Check for validation success - response comes at top level, not under .validation
+      if (validationData?.success || validationData?.status) {
+        const result = validationData.report || validationData;
         
         // Extract COC number and issue date from validation results
         let cocNumberExtracted = result.cocNumber || result.administrativeDetails?.cocNumber;
@@ -757,17 +758,19 @@ const SubsectionDetail = () => {
         return;
       }
 
-      if (validationData?.validation) {
-        const result = validationData.validation;
+      // Check for validation success - response comes at top level, not under .validation
+      if (validationData?.success || validationData?.status) {
+        const result = validationData.report || validationData;
+        const status = validationData.status || result.overallStatus;
         
         // Update document COC status based on validation result
         let docCocStatus = '';
-        if (result.overallStatus === 'Pass' || result.status === 'Pass') {
+        if (status === 'Pass') {
           docCocStatus = 'Approved';
           toast.success('✅ COC verification passed!');
-        } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
+        } else if (status === 'Fail') {
           docCocStatus = 'Failed';
-          toast.error(`❌ COC verification failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found`);
+          toast.error(`❌ COC verification failed: ${validationData.violations?.length || result.criticalFailures?.length || 0} violations found`);
         } else {
           toast.warning(`⚠️ COC verification incomplete`);
         }
