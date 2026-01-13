@@ -127,6 +127,25 @@ const SubsectionDetail = () => {
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
 
+  // Normalize COC type to proper casing (Initial, Temporary, Supplementary)
+  const normalizeCocType = (type: string | null | undefined): string => {
+    if (!type) return '';
+    const lower = type.toLowerCase();
+    if (lower === 'initial') return 'Initial';
+    if (lower === 'temporary') return 'Temporary';
+    if (lower === 'supplementary') return 'Supplementary';
+    return type;
+  };
+  
+  // Normalize COC status to proper values (Approved, Failed)
+  const normalizeCocStatus = (status: string | null | undefined): string => {
+    if (!status) return '';
+    const lower = status.toLowerCase();
+    if (lower === 'approved' || lower === 'pass' || lower === 'passed') return 'Approved';
+    if (lower === 'failed' || lower === 'fail' || lower === 'rejected') return 'Failed';
+    return status;
+  };
+
   useEffect(() => {
     if (subsectionId && subsectionId !== "new") {
       fetchSubsectionData();
@@ -290,14 +309,14 @@ const SubsectionDetail = () => {
       if (error) throw error;
       setSupabaseDocuments(data || []);
       
-      // Initialize COC data from documents
+      // Initialize COC data from documents with normalized values
       if (data && data.length > 0) {
         const initialCocData: Record<string, any> = {};
         data.forEach(doc => {
           if (doc.coc_type || doc.coc_status || doc.coc_number || doc.coc_issue_date) {
             initialCocData[doc.id] = {
-              cocType: doc.coc_type || '',
-              cocStatus: doc.coc_status || '',
+              cocType: normalizeCocType(doc.coc_type),
+              cocStatus: normalizeCocStatus(doc.coc_status),
               cocNumber: doc.coc_number || '',
               cocIssueDate: doc.coc_issue_date || ''
             };
@@ -379,9 +398,10 @@ const SubsectionDetail = () => {
           
           const cocNumber = extractedData.cocNumber || adminDetails.cocNumber || '';
           const cocIssueDate = extractedData.cocIssueDate || adminDetails.cocIssueDate || '';
-          const cocType = extractedData.cocType || '';
+          const cocType = normalizeCocType(extractedData.cocType);
           const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' : 
-                            extractedData.overallStatus === 'Fail' ? 'Failed' : '';
+                            extractedData.overallStatus === 'Fail' ? 'Failed' : 
+                            normalizeCocStatus(extractedData.cocStatus);
           
           if (cocNumber || cocIssueDate || cocType || cocStatus) {
             cocDataFromExtractions[extraction.document_id] = {
@@ -708,12 +728,13 @@ const SubsectionDetail = () => {
     if (existingExtraction?.extracted_data) {
       const extractedData = existingExtraction.extracted_data;
       
-      // Auto-populate COC fields from extraction data
+      // Auto-populate COC fields from extraction data with normalization
       const cocNumber = extractedData.cocNumber || extractedData.administrativeDetails?.cocNumber || '';
       const cocIssueDate = extractedData.cocIssueDate || extractedData.administrativeDetails?.cocIssueDate || '';
-      const cocType = extractedData.cocType || '';
+      const cocType = normalizeCocType(extractedData.cocType);
       const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' : 
-                        extractedData.overallStatus === 'Fail' ? 'Failed' : '';
+                        extractedData.overallStatus === 'Fail' ? 'Failed' : 
+                        normalizeCocStatus(extractedData.cocStatus);
       
       // Update local state immediately for UI display
       setCocDataByDocument(prev => ({
@@ -784,10 +805,13 @@ const SubsectionDetail = () => {
       setShowCocPreview(false);
       toast.info("Starting SANS 10142-1 verification...");
 
+      // Normalize approved data
+      const normalizedCocType = normalizeCocType(approvedData.cocType);
+      
       // Update subsection with approved data first
       const subsectionUpdateData: any = {};
       if (approvedData.cocNumber) subsectionUpdateData.coc_number = approvedData.cocNumber;
-      if (approvedData.cocType) subsectionUpdateData.coc_type = approvedData.cocType;
+      if (normalizedCocType) subsectionUpdateData.coc_type = normalizedCocType;
       if (approvedData.cocIssueDate) subsectionUpdateData.coc_issue_date = approvedData.cocIssueDate;
 
       if (Object.keys(subsectionUpdateData).length > 0) {
@@ -800,7 +824,7 @@ const SubsectionDetail = () => {
       // Also update the document record with extracted COC data
       const docUpdateData: any = {};
       if (approvedData.cocNumber) docUpdateData.coc_number = approvedData.cocNumber;
-      if (approvedData.cocType) docUpdateData.coc_type = approvedData.cocType;
+      if (normalizedCocType) docUpdateData.coc_type = normalizedCocType;
       if (approvedData.cocIssueDate) docUpdateData.coc_issue_date = approvedData.cocIssueDate;
 
       if (Object.keys(docUpdateData).length > 0) {
@@ -815,7 +839,7 @@ const SubsectionDetail = () => {
         ...prev,
         [docId]: {
           cocNumber: approvedData.cocNumber || '',
-          cocType: approvedData.cocType || '',
+          cocType: normalizedCocType || '',
           cocIssueDate: approvedData.cocIssueDate || '',
           cocStatus: prev[docId]?.cocStatus || ''
         }
@@ -852,10 +876,10 @@ const SubsectionDetail = () => {
           toast.warning(`⚠️ COC verification incomplete`);
         }
 
-        // Extract COC details from validation result
+        // Extract COC details from validation result with normalization
         const cocNumber = result.cocNumber || result.administrativeDetails?.cocNumber || '';
         const cocIssueDate = result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
-        const cocType = result.cocType || '';
+        const cocType = normalizeCocType(result.cocType);
         
         // Update document in DB with all extracted COC data
         const updateData: Record<string, string> = {};
@@ -1362,16 +1386,16 @@ const SubsectionDetail = () => {
       const doc = supabaseDocuments.find(d => d.id === docId);
       if (doc && (doc.coc_number || doc.coc_issue_date || doc.coc_type || doc.coc_status)) {
         return {
-          cocType: doc.coc_type || '',
-          cocStatus: doc.coc_status || '',
+          cocType: normalizeCocType(doc.coc_type),
+          cocStatus: normalizeCocStatus(doc.coc_status),
           cocNumber: doc.coc_number || '',
           cocIssueDate: doc.coc_issue_date || ''
         };
       }
       // Fall back to subsection-level data
       return {
-        cocType: subsection?.cocType || '',
-        cocStatus: subsection?.cocStatus || '',
+        cocType: normalizeCocType(subsection?.cocType),
+        cocStatus: normalizeCocStatus(subsection?.cocStatus),
         cocNumber: subsection?.cocNumber || '',
         cocIssueDate: subsection?.cocIssueDate || ''
       };
