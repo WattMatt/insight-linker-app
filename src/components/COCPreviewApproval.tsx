@@ -423,6 +423,10 @@ export function COCPreviewApproval({
             updated.cocNumber = newData.cocNumber;
             updatedCount++;
           }
+          if (missing.includes('cocType') && newData.cocType) {
+            updated.cocType = newData.cocType;
+            updatedCount++;
+          }
           if (missing.includes('cocIssueDate') && newData.cocIssueDate) {
             updated.cocIssueDate = newData.cocIssueDate;
             updated.testReport = { ...updated.testReport, issueDate: newData.cocIssueDate };
@@ -438,6 +442,21 @@ export function COCPreviewApproval({
           }
           if (missing.includes('registrationNumber') && newData.registrationNumber) {
             updated.administrativeDetails = { ...updated.administrativeDetails, registrationNumber: newData.registrationNumber };
+            updatedCount++;
+          }
+          // Handle conditional fields for Supplementary/Temporary COCs
+          if (missing.includes('initialCertificateNo') && (newData.initialCertificateNo || newData.supplementDetails?.initialCertificateNo)) {
+            updated.supplementDetails = { 
+              ...updated.supplementDetails, 
+              initialCertificateNo: newData.initialCertificateNo || newData.supplementDetails?.initialCertificateNo 
+            };
+            updatedCount++;
+          }
+          if (missing.includes('expiryDate') && (newData.expiryDate || newData.temporaryDetails?.expiryDate)) {
+            updated.temporaryDetails = { 
+              ...updated.temporaryDetails, 
+              expiryDate: newData.expiryDate || newData.temporaryDetails?.expiryDate 
+            };
             updatedCount++;
           }
           
