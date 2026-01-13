@@ -503,6 +503,18 @@ export function COCPreviewApproval({
   };
 
   const { isComplete, missingFields } = validateCompleteness();
+  
+  // Debug: Log validation state
+  console.log('COC Validation State:', {
+    isComplete,
+    missingFields,
+    cocNumber: editedData.cocNumber,
+    cocType: editedData.cocType,
+    cocIssueDate: editedData.cocIssueDate || editedData.testReport?.issueDate,
+    physicalAddress: editedData.administrativeDetails?.physicalAddress,
+    registeredPerson: editedData.administrativeDetails?.registeredPerson,
+    registrationNumber: editedData.administrativeDetails?.registrationNumber
+  });
 
   const handleApprove = () => {
     onApprove(editedData);
