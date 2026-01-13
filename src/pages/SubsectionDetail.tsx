@@ -775,18 +775,33 @@ const SubsectionDetail = () => {
           toast.warning(`⚠️ COC verification incomplete`);
         }
 
-        // Update document status in DB and local state
-        if (docCocStatus) {
+        // Extract COC details from validation result
+        const cocNumber = result.cocNumber || result.administrativeDetails?.cocNumber || '';
+        const cocIssueDate = result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
+        const cocType = result.cocType || '';
+        
+        // Update document in DB with all extracted COC data
+        const updateData: Record<string, string> = {};
+        if (docCocStatus) updateData.coc_status = docCocStatus;
+        if (cocNumber) updateData.coc_number = cocNumber;
+        if (cocIssueDate) updateData.coc_issue_date = cocIssueDate;
+        if (cocType) updateData.coc_type = cocType;
+        
+        if (Object.keys(updateData).length > 0) {
           await supabase
             .from('subsection_documents')
-            .update({ coc_status: docCocStatus })
+            .update(updateData)
             .eq('id', docId);
           
+          // Update local state with all extracted values
           setCocDataByDocument(prev => ({
             ...prev,
             [docId]: {
               ...prev[docId],
-              cocStatus: docCocStatus
+              cocNumber: cocNumber || prev[docId]?.cocNumber || '',
+              cocIssueDate: cocIssueDate || prev[docId]?.cocIssueDate || '',
+              cocType: cocType || prev[docId]?.cocType || '',
+              cocStatus: docCocStatus || prev[docId]?.cocStatus || ''
             }
           }));
         }
