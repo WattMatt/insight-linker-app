@@ -829,6 +829,28 @@ serve(async (req) => {
         }
         subsectionUpdateData.coc_status = mappedSubsectionStatus;
         
+        // CRITICAL: Set is_compliant based on validation result AND hierarchy rules
+        // A subsection is ONLY compliant if:
+        // 1. The COC validation passed (status = Approved)
+        // 2. Hierarchy rules are satisfied (Initial COC exists and is valid for Supplementary/Temporary)
+        const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
+                               validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
+                               validationResult.initialCocValid !== false;
+        const validationPassed = mappedSubsectionStatus === 'Approved';
+        const hasCriticalFailures = (validationResult.criticalFailures?.length || 0) > 0;
+        
+        // is_compliant = validation passed AND hierarchy valid AND no critical failures
+        subsectionUpdateData.is_compliant = validationPassed && hierarchyValid && !hasCriticalFailures;
+        
+        console.log('Compliance determination:', {
+          validationPassed,
+          hierarchyValid,
+          hasCriticalFailures,
+          finalIsCompliant: subsectionUpdateData.is_compliant,
+          hierarchyStatus: validationResult.hierarchyValidation?.hierarchyStatus,
+          initialCocValid: validationResult.initialCocValid
+        });
+        
         const { error: updateError } = await supabase
           .from('subsections')
           .update(subsectionUpdateData)
@@ -840,7 +862,29 @@ serve(async (req) => {
           console.log('Updated subsection with best COC details:', subsectionUpdateData);
         }
       } else {
-        console.log('Subsection already has better/newer COC data, skipping update');
+        // Even if we don't update COC details, we should still update is_compliant if this validation failed
+        // This ensures failed validations always mark the subsection as non-compliant
+        const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
+                               validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
+                               validationResult.initialCocValid !== false;
+        const validationPassed = mappedSubsectionStatus === 'Approved';
+        const hasCriticalFailures = (validationResult.criticalFailures?.length || 0) > 0;
+        const isCompliant = validationPassed && hierarchyValid && !hasCriticalFailures;
+        
+        // If this validation failed, mark as non-compliant regardless of other COC data
+        if (!isCompliant) {
+          const { error: updateError } = await supabase
+            .from('subsections')
+            .update({ is_compliant: false })
+            .eq('id', subsectionId);
+          
+          if (updateError) {
+            console.error('Failed to update is_compliant:', updateError);
+          } else {
+            console.log('Marked subsection as non-compliant due to validation failure');
+          }
+        }
+        console.log('Subsection already has better/newer COC data, but updated is_compliant:', isCompliant);
       }
     }
 
