@@ -252,6 +252,63 @@ export type Database = {
         }
         Relationships: []
       }
+      coc_extractions: {
+        Row: {
+          confidence: string | null
+          created_at: string
+          document_id: string
+          extracted_at: string
+          extracted_by: string | null
+          extracted_data: Json
+          extraction_method: string | null
+          extraction_notes: string | null
+          id: string
+          subsection_id: string
+          updated_at: string
+        }
+        Insert: {
+          confidence?: string | null
+          created_at?: string
+          document_id: string
+          extracted_at?: string
+          extracted_by?: string | null
+          extracted_data?: Json
+          extraction_method?: string | null
+          extraction_notes?: string | null
+          id?: string
+          subsection_id: string
+          updated_at?: string
+        }
+        Update: {
+          confidence?: string | null
+          created_at?: string
+          document_id?: string
+          extracted_at?: string
+          extracted_by?: string | null
+          extracted_data?: Json
+          extraction_method?: string | null
+          extraction_notes?: string | null
+          id?: string
+          subsection_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_extractions_document_id_fkey"
+            columns: ["document_id"]
+            isOneToOne: false
+            referencedRelation: "subsection_documents"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_extractions_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coc_validations: {
         Row: {
           created_at: string

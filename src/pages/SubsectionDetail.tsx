@@ -34,6 +34,7 @@ import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
+import { COCReviewStatus } from "@/components/COCReviewStatus";
 
 interface SubsectionData {
   name: string;
@@ -106,7 +107,9 @@ const SubsectionDetail = () => {
   const [snags, setSnags] = useState<any[]>([]);
   const [openSnagsCount, setOpenSnagsCount] = useState(0);
   const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
+  const [cocExtractions, setCocExtractions] = useState<Record<string, any>>({});
   const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
+  const [reExtractingDocId, setReExtractingDocId] = useState<string | null>(null);
   const [selectedValidation, setSelectedValidation] = useState<any>(null);
   const [validationReportOpen, setValidationReportOpen] = useState(false);
   const [deleteSubsectionDialogOpen, setDeleteSubsectionDialogOpen] = useState(false);
@@ -119,6 +122,7 @@ const SubsectionDetail = () => {
   const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{file_name: string, file_url: string} | null>(null);
   const [generatingReportForId, setGeneratingReportForId] = useState<string | null>(null);
+  const [editingExtractionDoc, setEditingExtractionDoc] = useState<{id: string, url: string, name: string} | null>(null);
 
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
@@ -132,6 +136,7 @@ const SubsectionDetail = () => {
       fetchSupabaseDocuments();
       fetchSnags();
       fetchCocValidations();
+      fetchCocExtractions();
       
       // Load offline data if offline
       if (!isOnline) {
@@ -349,6 +354,28 @@ const SubsectionDetail = () => {
     }
   };
 
+  const fetchCocExtractions = async () => {
+    if (!subsectionId) return;
+    
+    try {
+      const { data, error } = await supabase
+        .from('coc_extractions')
+        .select('*')
+        .eq('subsection_id', subsectionId);
+      
+      if (error) throw error;
+      
+      // Create a map of document_id -> extraction result
+      const extractionsMap: Record<string, any> = {};
+      data?.forEach(extraction => {
+        extractionsMap[extraction.document_id] = extraction;
+      });
+      setCocExtractions(extractionsMap);
+    } catch (error) {
+      console.error("Error fetching COC extractions:", error);
+    }
+  };
+
   const handleManualValidation = async (documentId: string, documentUrl: string) => {
     try {
       setValidatingDocId(documentId);
@@ -535,10 +562,13 @@ const SubsectionDetail = () => {
   };
 
   // New function to extract COC data for preview
-  const handleExtractCocData = async (documentId: string, documentUrl: string, fileName: string) => {
+  const handleExtractCocData = async (documentId: string, documentUrl: string, fileName: string, forceReextract = false) => {
     try {
       setValidatingDocId(documentId);
-      toast.info("Extracting COC information...");
+      if (forceReextract) {
+        setReExtractingDocId(documentId);
+      }
+      toast.info(forceReextract ? "Re-extracting COC information..." : "Extracting COC information...");
 
       // Extract storage path and create signed URL for private documents
       let signedUrl = documentUrl;
@@ -564,10 +594,17 @@ const SubsectionDetail = () => {
         }
       }
 
+      // Get current user ID
+      const { data: { user } } = await supabase.auth.getUser();
+
       const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
         body: {
           documentUrl: signedUrl,
-          fileName: fileName
+          fileName: fileName,
+          documentId: documentId,
+          subsectionId: subsectionId,
+          forceReextract: forceReextract,
+          userId: user?.id
         }
       });
 
@@ -584,11 +621,32 @@ const SubsectionDetail = () => {
       }
 
       if (extractionData?.extractedData) {
+        // Update local extractions cache
+        if (extractionData.extractionId) {
+          setCocExtractions(prev => ({
+            ...prev,
+            [documentId]: {
+              id: extractionData.extractionId,
+              document_id: documentId,
+              subsection_id: subsectionId,
+              extracted_data: extractionData.extractedData,
+              confidence: extractionData.extractedData.confidence || 'medium',
+              extraction_method: extractionData.model,
+              extracted_at: new Date().toISOString()
+            }
+          }));
+        }
+
         // Show preview with extracted data
         setCocPreviewData(extractionData.extractedData);
         setShowCocPreview(true);
         setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
-        toast.success('COC information extracted! Please review before verification.');
+        
+        if (extractionData.cached) {
+          toast.success('Loaded cached extraction. Review and update if needed.');
+        } else {
+          toast.success('COC information extracted! Please review before verification.');
+        }
       } else {
         toast.error('No data could be extracted from the document');
       }
@@ -597,6 +655,40 @@ const SubsectionDetail = () => {
       toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setValidatingDocId(null);
+      setReExtractingDocId(null);
+    }
+  };
+
+  // Handle opening extraction for editing (using cached data)
+  const handleEditExtraction = async (documentId: string, documentUrl: string, fileName: string) => {
+    const existingExtraction = cocExtractions[documentId];
+    
+    if (existingExtraction?.extracted_data) {
+      // Use cached extraction data
+      setCocPreviewData(existingExtraction.extracted_data);
+      setShowCocPreview(true);
+      
+      // Create signed URL for the document
+      let signedUrl = documentUrl;
+      if (documentUrl.includes('/storage/v1/object/')) {
+        const urlParts = documentUrl.split('/documents/');
+        if (urlParts.length === 2) {
+          const filePath = decodeURIComponent(urlParts[1]);
+          const { data: signedData, error: signError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(filePath, 3600);
+          
+          if (!signError && signedData) {
+            signedUrl = signedData.signedUrl;
+          }
+        }
+      }
+      
+      setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
+      toast.info('Editing existing extraction data');
+    } else {
+      // No cached extraction, do fresh extraction
+      handleExtractCocData(documentId, documentUrl, fileName, false);
     }
   };
 

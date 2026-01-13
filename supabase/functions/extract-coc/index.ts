@@ -651,7 +651,7 @@ serve(async (req) => {
   }
 
   try {
-    const { documentUrl, fileName, retryFields } = await req.json();
+    const { documentUrl, fileName, retryFields, documentId, subsectionId, forceReextract, userId } = await req.json();
     
     if (!documentUrl) {
       return new Response(
@@ -669,6 +669,33 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // ============ CHECK FOR EXISTING EXTRACTION (CACHING) ============
+    if (documentId && !forceReextract && !retryFields) {
+      console.log('Checking for existing extraction for document:', documentId);
+      
+      const { data: existingExtraction, error: fetchError } = await supabase
+        .from('coc_extractions')
+        .select('*')
+        .eq('document_id', documentId)
+        .maybeSingle();
+      
+      if (!fetchError && existingExtraction) {
+        console.log('Found existing extraction, returning cached data');
+        return new Response(
+          JSON.stringify({
+            success: true,
+            extractedData: existingExtraction.extracted_data,
+            model: existingExtraction.extraction_method,
+            cached: true,
+            extractedAt: existingExtraction.extracted_at,
+            extractionId: existingExtraction.id,
+            confidence: existingExtraction.confidence
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     console.log('Starting enhanced COC extraction for:', fileName);
     console.log('Using model: google/gemini-3-pro-preview for best document analysis');
@@ -922,12 +949,48 @@ serve(async (req) => {
     console.log('COC Number:', extractedData.cocNumber);
     console.log('Issue Date:', extractedData.cocIssueDate);
 
+    // ============ SAVE EXTRACTION TO DATABASE ============
+    let extractionId: string | null = null;
+    
+    if (documentId && subsectionId) {
+      console.log('Saving extraction to database for document:', documentId);
+      
+      // Upsert extraction (update if exists, insert if not)
+      const { data: savedExtraction, error: saveError } = await supabase
+        .from('coc_extractions')
+        .upsert({
+          document_id: documentId,
+          subsection_id: subsectionId,
+          extracted_data: extractedData,
+          confidence: extractedData.confidence || 'medium',
+          extraction_method: 'google/gemini-3-pro-preview',
+          extraction_notes: extractedData.extractionNotes,
+          extracted_at: new Date().toISOString(),
+          extracted_by: userId || null
+        }, {
+          onConflict: 'document_id',
+          ignoreDuplicates: false
+        })
+        .select('id')
+        .single();
+      
+      if (saveError) {
+        console.error('Error saving extraction:', saveError);
+        // Non-fatal - continue to return the extraction data
+      } else {
+        extractionId = savedExtraction?.id;
+        console.log('Extraction saved successfully with ID:', extractionId);
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         extractedData,
         model: 'google/gemini-3-pro-preview',
-        missingFields: finalMissing
+        missingFields: finalMissing,
+        extractionId,
+        cached: false
       }),
       { 
         status: 200, 
