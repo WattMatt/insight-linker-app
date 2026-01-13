@@ -569,7 +569,7 @@ function mergeExtractionResults(first: any, second: any): any {
   return merged;
 }
 
-// Parse AI response to extract JSON
+// Parse AI response to extract JSON with robust error handling
 function parseAIResponse(content: string): any {
   if (!content) return null;
   
@@ -585,14 +585,38 @@ function parseAIResponse(content: string): any {
   try {
     return JSON.parse(jsonStr);
   } catch (e) {
-    console.error('JSON parse error:', e);
+    console.error('JSON parse error (attempt 1):', e);
+    
     // Try to fix common JSON issues
     try {
       // Remove trailing commas
       jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+      // Remove control characters
+      jsonStr = jsonStr.replace(/[\x00-\x1F\x7F]/g, '');
+      // Fix unescaped quotes in strings
+      jsonStr = jsonStr.replace(/(?<!\\)\\(?!["\\/bfnrtu])/g, '\\\\');
       return JSON.parse(jsonStr);
     } catch (e2) {
-      console.error('JSON parse retry failed:', e2);
+      console.error('JSON parse error (attempt 2):', e2);
+      
+      // Last resort: try to find any valid JSON object
+      try {
+        const match = content.match(/\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}/g);
+        if (match && match.length > 0) {
+          // Try the largest match (most likely to be the full response)
+          const sorted = match.sort((a, b) => b.length - a.length);
+          for (const candidate of sorted) {
+            try {
+              return JSON.parse(candidate);
+            } catch {
+              continue;
+            }
+          }
+        }
+      } catch (e3) {
+        console.error('JSON parse error (attempt 3):', e3);
+      }
+      
       return null;
     }
   }

@@ -148,14 +148,19 @@ const SubsectionDetail = () => {
 
   useEffect(() => {
     if (subsectionId && subsectionId !== "new") {
-      fetchSubsectionData();
-      fetchCompanyLogo();
-      fetchTemplates();
-      fetchDocumentCategories();
-      fetchSupabaseDocuments();
-      fetchSnags();
-      fetchCocValidations();
-      fetchCocExtractions();
+      // Sequential loading to avoid race conditions with cocDataByDocument state
+      const loadAllData = async () => {
+        await fetchSubsectionData();
+        await fetchCompanyLogo();
+        await fetchTemplates();
+        await fetchDocumentCategories();
+        // Fetch documents first, then extractions - extractions will merge with document data
+        await fetchSupabaseDocuments();
+        await fetchCocExtractions();
+        await fetchCocValidations();
+        await fetchSnags();
+      };
+      loadAllData();
       
       // Load offline data if offline
       if (!isOnline) {

@@ -600,85 +600,113 @@ serve(async (req) => {
 
     console.log('Calling AI for enhanced validation with vision capabilities...');
 
-    // Call Lovable AI with vision model for better document analysis
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-3-pro-preview',
-        messages,
-        temperature: 0.1, // Very low temperature for consistent, accurate validation
-      }),
-    });
+    // Retry logic for AI calls
+    let validationResult: any = null;
+    let lastError: Error | null = null;
+    const MAX_RETRIES = 2;
 
-    if (!aiResponse.ok) {
-      const errorText = await aiResponse.text();
-      console.error('AI gateway error:', aiResponse.status, errorText);
-      
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      try {
+        // Call Lovable AI with vision model for better document analysis
+        const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-3-pro-preview',
+            messages,
+            temperature: 0.1, // Very low temperature for consistent, accurate validation
+            max_tokens: 16384, // Ensure complete JSON response
+          }),
+        });
+
+        if (!aiResponse.ok) {
+          const errorText = await aiResponse.text();
+          console.error('AI gateway error:', aiResponse.status, errorText);
+          
+          if (aiResponse.status === 429) {
+            return new Response(
+              JSON.stringify({ error: 'Rate limit exceeded. Please try again later.' }),
+              { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          if (aiResponse.status === 402) {
+            return new Response(
+              JSON.stringify({ error: 'Payment required. Please add credits to your Lovable AI workspace.' }),
+              { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+          
+          throw new Error(`AI validation failed: ${errorText}`);
+        }
+
+        const aiData = await aiResponse.json();
+        console.log('AI response received successfully');
+
+        const aiContent = aiData.choices?.[0]?.message?.content;
+        
+        if (!aiContent) {
+          throw new Error('Empty response from AI');
+        }
+        
+        // Extract JSON from response (handle markdown code blocks)
+        // Try multiple patterns to extract JSON
+        const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/) || 
+                         aiContent.match(/```\n([\s\S]*?)\n```/) ||
+                         aiContent.match(/\{[\s\S]*\}/);
+        
+        let jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
+        
+        // Clean up common JSON issues
+        jsonStr = jsonStr.trim();
+        if (jsonStr.startsWith('```')) {
+          jsonStr = jsonStr.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
+        }
+        
+        // Remove trailing commas before closing brackets
+        jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
+        
+        validationResult = JSON.parse(jsonStr);
+        
+        // Validate required fields
+        if (!validationResult.overallStatus) {
+          validationResult.overallStatus = 'Incomplete';
+        }
+        if (!validationResult.checks) {
+          validationResult.checks = [];
+        }
+        if (!validationResult.summary) {
+          validationResult.summary = {
+            totalChecks: validationResult.checks?.length || 0,
+            passedChecks: validationResult.checks?.filter((c: any) => c.result === 'Pass').length || 0,
+            failedChecks: validationResult.checks?.filter((c: any) => c.result === 'Fail').length || 0,
+            notTested: validationResult.checks?.filter((c: any) => c.result === 'Not Tested').length || 0,
+            notApplicable: validationResult.checks?.filter((c: any) => c.result === 'Not Applicable').length || 0,
+            criticalFailures: validationResult.criticalFailures?.length || 0
+          };
+        }
+        
+        // Successfully parsed, break out of retry loop
+        console.log('Validation parsed successfully on attempt', attempt + 1);
+        break;
+        
+      } catch (parseError) {
+        lastError = parseError as Error;
+        console.error(`Attempt ${attempt + 1} failed:`, parseError);
+        
+        if (attempt < MAX_RETRIES) {
+          console.log(`Retrying validation (attempt ${attempt + 2})...`);
+          // Brief delay before retry
+          await new Promise(resolve => setTimeout(resolve, 1000));
+        }
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: 'Payment required. Please add credits to your Lovable AI workspace.' }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      
-      throw new Error(`AI validation failed: ${errorText}`);
     }
 
-    const aiData = await aiResponse.json();
-    console.log('AI response received successfully');
-
-    const aiContent = aiData.choices[0].message.content;
-    
-    // Extract JSON from response (handle markdown code blocks)
-    let validationResult;
-    try {
-      // Try multiple patterns to extract JSON
-      const jsonMatch = aiContent.match(/```json\n([\s\S]*?)\n```/) || 
-                       aiContent.match(/```\n([\s\S]*?)\n```/) ||
-                       aiContent.match(/\{[\s\S]*\}/);
-      
-      let jsonStr = jsonMatch ? (jsonMatch[1] || jsonMatch[0]) : aiContent;
-      
-      // Clean up common JSON issues
-      jsonStr = jsonStr.trim();
-      if (jsonStr.startsWith('```')) {
-        jsonStr = jsonStr.replace(/^```json?\n?/, '').replace(/\n?```$/, '');
-      }
-      
-      validationResult = JSON.parse(jsonStr);
-      
-      // Validate required fields
-      if (!validationResult.overallStatus) {
-        validationResult.overallStatus = 'Incomplete';
-      }
-      if (!validationResult.checks) {
-        validationResult.checks = [];
-      }
-      if (!validationResult.summary) {
-        validationResult.summary = {
-          totalChecks: validationResult.checks?.length || 0,
-          passedChecks: validationResult.checks?.filter((c: any) => c.result === 'Pass').length || 0,
-          failedChecks: validationResult.checks?.filter((c: any) => c.result === 'Fail').length || 0,
-          notTested: validationResult.checks?.filter((c: any) => c.result === 'Not Tested').length || 0,
-          notApplicable: validationResult.checks?.filter((c: any) => c.result === 'Not Applicable').length || 0,
-          criticalFailures: validationResult.criticalFailures?.length || 0
-        };
-      }
-      
-    } catch (parseError) {
-      console.error('Failed to parse AI response as JSON:', parseError);
-      console.error('Raw AI content:', aiContent.substring(0, 500));
-      
+    // If all retries failed, return error result
+    if (!validationResult) {
+      console.error('All validation attempts failed:', lastError);
       validationResult = {
         overallStatus: 'Error',
         confidenceScore: 0,
@@ -688,7 +716,7 @@ serve(async (req) => {
           category: 'Technical',
           clause: 'N/A',
           description: 'Failed to parse validation response',
-          reason: 'The AI response could not be interpreted as valid JSON',
+          reason: lastError?.message || 'The AI response could not be interpreted as valid JSON',
           immediateAction: 'Please try validating the document again',
           riskLevel: 'Medium'
         }],
@@ -708,23 +736,26 @@ serve(async (req) => {
                 'Confidence:', validationResult.confidenceScore,
                 'Checks:', validationResult.summary?.totalChecks);
 
-    // Map overall status to coc_status (using DB constraint values)
-    // Subsections use: valid, invalid, pending, Failed, Approved, Missing
-    // Documents use: pending, approved, rejected
-    const subsectionStatusMap: Record<string, string> = {
-      'Pass': 'Approved',
-      'Fail': 'Failed',
-      'Incomplete': 'pending',
-      'Error': 'pending'
+    // Map overall status to coc_status
+    // STANDARDIZE: All statuses should be lowercase for database, UI normalizes them
+    // Documents: pending, approved, rejected
+    // Subsections: Approved, Failed, pending
+    const getDocumentStatus = (status: string): string => {
+      const s = status.toLowerCase();
+      if (s === 'pass' || s === 'passed' || s === 'approved' || s === 'valid') return 'approved';
+      if (s === 'fail' || s === 'failed' || s === 'rejected' || s === 'invalid') return 'rejected';
+      return 'pending';
     };
-    const documentStatusMap: Record<string, string> = {
-      'Pass': 'approved',
-      'Fail': 'rejected',
-      'Incomplete': 'pending',
-      'Error': 'pending'
+    
+    const getSubsectionStatus = (status: string): string => {
+      const s = status.toLowerCase();
+      if (s === 'pass' || s === 'passed' || s === 'approved' || s === 'valid') return 'Approved';
+      if (s === 'fail' || s === 'failed' || s === 'rejected' || s === 'invalid') return 'Failed';
+      return 'pending';
     };
-    const mappedSubsectionStatus = subsectionStatusMap[validationResult.overallStatus] || 'pending';
-    const mappedDocumentStatus = documentStatusMap[validationResult.overallStatus] || 'pending';
+    
+    const mappedDocumentStatus = getDocumentStatus(validationResult.overallStatus);
+    const mappedSubsectionStatus = getSubsectionStatus(validationResult.overallStatus);
 
     // CRITICAL: Update the DOCUMENT with extracted COC details (per-document data)
     // This ensures each document retains its own extracted data
