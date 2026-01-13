@@ -367,10 +367,51 @@ const SubsectionDetail = () => {
       
       // Create a map of document_id -> extraction result
       const extractionsMap: Record<string, any> = {};
+      const cocDataFromExtractions: Record<string, { cocNumber: string; cocIssueDate: string; cocType: string; cocStatus: string }> = {};
+      
       data?.forEach(extraction => {
         extractionsMap[extraction.document_id] = extraction;
+        
+        // Auto-populate COC fields from extraction data
+        if (extraction.extracted_data && typeof extraction.extracted_data === 'object') {
+          const extractedData = extraction.extracted_data as Record<string, any>;
+          const adminDetails = extractedData.administrativeDetails as Record<string, any> || {};
+          
+          const cocNumber = extractedData.cocNumber || adminDetails.cocNumber || '';
+          const cocIssueDate = extractedData.cocIssueDate || adminDetails.cocIssueDate || '';
+          const cocType = extractedData.cocType || '';
+          const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' : 
+                            extractedData.overallStatus === 'Fail' ? 'Failed' : '';
+          
+          if (cocNumber || cocIssueDate || cocType || cocStatus) {
+            cocDataFromExtractions[extraction.document_id] = {
+              cocNumber,
+              cocIssueDate,
+              cocType,
+              cocStatus
+            };
+          }
+        }
       });
+      
       setCocExtractions(extractionsMap);
+      
+      // Merge extraction data with existing COC data (extraction data takes precedence if doc data is empty)
+      if (Object.keys(cocDataFromExtractions).length > 0) {
+        setCocDataByDocument(prev => {
+          const merged = { ...prev };
+          Object.entries(cocDataFromExtractions).forEach(([docId, extractionCocData]) => {
+            const existing = (prev[docId] || {}) as { cocNumber?: string; cocIssueDate?: string; cocType?: string; cocStatus?: string };
+            merged[docId] = {
+              cocNumber: existing.cocNumber || extractionCocData.cocNumber || '',
+              cocIssueDate: existing.cocIssueDate || extractionCocData.cocIssueDate || '',
+              cocType: existing.cocType || extractionCocData.cocType || '',
+              cocStatus: existing.cocStatus || extractionCocData.cocStatus || ''
+            };
+          });
+          return merged;
+        });
+      }
     } catch (error) {
       console.error("Error fetching COC extractions:", error);
     }
