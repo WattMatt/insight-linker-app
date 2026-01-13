@@ -665,8 +665,45 @@ const SubsectionDetail = () => {
     const existingExtraction = cocExtractions[documentId];
     
     if (existingExtraction?.extracted_data) {
-      // Use cached extraction data
-      setCocPreviewData(existingExtraction.extracted_data);
+      const extractedData = existingExtraction.extracted_data;
+      
+      // Auto-populate COC fields from extraction data
+      const cocNumber = extractedData.cocNumber || extractedData.administrativeDetails?.cocNumber || '';
+      const cocIssueDate = extractedData.cocIssueDate || extractedData.administrativeDetails?.cocIssueDate || '';
+      const cocType = extractedData.cocType || '';
+      const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' : 
+                        extractedData.overallStatus === 'Fail' ? 'Failed' : '';
+      
+      // Update local state immediately for UI display
+      setCocDataByDocument(prev => ({
+        ...prev,
+        [documentId]: {
+          ...prev[documentId],
+          cocNumber: cocNumber || prev[documentId]?.cocNumber || '',
+          cocIssueDate: cocIssueDate || prev[documentId]?.cocIssueDate || '',
+          cocType: cocType || prev[documentId]?.cocType || '',
+          cocStatus: cocStatus || prev[documentId]?.cocStatus || ''
+        }
+      }));
+      
+      // Save to database
+      const docUpdateData: Record<string, string> = {};
+      if (cocNumber) docUpdateData.coc_number = cocNumber;
+      if (cocIssueDate) docUpdateData.coc_issue_date = cocIssueDate;
+      if (cocType) docUpdateData.coc_type = cocType;
+      if (cocStatus) docUpdateData.coc_status = cocStatus;
+      
+      if (Object.keys(docUpdateData).length > 0) {
+        await supabase
+          .from('subsection_documents')
+          .update(docUpdateData)
+          .eq('id', documentId);
+        
+        toast.success('COC fields auto-populated from extraction data');
+      }
+      
+      // Use cached extraction data for preview
+      setCocPreviewData(extractedData);
       setShowCocPreview(true);
       
       // Create signed URL for the document
@@ -686,7 +723,6 @@ const SubsectionDetail = () => {
       }
       
       setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
-      toast.info('Editing existing extraction data');
     } else {
       // No cached extraction, do fresh extraction
       handleExtractCocData(documentId, documentUrl, fileName, false);
