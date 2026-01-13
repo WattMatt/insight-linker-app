@@ -912,12 +912,11 @@ const SubsectionDetail = () => {
           }));
         }
         
-        // Refresh data
-        await Promise.all([
-          fetchCocValidations(),
-          fetchSubsectionData(),
-          fetchSupabaseDocuments()
-        ]);
+        // Refresh validations and documents - DON'T call fetchSubsectionData as it can wipe state
+        await fetchCocValidations();
+        // Small delay to ensure DB write completed before refetch
+        await new Promise(resolve => setTimeout(resolve, 200));
+        await fetchSupabaseDocuments();
       }
     } catch (error) {
       console.error('Error during verification:', error);
@@ -1057,16 +1056,17 @@ const SubsectionDetail = () => {
         inspections: inspectionsObj
       });
       
-      // Initialize COC data from subsection for existing documents
+      // Initialize COC data from subsection for existing documents - MERGE don't replace
       if (fullSubsection.coc_type || fullSubsection.coc_status) {
-        setCocDataByDocument({
+        setCocDataByDocument(prev => ({
+          ...prev,
           'subsection-default': {
             cocType: fullSubsection.coc_type || '',
             cocStatus: fullSubsection.coc_status || '',
             cocNumber: fullSubsection.coc_number || '',
             cocIssueDate: fullSubsection.coc_issue_date || ''
           }
-        });
+        }));
       }
       
       setMeterSerialNumber(fullSubsection.meter_serial_number || '');
