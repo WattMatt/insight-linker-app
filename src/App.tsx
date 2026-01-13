@@ -47,6 +47,7 @@ const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
 const APIClients = lazy(() => import("./pages/APIClients"));
+const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
 
 // Eagerly load components that appear on every page
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
@@ -352,6 +353,10 @@ const App = () => (
           <Route
             path="/api-clients"
             element={<ProtectedRoute><DashboardLayout><APIClients /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
+            path="/coc-documentation"
+            element={<ProtectedRoute><DashboardLayout><COCDocumentation /></DashboardLayout></ProtectedRoute>}
           />
           {/* Client Portal Routes */}
           <Route
