@@ -35,7 +35,6 @@ A Supplementary COC may only be valid if:
 ### 3. TEMPORARY COC RULES
 - A Temporary COC may be issued for provisional compliance (e.g., pending remedial work)
 - Temporary COCs MUST reference the Initial COC number
-- Temporary COCs expire after their defined validity period (typically 3 months)
 - Temporary COCs CANNOT establish compliance alone - they only provide temporary authorization
 - **CHECK ID:** COC-TEMP-001
 
@@ -43,18 +42,21 @@ A Supplementary COC may only be valid if:
 Premises are considered NON-COMPLIANT if:
   a) A Supplementary or Temporary COC exists WITHOUT a valid Initial COC
   b) A Supplementary or Temporary COC does NOT list the Initial COC reference number
-  c) The Initial COC has expired (>2 years commercial, >5 years domestic) or been revoked
-  d) A Temporary COC has exceeded its validity period
 - **CHECK ID:** COC-VALID-001
+
+**IMPORTANT: COCs DO NOT EXPIRE.** An Electrical Certificate of Compliance remains valid indefinitely once issued, unless:
+- The installation is altered (requiring a new Supplementary COC)
+- The installation is found to be non-compliant upon re-inspection
+- The COC is formally revoked by authorities
+Do NOT report COC expiry as a failure condition.
 
 ### 5. COMPLIANCE VALIDATION FLOW (Execute in Order)
 - **Step 1:** Identify COC Type → Initial / Supplementary / Temporary
-- **Step 2:** If Initial → Validate status (valid/expired/revoked)
+- **Step 2:** If Initial → Validate that it exists and was properly issued
 - **Step 3:** If Supplementary/Temporary → Confirm Initial COC reference number exists
-- **Step 4:** Validate Initial COC reference is legitimate and not expired
-- **Step 5:** Confirm validity period for Temporary COCs
-- **Step 6:** Confirm scope aligns with Initial COC baseline
-- **Step 7:** Return compliance status with clause-specific reasoning
+- **Step 4:** Validate Initial COC reference is legitimate
+- **Step 5:** Confirm scope aligns with Initial COC baseline
+- **Step 6:** Return compliance status with clause-specific reasoning
 
 ### 6. TRACEABILITY REQUIREMENTS
 Each compliance decision MUST cite:
@@ -264,7 +266,7 @@ Scan the entire document and extract:
   "cocFormat": "ECA | ECSA | DOL | Other",
   "evaluationDate": "YYYY-MM-DD (today's date)",
   "cocIssueDate": "YYYY-MM-DD | null",
-  "cocExpiryDate": "YYYY-MM-DD | null (for Temporary COCs)",
+  "cocExpiryDate": null,
   "initialCocReference": "string | null (REQUIRED for Supplementary/Temporary)",
   "initialCocValid": true | false | null,
   "hierarchyValidation": {
@@ -272,7 +274,7 @@ Scan the entire document and extract:
     "initialCocExists": true | false,
     "initialCocReferenced": true | false | null,
     "initialCocNumber": "string | null",
-    "hierarchyStatus": "Valid | Invalid - No Initial COC | Invalid - Missing Reference | Invalid - Expired Initial",
+    "hierarchyStatus": "Valid | Invalid - No Initial COC | Invalid - Missing Reference",
     "hierarchyNotes": "string explaining hierarchy validation result"
   },
   "overallStatus": "Pass | Fail | Incomplete",
@@ -412,9 +414,8 @@ Scan the entire document and extract:
 1. **COC Hierarchy Validation (EXECUTE FIRST):**
    - Identify COC Type: Initial / Supplementary / Temporary
    - If Supplementary/Temporary: Verify Initial COC reference exists
-   - Validate referenced Initial COC is not expired
-   - For Temporary: Check validity period has not elapsed
-   - **FAIL IMMEDIATELY if hierarchy is invalid**
+   - **FAIL IMMEDIATELY if hierarchy is invalid (missing Initial COC reference)**
+   - Note: COCs do NOT expire - do not check for expiry
 
 2. **Document Quality Assessment:**
    - Rate image/scan quality
@@ -457,8 +458,6 @@ Scan the entire document and extract:
 **COC Hierarchy Failures:**
 - Supplementary COC without Initial COC reference → Non-compliant
 - Temporary COC without Initial COC reference → Non-compliant
-- Supplementary/Temporary COC with expired Initial COC → Non-compliant
-- Temporary COC past validity period → Non-compliant
 
 **Technical Failures:**
 - Earth resistance > 5Ω on any system type
