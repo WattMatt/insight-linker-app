@@ -787,9 +787,15 @@ serve(async (req) => {
       documentUpdateData.coc_issue_date = validationResult.cocIssueDate;
     }
     if (validationResult.cocType) {
-      // Map to DB constraint values: 'initial' or 'supplementary'
+      // Store with proper casing (Initial, Supplementary, Temporary) - UI normalizes display
       const cocType = (validationResult.cocType || '').toLowerCase();
-      documentUpdateData.coc_type = cocType.includes('supplementary') ? 'supplementary' : 'initial';
+      if (cocType.includes('initial')) {
+        documentUpdateData.coc_type = 'Initial';
+      } else if (cocType.includes('supplementary')) {
+        documentUpdateData.coc_type = 'Supplementary';
+      } else if (cocType.includes('temporary')) {
+        documentUpdateData.coc_type = 'Temporary';
+      }
     }
     documentUpdateData.coc_status = mappedDocumentStatus;
 
@@ -845,7 +851,15 @@ serve(async (req) => {
           subsectionUpdateData.coc_issue_date = validationResult.cocIssueDate;
         }
         if (validationResult.cocType) {
-          subsectionUpdateData.coc_type = validationResult.cocType;
+          // Store with proper casing (Initial, Supplementary, Temporary)
+          const cocType = (validationResult.cocType || '').toLowerCase();
+          if (cocType.includes('initial')) {
+            subsectionUpdateData.coc_type = 'Initial';
+          } else if (cocType.includes('supplementary')) {
+            subsectionUpdateData.coc_type = 'Supplementary';
+          } else if (cocType.includes('temporary')) {
+            subsectionUpdateData.coc_type = 'Temporary';
+          }
         }
         subsectionUpdateData.coc_status = mappedSubsectionStatus;
         

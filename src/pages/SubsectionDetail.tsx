@@ -3218,123 +3218,50 @@ const SubsectionDetail = () => {
                             </div>
                           </div>
 
-                          <div className="grid md:grid-cols-2 gap-4">
+                          {/* COC Details - Read-only display (auto-populated from extraction) */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-muted/50 rounded-lg">
                             <div>
-                              <Label>COC Number</Label>
-                              <Input
-                                value={getDocCocData(doc.id).cocNumber}
-                                onChange={(e) => updateDocCocData(doc.id, 'cocNumber', e.target.value)}
-                                placeholder="ECA 642760"
-                                className="mt-1"
-                              />
+                              <p className="text-xs text-muted-foreground">COC Number</p>
+                              <p className="font-medium text-sm">{getDocCocData(doc.id).cocNumber || '-'}</p>
                             </div>
                             <div>
-                              <Label>Issue Date</Label>
-                              <Popover>
-                                <PopoverTrigger asChild>
-                                  <Button
-                                    variant="outline"
-                                    className="w-full justify-start text-left font-normal mt-1"
-                                  >
-                                    <CalendarIcon className="mr-2 h-4 w-4" />
-                                    {getDocCocData(doc.id).cocIssueDate ? (
-                                      format(new Date(getDocCocData(doc.id).cocIssueDate), "PPP")
-                                    ) : (
-                                      <span>Pick a date</span>
-                                    )}
-                                  </Button>
-                                </PopoverTrigger>
-                                <PopoverContent className="w-auto p-0" align="start">
-                                  <Calendar
-                                    mode="single"
-                                    selected={getDocCocData(doc.id).cocIssueDate ? new Date(getDocCocData(doc.id).cocIssueDate) : undefined}
-                                    onSelect={(date) => updateDocCocData(doc.id, 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
-                                    initialFocus
-                                    className="pointer-events-auto"
-                                  />
-                                </PopoverContent>
-                              </Popover>
+                              <p className="text-xs text-muted-foreground">Issue Date</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(doc.id).cocIssueDate 
+                                  ? format(new Date(getDocCocData(doc.id).cocIssueDate), "PPP") 
+                                  : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">COC Type</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(doc.id).cocType ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    {getDocCocData(doc.id).cocType}
+                                  </Badge>
+                                ) : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">COC Status</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(doc.id).cocStatus === 'Approved' ? (
+                                  <Badge className="bg-green-500 text-white text-xs">✅ Approved</Badge>
+                                ) : getDocCocData(doc.id).cocStatus === 'Failed' ? (
+                                  <Badge variant="destructive" className="text-xs">❌ Failed</Badge>
+                                ) : '-'}
+                              </p>
                             </div>
                           </div>
-
-                          <div className="mt-4">
-                            <Label>COC Type</Label>
-                            <div className="flex gap-4 mt-2">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${doc.id}`}
-                                  value="Initial"
-                                  checked={getDocCocData(doc.id).cocType === 'Initial'}
-                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Initial</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${doc.id}`}
-                                  value="Temporary"
-                                  checked={getDocCocData(doc.id).cocType === 'Temporary'}
-                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Temporary</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${doc.id}`}
-                                  value="Supplementary"
-                                  checked={getDocCocData(doc.id).cocType === 'Supplementary'}
-                                  onChange={(e) => updateDocCocData(doc.id, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Supplementary</span>
-                              </label>
-                            </div>
-                          </div>
-
-                          <div className="mt-4">
-                            <Label>COC Status</Label>
-                            <div className="flex gap-4 mt-2">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocStatus-${doc.id}`}
-                                  value="Approved"
-                                  checked={getDocCocData(doc.id).cocStatus === 'Approved'}
-                                  onChange={(e) => updateDocCocData(doc.id, 'cocStatus', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">✅ Approved</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocStatus-${doc.id}`}
-                                  value="Failed"
-                                  checked={getDocCocData(doc.id).cocStatus === 'Failed'}
-                                  onChange={(e) => updateDocCocData(doc.id, 'cocStatus', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">❌ Failed</span>
-                              </label>
-                            </div>
-                          </div>
-
-                          <Button
-                            onClick={() => handleSaveCocDetails(doc.id)} 
-                            disabled={saving}
-                            className="mt-4 bg-blue-500 hover:bg-blue-600"
-                          >
-                            {saving ? "Saving..." : "Save Details"}
-                          </Button>
+                          {!cocValidations[doc.id] && !cocExtractions[doc.id] && (
+                            <p className="text-xs text-muted-foreground mt-2">
+                              Click "Verify COC" to extract and validate this certificate. Data will be saved automatically.
+                            </p>
+                          )}
                         </div>
                       ))}
                       
-                      {/* Firebase COC Documents (Legacy) - these don't have doc IDs so use idx */}
+                      {/* Firebase COC Documents (Legacy) - read-only display */}
                       {cocDocs.map((doc, idx) => {
                         const legacyDocId = `legacy-${idx}`;
                         return (
@@ -3344,7 +3271,7 @@ const SubsectionDetail = () => {
                               <FileText className="h-5 w-5 text-muted-foreground" />
                               <div>
                                 <p className="font-medium">{doc.file_name}</p>
-                                <Badge variant="secondary" className="text-xs">Supabase</Badge>
+                                <Badge variant="secondary" className="text-xs">Legacy</Badge>
                               </div>
                             </div>
                             <div className="flex items-center gap-1">
@@ -3367,119 +3294,41 @@ const SubsectionDetail = () => {
                             </div>
                           </div>
 
-                      <div className="grid md:grid-cols-2 gap-4">
-                        <div>
-                          <Label>COC Number</Label>
-                          <Input
-                            value={getDocCocData(legacyDocId).cocNumber}
-                            onChange={(e) => updateDocCocData(legacyDocId, 'cocNumber', e.target.value)}
-                            placeholder="ECA 642760"
-                            className="mt-1"
-                          />
-                        </div>
-                        <div>
-                          <Label>Issue Date</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start text-left font-normal mt-1"
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {getDocCocData(legacyDocId).cocIssueDate ? (
-                                  format(new Date(getDocCocData(legacyDocId).cocIssueDate), "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={getDocCocData(legacyDocId).cocIssueDate ? new Date(getDocCocData(legacyDocId).cocIssueDate) : undefined}
-                                onSelect={(date) => updateDocCocData(legacyDocId, 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
-                                initialFocus
-                                className="pointer-events-auto"
-                              />
-                            </PopoverContent>
-                          </Popover>
-                        </div>
-                      </div>
-
-                          <div className="mt-4">
-                            <Label>COC Type</Label>
-                            <div className="flex gap-4 mt-2">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${legacyDocId}`}
-                                  value="Initial"
-                                  checked={getDocCocData(legacyDocId).cocType === 'Initial'}
-                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Initial</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${legacyDocId}`}
-                                  value="Temporary"
-                                  checked={getDocCocData(legacyDocId).cocType === 'Temporary'}
-                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Temporary</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocType-${legacyDocId}`}
-                                  value="Supplementary"
-                                  checked={getDocCocData(legacyDocId).cocType === 'Supplementary'}
-                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocType', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">Supplementary</span>
-                              </label>
+                          {/* COC Details - Read-only display */}
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-muted/50 rounded-lg">
+                            <div>
+                              <p className="text-xs text-muted-foreground">COC Number</p>
+                              <p className="font-medium text-sm">{getDocCocData(legacyDocId).cocNumber || '-'}</p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">Issue Date</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(legacyDocId).cocIssueDate 
+                                  ? format(new Date(getDocCocData(legacyDocId).cocIssueDate), "PPP") 
+                                  : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">COC Type</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(legacyDocId).cocType ? (
+                                  <Badge variant="outline" className="text-xs">
+                                    {getDocCocData(legacyDocId).cocType}
+                                  </Badge>
+                                ) : '-'}
+                              </p>
+                            </div>
+                            <div>
+                              <p className="text-xs text-muted-foreground">COC Status</p>
+                              <p className="font-medium text-sm">
+                                {getDocCocData(legacyDocId).cocStatus === 'Approved' ? (
+                                  <Badge className="bg-green-500 text-white text-xs">✅ Approved</Badge>
+                                ) : getDocCocData(legacyDocId).cocStatus === 'Failed' ? (
+                                  <Badge variant="destructive" className="text-xs">❌ Failed</Badge>
+                                ) : '-'}
+                              </p>
                             </div>
                           </div>
-
-                          <div className="mt-4">
-                            <Label>COC Status</Label>
-                            <div className="flex gap-4 mt-2">
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocStatus-${legacyDocId}`}
-                                  value="Approved"
-                                  checked={getDocCocData(legacyDocId).cocStatus === 'Approved'}
-                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocStatus', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">✅ Approved</span>
-                              </label>
-                              <label className="flex items-center gap-2 cursor-pointer">
-                                <input
-                                  type="radio"
-                                  name={`cocStatus-${legacyDocId}`}
-                                  value="Failed"
-                                  checked={getDocCocData(legacyDocId).cocStatus === 'Failed'}
-                                  onChange={(e) => updateDocCocData(legacyDocId, 'cocStatus', e.target.value)}
-                                  className="w-4 h-4 text-primary cursor-pointer"
-                                />
-                                <span className="text-sm">❌ Failed</span>
-                              </label>
-                            </div>
-                          </div>
-
-                          <Button
-                            onClick={() => handleSaveCocDetails(legacyDocId)} 
-                            disabled={saving}
-                            className="mt-4 bg-blue-500 hover:bg-blue-600"
-                          >
-                            {saving ? "Saving..." : "Save Details"}
-                          </Button>
                         </div>
                       )})}
                     </div>
@@ -3490,131 +3339,53 @@ const SubsectionDetail = () => {
                           <FileText className="h-5 w-5 text-muted-foreground" />
                           <div>
                             <p className="font-medium">{subsection.name} - ECA {subsection.cocNumber}.pdf</p>
-                            <p className="text-sm text-muted-foreground">Size: 1.19 MB</p>
+                            <p className="text-sm text-muted-foreground">Legacy COC Record</p>
                           </div>
                         </div>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="bg-green-500 text-white hover:bg-green-600 border-green-500"
-                        >
-                          Pass
-                        </Button>
+                        {getDocCocData('subsection-default').cocStatus === 'Approved' ? (
+                          <Badge className="bg-green-500 text-white">✅ Pass</Badge>
+                        ) : getDocCocData('subsection-default').cocStatus === 'Failed' ? (
+                          <Badge variant="destructive">❌ Fail</Badge>
+                        ) : (
+                          <Badge variant="secondary">Unknown</Badge>
+                        )}
                       </div>
 
-                      <div className="grid md:grid-cols-2 gap-4">
+                      {/* COC Details - Read-only display */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-muted/50 rounded-lg">
                         <div>
-                          <Label>COC Number</Label>
-                          <Input
-                            value={getDocCocData('subsection-default').cocNumber}
-                            onChange={(e) => updateDocCocData('subsection-default', 'cocNumber', e.target.value)}
-                            placeholder="ECA 642760"
-                            className="mt-1"
-                          />
+                          <p className="text-xs text-muted-foreground">COC Number</p>
+                          <p className="font-medium text-sm">{getDocCocData('subsection-default').cocNumber || '-'}</p>
                         </div>
                         <div>
-                          <Label>Issue Date</Label>
-                          <Popover>
-                            <PopoverTrigger asChild>
-                              <Button
-                                variant="outline"
-                                className="w-full justify-start text-left font-normal mt-1"
-                              >
-                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                {getDocCocData('subsection-default').cocIssueDate ? (
-                                  format(new Date(getDocCocData('subsection-default').cocIssueDate), "PPP")
-                                ) : (
-                                  <span>Pick a date</span>
-                                )}
-                              </Button>
-                            </PopoverTrigger>
-                            <PopoverContent className="w-auto p-0" align="start">
-                              <Calendar
-                                mode="single"
-                                selected={getDocCocData('subsection-default').cocIssueDate ? new Date(getDocCocData('subsection-default').cocIssueDate) : undefined}
-                                onSelect={(date) => updateDocCocData('subsection-default', 'cocIssueDate', date ? format(date, 'yyyy-MM-dd') : '')}
-                                initialFocus
-                                className="pointer-events-auto"
-                              />
-                            </PopoverContent>
-                          </Popover>
+                          <p className="text-xs text-muted-foreground">Issue Date</p>
+                          <p className="font-medium text-sm">
+                            {getDocCocData('subsection-default').cocIssueDate 
+                              ? format(new Date(getDocCocData('subsection-default').cocIssueDate), "PPP") 
+                              : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">COC Type</p>
+                          <p className="font-medium text-sm">
+                            {getDocCocData('subsection-default').cocType ? (
+                              <Badge variant="outline" className="text-xs">
+                                {getDocCocData('subsection-default').cocType}
+                              </Badge>
+                            ) : '-'}
+                          </p>
+                        </div>
+                        <div>
+                          <p className="text-xs text-muted-foreground">COC Status</p>
+                          <p className="font-medium text-sm">
+                            {getDocCocData('subsection-default').cocStatus === 'Approved' ? (
+                              <Badge className="bg-green-500 text-white text-xs">✅ Approved</Badge>
+                            ) : getDocCocData('subsection-default').cocStatus === 'Failed' ? (
+                              <Badge variant="destructive" className="text-xs">❌ Failed</Badge>
+                            ) : '-'}
+                          </p>
                         </div>
                       </div>
-
-                      <div className="mt-4">
-                        <Label>COC Type</Label>
-                        <div className="flex gap-4 mt-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocType"
-                              value="Initial"
-                              checked={getDocCocData('subsection-default').cocType === 'Initial'}
-                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">Initial</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocType"
-                              value="Temporary"
-                              checked={getDocCocData('subsection-default').cocType === 'Temporary'}
-                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">Temporary</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocType"
-                              value="Supplementary"
-                              checked={getDocCocData('subsection-default').cocType === 'Supplementary'}
-                              onChange={(e) => updateDocCocData('subsection-default', 'cocType', e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">Supplementary</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <div className="mt-4">
-                        <Label>COC Status</Label>
-                        <div className="flex gap-4 mt-2">
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocStatus"
-                              value="Approved"
-                              checked={getDocCocData('subsection-default').cocStatus === 'Approved'}
-                              onChange={(e) => updateDocCocData('subsection-default', 'cocStatus', e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">✅ Approved</span>
-                          </label>
-                          <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                              type="radio"
-                              name="cocStatus"
-                              value="Failed"
-                              checked={getDocCocData('subsection-default').cocStatus === 'Failed'}
-                              onChange={(e) => updateDocCocData('subsection-default', 'cocStatus', e.target.value)}
-                              className="w-4 h-4 text-primary cursor-pointer"
-                            />
-                            <span className="text-sm">❌ Failed</span>
-                          </label>
-                        </div>
-                      </div>
-
-                      <Button
-                        onClick={() => handleSaveCocDetails('subsection-default')} 
-                        disabled={saving}
-                        className="mt-4 bg-blue-500 hover:bg-blue-600"
-                      >
-                        {saving ? "Saving..." : "Save Details"}
-                      </Button>
                     </div>
                   ) : null;
                 })()}
