@@ -19,6 +19,8 @@ export const useUserRole = () => {
       if (error) throw error;
       return data?.role as UserRole;
     },
+    staleTime: 1000 * 60 * 5, // 5 minutes - prevents refetch on hot reload
+    gcTime: 1000 * 60 * 10, // 10 minutes cache
   });
 };
 
