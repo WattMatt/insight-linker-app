@@ -3045,12 +3045,21 @@ const SubsectionDetail = () => {
                               <Button
                                 size="sm"
                                 variant="outline"
-                                onClick={() => handleExtractCocData(doc.id, doc.file_url, doc.file_name)}
+                                onClick={() => {
+                                  // If extraction exists, open for review/edit; otherwise extract fresh
+                                  if (cocExtractions[doc.id]) {
+                                    handleEditExtraction(doc.id, doc.file_url, doc.file_name);
+                                  } else {
+                                    handleExtractCocData(doc.id, doc.file_url, doc.file_name);
+                                  }
+                                }}
                                 disabled={validatingDocId === doc.id}
-                                title="Extract and verify COC against SANS 10142-1"
+                                title={cocExtractions[doc.id] ? "Review existing COC extraction" : "Extract and verify COC against SANS 10142-1"}
                               >
                                 {validatingDocId === doc.id ? (
                                   <RefreshCw className="h-4 w-4 animate-spin" />
+                                ) : cocExtractions[doc.id] ? (
+                                  'Review COC'
                                 ) : (
                                   'Verify COC'
                                 )}
