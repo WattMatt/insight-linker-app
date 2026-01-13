@@ -18,10 +18,13 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 // Field display names for user-friendly messaging
 const FIELD_DISPLAY_NAMES: Record<string, string> = {
   'cocNumber': 'COC Number',
+  'cocType': 'COC Type',
   'cocIssueDate': 'Issue Date',
   'physicalAddress': 'Physical Address',
   'registeredPerson': 'Registered Person',
   'registrationNumber': 'Registration Number',
+  'initialCertificateNo': 'Initial COC Reference',
+  'expiryDate': 'Expiry Date',
 };
 interface ExtractedData {
   // Core Certificate Identification
@@ -285,14 +288,30 @@ export function COCPreviewApproval({
   const [retryingFields, setRetryingFields] = useState<string[]>([]);
   const [isRetryingAll, setIsRetryingAll] = useState(false);
 
-  // Get list of missing required fields
+  // Get list of missing required fields (must match validateCompleteness logic)
   const getMissingFields = useCallback(() => {
     const missing: string[] = [];
     if (!editedData.cocNumber?.trim()) missing.push('cocNumber');
+    if (!editedData.cocType?.trim()) missing.push('cocType');
     if (!editedData.cocIssueDate?.trim() && !editedData.testReport?.issueDate?.trim()) missing.push('cocIssueDate');
     if (!editedData.administrativeDetails?.physicalAddress?.trim()) missing.push('physicalAddress');
     if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push('registeredPerson');
     if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push('registrationNumber');
+    
+    // CONDITIONAL: Supplementary/Temporary require Initial COC Reference
+    if (editedData.cocType === 'Supplementary' || editedData.cocType === 'Temporary') {
+      if (!editedData.supplementDetails?.initialCertificateNo?.trim()) {
+        missing.push('initialCertificateNo');
+      }
+    }
+    
+    // CONDITIONAL: Temporary requires Expiry Date
+    if (editedData.cocType === 'Temporary') {
+      if (!editedData.temporaryDetails?.expiryDate?.trim()) {
+        missing.push('expiryDate');
+      }
+    }
+    
     return missing;
   }, [editedData]);
 
@@ -503,18 +522,6 @@ export function COCPreviewApproval({
   };
 
   const { isComplete, missingFields } = validateCompleteness();
-  
-  // Debug: Log validation state
-  console.log('COC Validation State:', {
-    isComplete,
-    missingFields,
-    cocNumber: editedData.cocNumber,
-    cocType: editedData.cocType,
-    cocIssueDate: editedData.cocIssueDate || editedData.testReport?.issueDate,
-    physicalAddress: editedData.administrativeDetails?.physicalAddress,
-    registeredPerson: editedData.administrativeDetails?.registeredPerson,
-    registrationNumber: editedData.administrativeDetails?.registrationNumber
-  });
 
   const handleApprove = () => {
     onApprove(editedData);
