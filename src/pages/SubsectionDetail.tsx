@@ -28,7 +28,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { COCValidationReport } from "@/components/COCValidationReport";
-import { ValidationChat } from "@/components/ValidationChat";
+
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
@@ -4032,29 +4032,13 @@ const SubsectionDetail = () => {
           </DialogHeader>
           {selectedValidation && (
             <div className="flex-1 overflow-y-auto">
-              <Tabs defaultValue="report" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="report">Validation Report</TabsTrigger>
-                  <TabsTrigger value="chat">Ask Questions</TabsTrigger>
-                </TabsList>
-                <TabsContent value="report" className="mt-4">
-                  <COCValidationReport 
-                    validation={{
-                      ...selectedValidation,
-                      subsection_id: subsectionId || ''
-                    }} 
-                    subsectionName={subsection?.name}
-                  />
-                </TabsContent>
-                <TabsContent value="chat" className="mt-4">
-                  <ValidationChat
-                    validationId={selectedValidation.id}
-                    subsectionId={subsectionId || ''}
-                    documentId={selectedValidation.document_id}
-                    validationData={selectedValidation.report_data}
-                  />
-                </TabsContent>
-              </Tabs>
+              <COCValidationReport 
+                validation={{
+                  ...selectedValidation,
+                  subsection_id: subsectionId || ''
+                }} 
+                subsectionName={subsection?.name}
+              />
             </div>
           )}
         </DialogContent>
