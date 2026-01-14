@@ -882,9 +882,10 @@ const SubsectionDetail = () => {
         }
 
         // Extract COC details from validation result with normalization
-        const cocNumber = result.cocNumber || result.administrativeDetails?.cocNumber || '';
-        const cocIssueDate = result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
-        const cocType = normalizeCocType(result.cocType);
+        // IMPORTANT: Prefer user-approved data over validation result to avoid overwriting correct values
+        const cocNumber = approvedData.cocNumber || result.cocNumber || result.administrativeDetails?.cocNumber || '';
+        const cocIssueDate = approvedData.cocIssueDate || result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
+        const cocType = normalizeCocType(approvedData.cocType) || normalizeCocType(result.cocType);
         
         // Update document in DB with all extracted COC data
         const updateData: Record<string, string> = {};
