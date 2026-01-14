@@ -63,6 +63,7 @@ const PublicSubsection = () => {
   const [clientData, setClientData] = useState<ClientData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
+  const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
 
@@ -163,6 +164,22 @@ const PublicSubsection = () => {
       } else {
         setSnags(snagsData || []);
       }
+
+      // Fetch COC validations to check for any failed validations
+      const { data: validationsData, error: validationsError } = await supabase
+        .from('coc_validations')
+        .select('*')
+        .eq('subsection_id', subsectionId);
+
+      if (validationsError) {
+        console.error("Error fetching COC validations:", validationsError);
+      } else {
+        const validationsMap: Record<string, any> = {};
+        validationsData?.forEach(validation => {
+          validationsMap[validation.document_id] = validation;
+        });
+        setCocValidations(validationsMap);
+      }
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -228,6 +245,11 @@ const PublicSubsection = () => {
   };
   
   const getOverallStatus = () => {
+    // Check if any COC validation has failed - if supplementary work fails, installation is non-compliant
+    const hasFailedValidation = Object.values(cocValidations).some(
+      (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
+    );
+    if (subsection.is_coc_required && hasFailedValidation) return "Fail";
     if (subsection.is_coc_required && subsection.coc_status !== 'Approved' && subsection.coc_status !== 'Valid' && subsection.coc_status !== 'Pass') return "Fail";
     if (subsection.is_coc_required && subsection.metering_status === 'Missing' && !subsection.meter_serial_number) return "Fail";
     if (openSnagsCount > 0) return "Fail";
