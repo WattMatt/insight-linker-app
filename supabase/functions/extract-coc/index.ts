@@ -539,9 +539,9 @@ function parseAndValidateDate(rawDate: string): string | null {
   return null;
 }
 
-// Normalize and validate COC type - default to "Unknown" if not explicitly confirmed
+// Normalize and validate COC type - default to "Not Marked" if not explicitly confirmed
 function normalizeCocType(cocType: string | undefined | null): string {
-  if (!cocType) return 'Unknown';
+  if (!cocType) return 'Not Marked';
   
   const normalized = cocType.toLowerCase().trim();
   
@@ -560,19 +560,19 @@ function normalizeCocType(cocType: string | undefined | null): string {
     return 'Temporary';
   }
   
-  // Explicitly unknown
-  if (normalized.includes('unknown') || normalized === '' || normalized === 'null') {
-    return 'Unknown';
+  // Explicitly unknown/not marked
+  if (normalized.includes('unknown') || normalized.includes('not marked') || normalized === '' || normalized === 'null') {
+    return 'Not Marked';
   }
   
-  // If it contains "initial" but with qualifiers like "unknown" or question marks, treat as unknown
+  // If it contains "initial" but with qualifiers like "unknown" or question marks, treat as not marked
   if (normalized.includes('initial') && (normalized.includes('?') || normalized.includes('unclear') || normalized.includes('not marked'))) {
-    return 'Unknown';
+    return 'Not Marked';
   }
   
-  // Default to Unknown for any unrecognized value
-  console.log('Unrecognized COC type, defaulting to Unknown:', cocType);
-  return 'Unknown';
+  // Default to Not Marked for any unrecognized value
+  console.log('Unrecognized COC type, defaulting to Not Marked:', cocType);
+  return 'Not Marked';
 }
 
 // Check which required fields are missing
