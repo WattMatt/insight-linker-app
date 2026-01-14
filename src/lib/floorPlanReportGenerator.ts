@@ -1,24 +1,27 @@
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import {
-  DOCUMENT_DESIGN_STANDARDS,
-  hexToRgb,
-  RGB_COLORS,
-  PAGE,
-  SAFE_BOTTOM_MARGIN,
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
-  addFullWidthSectionHeader,
-  getStandardTableStyles,
-  getTableOptionsWithSafeMargins,
-  addPrimaryHeaderTable,
-  logComplianceCheck,
-  drawKpiCard,
-} from "./pdfUtils";
+/**
+ * Floor Plan Report Generator - pdfmake version
+ * Generates PDF reports for floor plan inspections with pins/snags
+ */
 
-const { typography, colors, margins, tables, footers } = DOCUMENT_DESIGN_STANDARDS;
+import {
+  generatePdfBlob,
+  buildDocument,
+  createSectionHeader,
+  createDataTable,
+  createInfoTable,
+  createKpiRow,
+  logComplianceCheck,
+  COLORS,
+  mmToPt,
+  A4_WIDTH_PT,
+  CONTENT_WIDTH_PT,
+  PDFComplianceCheck,
+} from "./pdfMakeUtils";
+import { DOCUMENT_DESIGN_STANDARDS } from "./documentDesignStandards";
+
+const { margins } = DOCUMENT_DESIGN_STANDARDS;
+
+type Content = any;
 
 interface Pin {
   pin_number: number;
@@ -53,24 +56,24 @@ interface ReportData {
   subsectionName: string;
   floorPlanUrl: string;
   pins: Pin[];
-  canvasDataUrl?: string; // Canvas with pins rendered on floor plan
+  canvasDataUrl?: string;
 }
 
-export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> => {
-  const doc = new jsPDF({
-    orientation: "portrait",
-    unit: "mm",
-    format: "a4",
-  });
+export interface FloorPlanReportResult {
+  blob: Blob;
+  fileName: string;
+  complianceChecks: PDFComplianceCheck;
+}
 
-  const pageWidth = doc.internal.pageSize.getWidth();
-  const pageHeight = doc.internal.pageSize.getHeight();
-  const contentWidth = pageWidth - (2 * margins.left);
-  let yPos = margins.top;
+/**
+ * Generate a floor plan inspection report using pdfmake
+ */
+export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPlanReportResult> => {
+  const content: Content[] = [];
 
   const snags = data.pins.filter(p => p.pin_type === 'snag');
   const observations = data.pins.filter(p => p.pin_type === 'observation');
-  
+
   // Status breakdown
   const statusCount = {
     open: data.pins.filter(p => p.status === 'open').length,
@@ -80,55 +83,38 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
     resolved: data.pins.filter(p => p.status === 'resolved').length,
   };
 
-  // ===== PAGE 1: DEDICATED COVER PAGE =====
-  addCoverPage(doc, {
-    title: 'Floor Plan Inspection Report',
-    subtitle: `${data.subsectionName}`,
-    siteName: data.siteName,
-    reportType: 'Floor Plan Report',
-    organizationName: data.projectName,
-    reportDate: new Date(),
-  });
+  const totalPins = data.pins.length || 1; // Avoid division by zero
 
-  // Executive Summary Page
-  doc.addPage();
-  let pageNum = 2;
-  
-  yPos = addFullWidthSectionHeader(doc, "Executive Summary", 0, RGB_COLORS.primary);
-  
-  doc.setTextColor(...RGB_COLORS.textPrimary);
+  // ===== EXECUTIVE SUMMARY PAGE =====
+  content.push(createSectionHeader('Executive Summary', 'primary'));
+
+  // KPI row
+  content.push(createKpiRow([
+    { value: data.pins.length.toString(), label: 'Total Items', color: COLORS.primary },
+    { value: snags.length.toString(), label: 'Snags', color: COLORS.error },
+    { value: observations.length.toString(), label: 'Observations', color: COLORS.accent },
+    { value: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%`, label: 'Resolved', color: COLORS.success },
+  ]));
 
   // Status breakdown table
-  doc.setFontSize(typography.scale.h4);
-  doc.setFont(typography.fonts.heading, 'bold');
-  doc.text("Status Overview", margins.left, yPos);
-  yPos += 7;
-
-  autoTable(doc, {
-    ...getStandardTableStyles(),
-    startY: yPos,
-    head: [['Status', 'Count', 'Percentage']],
-    body: [
-      ['Open', statusCount.open.toString(), `${Math.round((statusCount.open / data.pins.length) * 100)}%`],
-      ['In Progress', statusCount.in_progress.toString(), `${Math.round((statusCount.in_progress / data.pins.length) * 100)}%`],
-      ['Finished', statusCount.finished.toString(), `${Math.round((statusCount.finished / data.pins.length) * 100)}%`],
-      ['Closed', (statusCount.closed + statusCount.resolved).toString(), `${Math.round(((statusCount.closed + statusCount.resolved) / data.pins.length) * 100)}%`],
+  content.push(createSectionHeader('Status Overview'));
+  content.push(createDataTable(
+    [
+      { header: 'Status', field: 'status', width: '*' },
+      { header: 'Count', field: 'count', width: 60, alignment: 'center' },
+      { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
     ],
-    headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white, fontStyle: 'bold' },
-    columnStyles: {
-      0: { cellWidth: 60 },
-      1: { cellWidth: 40, halign: 'center' },
-      2: { cellWidth: 40, halign: 'center' },
-    },
-  });
-
-  yPos = (doc as any).lastAutoTable.finalY + 12;
+    [
+      { status: 'Open', count: statusCount.open, percentage: `${Math.round((statusCount.open / totalPins) * 100)}%` },
+      { status: 'In Progress', count: statusCount.in_progress, percentage: `${Math.round((statusCount.in_progress / totalPins) * 100)}%` },
+      { status: 'Finished', count: statusCount.finished, percentage: `${Math.round((statusCount.finished / totalPins) * 100)}%` },
+      { status: 'Closed/Resolved', count: statusCount.closed + statusCount.resolved, percentage: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%` },
+    ]
+  ));
 
   // Priority breakdown for snags
   if (snags.length > 0) {
-    doc.setFontSize(typography.scale.h4);
-    doc.text("Snags by Priority", margins.left, yPos);
-    yPos += 7;
+    content.push(createSectionHeader('Snags by Priority'));
 
     const priorityCount = {
       critical: snags.filter(s => s.priority === 'critical').length,
@@ -137,25 +123,22 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
       low: snags.filter(s => s.priority === 'low').length,
     };
 
-    autoTable(doc, {
-      ...getStandardTableStyles(),
-      startY: yPos,
-      head: [['Priority', 'Count', 'Percentage']],
-      body: [
-        ['Critical', priorityCount.critical.toString(), `${Math.round((priorityCount.critical / snags.length) * 100)}%`],
-        ['High', priorityCount.high.toString(), `${Math.round((priorityCount.high / snags.length) * 100)}%`],
-        ['Medium', priorityCount.medium.toString(), `${Math.round((priorityCount.medium / snags.length) * 100)}%`],
-        ['Low', priorityCount.low.toString(), `${Math.round((priorityCount.low / snags.length) * 100)}%`],
-      ],
-      headStyles: { fillColor: RGB_COLORS.error, textColor: RGB_COLORS.white, fontStyle: 'bold' },
-      columnStyles: {
-        0: { cellWidth: 60 },
-        1: { cellWidth: 40, halign: 'center' },
-        2: { cellWidth: 40, halign: 'center' },
-      },
-    });
+    const snagTotal = snags.length || 1;
 
-    yPos = (doc as any).lastAutoTable.finalY + 12;
+    content.push(createDataTable(
+      [
+        { header: 'Priority', field: 'priority', width: '*' },
+        { header: 'Count', field: 'count', width: 60, alignment: 'center' },
+        { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
+      ],
+      [
+        { priority: 'Critical', count: priorityCount.critical, percentage: `${Math.round((priorityCount.critical / snagTotal) * 100)}%` },
+        { priority: 'High', count: priorityCount.high, percentage: `${Math.round((priorityCount.high / snagTotal) * 100)}%` },
+        { priority: 'Medium', count: priorityCount.medium, percentage: `${Math.round((priorityCount.medium / snagTotal) * 100)}%` },
+        { priority: 'Low', count: priorityCount.low, percentage: `${Math.round((priorityCount.low / snagTotal) * 100)}%` },
+      ],
+      { headerStyle: 'secondary' }
+    ));
   }
 
   // Contractor breakdown
@@ -167,376 +150,261 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
   });
 
   if (Object.keys(contractorCounts).length > 0) {
-    doc.setFontSize(typography.scale.h4);
-    doc.text("Snags by Contractor", margins.left, yPos);
-    yPos += 7;
+    content.push(createSectionHeader('Snags by Contractor'));
 
-    autoTable(doc, {
-      ...getStandardTableStyles(),
-      startY: yPos,
-      head: [['Contractor', 'Total', 'Open', 'In Progress', 'Finished']],
-      body: Object.entries(contractorCounts).map(([contractor]) => {
-        const contractorSnags = snags.filter(s => s.assigned_contractor === contractor);
-        return [
-          contractor,
-          contractorSnags.length.toString(),
-          contractorSnags.filter(s => s.status === 'open').length.toString(),
-          contractorSnags.filter(s => s.status === 'in_progress').length.toString(),
-          contractorSnags.filter(s => s.status === 'finished' || s.status === 'closed' || s.status === 'resolved').length.toString(),
-        ];
-      }),
-      headStyles: { fillColor: RGB_COLORS.textMuted, textColor: RGB_COLORS.white, fontStyle: 'bold' },
-      columnStyles: {
-        0: { cellWidth: 60 },
-        1: { cellWidth: 25, halign: 'center' },
-        2: { cellWidth: 25, halign: 'center' },
-        3: { cellWidth: 30, halign: 'center' },
-        4: { cellWidth: 30, halign: 'center' },
-      },
+    const contractorData = Object.entries(contractorCounts).map(([contractor]) => {
+      const contractorSnags = snags.filter(s => s.assigned_contractor === contractor);
+      return {
+        contractor,
+        total: contractorSnags.length,
+        open: contractorSnags.filter(s => s.status === 'open').length,
+        inProgress: contractorSnags.filter(s => s.status === 'in_progress').length,
+        finished: contractorSnags.filter(s => ['finished', 'closed', 'resolved'].includes(s.status)).length,
+      };
+    });
+
+    content.push(createDataTable(
+      [
+        { header: 'Contractor', field: 'contractor', width: '*' },
+        { header: 'Total', field: 'total', width: 50, alignment: 'center' },
+        { header: 'Open', field: 'open', width: 50, alignment: 'center' },
+        { header: 'In Progress', field: 'inProgress', width: 70, alignment: 'center' },
+        { header: 'Finished', field: 'finished', width: 60, alignment: 'center' },
+      ],
+      contractorData
+    ));
+  }
+
+  // ===== FLOOR PLAN OVERVIEW =====
+  if (data.canvasDataUrl) {
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Floor Plan Overview', 'primary'));
+    
+    content.push({
+      image: data.canvasDataUrl,
+      width: CONTENT_WIDTH_PT - 20,
+      alignment: 'center',
+      margin: [0, 10, 0, 10],
     });
   }
 
-  // Floor Plan Overview Page
-  if (data.canvasDataUrl) {
-    doc.addPage();
-    pageNum++;
-    
-    yPos = addFullWidthSectionHeader(doc, "Floor Plan Overview", 0, RGB_COLORS.primary);
-    doc.setTextColor(...RGB_COLORS.textPrimary);
-    
-    // Add floor plan image with pins
-    const imgWidth = pageWidth - (2 * margins.left);
-    const imgHeight = pageHeight - (2 * margins.top) - 30;
-    
-    try {
-      doc.addImage(data.canvasDataUrl, 'PNG', margins.left, margins.top + 10, imgWidth, imgHeight, undefined, 'FAST');
-    } catch (error) {
-      console.error('Error adding floor plan image:', error);
-      doc.text('Error loading floor plan image', margins.left, margins.top + 20);
-    }
-  }
+  // ===== ITEMS SUMMARY TABLE =====
+  content.push({ text: '', pageBreak: 'before' });
+  content.push(createSectionHeader('Items Summary', 'primary'));
 
-  // Items Summary Table
-  doc.addPage();
-  pageNum++;
-  
-  yPos = addFullWidthSectionHeader(doc, "Items Summary", 0, RGB_COLORS.primary);
-  doc.setTextColor(...RGB_COLORS.textPrimary);
-  
-  autoTable(doc, {
-    ...getStandardTableStyles(),
-    startY: yPos,
-    head: [['#', 'Type', 'Title', 'Priority', 'Status', 'Contractor']],
-    body: data.pins
-      .sort((a, b) => a.pin_number - b.pin_number)
-      .map(pin => [
-        pin.pin_number.toString(),
-        pin.pin_type,
-        pin.title || 'Untitled',
-        pin.priority || '-',
-        pin.status.replace('_', ' '),
-        pin.assigned_contractor || '-',
-      ]),
-    headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white, fontStyle: 'bold' },
-    alternateRowStyles: { fillColor: RGB_COLORS.tableAltRow },
-  });
+  content.push(createDataTable(
+    [
+      { header: '#', field: 'number', width: 30, alignment: 'center' },
+      { header: 'Type', field: 'type', width: 60 },
+      { header: 'Title', field: 'title', width: '*' },
+      { header: 'Priority', field: 'priority', width: 60 },
+      { header: 'Status', field: 'status', width: 70 },
+      { header: 'Contractor', field: 'contractor', width: 80 },
+    ],
+    data.pins.sort((a, b) => a.pin_number - b.pin_number).map(pin => ({
+      number: pin.pin_number,
+      type: pin.pin_type,
+      title: pin.title || 'Untitled',
+      priority: pin.priority || '-',
+      status: pin.status.replace('_', ' '),
+      contractor: pin.assigned_contractor || '-',
+    }))
+  ));
 
-  // Individual Item Detail Pages
+  // ===== INDIVIDUAL ITEM DETAILS =====
   for (const pin of data.pins.sort((a, b) => a.pin_number - b.pin_number)) {
-    doc.addPage();
-    pageNum++;
-    yPos = margins.top;
+    content.push({ text: '', pageBreak: 'before' });
 
-    // Item header with status color
-    let headerColor: [number, number, number] = RGB_COLORS.primary;
-    if (pin.status === 'closed' || pin.status === 'resolved') headerColor = RGB_COLORS.success;
-    else if (pin.status === 'in_progress') headerColor = RGB_COLORS.warning;
-    else if (pin.status === 'open' && pin.priority === 'critical') headerColor = RGB_COLORS.error;
-    
-    doc.setFillColor(...headerColor);
-    doc.rect(0, 0, pageWidth, 30, "F");
-    
-    doc.setTextColor(...RGB_COLORS.white);
-    doc.setFontSize(typography.scale.h2);
-    doc.setFont(typography.fonts.heading, 'bold');
-    doc.text(`Item #${pin.pin_number}`, margins.left, 12);
-    
-    doc.setFontSize(typography.scale.body);
-    doc.text(`${pin.pin_type.toUpperCase()} • ${pin.status.replace('_', ' ').toUpperCase()}`, margins.left, 22);
-    
-    doc.setTextColor(...RGB_COLORS.textPrimary);
-    yPos = 40;
+    // Item header with colored bar
+    const headerColor = pin.status === 'closed' || pin.status === 'resolved' ? COLORS.success :
+                        pin.status === 'in_progress' ? COLORS.warning :
+                        pin.status === 'open' && pin.priority === 'critical' ? COLORS.error : COLORS.primary;
+
+    content.push({
+      table: {
+        widths: ['*'],
+        body: [[{
+          stack: [
+            {
+              text: `Item #${pin.pin_number}`,
+              fontSize: 18,
+              bold: true,
+              color: COLORS.white,
+            },
+            {
+              text: `${pin.pin_type.toUpperCase()} • ${pin.status.replace('_', ' ').toUpperCase()}`,
+              fontSize: 10,
+              color: COLORS.white,
+              margin: [0, 3, 0, 0],
+            },
+          ],
+        }]],
+      },
+      layout: {
+        hLineWidth: () => 0,
+        vLineWidth: () => 0,
+        paddingLeft: () => mmToPt(margins.left),
+        paddingRight: () => mmToPt(margins.right),
+        paddingTop: () => 12,
+        paddingBottom: () => 12,
+        fillColor: () => headerColor,
+      },
+      margin: [0, 0, 0, 15],
+    });
 
     // Info grid
-    doc.setFontSize(typography.scale.body);
-    doc.setFont(typography.fonts.heading, "bold");
-    
-    let infoYPos = yPos;
-    if (pin.priority) {
-      doc.text("Priority:", margins.left, infoYPos);
-      doc.setFont(typography.fonts.body, "normal");
-      doc.text(pin.priority.toUpperCase(), margins.left + 25, infoYPos);
-      infoYPos += 6;
+    const infoData: [string, string][] = [];
+    if (pin.priority) infoData.push(['Priority', pin.priority.toUpperCase()]);
+    if (pin.assigned_contractor) infoData.push(['Contractor', pin.assigned_contractor]);
+    if (pin.stakeholders) infoData.push(['Stakeholders', pin.stakeholders]);
+    if (pin.package) infoData.push(['Package', pin.package]);
+    if (pin.due_date) infoData.push(['Due Date', new Date(pin.due_date).toLocaleDateString()]);
+
+    if (infoData.length > 0) {
+      content.push(createInfoTable(infoData));
     }
-    
-    if (pin.assigned_contractor) {
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.text("Contractor:", margins.left, infoYPos);
-      doc.setFont(typography.fonts.body, "normal");
-      doc.text(pin.assigned_contractor, margins.left + 30, infoYPos);
-      infoYPos += 6;
-    }
-    
-    if (pin.stakeholders) {
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.text("Stakeholders:", margins.left, infoYPos);
-      doc.setFont(typography.fonts.body, "normal");
-      doc.text(pin.stakeholders, margins.left + 35, infoYPos);
-      infoYPos += 6;
-    }
-    
-    if (pin.package) {
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.text("Package:", margins.left, infoYPos);
-      doc.setFont(typography.fonts.body, "normal");
-      doc.text(pin.package, margins.left + 25, infoYPos);
-      infoYPos += 6;
-    }
-    
-    if (pin.due_date) {
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.text("Due Date:", margins.left, infoYPos);
-      doc.setFont(typography.fonts.body, "normal");
-      doc.text(new Date(pin.due_date).toLocaleDateString(), margins.left + 27, infoYPos);
-      infoYPos += 6;
-    }
-    
-    yPos = infoYPos + 5;
 
     // Title
     if (pin.title) {
-      doc.setFillColor(...RGB_COLORS.bgCard);
-      doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 12, "F");
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.setFontSize(typography.scale.h4);
-      doc.text("Title", margins.left + 2, yPos + 8);
-      yPos += 14;
-      doc.setFont(typography.fonts.body, "normal");
-      doc.setFontSize(typography.scale.body);
-      const titleLines = doc.splitTextToSize(pin.title, pageWidth - (2 * margins.left) - 4);
-      doc.text(titleLines, margins.left + 2, yPos);
-      yPos += 5 * titleLines.length + 8;
+      content.push(createSectionHeader('Title'));
+      content.push({
+        text: pin.title,
+        fontSize: 11,
+        margin: [0, 0, 0, 10],
+      });
     }
 
-    // Before/After Photo Comparison
-    if (pin.photo_url || pin.rectification_photo_url) {
-      if (pin.photo_url && pin.rectification_photo_url) {
-        // Side-by-side comparison
-        doc.setFont(typography.fonts.heading, "bold");
-        doc.setFontSize(typography.scale.body);
-        doc.text("Before / After Comparison", margins.left, yPos);
-        yPos += 5;
-        
-        const halfWidth = (pageWidth - (2 * margins.left) - 5) / 2;
-        const imgHeight = 70;
-        
-        // Before label and image
-        doc.setFontSize(typography.scale.caption);
-        doc.setTextColor(...RGB_COLORS.error);
-        doc.text("BEFORE", margins.left, yPos);
-        doc.setTextColor(...RGB_COLORS.success);
-        doc.text("AFTER", margins.left + halfWidth + 5, yPos);
-        doc.setTextColor(...RGB_COLORS.textPrimary);
-        yPos += 3;
-        
-        doc.setDrawColor(...RGB_COLORS.error);
-        doc.setLineWidth(1);
-        doc.rect(margins.left, yPos, halfWidth, imgHeight);
-        try {
-          doc.addImage(pin.photo_url, 'JPEG', margins.left + 1, yPos + 1, halfWidth - 2, imgHeight - 2, undefined, 'FAST');
-        } catch (error) {
-          console.error('Error adding before photo:', error);
-        }
-        
-        doc.setDrawColor(...RGB_COLORS.success);
-        doc.rect(margins.left + halfWidth + 5, yPos, halfWidth, imgHeight);
-        try {
-          doc.addImage(pin.rectification_photo_url, 'JPEG', margins.left + halfWidth + 6, yPos + 1, halfWidth - 2, imgHeight - 2, undefined, 'FAST');
-        } catch (error) {
-          console.error('Error adding after photo:', error);
-        }
-        
-        doc.setDrawColor(0);
-        doc.setLineWidth(0.5);
-        yPos += imgHeight + 5;
-        
-        // Rectification notes
-        if (pin.rectification_notes) {
-          doc.setFillColor(232, 245, 233);
-          doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 10, "F");
-          doc.setFont(typography.fonts.heading, "bold");
-          doc.setFontSize(typography.scale.body);
-          doc.text("Rectification Notes:", margins.left + 2, yPos + 7);
-          yPos += 12;
-          doc.setFont(typography.fonts.body, "normal");
-          doc.setFontSize(typography.scale.caption);
-          const rectNotes = doc.splitTextToSize(pin.rectification_notes, pageWidth - (2 * margins.left) - 4);
-          doc.text(rectNotes, margins.left + 2, yPos);
-          yPos += 4 * rectNotes.length + 3;
-        }
-        
-        if (pin.rectified_at) {
-          doc.setFontSize(typography.scale.caption);
-          doc.setTextColor(...RGB_COLORS.textMuted);
-          doc.text(`Rectified on ${new Date(pin.rectified_at).toLocaleString()}${pin.rectified_by ? ` by ${pin.rectified_by}` : ''}`, margins.left, yPos);
-          doc.setTextColor(...RGB_COLORS.textPrimary);
-          yPos += 8;
-        }
-      } else if (pin.photo_url) {
-        // Original photo only
-        try {
-          doc.setFont(typography.fonts.heading, "bold");
-          doc.setFontSize(typography.scale.body);
-          doc.text("Photo", margins.left, yPos);
-          yPos += 5;
-          
-          const imgWidth = pageWidth - (2 * margins.left);
-          const imgHeight = 90;
-          doc.setDrawColor(200);
-          doc.setLineWidth(0.5);
-          doc.rect(margins.left, yPos, imgWidth, imgHeight);
-          doc.addImage(pin.photo_url, 'JPEG', margins.left + 1, yPos + 1, imgWidth - 2, imgHeight - 2, undefined, 'FAST');
-          yPos += imgHeight + 10;
-        } catch (error) {
-          console.error('Error adding photo:', error);
-          doc.text('Error loading photo', margins.left, yPos);
-          yPos += 10;
-        }
+    // Photo comparison
+    if (pin.photo_url && pin.rectification_photo_url) {
+      content.push(createSectionHeader('Before / After Comparison'));
+      content.push({
+        columns: [
+          {
+            stack: [
+              { text: 'BEFORE', fontSize: 10, bold: true, color: COLORS.error, margin: [0, 0, 0, 5] },
+              { image: pin.photo_url, width: 200, height: 150 },
+            ],
+          },
+          {
+            stack: [
+              { text: 'AFTER', fontSize: 10, bold: true, color: COLORS.success, margin: [0, 0, 0, 5] },
+              { image: pin.rectification_photo_url, width: 200, height: 150 },
+            ],
+          },
+        ],
+        columnGap: 20,
+        margin: [0, 0, 0, 10],
+      });
+
+      if (pin.rectification_notes) {
+        content.push({
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                { text: 'Rectification Notes:', bold: true, fontSize: 10 },
+                { text: pin.rectification_notes, fontSize: 9, margin: [0, 3, 0, 0] },
+              ],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0,
+            vLineWidth: () => 0,
+            paddingLeft: () => 10,
+            paddingRight: () => 10,
+            paddingTop: () => 8,
+            paddingBottom: () => 8,
+            fillColor: () => '#e8f5e9',
+          },
+          margin: [0, 0, 0, 10],
+        });
       }
+    } else if (pin.photo_url) {
+      content.push(createSectionHeader('Photo'));
+      content.push({
+        image: pin.photo_url,
+        width: 300,
+        height: 200,
+        margin: [0, 0, 0, 10],
+      });
     }
 
-    // Detailed Description
+    // Detailed description
     if (pin.detailed_description) {
-      doc.setFillColor(...RGB_COLORS.bgCard);
-      doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 12, "F");
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.setFontSize(typography.scale.h4);
-      doc.text("Detailed Description", margins.left + 2, yPos + 8);
-      yPos += 14;
-      doc.setFont(typography.fonts.body, "normal");
-      doc.setFontSize(typography.scale.body);
-      const descLines = doc.splitTextToSize(pin.detailed_description, pageWidth - (2 * margins.left) - 4);
-      doc.text(descLines, margins.left + 2, yPos);
-      yPos += 5 * descLines.length + 8;
+      content.push(createSectionHeader('Detailed Description'));
+      content.push({
+        text: pin.detailed_description,
+        fontSize: 10,
+        margin: [0, 0, 0, 10],
+      });
     }
 
     // Notes
     if (pin.notes) {
-      doc.setFillColor(255, 250, 240);
-      doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 12, "F");
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.setFontSize(typography.scale.h4);
-      doc.text("Notes", margins.left + 2, yPos + 8);
-      yPos += 14;
-      doc.setFont(typography.fonts.body, "normal");
-      doc.setFontSize(typography.scale.body);
-      const notesLines = doc.splitTextToSize(pin.notes, pageWidth - (2 * margins.left) - 4);
-      doc.text(notesLines, margins.left + 2, yPos);
-      yPos += 5 * notesLines.length + 8;
-    }
-
-    // Comments section
-    if (pin.comments && pin.comments.length > 0) {
-      if (yPos > pageHeight - 50) {
-        doc.addPage();
-        pageNum++;
-        yPos = margins.top;
-      }
-      
-      doc.setFillColor(245, 245, 245);
-      doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 12, "F");
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.setFontSize(typography.scale.h4);
-      doc.text(`Comments (${pin.comments.length})`, margins.left + 2, yPos + 8);
-      yPos += 14;
-      
-      doc.setFontSize(typography.scale.caption);
-      pin.comments.forEach((comment) => {
-        if (yPos > pageHeight - 30) {
-          doc.addPage();
-          pageNum++;
-          yPos = margins.top;
-        }
-        
-        doc.setFont(typography.fonts.heading, "bold");
-        doc.text(`${comment.user_name || 'User'}`, margins.left + 2, yPos);
-        doc.setFont(typography.fonts.body, "normal");
-        doc.setTextColor(...RGB_COLORS.textMuted);
-        doc.text(new Date(comment.created_at).toLocaleDateString(), margins.left + 50, yPos);
-        doc.setTextColor(...RGB_COLORS.textPrimary);
-        yPos += 5;
-        
-        const commentLines = doc.splitTextToSize(comment.comment, pageWidth - (2 * margins.left) - 4);
-        doc.text(commentLines, margins.left + 2, yPos);
-        yPos += 4 * commentLines.length + 6;
+      content.push(createSectionHeader('Notes'));
+      content.push({
+        text: pin.notes,
+        fontSize: 10,
+        margin: [0, 0, 0, 10],
       });
     }
 
-    // Edit History
-    if (pin.edit_history && Array.isArray(pin.edit_history) && pin.edit_history.length > 0) {
-      if (yPos > pageHeight - 50) {
-        doc.addPage();
-        pageNum++;
-        yPos = margins.top;
-      }
-      
-      doc.setFillColor(250, 245, 255);
-      doc.rect(margins.left, yPos, pageWidth - 2 * margins.left, 12, "F");
-      doc.setFont(typography.fonts.heading, "bold");
-      doc.setFontSize(typography.scale.h4);
-      doc.text("Edit History", margins.left + 2, yPos + 8);
-      yPos += 14;
-      
-      doc.setFontSize(typography.scale.caption);
-      doc.setFont(typography.fonts.body, "normal");
-      
-      pin.edit_history.slice(-5).forEach((edit: any) => {
-        if (yPos > pageHeight - 20) {
-          doc.addPage();
-          pageNum++;
-          yPos = margins.top;
-        }
-        
-        const timestamp = new Date(edit.timestamp).toLocaleString();
-        doc.setTextColor(...RGB_COLORS.textMuted);
-        doc.text(timestamp, margins.left + 2, yPos);
-        doc.setTextColor(...RGB_COLORS.textPrimary);
-        yPos += 4;
-        
-        if (edit.changes?.status) {
-          doc.text(`Status: ${edit.changes.status.from} → ${edit.changes.status.to}`, margins.left + 4, yPos);
-          yPos += 4;
-        }
-        if (edit.changes?.priority) {
-          doc.text(`Priority: ${edit.changes.priority.from} → ${edit.changes.priority.to}`, margins.left + 4, yPos);
-          yPos += 4;
-        }
-        if (edit.changes?.assigned_contractor) {
-          doc.text(`Contractor: ${edit.changes.assigned_contractor.from || 'None'} → ${edit.changes.assigned_contractor.to}`, margins.left + 4, yPos);
-          yPos += 4;
-        }
-        yPos += 3;
+    // Comments
+    if (pin.comments && pin.comments.length > 0) {
+      content.push(createSectionHeader(`Comments (${pin.comments.length})`));
+
+      pin.comments.forEach(comment => {
+        content.push({
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                {
+                  columns: [
+                    { text: comment.user_name || 'User', bold: true, fontSize: 9 },
+                    { text: new Date(comment.created_at).toLocaleDateString(), fontSize: 8, color: COLORS.textMuted, alignment: 'right' },
+                  ],
+                },
+                { text: comment.comment, fontSize: 9, margin: [0, 3, 0, 0] },
+              ],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0,
+            hLineColor: () => COLORS.border,
+            paddingLeft: () => 8,
+            paddingRight: () => 8,
+            paddingTop: () => 6,
+            paddingBottom: () => 6,
+          },
+          margin: [0, 0, 0, 5],
+        });
       });
     }
   }
 
-  // Add standardized footers to all pages (skip cover page)
-  addFootersToAllPages(doc, true);
-  
+  // Build document
+  const docDefinition = buildDocument({
+    title: 'Floor Plan Inspection Report',
+    coverPage: {
+      title: 'Floor Plan Inspection Report',
+      subtitle: data.subsectionName,
+      siteName: data.siteName,
+      reportType: 'Floor Plan Report',
+      organizationName: data.projectName,
+      reportDate: new Date(),
+    },
+    content,
+  });
+
+  // Generate blob
+  const blob = await generatePdfBlob(docDefinition);
+
   // Log compliance
-  logComplianceCheck('floorPlanReportGenerator', {
+  const complianceChecks = logComplianceCheck('FloorPlanReport', {
     hasCoverPage: true,
-    logoPlacement: true,
+    logoPlacement: false,
     standardMargins: true,
     typographyScale: true,
     brandColors: true,
@@ -546,5 +414,7 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<jsPDF> 
     pageBreaks: true,
   });
 
-  return doc;
+  const fileName = `Floor_Plan_Report_${data.subsectionName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+  return { blob, fileName, complianceChecks };
 };

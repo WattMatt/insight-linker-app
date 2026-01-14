@@ -1,28 +1,23 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Eye, Loader2 } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
-  drawKpiCard,
-  drawProgressBar,
+  generatePdfBlob,
+  buildDocument,
+  createSectionHeader,
+  createInfoTable,
+  createDataTable,
+  createKpiRow,
   logComplianceCheck,
-  getTableOptionsWithSafeMargins,
-  RGB_COLORS,
-  PAGE,
-  SAFE_BOTTOM_MARGIN,
+  COLORS,
   PDFComplianceCheck,
-} from "@/lib/pdfUtils";
-import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
+} from "@/lib/pdfMakeUtils";
+
 interface SiteSummaryReportProps {
   siteId: string;
   siteName: string;
@@ -34,117 +29,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
   const [saving, setSaving] = useState(false);
   const [previewData, setPreviewData] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
 
-  const drawHealthCard = (
-    doc: jsPDF,
-    x: number,
-    y: number,
-    width: number,
-    height: number,
-    title: string,
-    percentage: number,
-    subtitle: string,
-    colorR: number,
-    colorG: number,
-    colorB: number
-  ) => {
-    // Card background with subtle shadow
-    doc.setFillColor(250, 250, 250);
-    doc.roundedRect(x + 0.5, y + 0.5, width, height, 3, 3, 'F');
-    
-    // Card border
-    doc.setDrawColor(230, 230, 230);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(x, y, width, height, 3, 3, 'S');
-    
-    // White card background
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(x, y, width, height, 3, 3, 'F');
-    
-    // Title
-    doc.setFontSize(9);
-    doc.setTextColor(60, 60, 60);
-    doc.setFont(undefined, 'bold');
-    doc.text(title, x + width / 2, y + 12, { align: 'center', maxWidth: width - 6 });
-    
-    // Progress ring
-    const centerX = x + width / 2;
-    const centerY = y + 33;
-    const outerRadius = 14;
-    const innerRadius = 11;
-    
-    // Background ring (light gray)
-    doc.setFillColor(240, 240, 240);
-    drawRing(doc, centerX, centerY, outerRadius, innerRadius, 0, 360);
-    
-    // Progress ring (colored)
-    const progressAngle = (percentage / 100) * 360;
-    doc.setFillColor(colorR, colorG, colorB);
-    drawRing(doc, centerX, centerY, outerRadius, innerRadius, 0, progressAngle);
-    
-    // Center circle background
-    doc.setFillColor(255, 255, 255);
-    doc.circle(centerX, centerY, innerRadius - 1, 'F');
-    
-    // Percentage text
-    doc.setFontSize(16);
-    doc.setTextColor(colorR, colorG, colorB);
-    doc.setFont(undefined, 'bold');
-    doc.text(`${percentage}`, centerX, centerY + 2, { align: 'center' });
-    
-    // Percent symbol
-    doc.setFontSize(8);
-    doc.setTextColor(120, 120, 120);
-    doc.setFont(undefined, 'normal');
-    doc.text('%', centerX, centerY + 7, { align: 'center' });
-    
-    // Subtitle
-    if (subtitle) {
-      doc.setFontSize(7);
-      doc.setTextColor(100, 100, 100);
-      doc.setFont(undefined, 'normal');
-      const lines = doc.splitTextToSize(subtitle, width - 6);
-      doc.text(lines, x + width / 2, y + height - 8, { align: 'center' });
-    }
-  };
-
-  const drawRing = (
-    doc: jsPDF,
-    x: number,
-    y: number,
-    outerRadius: number,
-    innerRadius: number,
-    startAngle: number,
-    endAngle: number
-  ) => {
-    const startRad = (startAngle - 90) * (Math.PI / 180);
-    const endRad = (endAngle - 90) * (Math.PI / 180);
-    const steps = Math.max(30, Math.ceil(Math.abs(endAngle - startAngle) / 3));
-    
-    for (let i = 0; i < steps; i++) {
-      const angle1 = startRad + (endRad - startRad) * (i / steps);
-      const angle2 = startRad + (endRad - startRad) * ((i + 1) / steps);
-      
-      const x1Out = x + outerRadius * Math.cos(angle1);
-      const y1Out = y + outerRadius * Math.sin(angle1);
-      const x2Out = x + outerRadius * Math.cos(angle2);
-      const y2Out = y + outerRadius * Math.sin(angle2);
-      
-      const x1In = x + innerRadius * Math.cos(angle1);
-      const y1In = y + innerRadius * Math.sin(angle1);
-      const x2In = x + innerRadius * Math.cos(angle2);
-      const y2In = y + innerRadius * Math.sin(angle2);
-      
-      doc.triangle(x1Out, y1Out, x2Out, y2Out, x1In, y1In, 'F');
-      doc.triangle(x2Out, y2Out, x2In, y2In, x1In, y1In, 'F');
-    }
-  };
-
-  // Helper functions for subsection compliance (simplified versions)
   const extractSnags = (jsonData: any): any[] => {
     if (!jsonData) return [];
     const snags: any[] = [];
-    
-    // Check for sections with snag items
+
     if (jsonData.sections) {
       jsonData.sections.forEach((section: any) => {
         if (section.items) {
@@ -156,124 +44,28 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         }
       });
     }
-    
-    // Check for dedicated snags array
+
     if (jsonData.snags) {
       snags.push(...jsonData.snags);
     }
-    
+
     return snags;
   };
 
   const calculateSubsectionCompliance = (
-    subsection: any, 
-    inspections: any[], 
+    subsection: any,
+    inspections: any[],
     documents: any[]
   ): boolean => {
-    // Has valid COC
-    const hasCoc = subsection.coc_status === 'Approved' || 
-                   subsection.coc_status === 'Valid' || 
+    const hasCoc = subsection.coc_status === 'Approved' ||
+                   subsection.coc_status === 'Valid' ||
                    subsection.coc_status === 'Pass';
-    
-    // Has at least one document
     const hasDocuments = documents.some(d => d.subsection_id === subsection.id);
-    
     return hasCoc || hasDocuments || subsection.is_compliant;
   };
 
-  const renderSubsectionCard = (
-    doc: jsPDF,
-    subsection: any,
-    startY: number,
-    inspections: any[],
-    documents: any[],
-    isCompliant: boolean
-  ) => {
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const cardWidth = pageWidth - 30;
-    const cardHeight = 110;
-    
-    // Card background
-    doc.setFillColor(255, 255, 255);
-    doc.roundedRect(15, startY, cardWidth, cardHeight, 3, 3, 'F');
-    doc.setDrawColor(220, 220, 220);
-    doc.setLineWidth(0.3);
-    doc.roundedRect(15, startY, cardWidth, cardHeight, 3, 3, 'S');
-    
-    // Header bar
-    const statusColor = isCompliant ? [46, 125, 50] : [244, 67, 54];
-    doc.setFillColor(statusColor[0], statusColor[1], statusColor[2]);
-    doc.roundedRect(15, startY, cardWidth, 12, 3, 3, 'F');
-    doc.rect(15, startY + 6, cardWidth, 6, 'F');
-    
-    // Title
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(11);
-    doc.setFont(undefined, 'bold');
-    doc.text(subsection.name, 20, startY + 8);
-    
-    // Category badge
-    if (subsection.category) {
-      const abbrev = getCategoryAbbreviation(subsection.category);
-      doc.setFontSize(8);
-      doc.text(abbrev, pageWidth - 20, startY + 8, { align: 'right' });
-    }
-    
-    // Content
-    let yPos = startY + 22;
-    doc.setTextColor(60, 60, 60);
-    doc.setFontSize(9);
-    doc.setFont(undefined, 'normal');
-    
-    // COC Status
-    doc.text('COC Status:', 20, yPos);
-    doc.setFont(undefined, 'bold');
-    doc.text(subsection.coc_status || 'Not Set', 55, yPos);
-    
-    // Metering Status
-    yPos += 8;
-    doc.setFont(undefined, 'normal');
-    doc.text('Metering:', 20, yPos);
-    doc.setFont(undefined, 'bold');
-    doc.text(subsection.metering_status || 'Unknown', 55, yPos);
-    
-    // Meter Serial
-    if (subsection.meter_serial_number) {
-      yPos += 8;
-      doc.setFont(undefined, 'normal');
-      doc.text('Meter S/N:', 20, yPos);
-      doc.setFont(undefined, 'bold');
-      doc.text(subsection.meter_serial_number, 55, yPos);
-    }
-    
-    // Tenant
-    if (subsection.tenant_name) {
-      yPos += 8;
-      doc.setFont(undefined, 'normal');
-      doc.text('Tenant:', 20, yPos);
-      doc.setFont(undefined, 'bold');
-      doc.text(subsection.tenant_name, 55, yPos);
-    }
-    
-    // Document count
-    const docCount = documents.filter(d => d.subsection_id === subsection.id).length;
-    yPos += 8;
-    doc.setFont(undefined, 'normal');
-    doc.text('Documents:', 20, yPos);
-    doc.setFont(undefined, 'bold');
-    doc.text(`${docCount} file${docCount !== 1 ? 's' : ''}`, 55, yPos);
-    
-    // Inspection count
-    const inspCount = inspections.filter(i => i.subsection_id === subsection.id).length;
-    yPos += 8;
-    doc.setFont(undefined, 'normal');
-    doc.text('Inspections:', 20, yPos);
-    doc.setFont(undefined, 'bold');
-    doc.text(`${inspCount} record${inspCount !== 1 ? 's' : ''}`, 55, yPos);
-  };
-
-  const generatePdfBlob = async (): Promise<{ blob: Blob; filename: string }> => {
-    // Fetch all necessary data including COC validations
+  const generatePdfDocument = async (): Promise<{ blob: Blob; filename: string }> => {
+    // Fetch all necessary data
     const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes] = await Promise.all([
       supabase.from("sites").select("*, clients(name)").eq("id", siteId).single(),
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
@@ -283,53 +75,29 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     ]);
 
     if (siteRes.error) throw siteRes.error;
-    
+
     const site = siteRes.data;
     const subsections = subsectionsRes.data || [];
     const allInspections = inspectionsRes.data || [];
     const siteDocuments = docsRes.data || [];
     const subsectionDocuments = subsectionDocsRes.data || [];
-    
-    // Get COC validations for subsections on this site
+
+    // Get COC validations
     const subsectionIds = subsections.map(s => s.id);
     const cocValidationsQuery = await supabase
       .from("coc_validations")
       .select("*")
       .in("subsection_id", subsectionIds)
       .order("validated_at", { ascending: false });
-    
+
     const cocValidations = cocValidationsQuery.data || [];
 
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const contentWidth = getContentWidth();
-    const { margins } = DOCUMENT_DESIGN_STANDARDS;
-
-    // ===== PAGE 1: COVER PAGE using pdfUtils =====
-    addCoverPage(doc, {
-      title: 'Site Summary Report',
-      subtitle: 'Comprehensive Site Health & Compliance Overview',
-      siteName: siteName,
-      clientName: clientName,
-      reportType: 'Summary Report',
-      organizationName: 'Asset Management System',
-      reportDate: new Date(),
-    });
-
-    // ===== PAGE 2: HEALTH OVERVIEW PAGE =====
-    doc.addPage();
-    const headerY = addStandardHeader(doc, 'Site Health Overview', null);
-    
-    let cardY = headerY + 10;
-    
-    // Calculate health metrics
+    // Calculate metrics
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
-    const cocCompliant = subsections.filter(s => s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass').length;
+    const cocCompliant = subsections.filter(s => ['Approved', 'Valid', 'Pass'].includes(s.coc_status)).length;
     const meteringInstalled = subsections.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length;
     const compliantCount = subsections.filter(s => calculateSubsectionCompliance(s, allInspections, subsectionDocuments)).length;
-    
-    // Extract all snags
+
     let totalSnags = 0;
     const subsectionsWithSnags = new Set<string>();
     allInspections.forEach(insp => {
@@ -339,45 +107,27 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         totalSnags += snags.length;
       }
     });
-    
-    const overallHealth = Math.round((compliantCount / subsections.length) * 100) || 0;
-    const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
-    const meteringData = Math.round((meteringInstalled / subsections.length) * 100) || 0;
-    const snagsPercentage = Math.round((subsectionsWithSnags.size / subsections.length) * 100) || 0;
-    
-    // Draw 4 health metric cards with pdfUtils drawKpiCard
-    const cardWidth = (contentWidth - (5 * 3)) / 4;
-    const cardHeight = 32;
-    
-    cardY = addSectionHeader(doc, 'Health Metrics', cardY);
-    
-    const kpiData = [
-      { value: `${overallHealth}%`, label: 'Overall Health', color: RGB_COLORS.success },
-      { value: `${cocCompliance}%`, label: 'COC Compliance', color: RGB_COLORS.warning },
-      { value: `${meteringData}%`, label: 'Metering Data', color: RGB_COLORS.primary },
-      { value: `${100 - snagsPercentage}%`, label: 'Snag Free', color: RGB_COLORS.error },
-    ];
-    
-    kpiData.forEach((kpi, i) => {
-      const cardX = margins.left + i * (cardWidth + 5);
-      drawKpiCard(doc, cardX, cardY, cardWidth, cardHeight, kpi.value, kpi.label, kpi.color);
-    });
-    
-    cardY += cardHeight + 15;
-    
-    // Progress bar for overall health
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...RGB_COLORS.textPrimary);
-    doc.text('Overall Health Rate:', margins.left, cardY);
-    drawProgressBar(doc, margins.left + 45, cardY - 4, contentWidth - 65, overallHealth);
-    
-    cardY += 20;
 
-    // Health by Category section
-    cardY = addSectionHeader(doc, 'Health by Category', cardY);
-    
-    // Group by category
+    const subsectionCount = subsections.length || 1;
+    const overallHealth = Math.round((compliantCount / subsectionCount) * 100);
+    const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
+    const meteringData = Math.round((meteringInstalled / subsectionCount) * 100);
+    const snagsPercentage = Math.round((subsectionsWithSnags.size / subsectionCount) * 100);
+
+    // Build content
+    const content: any[] = [];
+
+    // ===== HEALTH OVERVIEW PAGE =====
+    content.push(createSectionHeader('Health Metrics', 'primary'));
+
+    content.push(createKpiRow([
+      { value: `${overallHealth}%`, label: 'Overall Health', color: COLORS.success },
+      { value: `${cocCompliance}%`, label: 'COC Compliance', color: COLORS.warning },
+      { value: `${meteringData}%`, label: 'Metering Data', color: COLORS.primary },
+      { value: `${100 - snagsPercentage}%`, label: 'Snag Free', color: COLORS.error },
+    ]));
+
+    // Health by category
     const categoryGroups = subsections.reduce((acc, sub) => {
       const cat = sub.category || 'Uncategorized';
       if (!acc[cat]) acc[cat] = { total: 0, compliant: 0 };
@@ -385,123 +135,100 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       if (sub.is_compliant) acc[cat].compliant++;
       return acc;
     }, {} as Record<string, { total: number; compliant: number }>);
-    
+
     const categories = Object.keys(categoryGroups).slice(0, 4);
-    categories.forEach((cat, idx) => {
-      const data = categoryGroups[cat];
-      const percentage = Math.round((data.compliant / data.total) * 100) || 0;
-      const xPos = margins.left + (cardWidth + 5) * idx;
-      const abbrev = getCategoryAbbreviation(cat);
-      const color: [number, number, number] = percentage >= 80 ? RGB_COLORS.success : percentage >= 60 ? RGB_COLORS.warning : RGB_COLORS.error;
-      drawKpiCard(doc, xPos, cardY, cardWidth, cardHeight, `${percentage}%`, abbrev, color);
-    });
-    
-    cardY += cardHeight + 15;
-    
-    // Summary Statistics Table
-    cardY = addSectionHeader(doc, 'Summary Statistics', cardY);
-    
-    const summaryData = [
+    if (categories.length > 0) {
+      content.push(createSectionHeader('Health by Category'));
+      content.push(createKpiRow(
+        categories.map(cat => {
+          const data = categoryGroups[cat];
+          const percentage = Math.round((data.compliant / data.total) * 100) || 0;
+          return {
+            value: `${percentage}%`,
+            label: getCategoryAbbreviation(cat),
+            color: percentage >= 80 ? COLORS.success : percentage >= 60 ? COLORS.warning : COLORS.error,
+          };
+        })
+      ));
+    }
+
+    // Summary statistics table
+    content.push(createSectionHeader('Summary Statistics'));
+    content.push(createInfoTable([
       ['Total Subsections', subsections.length.toString()],
       ['COC Required', cocRequired.toString()],
       ['COC Compliant', cocCompliant.toString()],
       ['Metering Installed', meteringInstalled.toString()],
       ['Total Snags', totalSnags.toString()],
       ['Overall Health Rate', `${overallHealth}%`],
-    ];
-    
-    autoTable(doc, {
-      ...getTableOptionsWithSafeMargins(doc, cardY, 'Summary Statistics', null, 'Asset Management System'),
-      head: [['Metric', 'Value']],
-      body: summaryData,
-      columnStyles: {
-        0: { cellWidth: contentWidth - 40 },
-        1: { cellWidth: 40, halign: 'center', fontStyle: 'bold' },
+    ]));
+
+    // ===== SUBSECTION DETAILS =====
+    content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Subsection Details', 'primary'));
+
+    content.push(createDataTable(
+      [
+        { header: 'Name', field: 'name', width: '*' },
+        { header: 'Category', field: 'category', width: 80 },
+        { header: 'COC Status', field: 'cocStatus', width: 80 },
+        { header: 'Metering', field: 'metering', width: 70 },
+        { header: 'Status', field: 'status', width: 70, alignment: 'center' },
+      ],
+      subsections.map(sub => ({
+        name: sub.name,
+        category: getCategoryAbbreviation(sub.category || 'Other'),
+        cocStatus: sub.coc_status || 'Not Set',
+        metering: sub.metering_status || 'Unknown',
+        status: calculateSubsectionCompliance(sub, allInspections, subsectionDocuments) ? '✓' : '✗',
+      }))
+    ));
+
+    // ===== COC VALIDATIONS SUMMARY =====
+    if (cocValidations.length > 0) {
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(createSectionHeader('COC Validation Summary', 'primary'));
+
+      const validationRows = cocValidations.slice(0, 20).map(v => {
+        const report = (v.report_data || {}) as any;
+        const subsection = subsections.find(s => s.id === v.subsection_id);
+        return {
+          subsection: subsection?.name || 'Unknown',
+          cocNumber: report.cocNumber || '-',
+          status: report.overallStatus || v.status,
+          date: new Date(v.validated_at).toLocaleDateString(),
+        };
+      });
+
+      content.push(createDataTable(
+        [
+          { header: 'Subsection', field: 'subsection', width: '*' },
+          { header: 'COC Number', field: 'cocNumber', width: 100 },
+          { header: 'Status', field: 'status', width: 70, alignment: 'center' },
+          { header: 'Date', field: 'date', width: 80 },
+        ],
+        validationRows
+      ));
+    }
+
+    // Build document
+    const docDefinition = buildDocument({
+      title: 'Site Summary Report',
+      coverPage: {
+        title: 'Site Summary Report',
+        subtitle: 'Comprehensive Site Health & Compliance Overview',
+        siteName: siteName,
+        clientName: clientName,
+        reportType: 'Summary Report',
+        organizationName: 'Asset Management System',
+        reportDate: new Date(),
       },
+      content,
     });
 
-    // ===== SUBSECTION DETAIL PAGES =====
-    let pageNumber = 2;
-    
-    for (let i = 0; i < subsections.length; i += 2) {
-      doc.addPage();
-      const subsectionHeaderY = addStandardHeader(doc, 'Subsection Details', null);
-      
-      // Calculate compliance for first subsection
-      const isFirstCompliant = calculateSubsectionCompliance(subsections[i], allInspections, subsectionDocuments);
-      renderSubsectionCard(doc, subsections[i], subsectionHeaderY + 5, allInspections, subsectionDocuments, isFirstCompliant);
-      
-      // Second subsection on page (if exists)
-      if (i + 1 < subsections.length) {
-        const isSecondCompliant = calculateSubsectionCompliance(subsections[i + 1], allInspections, subsectionDocuments);
-        renderSubsectionCard(doc, subsections[i + 1], subsectionHeaderY + 120, allInspections, subsectionDocuments, isSecondCompliant);
-      }
-      
-      pageNumber++;
-    }
+    // Generate blob
+    const blob = await generatePdfBlob(docDefinition);
 
-    // ===== ANNEXES: COC VERIFICATION REPORTS =====
-    if (cocValidations.length > 0) {
-      // Add annexes divider page
-      doc.addPage();
-      doc.setFillColor(...RGB_COLORS.primary);
-      doc.rect(0, 0, pageWidth, pageHeight, 'F');
-      
-      doc.setTextColor(255, 255, 255);
-      doc.setFontSize(32);
-      doc.setFont('helvetica', 'bold');
-      doc.text('ANNEXES', pageWidth / 2, pageHeight / 2 - 10, { align: 'center' });
-      
-      doc.setFontSize(16);
-      doc.setFont('helvetica', 'normal');
-      doc.text('COC Verification Reports', pageWidth / 2, pageHeight / 2 + 10, { align: 'center' });
-      
-      doc.setFontSize(12);
-      doc.text(`${cocValidations.length} Report${cocValidations.length !== 1 ? 's' : ''}`, pageWidth / 2, pageHeight / 2 + 25, { align: 'center' });
-
-      // Add each COC validation report as an annex (simplified for brevity)
-      cocValidations.forEach((validation, annexIndex) => {
-        const report = (validation.report_data || {}) as any;
-        const status = report.overallStatus || report.status || validation.status;
-        const annexNumber = annexIndex + 1;
-        
-        // Annex Cover Page
-        doc.addPage();
-        doc.setFillColor(...RGB_COLORS.primary);
-        doc.rect(0, 0, pageWidth, pageHeight, 'F');
-        
-        doc.setTextColor(255, 255, 255);
-        doc.setFontSize(24);
-        doc.setFont('helvetica', 'bold');
-        doc.text(`ANNEX ${annexNumber}`, pageWidth / 2, 60, { align: 'center' });
-        
-        doc.setFontSize(20);
-        doc.setFont('helvetica', 'normal');
-        doc.text('COC Verification Report', pageWidth / 2, 85, { align: 'center' });
-        
-        if (report.cocNumber) {
-          doc.setFontSize(14);
-          doc.text(`COC #${report.cocNumber}`, pageWidth / 2, 105, { align: 'center' });
-        }
-        
-        doc.setFontSize(12);
-        doc.text(`Validated: ${new Date(validation.validated_at).toLocaleDateString()}`, pageWidth / 2, 125, { align: 'center' });
-        
-        // Status Badge
-        doc.setFontSize(28);
-        doc.setFont('helvetica', 'bold');
-        const statusText = status?.toUpperCase() || 'UNKNOWN';
-        let statusColor: [number, number, number] = [200, 200, 200];
-        if (status?.toLowerCase() === 'pass') statusColor = [76, 175, 80];
-        else if (status?.toLowerCase() === 'fail') statusColor = [220, 53, 69];
-        doc.setTextColor(...statusColor);
-        doc.text(statusText, pageWidth / 2, 155, { align: 'center' });
-      });
-    }
-
-    // Add footers to all pages (skip cover page)
-    addFootersToAllPages(doc, true);
-    
     // Log compliance
     logComplianceCheck('SiteSummaryReport', {
       hasCoverPage: true,
@@ -515,36 +242,33 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       pageBreaks: true,
     });
 
-    // Generate blob
-    const pdfBlob = doc.output('blob');
-    const reportDateFormatted = new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: '2-digit', day: '2-digit' }).replace(/\//g, '-');
-    const filename = `${siteName} - Site Summary Report - ${reportDateFormatted}.pdf`;
-    
-    return { blob: pdfBlob, filename };
+    const filename = `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+
+    return { blob, filename };
   };
 
   const handlePreview = async () => {
     try {
       setGenerating(true);
-      toast.info("Generating site summary report preview...");
-
-      const { blob, filename } = await generatePdfBlob();
-      const url = URL.createObjectURL(blob);
-      setPreviewData({ url, blob, filename });
+      const result = await generatePdfDocument();
+      const url = URL.createObjectURL(result.blob);
+      setPreviewData({ url, blob: result.blob, filename: result.filename });
     } catch (error) {
-      console.error('Error generating preview:', error);
-      toast.error('Failed to generate preview');
+      console.error("Error generating report:", error);
+      toast.error("Failed to generate report");
     } finally {
       setGenerating(false);
     }
   };
 
   const handleSaveToDocuments = async () => {
-    if (!previewData) return;
-    
+    if (!previewData?.blob) {
+      toast.error("No report to save");
+      return;
+    }
+
     try {
       setSaving(true);
-      
       const result = await savePDFToDocuments({
         blob: previewData.blob,
         fileName: previewData.filename,
@@ -553,54 +277,51 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       });
 
       if (result.success) {
-        toast.success("Site summary report saved to documents!");
-        setPreviewData(null);
+        toast.success("Report saved to site documents!");
       } else {
         toast.error(result.error || "Failed to save report");
       }
     } catch (error) {
-      console.error('Error saving report:', error);
-      toast.error('Failed to save report to documents');
+      console.error("Error saving report:", error);
+      toast.error("Failed to save report");
     } finally {
       setSaving(false);
     }
   };
 
-  const handleClosePreview = (open: boolean) => {
-    if (!open && previewData) {
+  const handleClosePreview = () => {
+    if (previewData?.url) {
       URL.revokeObjectURL(previewData.url);
-      setPreviewData(null);
     }
+    setPreviewData(null);
   };
 
   return (
     <>
-      <Button 
-        onClick={handlePreview} 
-        disabled={generating}
-        variant="outline"
-        className="gap-2"
-      >
+      <Button onClick={handlePreview} disabled={generating} variant="default" size="sm">
         {generating ? (
-          <Loader2 className="h-4 w-4 animate-spin" />
+          <>
+            <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+            Generating...
+          </>
         ) : (
-          <Eye className="h-4 w-4" />
+          <>
+            <Eye className="h-4 w-4 mr-2" />
+            Preview Report
+          </>
         )}
-        {generating ? "Generating..." : "Preview Report"}
       </Button>
 
-      {previewData && (
-        <DocumentPreviewDialog
-          open={!!previewData}
-          onOpenChange={handleClosePreview}
-          fileUrl={previewData.url}
-          fileName={previewData.filename}
-          onSaveToDocuments={handleSaveToDocuments}
-          saveLocation="site"
-          contextName={siteName}
-          isSaving={saving}
-        />
-      )}
+      <DocumentPreviewDialog
+        open={!!previewData}
+        onOpenChange={(open) => !open && handleClosePreview()}
+        fileUrl={previewData?.url || ""}
+        fileName={previewData?.filename || ""}
+        onSaveToDocuments={handleSaveToDocuments}
+        saveLocation="site"
+        contextName={siteName}
+        isSaving={saving}
+      />
     </>
   );
 };

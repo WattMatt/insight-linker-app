@@ -8,23 +8,17 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Eye } from "lucide-react";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
-  RGB_COLORS,
-  PAGE,
+  generatePdfBlob,
+  buildDocument,
+  createSectionHeader,
+  createDataTable,
   logComplianceCheck,
+  COLORS,
   PDFComplianceCheck,
-} from "@/lib/pdfUtils";
-import { DOCUMENT_DESIGN_STANDARDS } from "@/lib/documentDesignStandards";
-
-const { margins, typography } = DOCUMENT_DESIGN_STANDARDS;
+} from "@/lib/pdfMakeUtils";
 
 interface TemplateSection {
   id: string;
@@ -77,7 +71,6 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
-  const [complianceChecks, setComplianceChecks] = useState<PDFComplianceCheck | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -123,7 +116,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
     setReportData(prev => {
       const sectionData = prev[sectionId] || {};
       const itemData = sectionData[itemId] || {};
-      
+
       return {
         ...prev,
         [sectionId]: {
@@ -137,80 +130,56 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
     });
   };
 
-  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string, blob: Blob, complianceChecks: PDFComplianceCheck } | null> => {
+  const generatePDFDocument = async (): Promise<{ blob: Blob; fileName: string; complianceChecks: PDFComplianceCheck } | null> => {
     if (!selectedTemplate) return null;
 
     try {
-      const doc = new jsPDF();
-      const pageWidth = doc.internal.pageSize.getWidth();
-      const pageHeight = doc.internal.pageSize.getHeight();
+      const content: any[] = [];
 
-      // ===== PAGE 1: COVER PAGE =====
-      addCoverPage(doc, {
-        title: selectedTemplate.cover_page?.title || selectedTemplate.name,
-        subtitle: selectedTemplate.cover_page?.subtitle || selectedTemplate.category,
-        siteName,
-        reportType: 'Inspection Report',
-        organizationName: selectedTemplate.cover_page?.company_name || 'Watson Mattheus',
-        reportDate: new Date(),
-      });
+      // Build sections
+      selectedTemplate.sections?.forEach((section) => {
+        content.push(createSectionHeader(section.name));
 
-      // ===== CONTENT PAGES =====
-      doc.addPage();
-      addStandardHeader(doc, selectedTemplate.name, null);
-      
-      let yPos = PAGE.contentStartY;
-
-      selectedTemplate.sections?.forEach((section, sectionIndex) => {
-        if (yPos > pageHeight - 60) {
-          doc.addPage();
-          addStandardHeader(doc, selectedTemplate.name, null);
-          yPos = PAGE.contentStartY;
-        }
-
-        yPos = addSectionHeader(doc, section.name, yPos);
-
-        const tableData: any[] = [];
-        section.items?.forEach((item) => {
+        const tableData = section.items?.map((item) => {
           const itemData = reportData[section.id]?.[item.id];
-          tableData.push([
-            item.name,
-            itemData?.status || 'N/A',
-            itemData?.notes || ''
-          ]);
-        });
+          return {
+            item: item.name,
+            status: itemData?.status || 'N/A',
+            notes: itemData?.notes || '',
+          };
+        }) || [];
 
         if (tableData.length > 0) {
-          autoTable(doc, {
-            startY: yPos,
-            head: [['Item', 'Status', 'Notes']],
-            body: tableData,
-            theme: 'grid',
-            headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
-            styles: { fontSize: 9, cellPadding: 3 },
-            margin: { left: margins.left, right: margins.right },
-            didParseCell: (data) => {
-              if (data.section === 'body' && data.column.index === 1) {
-                const value = data.cell.raw as string;
-                if (value === 'Pass') {
-                  data.cell.styles.textColor = RGB_COLORS.success;
-                  data.cell.styles.fontStyle = 'bold';
-                } else if (value === 'Fail') {
-                  data.cell.styles.textColor = RGB_COLORS.error;
-                  data.cell.styles.fontStyle = 'bold';
-                }
-              }
-            }
-          });
-          yPos = (doc as any).lastAutoTable?.finalY + 15 || yPos + 50;
+          content.push(createDataTable(
+            [
+              { header: 'Item', field: 'item', width: '*' },
+              { header: 'Status', field: 'status', width: 60, alignment: 'center' },
+              { header: 'Notes', field: 'notes', width: 150 },
+            ],
+            tableData
+          ));
         }
       });
 
-      // Add footers to all pages (skip cover page)
-      addFootersToAllPages(doc, true);
+      // Build document
+      const docDefinition = buildDocument({
+        title: selectedTemplate.name,
+        coverPage: {
+          title: selectedTemplate.cover_page?.title || selectedTemplate.name,
+          subtitle: selectedTemplate.cover_page?.subtitle || selectedTemplate.category,
+          siteName,
+          reportType: 'Inspection Report',
+          organizationName: selectedTemplate.cover_page?.company_name || 'Watson Mattheus',
+          reportDate: new Date(),
+        },
+        content,
+      });
+
+      // Generate blob
+      const blob = await generatePdfBlob(docDefinition);
 
       // Log compliance
-      const checks = logComplianceCheck('TemplateBasedReport', {
+      const complianceChecks = logComplianceCheck('TemplateBasedReport', {
         hasCoverPage: true,
         logoPlacement: false,
         standardMargins: true,
@@ -223,8 +192,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
       });
 
       const fileName = `${subsectionName}_${selectedTemplate.name}_Report.pdf`;
-      const blob = doc.output('blob');
-      return { doc, fileName, blob, complianceChecks: checks };
+      return { blob, fileName, complianceChecks };
     } catch (error) {
       console.error("Error generating PDF:", error);
       return null;
@@ -235,17 +203,16 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
     try {
       setGenerating(true);
       const result = await generatePDFDocument();
-      
+
       if (!result) {
         toast.error("Failed to generate report");
         return;
       }
-      
+
       const url = URL.createObjectURL(result.blob);
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
       setPdfBlob(result.blob);
-      setComplianceChecks(result.complianceChecks);
       setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating PDF:", error);
@@ -363,7 +330,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
                           <Badge variant="outline" className="text-xs">Required</Badge>
                         )}
                       </div>
-                      
+
                       <div className="grid md:grid-cols-2 gap-4">
                         <div>
                           <Label>Status</Label>
@@ -416,7 +383,6 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
         saveLocation="subsection"
         contextName={subsectionName}
         isSaving={saving}
-        complianceChecks={complianceChecks || undefined}
       />
     </div>
   );
