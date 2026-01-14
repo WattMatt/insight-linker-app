@@ -830,6 +830,111 @@ serve(async (req) => {
           }
           validationResult.extractionNotes.push('WARNING: AI did not provide checkboxStates field');
         }
+        
+        // ===== POST-PROCESSING: REMOVE INVALID VIOLATIONS FOR INITIAL COCs =====
+        // If this is an Initial COC, remove any "Missing Initial COC Reference" violations
+        // because Initial COCs do NOT need to reference another COC
+        const currentCocType = validationResult.cocType?.toLowerCase();
+        console.log('=== POST-PROCESSING VIOLATIONS ===');
+        console.log('Current COC Type:', currentCocType);
+        
+        if (currentCocType === 'initial') {
+          console.log('🔧 Initial COC detected - filtering out invalid hierarchy violations');
+          
+          // Filter criticalFailures to remove invalid violations
+          if (validationResult.criticalFailures && Array.isArray(validationResult.criticalFailures)) {
+            const originalCount = validationResult.criticalFailures.length;
+            validationResult.criticalFailures = validationResult.criticalFailures.filter((failure: any) => {
+              const description = (failure.description || '').toLowerCase();
+              const reason = (failure.reason || '').toLowerCase();
+              const clause = (failure.clause || '').toLowerCase();
+              
+              // Check if this is a "Missing Initial COC Reference" violation
+              const isMissingRefViolation = 
+                description.includes('missing initial coc') ||
+                description.includes('does not reference') ||
+                description.includes('without referencing') ||
+                description.includes('initial coc reference') ||
+                reason.includes('missing initial coc') ||
+                reason.includes('does not reference') ||
+                reason.includes('without referencing') ||
+                reason.includes('initial coc reference') ||
+                (clause.includes('hierarchy') && (description.includes('supplementary') || description.includes('reference')));
+              
+              if (isMissingRefViolation) {
+                console.log('  ❌ REMOVED invalid violation:', failure.description || failure.reason);
+                return false; // Remove this violation
+              }
+              return true; // Keep this violation
+            });
+            
+            const removedCount = originalCount - validationResult.criticalFailures.length;
+            if (removedCount > 0) {
+              console.log(`  ✓ Removed ${removedCount} invalid violation(s) for Initial COC`);
+              if (!validationResult.extractionNotes) {
+                validationResult.extractionNotes = [];
+              }
+              validationResult.extractionNotes.push(
+                `SERVER FILTER: Removed ${removedCount} "Missing Initial COC Reference" violation(s) - Initial COCs do not need to reference another COC`
+              );
+            }
+          }
+          
+          // Also filter checks array if present
+          if (validationResult.checks && Array.isArray(validationResult.checks)) {
+            validationResult.checks = validationResult.checks.map((check: any) => {
+              const checkDesc = (check.description || check.check || '').toLowerCase();
+              if (
+                check.result === 'Fail' && 
+                (checkDesc.includes('initial coc reference') || 
+                 checkDesc.includes('missing initial coc') ||
+                 checkDesc.includes('supplementary coc') && checkDesc.includes('reference'))
+              ) {
+                console.log('  🔧 Changed check result to Not Applicable:', check.description || check.check);
+                return {
+                  ...check,
+                  result: 'Not Applicable',
+                  notes: (check.notes || '') + ' [SERVER: Not applicable for Initial COC]'
+                };
+              }
+              return check;
+            });
+          }
+          
+          // Update hierarchyValidation if this incorrect violation was reported
+          if (validationResult.hierarchyValidation) {
+            if (validationResult.hierarchyValidation.issues && Array.isArray(validationResult.hierarchyValidation.issues)) {
+              validationResult.hierarchyValidation.issues = validationResult.hierarchyValidation.issues.filter((issue: any) => {
+                const issueStr = (issue || '').toLowerCase();
+                return !issueStr.includes('missing initial') && 
+                       !issueStr.includes('does not reference') &&
+                       !issueStr.includes('without referencing');
+              });
+            }
+            // Recalculate if valid based on remaining issues
+            if (validationResult.hierarchyValidation.issues?.length === 0) {
+              validationResult.hierarchyValidation.isValid = true;
+            }
+          }
+          
+          // Recalculate summary counts
+          if (validationResult.criticalFailures?.length === 0 && validationResult.checks) {
+            const passCount = validationResult.checks.filter((c: any) => c.result === 'Pass').length;
+            const failCount = validationResult.checks.filter((c: any) => c.result === 'Fail').length;
+            if (failCount === 0 && passCount > 0) {
+              validationResult.overallStatus = 'Pass';
+              console.log('  ✓ Updated overallStatus to Pass after removing invalid violations');
+            }
+          }
+          
+          // Update summary
+          if (validationResult.summary) {
+            validationResult.summary.criticalFailures = validationResult.criticalFailures?.length || 0;
+            validationResult.summary.failedChecks = validationResult.checks?.filter((c: any) => c.result === 'Fail').length || 0;
+            validationResult.summary.notApplicable = validationResult.checks?.filter((c: any) => c.result === 'Not Applicable').length || 0;
+          }
+        }
+        // ===== END POST-PROCESSING =====
         // ===== END CHECKBOX STATES VALIDATION =====
         
         // Validate required fields
