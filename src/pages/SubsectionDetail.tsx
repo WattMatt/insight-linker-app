@@ -3183,6 +3183,10 @@ const SubsectionDetail = () => {
                   <BulkCOCReportSave 
                     siteId={siteId || ""}
                     subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
+                    onSaveComplete={() => {
+                      fetchDocumentCategories();
+                      fetchSupabaseDocuments();
+                    }}
                   />
                 </div>
               </CardHeader>

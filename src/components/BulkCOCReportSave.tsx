@@ -13,6 +13,7 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 interface BulkCOCReportSaveProps {
   siteId: string;
   subsections: Array<{ id: string; name: string }>;
+  onSaveComplete?: () => void;
 }
 
 interface SaveResult {
@@ -23,7 +24,7 @@ interface SaveResult {
   error?: string;
 }
 
-export function BulkCOCReportSave({ siteId, subsections }: BulkCOCReportSaveProps) {
+export function BulkCOCReportSave({ siteId, subsections, onSaveComplete }: BulkCOCReportSaveProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -123,6 +124,9 @@ export function BulkCOCReportSave({ siteId, subsections }: BulkCOCReportSaveProp
       } else {
         toast.warning(`Saved ${successCount} of ${validations.length} reports. ${errorCount} failed.`);
       }
+      
+      // Trigger refresh callback
+      onSaveComplete?.();
     } catch (error) {
       console.error("Error in bulk save:", error);
       toast.error("Failed to save COC reports");
