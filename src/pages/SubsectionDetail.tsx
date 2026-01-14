@@ -127,13 +127,14 @@ const SubsectionDetail = () => {
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
 
-  // Normalize COC type to proper casing (Initial, Temporary, Supplementary)
+  // Normalize COC type to proper casing (Initial, Temporary, Supplementary, Not Marked)
   const normalizeCocType = (type: string | null | undefined): string => {
     if (!type) return '';
     const lower = type.toLowerCase();
     if (lower === 'initial') return 'Initial';
     if (lower === 'temporary') return 'Temporary';
     if (lower === 'supplementary') return 'Supplementary';
+    if (lower === 'not marked' || lower === 'notmarked' || lower === 'not_marked') return 'Not Marked';
     return type;
   };
   
