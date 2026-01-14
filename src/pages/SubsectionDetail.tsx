@@ -35,6 +35,7 @@ import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 import { COCReviewStatus } from "@/components/COCReviewStatus";
+import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
 
 interface SubsectionData {
   name: string;
@@ -3169,7 +3170,13 @@ const SubsectionDetail = () => {
         <TabsContent value="coc-metering" className="space-y-4">
           <div className="space-y-6">
             {/* COC Compliance Rules Reference - At top for visibility */}
-            <COCComplianceRulesReference />
+            <div className="flex items-center justify-between gap-4">
+              <COCComplianceRulesReference />
+              <BulkCOCReportSave 
+                siteId={siteId || ""}
+                subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
+              />
+            </div>
             
             {/* Certificates of Compliance */}
             <Card>
