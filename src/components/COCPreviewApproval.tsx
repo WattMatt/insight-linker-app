@@ -15,6 +15,8 @@ import { toast } from "sonner";
 
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
+// Updated: 2026-01-14 - Added "Not Marked" COC type option and re-extract functionality
+
 // Field display names for user-friendly messaging
 const FIELD_DISPLAY_NAMES: Record<string, string> = {
   'cocNumber': 'COC Number',
