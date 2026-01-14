@@ -2341,6 +2341,11 @@ const SubsectionDetail = () => {
                           variant="outline"
                           className={
                             (() => {
+                              // Check if any COC validation has failed
+                              const hasFailedValidation = Object.values(cocValidations).some(
+                                (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
+                              );
+                              if (subsection.isCocRequired && hasFailedValidation) return "bg-red-500/10 text-red-500";
                               if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
                               if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
                               if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
@@ -2350,6 +2355,11 @@ const SubsectionDetail = () => {
                           }
                         >
                           {(() => {
+                            // Check if any COC validation has failed
+                            const hasFailedValidation = Object.values(cocValidations).some(
+                              (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
+                            );
+                            if (subsection.isCocRequired && hasFailedValidation) return "Fail";
                             if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
                             if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
                             if (openSnagsCount > 0) return "Fail";
@@ -2362,6 +2372,13 @@ const SubsectionDetail = () => {
                     <TooltipContent className="max-w-xs">
                       {(() => {
                         const reasons = [];
+                        // Check if any COC validation has failed
+                        const failedValidations = Object.entries(cocValidations).filter(
+                          ([_, v]: [string, any]) => v?.status === 'Fail' || v?.status === 'Failed'
+                        );
+                        if (subsection.isCocRequired && failedValidations.length > 0) {
+                          reasons.push(`${failedValidations.length} COC validation${failedValidations.length > 1 ? 's' : ''} failed (supplementary work invalidates installation)`);
+                        }
                         if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') {
                           reasons.push(`CoC status is "${subsection.cocStatus || 'Missing'}" (needs "Approved")`);
                         }
