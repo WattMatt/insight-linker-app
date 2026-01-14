@@ -3170,19 +3170,21 @@ const SubsectionDetail = () => {
         <TabsContent value="coc-metering" className="space-y-4">
           <div className="space-y-6">
             {/* COC Compliance Rules Reference - At top for visibility */}
-            <div className="flex items-center justify-between gap-4">
-              <COCComplianceRulesReference />
-              <BulkCOCReportSave 
-                siteId={siteId || ""}
-                subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
-              />
-            </div>
+            <COCComplianceRulesReference />
             
             {/* Certificates of Compliance */}
             <Card>
               <CardHeader>
-                <CardTitle>Certificates of Compliance</CardTitle>
-                <p className="text-sm text-muted-foreground">Manage COC documents and their details.</p>
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <CardTitle>Certificates of Compliance</CardTitle>
+                    <p className="text-sm text-muted-foreground mt-1">Manage COC documents and their details.</p>
+                  </div>
+                  <BulkCOCReportSave 
+                    siteId={siteId || ""}
+                    subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
+                  />
+                </div>
               </CardHeader>
               <CardContent className="space-y-6">
                 {/* Existing COC Documents */}
