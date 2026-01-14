@@ -779,6 +779,8 @@ serve(async (req) => {
 
     // CRITICAL: Update the DOCUMENT with extracted COC details (per-document data)
     // This ensures each document retains its own extracted data
+    // NOTE: We do NOT update coc_type here - the user has already approved it via COCPreviewApproval
+    // The validation engine may incorrectly detect the COC type, so we trust the user's approval
     const documentUpdateData: any = {};
     if (validationResult.cocNumber) {
       documentUpdateData.coc_number = validationResult.cocNumber;
@@ -786,17 +788,8 @@ serve(async (req) => {
     if (validationResult.cocIssueDate) {
       documentUpdateData.coc_issue_date = validationResult.cocIssueDate;
     }
-    if (validationResult.cocType) {
-      // Store with proper casing (Initial, Supplementary, Temporary) - UI normalizes display
-      const cocType = (validationResult.cocType || '').toLowerCase();
-      if (cocType.includes('initial')) {
-        documentUpdateData.coc_type = 'Initial';
-      } else if (cocType.includes('supplementary')) {
-        documentUpdateData.coc_type = 'Supplementary';
-      } else if (cocType.includes('temporary')) {
-        documentUpdateData.coc_type = 'Temporary';
-      }
-    }
+    // REMOVED: coc_type update - user-approved value should NOT be overwritten by validation
+    // The coc_type is set during extraction approval in handleApproveAndVerify
     documentUpdateData.coc_status = mappedDocumentStatus;
 
     if (Object.keys(documentUpdateData).length > 0) {
@@ -850,17 +843,8 @@ serve(async (req) => {
         if (validationResult.cocIssueDate) {
           subsectionUpdateData.coc_issue_date = validationResult.cocIssueDate;
         }
-        if (validationResult.cocType) {
-          // Store with proper casing (Initial, Supplementary, Temporary)
-          const cocType = (validationResult.cocType || '').toLowerCase();
-          if (cocType.includes('initial')) {
-            subsectionUpdateData.coc_type = 'Initial';
-          } else if (cocType.includes('supplementary')) {
-            subsectionUpdateData.coc_type = 'Supplementary';
-          } else if (cocType.includes('temporary')) {
-            subsectionUpdateData.coc_type = 'Temporary';
-          }
-        }
+        // REMOVED: coc_type update - user-approved value should NOT be overwritten by validation
+        // The coc_type is set during extraction approval in handleApproveAndVerify
         subsectionUpdateData.coc_status = mappedSubsectionStatus;
         
         // CRITICAL: Set is_compliant based on validation result AND hierarchy rules
