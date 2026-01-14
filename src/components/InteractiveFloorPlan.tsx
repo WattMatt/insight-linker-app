@@ -410,7 +410,7 @@ export const InteractiveFloorPlan = ({
         canvasDataUrl,
       });
 
-      const blob = report.output('blob');
+      const blob = report.blob;
       const url = URL.createObjectURL(blob);
       const filename = `floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`;
       setPdfPreview({ url, blob, filename });
