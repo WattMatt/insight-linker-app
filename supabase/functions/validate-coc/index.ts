@@ -19,10 +19,26 @@ and maintain audit trails for regulatory compliance.
 
 ### 0. COC TYPE MUST BE MARKED (CRITICAL - CHECK FIRST)
 - **CHECK ID:** COC-TYPE-001
-- On the certificate, there are checkboxes/tick boxes for: Initial, Supplementary, Temporary
-- The certificate issuer MUST tick/mark ONE of these boxes to indicate the certificate type
+- On the certificate, there are THREE checkboxes/tick boxes labeled: "Initial", "Supplementary", "Temporary"
+- These are typically arranged horizontally or vertically near the top of the certificate
+- The certificate issuer MUST tick/mark EXACTLY ONE of these boxes
+
+**CHECKBOX READING INSTRUCTIONS (CRITICAL - READ CAREFULLY):**
+1. Look for checkboxes/boxes next to the words "Initial", "Supplementary", "Temporary"
+2. A TICKED/MARKED checkbox may appear as: ☑, ✓, X, ✗, a filled box, or handwritten tick inside/over the box
+3. An EMPTY/UNMARKED checkbox appears as: ☐, □, an empty box, or just the word without any mark
+4. ONLY report the type that has a VISIBLE MARK inside or on the checkbox
+5. If "Initial" checkbox has a tick/X/mark → cocType = "Initial"
+6. If "Supplementary" checkbox has a tick/X/mark → cocType = "Supplementary"  
+7. If "Temporary" checkbox has a tick/X/mark → cocType = "Temporary"
+
+**COMMON MISREADING ERRORS TO AVOID:**
+- Do NOT confuse an empty checkbox border with a mark
+- Do NOT assume type based on other document content - ONLY use the checkbox state
+- If the "Initial" box is ticked, the document is Initial EVEN IF other fields are blank
+- The Initial COC Reference field being blank does NOT mean this is Supplementary
+
 - If NO checkbox is ticked/marked, this is an AUTOMATIC FAIL - the certificate is incomplete
-- Do NOT guess or infer the type from other information - look for an EXPLICIT tick/mark
 - If cocType cannot be determined from a visible tick/mark, set cocType to null and FAIL
 
 ### 1. INITIAL COC REQUIREMENT (Baseline Rule)
