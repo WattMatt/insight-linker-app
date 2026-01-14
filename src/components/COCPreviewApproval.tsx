@@ -1005,6 +1005,7 @@ export function COCPreviewApproval({
                         <div className="space-y-1">
                           <Label className="text-xs font-semibold flex items-center gap-1">
                             Initial COC Reference <span className="text-destructive">*</span>
+                            {renderRetryButton('initialCertificateNo', !editedData.supplementDetails?.initialCertificateNo?.trim())}
                           </Label>
                           <Input
                             value={editedData.supplementDetails?.initialCertificateNo || ''}
@@ -1016,11 +1017,19 @@ export function COCPreviewApproval({
                               }
                             })}
                             className="h-9 font-mono"
-                            placeholder="Original COC number"
+                            placeholder="Original COC number this supplements"
                           />
                           <p className="text-xs text-muted-foreground">
-                            The original Initial COC this certificate references
+                            Required: The original Initial COC number this certificate references
                           </p>
+                          {!editedData.supplementDetails?.initialCertificateNo?.trim() && (
+                            <Alert variant="destructive" className="py-2 mt-2">
+                              <AlertTriangle className="h-4 w-4" />
+                              <AlertDescription className="text-xs">
+                                Supplementary COCs require the Initial COC number. Check the document for the referenced certificate number, or enter it manually if you know it.
+                              </AlertDescription>
+                            </Alert>
+                          )}
                         </div>
                         
                         {editedData.cocType === 'Supplementary' && (
