@@ -23,12 +23,14 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 - READ EACH DIGIT EXTREMELY CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9, 5≠6
 - This is a UNIQUE identifier - each document has a DIFFERENT number
 
-### 2. CERTIFICATE TYPE (CRITICAL - DETERMINES VALIDATION RULES)
+### 2. CERTIFICATE TYPE (CRITICAL - MUST CHECK IF CHECKBOX IS EXPLICITLY MARKED)
 📍 LOCATION: Near certificate number or in header area
-- THREE POSSIBLE TYPES - Look for checkboxes ☐ ☑ or text indicating:
-  a) "Initial Certificate" - First/original COC for installation (most common)
+- Look for EXPLICIT checkboxes ☐ ☑ or marked boxes indicating:
+  a) "Initial Certificate" - First/original COC for installation
   b) "Supplementary Certificate" - Additional work on existing installation
   c) "Temporary Certificate" - Provisional compliance, time-limited
+- **CRITICAL: If NO checkbox is visibly marked/checked/ticked, return "Unknown"**
+- Do NOT assume "Initial" if nothing is marked - this is a validation failure
 - IF SUPPLEMENTARY: MUST find reference to Initial COC number
 - IF TEMPORARY: Look for expiry date or validity period
 
@@ -68,7 +70,7 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 \`\`\`json
 {
   "cocNumber": "EXACT certificate number from top right",
-  "cocType": "Initial | Supplementary | Temporary",
+  "cocType": "Initial | Supplementary | Temporary | Unknown (if no checkbox is marked)",
   "cocIssueDate": "YYYY-MM-DD from registered person signature section",
   "supplementDetails": {
     "supplementNo": "sequence number if supplementary (e.g., 1, 2, 3)",
@@ -313,12 +315,14 @@ Use EXTREME care when reading numbers and dates.
 - READ EACH DIGIT VERY CAREFULLY: 0≠6≠8, 1≠7, 2≠3
 - Common format: "ECA 1738009" or just "1738009"
 
-### PRIORITY 2: Certificate Type (CRITICAL - 3 TYPES EXIST)
+### PRIORITY 2: Certificate Type (CRITICAL - MUST CHECK IF CHECKBOX IS MARKED)
 📍 Near certificate number or in header area
-- Look for checkboxes or text indicating:
+- Look for EXPLICIT checkboxes ☐ ☑ or marked boxes:
   a) "Initial" or "Initial Certificate" - First COC for installation
   b) "Supplementary" or "Supplementary Certificate" - Additional work referencing Initial
   c) "Temporary" or "Temporary Certificate" - Provisional compliance with expiry
+- **CRITICAL: If NO checkbox is visibly marked/checked/ticked, return "Unknown"**
+- Do NOT assume "Initial" if nothing is marked - this is a validation failure
 - IF SUPPLEMENTARY: You MUST find the Initial COC number it references
 - IF TEMPORARY: Look for expiry date and the Initial COC it references
 
@@ -343,7 +347,7 @@ Use EXTREME care when reading numbers and dates.
 \`\`\`json
 {
   "cocNumber": "string - CERTIFICATE NUMBER FROM TOP RIGHT",
-  "cocType": "Initial | Supplementary | Temporary",
+  "cocType": "Initial | Supplementary | Temporary | Unknown (if no checkbox is marked)",
   "cocIssueDate": "YYYY-MM-DD",
   "supplementDetails": {
     "supplementNo": "sequence number if supplementary (1, 2, 3) or null",
