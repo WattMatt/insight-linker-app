@@ -4,25 +4,23 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Separator } from "@/components/ui/separator";
 import { Button } from "@/components/ui/button";
 import { CheckCircle2, XCircle, AlertTriangle, Eye } from "lucide-react";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { toast } from "sonner";
 import { useState } from "react";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
+  generatePdfBlob,
+  buildDocument,
+  createCoverPage,
+  createSectionHeader,
+  createInfoTable,
+  createDataTable,
+  createStatusBadge,
+  getStatusType,
   logComplianceCheck,
-  getTableOptionsWithSafeMargins,
-  RGB_COLORS,
-  PAGE,
-  SAFE_BOTTOM_MARGIN,
+  COLORS,
   PDFComplianceCheck,
-} from "@/lib/pdfUtils";
-import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
+} from "@/lib/pdfMakeUtils";
 
 interface ValidationReport {
   cocNumber?: string;
@@ -127,205 +125,190 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
     }
   };
 
-  const generatePDF = (): { doc: jsPDF; fileName: string; blob: Blob } => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    const contentWidth = getContentWidth();
-    const { margins } = DOCUMENT_DESIGN_STANDARDS;
+  const generatePDF = async (): Promise<{ blob: Blob; fileName: string; complianceChecks: PDFComplianceCheck }> => {
+    const content: any[] = [];
 
-    // ===== PAGE 1: COVER PAGE using pdfUtils =====
-    addCoverPage(doc, {
-      title: 'Electrical COC Evaluation Report',
-      subtitle: report.cocType || 'SANS 10142-1 Compliance Validation',
-      siteName: report.cocNumber || 'Unknown',
-      reportType: 'COC Validation',
-      organizationName: 'Watson Mattheus Electrical Compliance',
-      reportDate: new Date(report.evaluationDate || validation.validated_at),
-      referenceNumber: report.cocNumber,
+    // ===== EXECUTIVE SUMMARY PAGE =====
+    content.push(createSectionHeader('Validation Status', 'primary'));
+    
+    // Status display
+    content.push({
+      columns: [
+        {
+          text: (status || 'UNKNOWN').toUpperCase(),
+          fontSize: 24,
+          bold: true,
+          color: status?.toLowerCase() === 'pass' ? COLORS.success :
+                 status?.toLowerCase() === 'fail' ? COLORS.error :
+                 status?.toLowerCase() === 'incomplete' ? COLORS.warning : COLORS.textMuted,
+        },
+        createStatusBadge(status || 'Unknown', getStatusType(status || '')),
+      ],
+      margin: [0, 0, 0, 15],
     });
 
-    // Page 2: Executive Summary
-    doc.addPage();
-    let headerY = addStandardHeader(doc, 'Executive Summary', null);
-    let yPosition = headerY + 5;
-    
-    // Status badge on summary page
-    yPosition = addSectionHeader(doc, 'Validation Status', yPosition);
-    
-    const statusText = status?.toUpperCase() || 'UNKNOWN';
-    let statusColorRGB: [number, number, number] = RGB_COLORS.textMuted;
-    if (status?.toLowerCase() === 'pass') statusColorRGB = RGB_COLORS.success;
-    else if (status?.toLowerCase() === 'fail') statusColorRGB = RGB_COLORS.error;
-    else if (status?.toLowerCase() === 'incomplete') statusColorRGB = RGB_COLORS.warning;
-    
-    doc.setFontSize(18);
-    doc.setFont('helvetica', 'bold');
-    doc.setTextColor(...statusColorRGB);
-    doc.text(statusText, margins.left, yPosition + 8);
-    yPosition += 20;
-    
-    doc.setFontSize(10);
-    doc.setFont('helvetica', 'normal');
-    doc.setTextColor(...RGB_COLORS.textPrimary);
-    
+    // COC Type
     if (report.cocType) {
-      doc.setFont('helvetica', 'bold');
-      doc.text('COC Type:', margins.left, yPosition);
-      doc.setFont('helvetica', 'normal');
-      doc.text(report.cocType, margins.left + 35, yPosition);
-      yPosition += 7;
-    }
-    
-    if (report.installationSummary) {
-      yPosition += 5;
-      yPosition = addSectionHeader(doc, 'Installation Summary', yPosition);
-      doc.setFont('helvetica', 'normal');
-      const summaryLines = doc.splitTextToSize(report.installationSummary, contentWidth);
-      doc.text(summaryLines, margins.left, yPosition);
-      yPosition += (summaryLines.length * 5) + 10;
-    }
-    
-    if (report.overallAssessment) {
-      yPosition = addSectionHeader(doc, 'Overall Assessment', yPosition);
-      doc.setFont('helvetica', 'normal');
-      const assessmentLines = doc.splitTextToSize(report.overallAssessment, contentWidth);
-      doc.text(assessmentLines, margins.left, yPosition);
-      yPosition += (assessmentLines.length * 5);
-    }
-
-    // Page 3+: Critical Failures
-    if ((report.criticalFailures && report.criticalFailures.length > 0) || 
-        (isLegacyFormat && report.violations && report.violations.length > 0)) {
-      doc.addPage();
-      headerY = addStandardHeader(doc, 'Critical Failures', null);
-      yPosition = headerY + 5;
-      
-      const failureCount = report.criticalFailures?.length || report.violations?.length || 0;
-      yPosition = addSectionHeader(doc, `${failureCount} Critical Issue${failureCount !== 1 ? 's' : ''} Found`, yPosition);
-      
-      const failures = report.criticalFailures || report.violations || [];
-      
-      failures.forEach((failure: any, index: number) => {
-        if (yPosition > 260) {
-          doc.addPage();
-          headerY = addStandardHeader(doc, 'Critical Failures (continued)', null);
-          yPosition = headerY + 5;
-        }
-        
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.setFillColor(...RGB_COLORS.error, 0.1);
-        doc.rect(margins.left, yPosition - 5, contentWidth, 8, 'F');
-        doc.setTextColor(...RGB_COLORS.error);
-        doc.text(`${index + 1}. ${failure.clause || `Clause ${failure.clause}`}`, margins.left + 2, yPosition);
-        yPosition += 10;
-        
-        doc.setTextColor(...RGB_COLORS.textPrimary);
-        doc.setFont('helvetica', 'normal');
-        const desc = doc.splitTextToSize(failure.description, contentWidth - 4);
-        doc.text(desc, margins.left + 2, yPosition);
-        yPosition += (desc.length * 5) + 3;
-        
-        doc.setFont('helvetica', 'bold');
-        doc.text('Reason:', margins.left + 2, yPosition);
-        doc.setFont('helvetica', 'normal');
-        const reason = doc.splitTextToSize(failure.reason || failure.evidence || '', contentWidth - 4);
-        doc.text(reason, margins.left + 2, yPosition + 5);
-        yPosition += (reason.length * 5) + 10;
+      content.push({
+        columns: [
+          { text: 'COC Type:', bold: true, width: 80 },
+          { text: report.cocType },
+        ],
+        margin: [0, 0, 0, 10],
       });
     }
 
-    // Administrative Details
+    // Installation Summary
+    if (report.installationSummary) {
+      content.push(createSectionHeader('Installation Summary'));
+      content.push({
+        text: report.installationSummary,
+        fontSize: 10,
+        color: COLORS.textSecondary,
+        margin: [0, 0, 0, 15],
+      });
+    }
+
+    // Overall Assessment
+    if (report.overallAssessment) {
+      content.push(createSectionHeader('Overall Assessment'));
+      content.push({
+        text: report.overallAssessment,
+        fontSize: 10,
+        color: COLORS.textSecondary,
+        margin: [0, 0, 0, 15],
+      });
+    }
+
+    // ===== CRITICAL FAILURES =====
+    const failures = report.criticalFailures || report.violations || [];
+    if (failures.length > 0) {
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(createSectionHeader(`Critical Failures (${failures.length})`, 'primary'));
+
+      failures.forEach((failure: any, index: number) => {
+        content.push({
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                {
+                  text: `${index + 1}. ${failure.clause || 'Clause ' + (index + 1)}`,
+                  bold: true,
+                  fontSize: 11,
+                  color: COLORS.error,
+                },
+                {
+                  text: failure.description,
+                  fontSize: 10,
+                  margin: [0, 5, 0, 5],
+                },
+                {
+                  columns: [
+                    { text: 'Reason:', bold: true, width: 50, fontSize: 9 },
+                    { text: failure.reason || failure.evidence || 'Not specified', fontSize: 9 },
+                  ],
+                },
+              ],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0,
+            hLineColor: () => COLORS.error,
+            paddingLeft: () => 10,
+            paddingRight: () => 10,
+            paddingTop: () => 8,
+            paddingBottom: () => 8,
+            fillColor: () => '#fef2f2', // Light red background
+          },
+          margin: [0, 0, 0, 10],
+        });
+      });
+    }
+
+    // ===== ADMINISTRATIVE DETAILS =====
     if (report.administrativeDetails) {
-      doc.addPage();
-      headerY = addStandardHeader(doc, 'Administrative Completeness', null);
-      yPosition = headerY + 5;
-      
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(createSectionHeader('Administrative Completeness', 'primary'));
+
       const details = report.administrativeDetails;
-      
-      const adminData = [
+      const adminData: [string, string][] = [
         ['Physical Address', details.physicalAddress || 'Not Found'],
         ['Erf / Lot No.', details.erfNumber || 'Not Found'],
         ['Registered Person', details.registeredPerson || 'Not Found'],
         ['Registration Number', details.registrationNumber || 'Not Found'],
         ['Type of Registration', details.registrationType || 'Not Found'],
         ['Date of Registration', details.registrationDate || 'Not Found'],
-      ].filter(([field, value]) => {
+      ].filter(([_, value]) => {
         const lowerValue = value.toLowerCase();
-        return !lowerValue.includes('not found') && 
-               !lowerValue.includes('not provided') && 
+        return !lowerValue.includes('not found') &&
+               !lowerValue.includes('not provided') &&
                !lowerValue.includes('n/a') &&
                value.trim().length > 0;
-      });
-      
-      autoTable(doc, {
-        ...getTableOptionsWithSafeMargins(doc, yPosition, 'Administrative Details', null, 'Electrical Compliance'),
-        head: [['Field', 'Value']],
-        body: adminData,
-        theme: 'grid',
-        columnStyles: {
-          0: { cellWidth: 50 },
-          1: { cellWidth: contentWidth - 50 },
-        },
-      });
+      }) as [string, string][];
+
+      if (adminData.length > 0) {
+        content.push(createInfoTable(adminData));
+      }
     }
 
-    // Technical Evaluation
+    // ===== TECHNICAL EVALUATION =====
     if (report.technicalEvaluation && report.technicalEvaluation.length > 0) {
-      doc.addPage();
-      headerY = addStandardHeader(doc, 'Technical Evaluation', null);
-      yPosition = headerY + 5;
-      
-      const techData = report.technicalEvaluation.map((item: any) => [
-        `${item.section}\nClause ${item.clause}`,
-        item.requirement,
-        item.finding,
-        item.status
-      ]);
-      
-      autoTable(doc, {
-        ...getTableOptionsWithSafeMargins(doc, yPosition, 'Technical Evaluation', null, 'Electrical Compliance'),
-        head: [['Section', 'Requirement', 'Finding', 'Status']],
-        body: techData,
-        theme: 'grid',
-        columnStyles: {
-          0: { cellWidth: 35 },
-          1: { cellWidth: 55 },
-          2: { cellWidth: 55 },
-          3: { cellWidth: 25 }
-        }
-      });
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(createSectionHeader('Technical Evaluation', 'primary'));
+
+      content.push(createDataTable(
+        [
+          { header: 'Section', field: 'section', width: 80 },
+          { header: 'Requirement', field: 'requirement', width: '*' },
+          { header: 'Finding', field: 'finding', width: '*' },
+          { header: 'Status', field: 'status', width: 60, alignment: 'center' },
+        ],
+        report.technicalEvaluation.map(item => ({
+          section: `${item.section}\nClause ${item.clause}`,
+          requirement: item.requirement,
+          finding: item.finding,
+          status: item.status,
+        }))
+      ));
     }
 
-    // Recommendations
+    // ===== RECOMMENDATIONS =====
     if (report.recommendations && report.recommendations.length > 0) {
-      doc.addPage();
-      headerY = addStandardHeader(doc, 'Recommendations', null);
-      yPosition = headerY + 5;
-      
-      doc.setFontSize(10);
-      doc.setFont('helvetica', 'normal');
-      doc.setTextColor(...RGB_COLORS.textPrimary);
-      
-      report.recommendations.forEach((rec: string, index: number) => {
-        if (yPosition > 260) {
-          doc.addPage();
-          headerY = addStandardHeader(doc, 'Recommendations (continued)', null);
-          yPosition = headerY + 5;
-        }
-        
-        const recLines = doc.splitTextToSize(`${index + 1}. ${rec}`, contentWidth);
-        doc.text(recLines, margins.left, yPosition);
-        yPosition += (recLines.length * 5) + 5;
+      content.push({ text: '', pageBreak: 'before' });
+      content.push(createSectionHeader('Recommendations', 'primary'));
+
+      content.push({
+        ol: report.recommendations.map(rec => ({
+          text: rec,
+          fontSize: 10,
+          margin: [0, 0, 0, 5],
+        })),
+        margin: [0, 0, 0, 15],
       });
     }
 
-    // Add footers to all pages (skip cover page)
-    addFootersToAllPages(doc, true);
-    
+    // Build document with cover page
+    const docDefinition = buildDocument({
+      title: 'Electrical COC Evaluation Report',
+      coverPage: {
+        title: 'Electrical COC Evaluation Report',
+        subtitle: report.cocType || 'SANS 10142-1 Compliance Validation',
+        siteName: report.cocNumber || 'Unknown',
+        reportType: 'COC Validation',
+        organizationName: 'Watson Mattheus Electrical Compliance',
+        reportDate: new Date(report.evaluationDate || validation.validated_at),
+        referenceNumber: report.cocNumber,
+      },
+      content,
+    });
+
+    // Generate blob
+    const blob = await generatePdfBlob(docDefinition);
+
     // Log compliance
-    logComplianceCheck('COCValidationReport', {
+    const complianceChecks = logComplianceCheck('COCValidationReport', {
       hasCoverPage: true,
       logoPlacement: false,
       standardMargins: true,
@@ -338,16 +321,15 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
     });
 
     const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
-    const blob = doc.output('blob');
-    
-    return { doc, fileName, blob };
+
+    return { blob, fileName, complianceChecks };
   };
 
-  const handlePreviewReport = () => {
+  const handlePreviewReport = async () => {
     try {
       setGenerating(true);
-      const result = generatePDF();
-      
+      const result = await generatePDF();
+
       const url = URL.createObjectURL(result.blob);
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
@@ -436,14 +418,14 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
                 <span className="font-semibold">COC Type:</span> {report.cocType}
               </div>
             )}
-            
+
             {report.installationSummary && (
               <div>
                 <h4 className="font-semibold mb-2">Installation Summary:</h4>
                 <p className="text-muted-foreground">{report.installationSummary}</p>
               </div>
             )}
-            
+
             {report.overallAssessment && (
               <div>
                 <h4 className="font-semibold mb-2">Overall Assessment:</h4>
@@ -463,7 +445,7 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       )}
 
       {/* Critical Failures */}
-      {((report.criticalFailures && report.criticalFailures.length > 0) || 
+      {((report.criticalFailures && report.criticalFailures.length > 0) ||
         (isLegacyFormat && report.violations && report.violations.length > 0)) && (
         <Card className="border-red-200">
           <CardHeader className="bg-red-50">
@@ -509,12 +491,6 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
                   <p className="font-medium">{report.administrativeDetails.physicalAddress}</p>
                 </div>
               )}
-              {report.administrativeDetails.erfNumber && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Erf / Lot No.</p>
-                  <p className="font-medium">{report.administrativeDetails.erfNumber}</p>
-                </div>
-              )}
               {report.administrativeDetails.registeredPerson && (
                 <div>
                   <p className="text-sm text-muted-foreground">Registered Person</p>
@@ -531,12 +507,6 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
                 <div>
                   <p className="text-sm text-muted-foreground">Type of Registration</p>
                   <p className="font-medium">{report.administrativeDetails.registrationType}</p>
-                </div>
-              )}
-              {report.administrativeDetails.registrationDate && (
-                <div>
-                  <p className="text-sm text-muted-foreground">Date of Registration</p>
-                  <p className="font-medium">{report.administrativeDetails.registrationDate}</p>
                 </div>
               )}
             </div>
@@ -559,16 +529,16 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
                       <Badge variant="outline">{item.section}</Badge>
                       <span className="text-sm text-muted-foreground">Clause {item.clause}</span>
                     </div>
-                    <Badge 
+                    <Badge
                       variant={item.status === 'Pass' ? 'default' : item.status === 'Fail' ? 'destructive' : 'secondary'}
                     >
                       {item.status}
                     </Badge>
                   </div>
-                  <p className="font-medium">{item.requirement}</p>
-                  <p className="text-sm text-muted-foreground mt-1">{item.finding}</p>
+                  <p className="text-sm mb-1"><span className="font-medium">Requirement:</span> {item.requirement}</p>
+                  <p className="text-sm"><span className="font-medium">Finding:</span> {item.finding}</p>
                   {item.notes && (
-                    <p className="text-sm text-muted-foreground mt-2 italic">{item.notes}</p>
+                    <p className="text-sm text-muted-foreground mt-2">{item.notes}</p>
                   )}
                 </div>
               ))}
@@ -584,15 +554,19 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
             <CardTitle>Recommendations</CardTitle>
           </CardHeader>
           <CardContent>
-            <ul className="list-disc pl-5 space-y-2">
+            <ul className="space-y-2">
               {report.recommendations.map((rec, index) => (
-                <li key={index} className="text-muted-foreground">{rec}</li>
+                <li key={index} className="flex items-start gap-2">
+                  <span className="font-medium text-primary">{index + 1}.</span>
+                  <span>{rec}</span>
+                </li>
               ))}
             </ul>
           </CardContent>
         </Card>
       )}
 
+      {/* Preview Dialog */}
       <DocumentPreviewDialog
         open={previewOpen}
         onOpenChange={(open) => {
@@ -606,7 +580,7 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
         fileName={previewFileName}
         onSaveToDocuments={handleSaveToDocuments}
         saveLocation="subsection"
-        contextName={subsectionName || "Subsection"}
+        contextName={subsectionName}
         isSaving={saving}
       />
     </div>
