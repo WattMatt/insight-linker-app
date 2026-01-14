@@ -82,7 +82,7 @@ You MUST include this field in your JSON response:
 - The Initial COC establishes the baseline compliance state for the installation
 - **CHECK ID:** COC-INIT-001
 
-### 2. SUPPLEMENTARY COC RULES
+### 2. SUPPLEMENTARY COC RULES (ONLY APPLY IF cocType = "Supplementary")
 A Supplementary COC may only be valid if:
   a) The Initial COC exists and is valid
   b) The Supplementary COC explicitly references the Initial COC number
@@ -90,18 +90,27 @@ A Supplementary COC may only be valid if:
 - Supplementary COCs extend or modify compliance but CANNOT replace the Initial COC
 - Use for: Additions, alterations, or modifications to existing installations
 - **CHECK ID:** COC-SUPP-001
+- **CRITICAL:** These rules ONLY apply to Supplementary COCs. Do NOT apply to Initial COCs.
 
-### 3. TEMPORARY COC RULES
+### 3. TEMPORARY COC RULES (ONLY APPLY IF cocType = "Temporary")
 - A Temporary COC may be issued for provisional compliance (e.g., pending remedial work)
 - Temporary COCs MUST reference the Initial COC number
 - Temporary COCs CANNOT establish compliance alone - they only provide temporary authorization
 - **CHECK ID:** COC-TEMP-001
+- **CRITICAL:** These rules ONLY apply to Temporary COCs. Do NOT apply to Initial COCs.
 
 ### 4. NON-COMPLIANCE CONDITIONS (Automatic FAIL)
+**⚠️ CRITICAL: The following conditions ONLY apply to Supplementary and Temporary COCs:**
 Premises are considered NON-COMPLIANT if:
   a) A Supplementary or Temporary COC exists WITHOUT a valid Initial COC
   b) A Supplementary or Temporary COC does NOT list the Initial COC reference number
 - **CHECK ID:** COC-VALID-001
+
+**⚠️ INITIAL COC EXCEPTION:**
+- An Initial COC does NOT need to reference another COC number
+- An Initial COC stands alone as the foundational compliance document
+- Do NOT flag "Missing Initial COC Reference" for an Initial COC
+- For Initial COCs, set COC-SUPP-001 and COC-TEMP-001 to "Not Applicable"
 
 **IMPORTANT: COCs DO NOT EXPIRE.** An Electrical Certificate of Compliance remains valid indefinitely once issued, unless:
 - The installation is altered (requiring a new Supplementary COC)
@@ -110,12 +119,14 @@ Premises are considered NON-COMPLIANT if:
 Do NOT report COC expiry as a failure condition.
 
 ### 5. COMPLIANCE VALIDATION FLOW (Execute in Order)
-- **Step 1:** Identify COC Type → Initial / Supplementary / Temporary
-- **Step 2:** If Initial → Validate that it exists and was properly issued
-- **Step 3:** If Supplementary/Temporary → Confirm Initial COC reference number exists
-- **Step 4:** Validate Initial COC reference is legitimate
-- **Step 5:** Confirm scope aligns with Initial COC baseline
+- **Step 1:** Identify COC Type → Initial / Supplementary / Temporary (based on CHECKBOX STATES)
+- **Step 2:** If Initial → This COC stands alone. Do NOT check for Initial COC reference. Set COC-SUPP-001 and COC-TEMP-001 to "Not Applicable"
+- **Step 3:** If Supplementary → MUST have Initial COC reference number. Fail COC-SUPP-001 if missing.
+- **Step 4:** If Temporary → MUST have Initial COC reference number. Fail COC-TEMP-001 if missing.
+- **Step 5:** Validate technical test results against SANS 10142-1 clauses
 - **Step 6:** Return compliance status with clause-specific reasoning
+
+**⚠️ ABSOLUTE RULE: Never flag "Missing Initial COC Reference" for an Initial COC. This check is ONLY for Supplementary and Temporary COCs.**
 
 ### 6. TRACEABILITY REQUIREMENTS
 Each compliance decision MUST cite:
