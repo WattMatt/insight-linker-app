@@ -23,46 +23,58 @@ and maintain audit trails for regulatory compliance.
 - These are typically arranged horizontally or vertically near the top of the certificate
 - The certificate issuer MUST tick/mark EXACTLY ONE of these boxes
 
-**⚠️ CRITICAL CHECKBOX READING PROCESS - FOLLOW EXACTLY:**
+## ⚠️⚠️⚠️ MANDATORY CHECKBOX ANALYSIS - DO THIS BEFORE ANYTHING ELSE ⚠️⚠️⚠️
 
-**STEP A - LOCATE ALL THREE CHECKBOXES:**
+**YOUR RESPONSE WILL BE REJECTED IF YOU DO NOT INCLUDE THE "checkboxStates" FIELD IN YOUR JSON OUTPUT.**
+
+**STEP 1 - LOCATE ALL THREE CHECKBOXES:**
 Look for the section (usually near the top) that shows checkboxes for:
 □ Initial    □ Supplementary    □ Temporary
 
-**STEP B - EXAMINE EACH CHECKBOX INDIVIDUALLY:**
-For EACH of the three checkboxes, determine its state:
-- MARKED/TICKED: Contains ☑, ✓, X, ✗, a filled box, handwritten tick, or ANY mark inside/over the box
-- EMPTY/UNMARKED: Shows only □, ☐, an empty box outline, or NO mark whatsoever
+**STEP 2 - EXAMINE EACH CHECKBOX ONE BY ONE:**
+For EACH checkbox, look ONLY at the box itself (not surrounding text):
+- **MARKED** = The box contains ANY mark: ☑, ✓, X, ✗, handwritten tick, filled box, or ink inside
+- **EMPTY** = The box shows ONLY the outline with NOTHING inside: □, ☐, empty square
 
-**STEP C - CRITICAL DISTINCTION (READ MULTIPLE TIMES):**
-⚡ A checkbox is MARKED if there is ANY ink/mark INSIDE or ON TOP OF the box
-⚡ A checkbox is EMPTY if it shows ONLY the box outline with NO additional marks
-⚡ The "Initial COC Reference" field being BLANK does NOT indicate Supplementary type
-⚡ A document with BLANK reference fields but "Initial" ticked is an INITIAL COC
-⚡ If "Supplementary" checkbox is EMPTY (just □), it is NOT Supplementary regardless of other content
+**STEP 3 - CRITICAL RULES (MEMORIZE THESE):**
+⚡ The word "Initial" next to an empty box does NOT mean Initial is marked
+⚡ The "Initial COC Reference" field being BLANK does NOT mean this is Supplementary
+⚡ An empty reference field + "Initial" checkbox MARKED = this IS an Initial COC
+⚡ Only ONE checkbox should be marked - if "Initial" is ticked, cocType = "Initial"
+⚡ If you see a tick/mark IN the Initial box, the COC is INITIAL regardless of other content
 
-**STEP D - REPORT WHAT YOU SEE:**
-In your response, you MUST include in extractionNotes:
-- "Initial checkbox: [MARKED/EMPTY] - describe what you see"
-- "Supplementary checkbox: [MARKED/EMPTY] - describe what you see"  
-- "Temporary checkbox: [MARKED/EMPTY] - describe what you see"
-Then set cocType based ONLY on which checkbox is MARKED.
+**STEP 4 - REQUIRED OUTPUT (MANDATORY):**
+You MUST include this field in your JSON response:
+\`\`\`
+"checkboxStates": {
+  "initialBox": "MARKED" or "EMPTY",
+  "initialBoxDescription": "what you actually see in/around this checkbox",
+  "supplementaryBox": "MARKED" or "EMPTY",
+  "supplementaryBoxDescription": "what you actually see in/around this checkbox",
+  "temporaryBox": "MARKED" or "EMPTY",
+  "temporaryBoxDescription": "what you actually see in/around this checkbox"
+}
+\`\`\`
 
-**COMMON AI VISION ERRORS - AVOID THESE:**
-1. ❌ Seeing an empty checkbox border as a mark (box outline ≠ tick mark)
+**STEP 5 - SET cocType BASED ON checkboxStates:**
+- If checkboxStates.initialBox === "MARKED" → cocType = "Initial"
+- If checkboxStates.supplementaryBox === "MARKED" → cocType = "Supplementary"
+- If checkboxStates.temporaryBox === "MARKED" → cocType = "Temporary"
+- If ALL boxes are EMPTY → cocType = null (FAIL)
+
+**COMMON AI VISION ERRORS - YOU MUST AVOID:**
+1. ❌ Seeing an empty checkbox border as a mark (the border itself is NOT a tick)
 2. ❌ Inferring type from blank reference fields (blank fields ≠ type indicator)
-3. ❌ Confusing "Initial COC Reference" field with "Initial" checkbox
+3. ❌ Confusing "Initial COC Reference" text field with "Initial" checkbox
 4. ❌ Assuming Supplementary because some optional fields are blank
-5. ❌ Mistaking the word "Initial" for a ticked Initial checkbox
+5. ❌ Reading the label "Initial" as the checkbox being ticked
 
-**DECISION RULE - SIMPLE:**
-- If ONLY "Initial" has a mark inside → cocType = "Initial"
-- If ONLY "Supplementary" has a mark inside → cocType = "Supplementary"
-- If ONLY "Temporary" has a mark inside → cocType = "Temporary"
-- If NO checkbox has a mark → cocType = null, FAIL
+**SELF-CHECK BEFORE RESPONDING:**
+- Did I include checkboxStates in my JSON? (REQUIRED)
+- Does my cocType match which checkbox I marked as "MARKED"?
+- If I said initialBox: "EMPTY" but cocType: "Initial" → I made an error, fix it!
 
 - If NO checkbox is ticked/marked, this is an AUTOMATIC FAIL - the certificate is incomplete
-- If cocType cannot be determined from a visible tick/mark, set cocType to null and FAIL
 
 ### 1. INITIAL COC REQUIREMENT (Baseline Rule)
 - Every premises MUST have a valid Initial COC issued
@@ -308,8 +320,16 @@ Scan the entire document and extract:
 
 \`\`\`json
 {
+  "checkboxStates": {
+    "initialBox": "MARKED | EMPTY (REQUIRED - what you see in the Initial checkbox)",
+    "initialBoxDescription": "string describing what you actually see in/around the Initial checkbox",
+    "supplementaryBox": "MARKED | EMPTY (REQUIRED - what you see in the Supplementary checkbox)",
+    "supplementaryBoxDescription": "string describing what you actually see in/around the Supplementary checkbox",
+    "temporaryBox": "MARKED | EMPTY (REQUIRED - what you see in the Temporary checkbox)",
+    "temporaryBoxDescription": "string describing what you actually see in/around the Temporary checkbox"
+  },
   "cocNumber": "string (EXACT value from certificate)",
-  "cocType": "Initial | Supplementary | Temporary | null (null if checkbox NOT ticked)",
+  "cocType": "Initial | Supplementary | Temporary | null (MUST MATCH which checkboxStates box is MARKED)",
   "cocTypeMarked": true | false,
   "cocFormat": "ECA | ECSA | DOL | Other",
   "evaluationDate": "YYYY-MM-DD (today's date)",
@@ -728,6 +748,78 @@ serve(async (req) => {
         jsonStr = jsonStr.replace(/,\s*([}\]])/g, '$1');
         
         validationResult = JSON.parse(jsonStr);
+        
+        // ===== CHECKBOX STATES VALIDATION & LOGGING =====
+        // Log the raw checkbox states for debugging
+        console.log('=== CHECKBOX STATES DEBUG ===');
+        console.log('Raw checkboxStates:', JSON.stringify(validationResult.checkboxStates, null, 2));
+        console.log('Reported cocType:', validationResult.cocType);
+        
+        // Validate checkbox states match cocType - SERVER-SIDE OVERRIDE if mismatch
+        if (validationResult.checkboxStates) {
+          const cs = validationResult.checkboxStates;
+          const initialMarked = cs.initialBox?.toUpperCase() === 'MARKED';
+          const supplementaryMarked = cs.supplementaryBox?.toUpperCase() === 'MARKED';
+          const temporaryMarked = cs.temporaryBox?.toUpperCase() === 'MARKED';
+          
+          console.log('Checkbox analysis:', {
+            initialMarked,
+            supplementaryMarked,
+            temporaryMarked,
+            initialDesc: cs.initialBoxDescription,
+            supplementaryDesc: cs.supplementaryBoxDescription,
+            temporaryDesc: cs.temporaryBoxDescription
+          });
+          
+          // Determine correct cocType from checkbox states
+          let correctCocType: string | null = null;
+          if (initialMarked && !supplementaryMarked && !temporaryMarked) {
+            correctCocType = 'Initial';
+          } else if (supplementaryMarked && !initialMarked && !temporaryMarked) {
+            correctCocType = 'Supplementary';
+          } else if (temporaryMarked && !initialMarked && !supplementaryMarked) {
+            correctCocType = 'Temporary';
+          } else if (!initialMarked && !supplementaryMarked && !temporaryMarked) {
+            correctCocType = null; // No checkbox marked
+          } else {
+            // Multiple marked - unusual, log and use AI's decision
+            console.log('WARNING: Multiple checkboxes reported as marked, using AI decision');
+            correctCocType = validationResult.cocType;
+          }
+          
+          // Check for mismatch and OVERRIDE if necessary
+          if (correctCocType !== validationResult.cocType) {
+            console.log('🚨 COC TYPE MISMATCH DETECTED!');
+            console.log(`   AI reported cocType: ${validationResult.cocType}`);
+            console.log(`   Checkbox states indicate: ${correctCocType}`);
+            console.log(`   OVERRIDING cocType to: ${correctCocType}`);
+            
+            // Add extraction note about the override
+            if (!validationResult.extractionNotes) {
+              validationResult.extractionNotes = [];
+            }
+            validationResult.extractionNotes.push(
+              `SERVER OVERRIDE: cocType changed from "${validationResult.cocType}" to "${correctCocType}" based on checkboxStates analysis`
+            );
+            
+            // Apply the override
+            validationResult.cocType = correctCocType;
+            
+            // Also update hierarchyValidation if present
+            if (validationResult.hierarchyValidation) {
+              validationResult.hierarchyValidation.cocTypeIdentified = correctCocType;
+            }
+          } else {
+            console.log('✓ cocType matches checkboxStates - no override needed');
+          }
+        } else {
+          console.log('⚠️ WARNING: checkboxStates field missing from AI response');
+          if (!validationResult.extractionNotes) {
+            validationResult.extractionNotes = [];
+          }
+          validationResult.extractionNotes.push('WARNING: AI did not provide checkboxStates field');
+        }
+        // ===== END CHECKBOX STATES VALIDATION =====
         
         // Validate required fields
         if (!validationResult.overallStatus) {
