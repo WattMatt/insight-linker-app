@@ -2415,20 +2415,28 @@ const SubsectionDetail = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
                 {(() => {
-                  // Get document URLs from the supabaseDocuments state
-                  const getDocumentUrl = (docId: string): string | null => {
+                  // Get document info from the supabaseDocuments state
+                  const getDocumentInfo = (docId: string) => {
                     const doc = supabaseDocuments.find(d => d.id === docId);
-                    return doc?.file_url || null;
+                    return {
+                      fileUrl: doc?.file_url || null,
+                      cocType: doc?.coc_type || null,
+                      cocNumber: doc?.coc_number || null
+                    };
                   };
                   
                   const validationsList = Object.entries(cocValidations)
-                    .map(([docId, validation]: [string, any]) => ({
-                      docId,
-                      status: validation?.status,
-                      cocType: validation?.report_data?.coc_type || 'Unknown',
-                      cocNumber: validation?.report_data?.coc_number || 'N/A',
-                      fileUrl: getDocumentUrl(docId)
-                    }))
+                    .map(([docId, validation]: [string, any]) => {
+                      const docInfo = getDocumentInfo(docId);
+                      return {
+                        docId,
+                        status: validation?.status,
+                        // Try report_data first (camelCase), then document fields (snake_case)
+                        cocType: validation?.report_data?.cocType || validation?.report_data?.coc_type || docInfo.cocType || 'Unknown',
+                        cocNumber: validation?.report_data?.cocNumber || validation?.report_data?.coc_number || docInfo.cocNumber || 'N/A',
+                        fileUrl: docInfo.fileUrl
+                      };
+                    })
                     .sort((a, b) => {
                       // Sort: Initial first, then Supplementary, then others
                       const typeOrder = (type: string) => {
