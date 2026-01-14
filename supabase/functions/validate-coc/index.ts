@@ -779,8 +779,7 @@ serve(async (req) => {
 
     // CRITICAL: Update the DOCUMENT with extracted COC details (per-document data)
     // This ensures each document retains its own extracted data
-    // NOTE: We do NOT update coc_type here - the user has already approved it via COCPreviewApproval
-    // The validation engine may incorrectly detect the COC type, so we trust the user's approval
+    // Now also syncs coc_type from AI extraction to ensure consistency
     const documentUpdateData: any = {};
     if (validationResult.cocNumber) {
       documentUpdateData.coc_number = validationResult.cocNumber;
@@ -788,8 +787,11 @@ serve(async (req) => {
     if (validationResult.cocIssueDate) {
       documentUpdateData.coc_issue_date = validationResult.cocIssueDate;
     }
-    // REMOVED: coc_type update - user-approved value should NOT be overwritten by validation
-    // The coc_type is set during extraction approval in handleApproveAndVerify
+    // Sync coc_type from AI extraction - this ensures the stored type matches what's on the certificate
+    if (validationResult.cocType) {
+      documentUpdateData.coc_type = validationResult.cocType;
+      console.log('Syncing coc_type from AI extraction:', validationResult.cocType);
+    }
     documentUpdateData.coc_status = mappedDocumentStatus;
 
     if (Object.keys(documentUpdateData).length > 0) {
