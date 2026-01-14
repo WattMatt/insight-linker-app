@@ -882,10 +882,12 @@ const SubsectionDetail = () => {
         }
 
         // Extract COC details from validation result with normalization
-        // IMPORTANT: Prefer user-approved data over validation result to avoid overwriting correct values
+        // CRITICAL: ALWAYS use user-approved cocType - NEVER fall back to validation result
+        // The validation engine may incorrectly detect the COC type, but the user has explicitly approved it
         const cocNumber = approvedData.cocNumber || result.cocNumber || result.administrativeDetails?.cocNumber || '';
         const cocIssueDate = approvedData.cocIssueDate || result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
-        const cocType = normalizeCocType(approvedData.cocType) || normalizeCocType(result.cocType);
+        // Use ONLY the approved cocType - do NOT fall back to validation result which may be wrong
+        const cocType = normalizeCocType(approvedData.cocType);
         
         // Update document in DB with all extracted COC data
         const updateData: Record<string, string> = {};
