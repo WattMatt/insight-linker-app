@@ -23,14 +23,18 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 - READ EACH DIGIT EXTREMELY CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9, 5≠6
 - This is a UNIQUE identifier - each document has a DIFFERENT number
 
-### 2. CERTIFICATE TYPE (CRITICAL - MUST CHECK IF CHECKBOX IS EXPLICITLY MARKED)
-📍 LOCATION: Near certificate number or in header area
-- Look for EXPLICIT checkboxes ☐ ☑ or marked boxes indicating:
-  a) "Initial Certificate" - First/original COC for installation
-  b) "Supplementary Certificate" - Additional work on existing installation
-  c) "Temporary Certificate" - Provisional compliance, time-limited
-- **CRITICAL: If NO checkbox is visibly marked/checked/ticked, return "Unknown"**
-- Do NOT assume "Initial" if nothing is marked - this is a validation failure
+### 2. CERTIFICATE TYPE (CRITICAL - CHECKBOX VERIFICATION REQUIRED)
+📍 LOCATION: Near certificate number or in header area - boxes labeled "Initial", "Supplementary", "Certificate"
+- There are THREE checkboxes: "Initial" / "Supplementary" / "Certificate"
+- You MUST identify which checkbox has a VISIBLE TICK/CHECK MARK (☑, ✓, X, or filled box)
+- RULES FOR DETERMINING TYPE:
+  a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
+  b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
+  c) If BOTH "Initial" and "Supplementary" are empty but "Certificate" is marked → return "Initial"
+  d) If NO checkbox has a visible mark/tick/check → return "Unknown"
+  e) If you cannot clearly see the checkboxes → return "Unknown"
+- **NEVER ASSUME "Initial" - if you're not 100% certain you see a tick mark, return "Unknown"**
+- **"Unknown" is the SAFE default - it's better to say Unknown than guess wrong**
 - IF SUPPLEMENTARY: MUST find reference to Initial COC number
 - IF TEMPORARY: Look for expiry date or validity period
 
@@ -315,14 +319,17 @@ Use EXTREME care when reading numbers and dates.
 - READ EACH DIGIT VERY CAREFULLY: 0≠6≠8, 1≠7, 2≠3
 - Common format: "ECA 1738009" or just "1738009"
 
-### PRIORITY 2: Certificate Type (CRITICAL - MUST CHECK IF CHECKBOX IS MARKED)
-📍 Near certificate number or in header area
-- Look for EXPLICIT checkboxes ☐ ☑ or marked boxes:
-  a) "Initial" or "Initial Certificate" - First COC for installation
-  b) "Supplementary" or "Supplementary Certificate" - Additional work referencing Initial
-  c) "Temporary" or "Temporary Certificate" - Provisional compliance with expiry
-- **CRITICAL: If NO checkbox is visibly marked/checked/ticked, return "Unknown"**
-- Do NOT assume "Initial" if nothing is marked - this is a validation failure
+### PRIORITY 2: Certificate Type (CRITICAL - CHECKBOX VERIFICATION REQUIRED)
+📍 Near certificate number - boxes labeled "Initial", "Supplementary", "Certificate"
+- There are THREE checkboxes in a row: "Initial" / "Supplementary" / "Certificate"
+- You MUST identify which checkbox has a VISIBLE TICK/CHECK MARK (☑, ✓, X, or filled box)
+- RULES FOR DETERMINING TYPE:
+  a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
+  b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
+  c) If you see "Temporary" checkbox marked → return "Temporary"
+  d) If NO checkbox has a visible mark/tick/check → return "Unknown"
+  e) If you cannot clearly see the checkboxes → return "Unknown"
+- **NEVER ASSUME "Initial" by default - "Unknown" is the safe choice if unsure**
 - IF SUPPLEMENTARY: You MUST find the Initial COC number it references
 - IF TEMPORARY: Look for expiry date and the Initial COC it references
 
@@ -530,6 +537,42 @@ function parseAndValidateDate(rawDate: string): string | null {
   }
   
   return null;
+}
+
+// Normalize and validate COC type - default to "Unknown" if not explicitly confirmed
+function normalizeCocType(cocType: string | undefined | null): string {
+  if (!cocType) return 'Unknown';
+  
+  const normalized = cocType.toLowerCase().trim();
+  
+  // Only return "Initial" if it's explicitly confirmed
+  if (normalized === 'initial' || normalized === 'initial certificate') {
+    return 'Initial';
+  }
+  
+  // Supplementary types
+  if (normalized.includes('supplementary')) {
+    return 'Supplementary';
+  }
+  
+  // Temporary types
+  if (normalized.includes('temporary')) {
+    return 'Temporary';
+  }
+  
+  // Explicitly unknown
+  if (normalized.includes('unknown') || normalized === '' || normalized === 'null') {
+    return 'Unknown';
+  }
+  
+  // If it contains "initial" but with qualifiers like "unknown" or question marks, treat as unknown
+  if (normalized.includes('initial') && (normalized.includes('?') || normalized.includes('unclear') || normalized.includes('not marked'))) {
+    return 'Unknown';
+  }
+  
+  // Default to Unknown for any unrecognized value
+  console.log('Unrecognized COC type, defaulting to Unknown:', cocType);
+  return 'Unknown';
 }
 
 // Check which required fields are missing
@@ -991,6 +1034,11 @@ serve(async (req) => {
         // Continue with PASS 1 results
       }
     }
+
+    // ============ Normalize COC Type ============
+    // CRITICAL: Ensure cocType defaults to "Unknown" if not explicitly confirmed
+    extractedData.cocType = normalizeCocType(extractedData.cocType);
+    console.log('Normalized COC Type:', extractedData.cocType);
 
     // ============ Final Confidence Assessment ============
     const finalMissing = getMissingRequiredFields(extractedData);
