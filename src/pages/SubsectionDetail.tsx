@@ -2414,18 +2414,77 @@ const SubsectionDetail = () => {
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
-                <Badge
-                  variant="outline"
-                  className={
-                    subsection.cocStatus === "Approved"
-                      ? "bg-green-500/10 text-green-500"
-                      : subsection.isCocRequired
-                      ? "bg-red-500/10 text-red-500"
-                      : "bg-gray-500/10 text-gray-500"
+                {(() => {
+                  const validationsList = Object.entries(cocValidations)
+                    .map(([docId, validation]: [string, any]) => ({
+                      docId,
+                      status: validation?.status,
+                      cocType: validation?.report_data?.coc_type || 'Unknown',
+                      cocNumber: validation?.report_data?.coc_number || 'N/A'
+                    }))
+                    .sort((a, b) => {
+                      // Sort: Initial first, then Supplementary, then others
+                      const typeOrder = (type: string) => {
+                        if (type?.toLowerCase() === 'initial') return 0;
+                        if (type?.toLowerCase() === 'supplementary') return 1;
+                        return 2;
+                      };
+                      return typeOrder(a.cocType) - typeOrder(b.cocType);
+                    });
+                  
+                  const hasMultiple = validationsList.length > 1;
+                  const hasAnyFailed = validationsList.some(v => v.status === 'Fail' || v.status === 'Failed');
+                  
+                  if (!subsection.isCocRequired) {
+                    return (
+                      <Badge variant="outline" className="bg-muted/50 text-muted-foreground">
+                        N/A
+                      </Badge>
+                    );
                   }
-                >
-                  {subsection.isCocRequired ? (subsection.cocStatus || "Missing") : "N/A"}
-                </Badge>
+                  
+                  if (hasMultiple) {
+                    return (
+                      <div className="space-y-1">
+                        {validationsList.map((v, idx) => (
+                          <div key={v.docId} className="flex items-center gap-2">
+                            <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
+                            <Badge 
+                              variant="outline" 
+                              className="text-xs px-1.5 py-0"
+                            >
+                              {v.cocType}
+                            </Badge>
+                            <Badge
+                              variant="outline"
+                              className={
+                                v.status === 'Pass' 
+                                  ? "bg-green-500/10 text-green-500 text-xs px-1.5 py-0"
+                                  : "bg-red-500/10 text-red-500 text-xs px-1.5 py-0"
+                              }
+                            >
+                              {v.status || 'Pending'}
+                            </Badge>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  
+                  // Single or no validations - show original badge
+                  return (
+                    <Badge
+                      variant="outline"
+                      className={
+                        subsection.cocStatus === "Approved" && !hasAnyFailed
+                          ? "bg-green-500/10 text-green-500"
+                          : "bg-red-500/10 text-red-500"
+                      }
+                    >
+                      {subsection.cocStatus || "Missing"}
+                    </Badge>
+                  );
+                })()}
               </div>
               <div>
                 <p className="text-sm text-muted-foreground mb-1">Metering Status</p>
