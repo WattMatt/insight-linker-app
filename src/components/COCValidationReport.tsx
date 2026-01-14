@@ -274,27 +274,37 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       });
     }
 
-    // Build document with cover page
-    const docDefinition = buildDocument({
-      title: 'Electrical COC Evaluation Report',
-      coverPage: {
-        title: 'Electrical COC Evaluation Report',
-        subtitle: report.cocType || 'SANS 10142-1 Compliance Validation',
-        siteName: report.cocNumber || 'Unknown',
-        reportType: 'COC Validation',
-        organizationName: 'Watson Mattheus Electrical Compliance',
-        reportDate: new Date(report.evaluationDate || validation.validated_at),
-        referenceNumber: report.cocNumber,
+    // Build compact document WITHOUT cover page - just a simple header
+    const reportDate = new Date(report.evaluationDate || validation.validated_at);
+    const docDefinition = {
+      pageSize: 'A4' as const,
+      pageMargins: [40, 60, 40, 50] as [number, number, number, number],
+      header: {
+        columns: [
+          { text: 'COC Validation Report', fontSize: 10, bold: true, margin: [40, 20, 0, 0] },
+          { text: `REF: ${report.cocNumber || 'N/A'}`, fontSize: 9, alignment: 'right' as const, margin: [0, 20, 40, 0] },
+        ],
       },
+      footer: (currentPage: number, pageCount: number) => ({
+        columns: [
+          { text: 'CONFIDENTIAL', fontSize: 8, color: COLORS.textMuted, margin: [40, 0, 0, 0] },
+          { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, alignment: 'center' as const },
+          { text: reportDate.toLocaleDateString(), fontSize: 8, alignment: 'right' as const, margin: [0, 0, 40, 0] },
+        ],
+        margin: [0, 10, 0, 0],
+      }),
       content,
-    });
+      defaultStyle: {
+        fontSize: 10,
+      },
+    };
 
     // Generate blob
     const blob = await generatePdfBlob(docDefinition);
 
     // Log compliance
     const complianceChecks = logComplianceCheck('COCValidationReport', {
-      hasCoverPage: true,
+      hasCoverPage: false,
       logoPlacement: false,
       standardMargins: true,
       typographyScale: true,
@@ -302,7 +312,7 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       pageHeaders: true,
       pageFooters: true,
       tableStyles: true,
-      pageBreaks: true,
+      pageBreaks: false,
     });
 
     const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
