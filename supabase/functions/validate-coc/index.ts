@@ -23,20 +23,43 @@ and maintain audit trails for regulatory compliance.
 - These are typically arranged horizontally or vertically near the top of the certificate
 - The certificate issuer MUST tick/mark EXACTLY ONE of these boxes
 
-**CHECKBOX READING INSTRUCTIONS (CRITICAL - READ CAREFULLY):**
-1. Look for checkboxes/boxes next to the words "Initial", "Supplementary", "Temporary"
-2. A TICKED/MARKED checkbox may appear as: ☑, ✓, X, ✗, a filled box, or handwritten tick inside/over the box
-3. An EMPTY/UNMARKED checkbox appears as: ☐, □, an empty box, or just the word without any mark
-4. ONLY report the type that has a VISIBLE MARK inside or on the checkbox
-5. If "Initial" checkbox has a tick/X/mark → cocType = "Initial"
-6. If "Supplementary" checkbox has a tick/X/mark → cocType = "Supplementary"  
-7. If "Temporary" checkbox has a tick/X/mark → cocType = "Temporary"
+**⚠️ CRITICAL CHECKBOX READING PROCESS - FOLLOW EXACTLY:**
 
-**COMMON MISREADING ERRORS TO AVOID:**
-- Do NOT confuse an empty checkbox border with a mark
-- Do NOT assume type based on other document content - ONLY use the checkbox state
-- If the "Initial" box is ticked, the document is Initial EVEN IF other fields are blank
-- The Initial COC Reference field being blank does NOT mean this is Supplementary
+**STEP A - LOCATE ALL THREE CHECKBOXES:**
+Look for the section (usually near the top) that shows checkboxes for:
+□ Initial    □ Supplementary    □ Temporary
+
+**STEP B - EXAMINE EACH CHECKBOX INDIVIDUALLY:**
+For EACH of the three checkboxes, determine its state:
+- MARKED/TICKED: Contains ☑, ✓, X, ✗, a filled box, handwritten tick, or ANY mark inside/over the box
+- EMPTY/UNMARKED: Shows only □, ☐, an empty box outline, or NO mark whatsoever
+
+**STEP C - CRITICAL DISTINCTION (READ MULTIPLE TIMES):**
+⚡ A checkbox is MARKED if there is ANY ink/mark INSIDE or ON TOP OF the box
+⚡ A checkbox is EMPTY if it shows ONLY the box outline with NO additional marks
+⚡ The "Initial COC Reference" field being BLANK does NOT indicate Supplementary type
+⚡ A document with BLANK reference fields but "Initial" ticked is an INITIAL COC
+⚡ If "Supplementary" checkbox is EMPTY (just □), it is NOT Supplementary regardless of other content
+
+**STEP D - REPORT WHAT YOU SEE:**
+In your response, you MUST include in extractionNotes:
+- "Initial checkbox: [MARKED/EMPTY] - describe what you see"
+- "Supplementary checkbox: [MARKED/EMPTY] - describe what you see"  
+- "Temporary checkbox: [MARKED/EMPTY] - describe what you see"
+Then set cocType based ONLY on which checkbox is MARKED.
+
+**COMMON AI VISION ERRORS - AVOID THESE:**
+1. ❌ Seeing an empty checkbox border as a mark (box outline ≠ tick mark)
+2. ❌ Inferring type from blank reference fields (blank fields ≠ type indicator)
+3. ❌ Confusing "Initial COC Reference" field with "Initial" checkbox
+4. ❌ Assuming Supplementary because some optional fields are blank
+5. ❌ Mistaking the word "Initial" for a ticked Initial checkbox
+
+**DECISION RULE - SIMPLE:**
+- If ONLY "Initial" has a mark inside → cocType = "Initial"
+- If ONLY "Supplementary" has a mark inside → cocType = "Supplementary"
+- If ONLY "Temporary" has a mark inside → cocType = "Temporary"
+- If NO checkbox has a mark → cocType = null, FAIL
 
 - If NO checkbox is ticked/marked, this is an AUTOMATIC FAIL - the certificate is incomplete
 - If cocType cannot be determined from a visible tick/mark, set cocType to null and FAIL
