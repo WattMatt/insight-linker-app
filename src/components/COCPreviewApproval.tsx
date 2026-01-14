@@ -901,10 +901,31 @@ export function COCPreviewApproval({
                           </Badge>
                         )}
                         {(editedData.cocType === 'Unknown' || editedData.cocType === 'Not Marked') && (
-                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
-                            <AlertTriangle className="h-3 w-3 mr-1" />
-                            Not Marked - COC type checkbox not ticked, will FAIL validation
-                          </Badge>
+                          <div className="space-y-2">
+                            <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
+                              <AlertTriangle className="h-3 w-3 mr-1" />
+                              Not Marked - COC type checkbox not ticked, will FAIL validation
+                            </Badge>
+                            {onExtract && (
+                              <div className="flex items-center gap-2 p-2 bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 rounded text-xs">
+                                <AlertTriangle className="h-4 w-4 text-amber-600 dark:text-amber-400 flex-shrink-0" />
+                                <span className="text-amber-800 dark:text-amber-200">
+                                  COC type not detected. Try re-extracting or manually select the correct type above.
+                                </span>
+                                <Button
+                                  type="button"
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={onExtract}
+                                  disabled={isProcessing}
+                                  className="ml-auto h-7 text-xs border-amber-300 hover:bg-amber-100 dark:border-amber-700 dark:hover:bg-amber-900/50"
+                                >
+                                  <RefreshCw className={`h-3 w-3 mr-1 ${isProcessing ? 'animate-spin' : ''}`} />
+                                  Re-extract
+                                </Button>
+                              </div>
+                            )}
+                          </div>
                         )}
                       </div>
                     )}
