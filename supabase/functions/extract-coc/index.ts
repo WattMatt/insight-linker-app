@@ -31,12 +31,22 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
   a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
   b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
   c) If BOTH "Initial" and "Supplementary" are empty but "Certificate" is marked → return "Initial"
-  d) If NO checkbox has a visible mark/tick/check → return "Unknown"
-  e) If you cannot clearly see the checkboxes → return "Unknown"
-- **NEVER ASSUME "Initial" - if you're not 100% certain you see a tick mark, return "Unknown"**
-- **"Unknown" is the SAFE default - it's better to say Unknown than guess wrong**
-- IF SUPPLEMENTARY: MUST find reference to Initial COC number
+  d) If NO checkbox has a visible mark/tick/check → return "Not Marked"
+  e) If you cannot clearly see the checkboxes → return "Not Marked"
+- **NEVER ASSUME "Initial" - if you're not 100% certain you see a tick mark, return "Not Marked"**
+- **"Not Marked" is the SAFE default - it's better to say Not Marked than guess wrong**
+- IF SUPPLEMENTARY: MUST find reference to Initial COC number (see below)
 - IF TEMPORARY: Look for expiry date or validity period
+
+### 2a. SUPPLEMENTARY CERTIFICATE FIELDS (CRITICAL FOR SUPPLEMENTARY TYPE)
+📍 LOCATION: DIRECTLY BELOW the certificate number area, BEFORE "Identification of the relevant electrical installation"
+- Look for fields labeled "Supplement No." and "Initial Certificate No." (also written as "Ini. Initial Certificate No.")
+- These fields appear in a ROW under the certificate type checkboxes
+- **"Supplement No."**: Contains a number like "1", "2", "3" indicating which supplement this is
+- **"Initial Certificate No."** (CRITICAL): Contains the ORIGINAL COC number this supplements (e.g., "ECA 1234567")
+  - This is DIFFERENT from the main certificate number - it's the PARENT certificate
+  - READ THIS CAREFULLY - it's the most important field for Supplementary COCs
+- IF the Supplementary checkbox is marked, you MUST extract BOTH of these fields
 
 ### 3. INSTALLATION IDENTIFICATION SECTION
 📍 LOCATION: Upper portion of page, labeled section
@@ -74,12 +84,12 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 \`\`\`json
 {
   "cocNumber": "EXACT certificate number from top right",
-  "cocType": "Initial | Supplementary | Temporary | Unknown (if no checkbox is marked)",
+  "cocType": "Initial | Supplementary | Temporary | Not Marked (if no checkbox is marked)",
   "cocIssueDate": "YYYY-MM-DD from registered person signature section",
   "supplementDetails": {
-    "supplementNo": "sequence number if supplementary (e.g., 1, 2, 3)",
-    "initialCertificateNo": "REQUIRED if Supplementary/Temporary - the original COC number this references",
-    "issuedOn": "date of initial certificate if supplementary"
+    "supplementNo": "EXTRACT from 'Supplement No.' field below checkboxes (e.g., 1, 2, 3)",
+    "initialCertificateNo": "EXTRACT from 'Initial Certificate No.' field - the PARENT COC number this supplements (CRITICAL!)",
+    "issuedOn": "date of initial certificate if visible"
   },
   "temporaryDetails": {
     "expiryDate": "YYYY-MM-DD if temporary certificate",
@@ -327,11 +337,20 @@ Use EXTREME care when reading numbers and dates.
   a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
   b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
   c) If you see "Temporary" checkbox marked → return "Temporary"
-  d) If NO checkbox has a visible mark/tick/check → return "Unknown"
-  e) If you cannot clearly see the checkboxes → return "Unknown"
-- **NEVER ASSUME "Initial" by default - "Unknown" is the safe choice if unsure**
+  d) If NO checkbox has a visible mark/tick/check → return "Not Marked"
+  e) If you cannot clearly see the checkboxes → return "Not Marked"
+- **NEVER ASSUME "Initial" by default - "Not Marked" is the safe choice if unsure**
 - IF SUPPLEMENTARY: You MUST find the Initial COC number it references
 - IF TEMPORARY: Look for expiry date and the Initial COC it references
+
+### PRIORITY 2a: SUPPLEMENTARY CERTIFICATE FIELDS (EXTRACT IF SUPPLEMENTARY)
+📍 LOCATION: DIRECTLY BELOW certificate number, ABOVE "Identification of the relevant electrical installation"
+- **"Supplement No."**: Look for field labeled "Supplement No." - contains "1", "2", or "3"
+- **"Initial Certificate No."** (CRITICAL): Look for field labeled "Ini. Initial Certificate No." or "Initial Certificate No."
+  - This contains the ORIGINAL/PARENT COC number (e.g., "ECA 1234567")
+  - This is NOT the same as the main certificate number at the top
+  - This tells which certificate is being supplemented
+- BOTH fields are positioned in a row just below the Initial/Supplementary checkboxes
 
 ### PRIORITY 3: Issue Date (cocIssueDate) 
 📍 PAGE 1 - Declaration section, date next to registered person's signature
@@ -354,11 +373,11 @@ Use EXTREME care when reading numbers and dates.
 \`\`\`json
 {
   "cocNumber": "string - CERTIFICATE NUMBER FROM TOP RIGHT",
-  "cocType": "Initial | Supplementary | Temporary | Unknown (if no checkbox is marked)",
+  "cocType": "Initial | Supplementary | Temporary | Not Marked (if no checkbox is marked)",
   "cocIssueDate": "YYYY-MM-DD",
   "supplementDetails": {
-    "supplementNo": "sequence number if supplementary (1, 2, 3) or null",
-    "initialCertificateNo": "REQUIRED if Supplementary/Temporary - original COC number or null",
+    "supplementNo": "LOOK FOR 'Supplement No.' field below checkboxes - extract the number (1, 2, 3)",
+    "initialCertificateNo": "CRITICAL: Look for 'Initial Certificate No.' or 'Ini. Initial Certificate No.' field - this is the PARENT COC number",
     "issuedOn": "date of initial certificate or null"
   },
   "temporaryDetails": {
