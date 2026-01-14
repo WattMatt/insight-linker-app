@@ -128,118 +128,64 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
   const generatePDF = async (): Promise<{ blob: Blob; fileName: string; complianceChecks: PDFComplianceCheck }> => {
     const content: any[] = [];
 
-    // ===== EXECUTIVE SUMMARY PAGE =====
+    // ===== VALIDATION STATUS & SUMMARY (Combined on one page) =====
     content.push(createSectionHeader('Validation Status', 'primary'));
     
-    // Status display
+    // Compact status display with COC Type inline
     content.push({
       columns: [
         {
+          width: 'auto',
           text: (status || 'UNKNOWN').toUpperCase(),
-          fontSize: 24,
+          fontSize: 20,
           bold: true,
           color: status?.toLowerCase() === 'pass' ? COLORS.success :
                  status?.toLowerCase() === 'fail' ? COLORS.error :
                  status?.toLowerCase() === 'incomplete' ? COLORS.warning : COLORS.textMuted,
         },
-        createStatusBadge(status || 'Unknown', getStatusType(status || '')),
+        { width: 20, text: '' },
+        report.cocType ? {
+          width: 'auto',
+          text: `COC Type: ${report.cocType}`,
+          fontSize: 10,
+          margin: [0, 6, 0, 0],
+        } : { text: '' },
       ],
-      margin: [0, 0, 0, 15],
+      margin: [0, 0, 0, 12],
     });
 
-    // COC Type
-    if (report.cocType) {
-      content.push({
-        columns: [
-          { text: 'COC Type:', bold: true, width: 80 },
-          { text: report.cocType },
-        ],
-        margin: [0, 0, 0, 10],
-      });
-    }
-
-    // Installation Summary
+    // Installation Summary (compact)
     if (report.installationSummary) {
-      content.push(createSectionHeader('Installation Summary'));
       content.push({
-        text: report.installationSummary,
-        fontSize: 10,
-        color: COLORS.textSecondary,
-        margin: [0, 0, 0, 15],
+        text: [
+          { text: 'Installation Summary: ', bold: true, fontSize: 10 },
+          { text: report.installationSummary, fontSize: 10, color: COLORS.textSecondary },
+        ],
+        margin: [0, 0, 0, 8],
       });
     }
 
-    // Overall Assessment
+    // Overall Assessment (compact)
     if (report.overallAssessment) {
-      content.push(createSectionHeader('Overall Assessment'));
       content.push({
-        text: report.overallAssessment,
-        fontSize: 10,
-        color: COLORS.textSecondary,
-        margin: [0, 0, 0, 15],
+        text: [
+          { text: 'Assessment: ', bold: true, fontSize: 10 },
+          { text: report.overallAssessment, fontSize: 10, color: COLORS.textSecondary },
+        ],
+        margin: [0, 0, 0, 12],
       });
     }
 
-    // ===== CRITICAL FAILURES =====
-    const failures = report.criticalFailures || report.violations || [];
-    if (failures.length > 0) {
-      content.push({ text: '', pageBreak: 'before' });
-      content.push(createSectionHeader(`Critical Failures (${failures.length})`, 'primary'));
-
-      failures.forEach((failure: any, index: number) => {
-        content.push({
-          table: {
-            widths: ['*'],
-            body: [[{
-              stack: [
-                {
-                  text: `${index + 1}. ${failure.clause || 'Clause ' + (index + 1)}`,
-                  bold: true,
-                  fontSize: 11,
-                  color: COLORS.error,
-                },
-                {
-                  text: failure.description,
-                  fontSize: 10,
-                  margin: [0, 5, 0, 5],
-                },
-                {
-                  columns: [
-                    { text: 'Reason:', bold: true, width: 50, fontSize: 9 },
-                    { text: failure.reason || failure.evidence || 'Not specified', fontSize: 9 },
-                  ],
-                },
-              ],
-            }]],
-          },
-          layout: {
-            hLineWidth: () => 0.5,
-            vLineWidth: () => 0,
-            hLineColor: () => COLORS.error,
-            paddingLeft: () => 10,
-            paddingRight: () => 10,
-            paddingTop: () => 8,
-            paddingBottom: () => 8,
-            fillColor: () => '#fef2f2', // Light red background
-          },
-          margin: [0, 0, 0, 10],
-        });
-      });
-    }
-
-    // ===== ADMINISTRATIVE DETAILS =====
+    // ===== ADMINISTRATIVE DETAILS (inline, no page break) =====
     if (report.administrativeDetails) {
-      content.push({ text: '', pageBreak: 'before' });
-      content.push(createSectionHeader('Administrative Completeness', 'primary'));
+      content.push(createSectionHeader('Administrative Details', 'secondary'));
 
       const details = report.administrativeDetails;
       const adminData: [string, string][] = [
         ['Physical Address', details.physicalAddress || 'Not Found'],
-        ['Erf / Lot No.', details.erfNumber || 'Not Found'],
         ['Registered Person', details.registeredPerson || 'Not Found'],
         ['Registration Number', details.registrationNumber || 'Not Found'],
         ['Type of Registration', details.registrationType || 'Not Found'],
-        ['Date of Registration', details.registrationDate || 'Not Found'],
       ].filter(([_, value]) => {
         const lowerValue = value.toLowerCase();
         return !lowerValue.includes('not found') &&
@@ -253,20 +199,19 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       }
     }
 
-    // ===== TECHNICAL EVALUATION =====
+    // ===== TECHNICAL EVALUATION (compact table, no page break unless needed) =====
     if (report.technicalEvaluation && report.technicalEvaluation.length > 0) {
-      content.push({ text: '', pageBreak: 'before' });
-      content.push(createSectionHeader('Technical Evaluation', 'primary'));
+      content.push(createSectionHeader('Technical Evaluation', 'secondary'));
 
       content.push(createDataTable(
         [
-          { header: 'Section', field: 'section', width: 80 },
+          { header: 'Section', field: 'section', width: 70 },
           { header: 'Requirement', field: 'requirement', width: '*' },
           { header: 'Finding', field: 'finding', width: '*' },
-          { header: 'Status', field: 'status', width: 60, alignment: 'center' },
+          { header: 'Status', field: 'status', width: 50, alignment: 'center' },
         ],
         report.technicalEvaluation.map(item => ({
-          section: `${item.section}\nClause ${item.clause}`,
+          section: item.section,
           requirement: item.requirement,
           finding: item.finding,
           status: item.status,
@@ -274,18 +219,58 @@ export function COCValidationReport({ validation, subsectionName }: COCValidatio
       ));
     }
 
-    // ===== RECOMMENDATIONS =====
+    // ===== CRITICAL FAILURES (only if exists, with alert styling) =====
+    const failures = report.criticalFailures || report.violations || [];
+    if (failures.length > 0) {
+      content.push(createSectionHeader(`Critical Failures (${failures.length})`, 'primary'));
+
+      // Compact failure list
+      const failureRows = failures.map((failure: any, index: number) => [
+        { text: `${index + 1}`, fontSize: 9, alignment: 'center' as const },
+        { text: failure.clause || '-', fontSize: 9, bold: true, color: COLORS.error },
+        { text: failure.description, fontSize: 9 },
+        { text: failure.reason || failure.evidence || '-', fontSize: 9, color: COLORS.textSecondary },
+      ]);
+
+      content.push({
+        table: {
+          headerRows: 1,
+          widths: [25, 60, '*', '*'],
+          body: [
+            [
+              { text: '#', bold: true, fontSize: 9, fillColor: '#fef2f2' },
+              { text: 'Clause', bold: true, fontSize: 9, fillColor: '#fef2f2' },
+              { text: 'Description', bold: true, fontSize: 9, fillColor: '#fef2f2' },
+              { text: 'Reason', bold: true, fontSize: 9, fillColor: '#fef2f2' },
+            ],
+            ...failureRows,
+          ],
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => '#fecaca',
+          vLineColor: () => '#fecaca',
+          paddingLeft: () => 4,
+          paddingRight: () => 4,
+          paddingTop: () => 4,
+          paddingBottom: () => 4,
+        },
+        margin: [0, 0, 0, 12],
+      });
+    }
+
+    // ===== RECOMMENDATIONS (compact numbered list) =====
     if (report.recommendations && report.recommendations.length > 0) {
-      content.push({ text: '', pageBreak: 'before' });
-      content.push(createSectionHeader('Recommendations', 'primary'));
+      content.push(createSectionHeader('Recommendations', 'secondary'));
 
       content.push({
         ol: report.recommendations.map(rec => ({
           text: rec,
-          fontSize: 10,
-          margin: [0, 0, 0, 5],
+          fontSize: 9,
+          margin: [0, 0, 0, 4],
         })),
-        margin: [0, 0, 0, 15],
+        margin: [0, 0, 0, 10],
       });
     }
 
