@@ -11,7 +11,6 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
-import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
 
 interface Snag {
     id: string;
@@ -464,10 +463,6 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                             filteredCount={filteredSubsections.length}
                         />
                     </div>
-                    <BulkCOCReportSave 
-                        siteId={siteId}
-                        subsections={subsections.map(s => ({ id: s.id, name: s.name }))}
-                    />
                 </div>
             </div>
 
