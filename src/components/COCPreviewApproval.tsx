@@ -270,13 +270,22 @@ export function COCPreviewApproval({
   });
 
   // Sync when extractedData changes (e.g., after re-extraction)
+  // CRITICAL: Preserve user-selected cocType - don't overwrite with AI's detection
   useEffect(() => {
     if (extractedData) {
-      setEditedData(prev => ({
-        ...prev,
-        ...extractedData,
-        cocType: normalizeCocType(extractedData.cocType)
-      }));
+      setEditedData(prev => {
+        // Preserve user's manually selected COC type if it's a valid selection
+        // Only use AI's type if user hasn't set one or if prev.cocType is empty
+        const preserveUserCocType = prev.cocType && prev.cocType.trim() !== '';
+        const newCocType = preserveUserCocType ? prev.cocType : normalizeCocType(extractedData.cocType);
+        
+        return {
+          ...prev,
+          ...extractedData,
+          // CRITICAL: Always use preserved cocType to prevent AI from overwriting user selection
+          cocType: newCocType
+        };
+      });
     }
   }, [extractedData]);
 
