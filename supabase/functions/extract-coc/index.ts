@@ -665,8 +665,29 @@ async function callGeminiExtraction(
     throw { status: response.status, message: errorText };
   }
 
-  const data = await response.json();
-  return data.choices?.[0]?.message?.content;
+  // Read response text first to handle empty responses
+  const responseText = await response.text();
+  
+  if (!responseText || responseText.trim() === '') {
+    console.error('Gemini API returned empty response');
+    throw { status: 502, message: 'AI service returned empty response. Please try again.' };
+  }
+
+  let data;
+  try {
+    data = JSON.parse(responseText);
+  } catch (parseError) {
+    console.error('Failed to parse Gemini API response:', responseText.substring(0, 500));
+    throw { status: 502, message: 'Invalid response from AI service. Please try again.' };
+  }
+
+  const content = data.choices?.[0]?.message?.content;
+  if (!content) {
+    console.error('Gemini API response missing content:', JSON.stringify(data).substring(0, 500));
+    throw { status: 502, message: 'AI service did not return extracted data. Please try again.' };
+  }
+
+  return content;
 }
 
 serve(async (req) => {
