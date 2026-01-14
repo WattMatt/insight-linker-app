@@ -622,13 +622,15 @@ function parseAIResponse(content: string): any {
   }
 }
 
-// Call AI for extraction
+// Call AI for extraction - using gemini-2.5-flash which is fast and reliable for document extraction
 async function callGeminiExtraction(
   base64: string, 
   prompt: string, 
   apiKey: string,
-  model: string = 'google/gemini-3-pro-preview'
+  model: string = 'google/gemini-2.5-flash'
 ): Promise<any> {
+  console.log(`Calling AI with model: ${model}`);
+  
   const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
     method: 'POST',
     headers: {
@@ -655,13 +657,13 @@ async function callGeminiExtraction(
         }
       ],
       temperature: 0.1,
-      max_tokens: 8192,
+      max_tokens: 16384, // Increased for reliable responses
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    console.error('Gemini API error:', response.status, errorText);
+    console.error('AI API error:', response.status, errorText);
     throw { status: response.status, message: errorText };
   }
 
@@ -669,7 +671,7 @@ async function callGeminiExtraction(
   const responseText = await response.text();
   
   if (!responseText || responseText.trim() === '') {
-    console.error('Gemini API returned empty response');
+    console.error('AI API returned empty response');
     throw { status: 502, message: 'AI service returned empty response. Please try again.' };
   }
 
@@ -677,13 +679,22 @@ async function callGeminiExtraction(
   try {
     data = JSON.parse(responseText);
   } catch (parseError) {
-    console.error('Failed to parse Gemini API response:', responseText.substring(0, 500));
+    console.error('Failed to parse AI API response:', responseText.substring(0, 500));
     throw { status: 502, message: 'Invalid response from AI service. Please try again.' };
+  }
+
+  // Check for finish_reason: "length" which means the model ran out of tokens
+  const finishReason = data.choices?.[0]?.finish_reason;
+  if (finishReason === 'length') {
+    console.error('AI model hit token limit (finish_reason: length)');
+    throw { status: 502, message: 'AI response was truncated. Please try again or retry individual fields.' };
   }
 
   const content = data.choices?.[0]?.message?.content;
   if (!content) {
-    console.error('Gemini API response missing content:', JSON.stringify(data).substring(0, 500));
+    // Log more details about the response for debugging
+    console.error('AI API response missing content. finish_reason:', finishReason);
+    console.error('Response structure:', JSON.stringify(data).substring(0, 1000));
     throw { status: 502, message: 'AI service did not return extracted data. Please try again.' };
   }
 
@@ -743,7 +754,7 @@ serve(async (req) => {
     }
 
     console.log('Starting enhanced COC extraction for:', fileName);
-    console.log('Using model: google/gemini-3-pro-preview for best document analysis');
+    console.log('Using model: google/gemini-2.5-flash for reliable document analysis');
     
     // Download document
     let fileData: Blob;
