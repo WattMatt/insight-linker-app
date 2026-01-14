@@ -68,52 +68,62 @@ The COC Validation System is an AI-powered verification engine that:
 
 ### 2.1 High-Level Flow Diagram
 
-```
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  User Uploads   │───▶│  extract-coc    │───▶│  User Reviews   │
-│  COC Document   │    │  Edge Function  │    │  Extracted Data │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
-                                                       │
-                                                       ▼
-┌─────────────────┐    ┌─────────────────┐    ┌─────────────────┐
-│  View Report    │◀───│  validate-coc   │◀───│  User Approves  │
-│  & Save PDF     │    │  Edge Function  │    │  & Validates    │
-└─────────────────┘    └─────────────────┘    └─────────────────┘
+```mermaid
+graph TD
+    A[Upload Document] --> B{Step 1: Triage}
+    B -- Legible --> C[Step 2: Contextual Extraction]
+    B -- Illegible --> A
+    C --> D[Step 3: Discrepancy Analysis]
+    D --> E[Step 4: User Review & Approval]
+    E --> F[Step 5: SANS Validation Engine]
+    F --> G[Step 6: Hierarchy & Linking]
+    G --> H[Step 7: Outcome & Remediation]
+    H --> I[Step 8: Finalization & Notification]
 ```
 
 ### 2.2 Detailed Process Steps
 
-#### Step 1: Document Upload
-1. User navigates to Subsection Detail page
-2. User uploads COC PDF document to "Certificate of Compliance" category
-3. Document is stored in Supabase Storage (`documents` bucket)
-4. Document record created in `subsection_documents` table
+#### Step 1: Document Upload & Triage
+1. User uploads COC PDF to "Certificate of Compliance" category.
+2. System performs a basic legibility and orientation check.
+3. AI identifies if the document is a single-page or multi-page COC.
+4. Auto-rotates or prompts user if the scan quality is too low for OCR.
 
-#### Step 2: Data Extraction (`extract-coc`)
-1. User clicks "Extract & Verify" button
-2. System calls `extract-coc` edge function
-3. AI performs visual analysis using page-specific prompts:
-   - **Page 1**: Certificate details, registration, declarations
-   - **Page 2**: Test report, technical measurements
-4. Extracted data returned for user review
+#### Step 2: Contextual Extraction (`extract-coc`)
+1. AI extracts raw data from the document.
+2. System fetches context from the database (Current Subsection Address, Contractor Details, Previous COCs).
+3. AI uses this context to improve extraction accuracy (e.g., matching ambiguous handwriting to known addresses).
 
-#### Step 3: User Review & Approval
-1. User reviews extracted data in `COCPreviewApproval` component
-2. User can request re-extraction for specific fields
-3. User approves extraction results
-4. Approved data saved to database
+#### Step 3: Discrepancy Analysis
+1. System compares extracted data (Address, ID Number, Registration) against system records.
+2. Flag mismatches as "Warnings" in the review UI.
+3. Identify if the COC Number already exists in the system to prevent duplicates.
 
-#### Step 4: SANS Validation (`validate-coc`)
-1. System calls `validate-coc` edge function
-2. AI performs comprehensive SANS 10142-1:2020 validation
-3. Server-side post-processing applies business rules
-4. Results stored in `coc_validations` table
-5. Document and subsection records updated
+#### Step 4: User Review & Approval Loop
+1. User reviews data in the `COCPreviewApproval` UI.
+2. Warnings/Discrepancies are highlighted in yellow.
+3. User can manually correct fields or trigger a "Targeted Re-extraction".
+4. User clicks "Approve & Validate" to proceed.
 
-#### Step 5: Report Generation
-1. User views validation results in `COCValidationReport` component
-2. User can generate PDF report
-3. User can save report to document management system
+#### Step 5: SANS Validation Engine (`validate-coc`)
+1. AI executes the full SANS 10142-1 logic suite.
+2. Measurements are checked against physical constants and clause thresholds.
+3. Logic consistency check (e.g., if earth resistance is high, check if it matches the supply system type).
+
+#### Step 6: Hierarchy & Linking
+1. If "Supplementary" or "Temporary", system attempts to find the "Initial" COC in the same project/site.
+2. Establishes a database link between certificates.
+3. Validates that the Supplementary COC doesn't contradict the Initial COC's foundation.
+
+#### Step 7: Outcome & Remediation
+1. Overall "Pass" or "Fail" is assigned.
+2. For "Fail", specific "Remediation Steps" are generated per clause.
+3. Tasks automatically created for the contractor if integrated with the project management module.
+
+#### Step 8: Finalization & Notification
+1. Validation report is generated and archived.
+2. System updates the Subsection status to "Compliant" or "Non-Compliant".
+3. Notifications sent to relevant stakeholders (Client, Safety Officer, Contractor).
 
 ---
 
@@ -301,12 +311,16 @@ interface ValidationCheck {
 
 ### 4.5 Mandatory Administrative Checks
 
-| Check ID | Clause | Description |
-|----------|--------|-------------|
-| DOC-001 | 22 | Documentation & Certification Complete |
-| CERT-DATE-001 | Business Rule | Certificate Date Not Future-Dated |
-| COND-001 | 7.2 | Conductor Sizing Adequate |
 | OCP-001 | 8.3 | Overcurrent Protection Correct |
+
+### 4.6 Data Integrity & System Cross-Checks
+
+| Check ID | Description | Logic |
+|----------|-------------|-------|
+| SYS-ADDR-001 | Address Match | Extracted address must match subsection installation address (within 80% fuzzy match) |
+| SYS-CONT-001 | Contractor Match | Registered Person/Number should match an approved contractor in the system |
+| SYS-DUP-001 | Duplicate Check | COC Number must not already exist for a different subsection |
+| SYS-DATE-001 | Contextual Date | Test date should be within the project duration or before handover |
 
 ---
 
@@ -635,6 +649,21 @@ if (currentCocType === 'initial') {
     }
   }
 }
+
+### 10.3 Remediation & Notification Workflow
+
+1.  **Failure Triggers:**
+    - If `overallStatus` is "Fail", the system identifies all checks with `result: "Fail"`.
+    - `criticalFailures` are prioritized for immediate corrective action.
+
+2.  **Notification Logic:**
+    - **Contractor:** Receives an email with the remediation guide and a link to re-upload.
+    - **Site Manager:** Receives a summary of the safety-critical failures.
+
+3.  **Resolution Loop:**
+    - Document status is set to `rejected`.
+    - Subsection `is_compliant` remains `false`.
+    - System waits for a new document upload or a re-validation trigger after manual data correction.
 ```
 
 ---
@@ -718,6 +747,14 @@ const { data: validations } = await supabase
 | Insulation resistance = 0.2MΩ | INSUL-001 | Fail (Critical) |
 | RCD trips at 250ms (1×IΔn) | RCD-001 | Pass |
 | RCD trips at 400ms (1×IΔn) | RCD-001 | Fail |
+
+### 12.4 System Integration Tests
+
+| Test Case | Check ID | Expected Result |
+|-----------|----------|-----------------|
+| Extracted address "123 Main St" vs DB "123 Main Street" | SYS-ADDR-001 | Pass (Fuzzy Match) |
+| Extracted address "999 Wrong Rd" vs DB "123 Main St" | SYS-ADDR-001 | Fail (Warning) |
+| COC Number "ECA-100" already in DB for Subsection B | SYS-DUP-001 | Fail (Blocking) |
 
 ---
 
