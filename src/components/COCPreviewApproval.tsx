@@ -511,8 +511,10 @@ export function COCPreviewApproval({
   };
 
   // Validation: Check if minimum required fields are filled
-  const validateCompleteness = (): { isComplete: boolean; missingFields: string[] } => {
+  // Note: "Initial COC Reference" is NOT a blocking field - verification will catch it
+  const validateCompleteness = (): { isComplete: boolean; missingFields: string[]; warnings: string[] } => {
     const missing: string[] = [];
+    const warnings: string[] = [];
     
     // ALWAYS REQUIRED: Core Certificate Fields
     if (!editedData.cocNumber?.trim()) missing.push("COC Number");
@@ -527,27 +529,28 @@ export function COCPreviewApproval({
     if (!editedData.administrativeDetails?.registeredPerson?.trim()) missing.push("Registered Person");
     if (!editedData.administrativeDetails?.registrationNumber?.trim()) missing.push("Registration Number");
     
-    // CONDITIONAL: Supplementary/Temporary require Initial COC Reference
+    // WARNING ONLY: Supplementary/Temporary should have Initial COC Reference (verification will fail without it)
     if (editedData.cocType === 'Supplementary' || editedData.cocType === 'Temporary') {
       if (!editedData.supplementDetails?.initialCertificateNo?.trim()) {
-        missing.push("Initial COC Reference (required for " + editedData.cocType + ")");
+        warnings.push("Initial COC Reference (verification may fail for " + editedData.cocType + ")");
       }
     }
     
-    // CONDITIONAL: Temporary requires Expiry Date
+    // WARNING ONLY: Temporary should have Expiry Date (verification will flag this)
     if (editedData.cocType === 'Temporary') {
       if (!editedData.temporaryDetails?.expiryDate?.trim()) {
-        missing.push("Expiry Date (required for Temporary)");
+        warnings.push("Expiry Date (verification may fail for Temporary)");
       }
     }
     
     return {
       isComplete: missing.length === 0,
-      missingFields: missing
+      missingFields: missing,
+      warnings
     };
   };
 
-  const { isComplete, missingFields } = validateCompleteness();
+  const { isComplete, missingFields, warnings } = validateCompleteness();
 
   const handleApprove = () => {
     onApprove(editedData);
@@ -772,11 +775,37 @@ export function COCPreviewApproval({
               </Alert>
             )}
 
-            {hasExtractedData && isComplete && (
+            {hasExtractedData && warnings.length > 0 && (
+              <Alert className="border-amber-500/50 bg-amber-50 dark:bg-amber-950/20">
+                <AlertTriangle className="h-4 w-4 text-amber-600" />
+                <AlertDescription className="text-amber-800 dark:text-amber-200">
+                  <div className="space-y-2">
+                    <p className="font-semibold">Optional fields missing (verification may flag issues):</p>
+                    <ul className="list-disc list-inside text-sm">
+                      {warnings.map((warning, idx) => (
+                        <li key={idx}>{warning}</li>
+                      ))}
+                    </ul>
+                    <p className="text-xs mt-1">You can proceed, but verification will check these fields.</p>
+                  </div>
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {hasExtractedData && isComplete && warnings.length === 0 && (
               <Alert>
                 <CheckCircle2 className="h-4 w-4" />
                 <AlertDescription>
                   All required fields complete. Review and approve to verify.
+                </AlertDescription>
+              </Alert>
+            )}
+
+            {hasExtractedData && isComplete && warnings.length > 0 && (
+              <Alert>
+                <CheckCircle2 className="h-4 w-4" />
+                <AlertDescription>
+                  Required fields complete. You can approve now - verification will check optional fields.
                 </AlertDescription>
               </Alert>
             )}
