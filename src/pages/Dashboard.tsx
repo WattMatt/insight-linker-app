@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle, Plus, QrCode, FileText as TemplateIcon } from "lucide-react";
+import { Building2, Users, ClipboardCheck, Activity, CheckCircle, AlertTriangle, FileText, Layers, Shield, AlertCircle, Plus, QrCode, FileText as TemplateIcon, XCircle, FileCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
@@ -22,6 +22,11 @@ interface DashboardStats {
   closedSnags: number;
   cocCompliantCount: number;
   cocRequiredCount: number;
+  // COC Validation stats
+  totalCocValidations: number;
+  passedValidations: number;
+  failedValidations: number;
+  pendingValidations: number;
 }
 
 interface ActivityLog {
@@ -71,6 +76,10 @@ const Dashboard = () => {
     closedSnags: 0,
     cocCompliantCount: 0,
     cocRequiredCount: 0,
+    totalCocValidations: 0,
+    passedValidations: 0,
+    failedValidations: 0,
+    pendingValidations: 0,
   });
   const [activities, setActivities] = useState<ActivityLog[]>([]);
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
@@ -157,6 +166,18 @@ const Dashboard = () => {
         }
       });
       
+      // Calculate COC validation stats
+      const totalCocValidations = cocValidations.length;
+      const passedValidations = cocValidations.filter(v => 
+        v.status === 'Pass' || v.status === 'Passed' || v.status === 'Valid' || v.status === 'Approved'
+      ).length;
+      const failedValidations = cocValidations.filter(v => 
+        v.status === 'Fail' || v.status === 'Failed'
+      ).length;
+      const pendingValidations = cocValidations.filter(v => 
+        v.status === 'Pending' || v.status === 'In Review' || !v.status
+      ).length;
+      
       const cocRequiredCount = subsectionsData.filter(s => s.is_coc_required).length;
       // A subsection is only compliant if primary status is valid AND no failed validations
       const cocCompliantCount = subsectionsData.filter(s => {
@@ -177,6 +198,10 @@ const Dashboard = () => {
         closedSnags,
         cocCompliantCount,
         cocRequiredCount,
+        totalCocValidations,
+        passedValidations,
+        failedValidations,
+        pendingValidations,
       });
 
       setActivities(activityRes.data || []);
@@ -342,6 +367,97 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      {/* COC Validation Summary Widget */}
+      <Card className="glass-card border-none">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2">
+            <FileCheck className="h-5 w-5 text-primary" />
+            COC Validation Summary
+          </CardTitle>
+          <CardDescription>
+            Pass/fail counts for all COC document validations across sites
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {/* Total Validations */}
+            <div className="p-4 rounded-lg bg-muted/50 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <FileText className="h-5 w-5 text-muted-foreground" />
+              </div>
+              <div className="text-2xl font-bold">{stats.totalCocValidations}</div>
+              <p className="text-xs text-muted-foreground">Total Validations</p>
+            </div>
+            
+            {/* Passed */}
+            <div className="p-4 rounded-lg bg-green-500/10 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <CheckCircle className="h-5 w-5 text-green-500" />
+              </div>
+              <div className="text-2xl font-bold text-green-600 dark:text-green-400">{stats.passedValidations}</div>
+              <p className="text-xs text-muted-foreground">Passed</p>
+            </div>
+            
+            {/* Failed */}
+            <div className="p-4 rounded-lg bg-red-500/10 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <XCircle className="h-5 w-5 text-red-500" />
+              </div>
+              <div className="text-2xl font-bold text-red-600 dark:text-red-400">{stats.failedValidations}</div>
+              <p className="text-xs text-muted-foreground">Failed</p>
+            </div>
+            
+            {/* Pending */}
+            <div className="p-4 rounded-lg bg-yellow-500/10 text-center">
+              <div className="flex items-center justify-center gap-2 mb-2">
+                <AlertCircle className="h-5 w-5 text-yellow-500" />
+              </div>
+              <div className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">{stats.pendingValidations}</div>
+              <p className="text-xs text-muted-foreground">Pending</p>
+            </div>
+          </div>
+          
+          {/* Pass Rate Progress Bar */}
+          {stats.totalCocValidations > 0 && (
+            <div className="mt-4 pt-4 border-t">
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm font-medium">Validation Pass Rate</span>
+                <span className="text-sm font-bold text-green-600 dark:text-green-400">
+                  {Math.round((stats.passedValidations / stats.totalCocValidations) * 100)}%
+                </span>
+              </div>
+              <div className="relative h-3 bg-muted rounded-full overflow-hidden">
+                <div 
+                  className="absolute left-0 top-0 h-full bg-green-500 transition-all"
+                  style={{ width: `${(stats.passedValidations / stats.totalCocValidations) * 100}%` }}
+                />
+                <div 
+                  className="absolute top-0 h-full bg-red-500 transition-all"
+                  style={{ 
+                    left: `${(stats.passedValidations / stats.totalCocValidations) * 100}%`,
+                    width: `${(stats.failedValidations / stats.totalCocValidations) * 100}%` 
+                  }}
+                />
+              </div>
+              <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  Pass ({stats.passedValidations})
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-red-500"></span>
+                  Fail ({stats.failedValidations})
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
+                  Pending ({stats.pendingValidations})
+                </span>
+              </div>
+            </div>
+          )}
+        </CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* High-Risk Snags Tracker */}
