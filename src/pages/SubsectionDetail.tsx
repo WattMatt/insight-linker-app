@@ -2429,12 +2429,21 @@ const SubsectionDetail = () => {
                   const validationsList = Object.entries(cocValidations)
                     .map(([docId, validation]: [string, any]) => {
                       const docInfo = getDocumentInfo(docId);
+                      // Get both stored and AI-extracted types for comparison
+                      const storedType = docInfo.cocType;
+                      const extractedType = validation?.report_data?.cocType || validation?.report_data?.coc_type;
+                      // Prioritize document stored type (which should now be synced from validation)
+                      const displayType = storedType || extractedType || 'Unknown';
+                      const hasMismatch = storedType && extractedType && storedType !== extractedType;
+                      
                       return {
                         docId,
                         status: validation?.status,
-                        // Try report_data first (camelCase), then document fields (snake_case)
-                        cocType: validation?.report_data?.cocType || validation?.report_data?.coc_type || docInfo.cocType || 'Unknown',
-                        cocNumber: validation?.report_data?.cocNumber || validation?.report_data?.coc_number || docInfo.cocNumber || 'N/A',
+                        cocType: displayType,
+                        storedType,
+                        extractedType,
+                        hasMismatch,
+                        cocNumber: docInfo.cocNumber || validation?.report_data?.cocNumber || validation?.report_data?.coc_number || 'N/A',
                         fileUrl: docInfo.fileUrl
                       };
                     })
@@ -2467,9 +2476,12 @@ const SubsectionDetail = () => {
                             <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
                             <Badge 
                               variant="outline" 
-                              className="text-xs px-1.5 py-0"
+                              className={`text-xs px-1.5 py-0 ${v.hasMismatch ? 'border-yellow-500' : ''}`}
                             >
                               {v.cocType}
+                              {v.hasMismatch && (
+                                <span className="ml-1 text-yellow-500" title={`Stored: ${v.storedType}, AI detected: ${v.extractedType}`}>⚠️</span>
+                              )}
                             </Badge>
                             <span className="text-xs text-muted-foreground font-mono">
                               {v.cocNumber}
