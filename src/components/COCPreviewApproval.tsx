@@ -232,9 +232,10 @@ export function COCPreviewApproval({
   const normalizeCocType = (type?: string): string => {
     if (!type) return '';
     const normalized = type.toLowerCase().trim();
-    if (normalized.includes('initial')) return 'Initial';
+    if (normalized.includes('initial') && !normalized.includes('unknown')) return 'Initial';
     if (normalized.includes('supplementary')) return 'Supplementary';
     if (normalized.includes('temporary')) return 'Temporary';
+    if (normalized.includes('unknown') || normalized === '') return 'Unknown';
     return type; // Return original if no match
   };
 
@@ -871,6 +872,12 @@ export function COCPreviewApproval({
                             Temporary Certificate
                           </div>
                         </SelectItem>
+                        <SelectItem value="Unknown">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4 text-red-600" />
+                            Unknown (Not marked on document)
+                          </div>
+                        </SelectItem>
                       </SelectContent>
                     </Select>
                     {editedData.cocType && (
@@ -891,6 +898,12 @@ export function COCPreviewApproval({
                           <Badge className="bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300">
                             <Clock className="h-3 w-3 mr-1" />
                             Temporary - Time-limited, requires Initial COC
+                          </Badge>
+                        )}
+                        {editedData.cocType === 'Unknown' && (
+                          <Badge className="bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300">
+                            <AlertTriangle className="h-3 w-3 mr-1" />
+                            Unknown - COC type not marked, will FAIL validation
                           </Badge>
                         )}
                       </div>
