@@ -2415,12 +2415,19 @@ const SubsectionDetail = () => {
               <div>
                 <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
                 {(() => {
+                  // Get document URLs from the supabaseDocuments state
+                  const getDocumentUrl = (docId: string): string | null => {
+                    const doc = supabaseDocuments.find(d => d.id === docId);
+                    return doc?.file_url || null;
+                  };
+                  
                   const validationsList = Object.entries(cocValidations)
                     .map(([docId, validation]: [string, any]) => ({
                       docId,
                       status: validation?.status,
                       cocType: validation?.report_data?.coc_type || 'Unknown',
-                      cocNumber: validation?.report_data?.coc_number || 'N/A'
+                      cocNumber: validation?.report_data?.coc_number || 'N/A',
+                      fileUrl: getDocumentUrl(docId)
                     }))
                     .sort((a, b) => {
                       // Sort: Initial first, then Supplementary, then others
@@ -2445,7 +2452,7 @@ const SubsectionDetail = () => {
                   
                   if (hasMultiple) {
                     return (
-                      <div className="space-y-1">
+                      <div className="space-y-1.5">
                         {validationsList.map((v, idx) => (
                           <div key={v.docId} className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
@@ -2468,6 +2475,17 @@ const SubsectionDetail = () => {
                             >
                               {v.status || 'Pending'}
                             </Badge>
+                            {v.fileUrl && (
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                className="h-5 w-5"
+                                onClick={() => window.open(v.fileUrl!, '_blank')}
+                                title="View document"
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            )}
                           </div>
                         ))}
                       </div>
