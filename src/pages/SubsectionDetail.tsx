@@ -2447,7 +2447,7 @@ const SubsectionDetail = () => {
                     return (
                       <div className="space-y-1">
                         {validationsList.map((v, idx) => (
-                          <div key={v.docId} className="flex items-center gap-2">
+                          <div key={v.docId} className="flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
                             <Badge 
                               variant="outline" 
@@ -2455,6 +2455,9 @@ const SubsectionDetail = () => {
                             >
                               {v.cocType}
                             </Badge>
+                            <span className="text-xs text-muted-foreground font-mono">
+                              {v.cocNumber}
+                            </span>
                             <Badge
                               variant="outline"
                               className={
