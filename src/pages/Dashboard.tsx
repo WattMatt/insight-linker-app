@@ -94,7 +94,8 @@ const Dashboard = () => {
         supabaseSnagsRes,
         activityRes,
         eventsRes,
-        highRiskSnagsRes
+        highRiskSnagsRes,
+        cocValidationsRes
       ] = await Promise.all([
         supabase.from("clients").select("id", { count: "exact", head: true }),
         supabase.from("sites").select("id", { count: "exact", head: true }),
@@ -124,6 +125,8 @@ const Dashboard = () => {
           .in("risk_level", ["High", "Critical"])
           .order("created_at", { ascending: false })
           .limit(10),
+        // Fetch COC validations to check for failed supplementary validations
+        supabase.from("coc_validations").select("subsection_id, status"),
       ]);
 
       const totalClients = supabaseClientsRes.count || 0;
@@ -144,8 +147,23 @@ const Dashboard = () => {
       const closedSnags = supabaseSnagsRes.data?.filter(s => s.status === 'Closed' || s.status === 'Resolved').length || 0;
 
       const subsectionsData = supabaseSubsectionsRes.data || [];
+      const cocValidations = cocValidationsRes.data || [];
+      
+      // Build a set of subsection IDs that have at least one failed validation
+      const subsectionsWithFailedValidations = new Set<string>();
+      cocValidations.forEach(v => {
+        if (v.status === 'Fail' || v.status === 'Failed') {
+          subsectionsWithFailedValidations.add(v.subsection_id);
+        }
+      });
+      
       const cocRequiredCount = subsectionsData.filter(s => s.is_coc_required).length;
-      const cocCompliantCount = subsectionsData.filter(s => s.is_coc_required && s.coc_status === 'Valid').length;
+      // A subsection is only compliant if primary status is valid AND no failed validations
+      const cocCompliantCount = subsectionsData.filter(s => {
+        if (!s.is_coc_required) return false;
+        if (subsectionsWithFailedValidations.has(s.id)) return false;
+        return s.coc_status === 'Valid' || s.coc_status === 'Approved' || s.coc_status === 'Pass';
+      }).length;
 
       setStats({
         totalClients,

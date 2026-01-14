@@ -69,6 +69,35 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [snagCounts, setSnagCounts] = useState({ open: 0, inProgress: 0, closed: 0 });
   const [loading, setLoading] = useState(true);
+  const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
+
+  // Fetch COC validations to check for any failed supplementary validations
+  useEffect(() => {
+    const fetchCocValidations = async () => {
+      if (subsections.length === 0) return;
+      
+      const subsectionIds = subsections.map(s => s.id);
+      const { data, error } = await supabase
+        .from('coc_validations')
+        .select('subsection_id, status')
+        .in('subsection_id', subsectionIds);
+      
+      if (error) {
+        console.error("Error fetching COC validations:", error);
+        return;
+      }
+      
+      const failedSet = new Set<string>();
+      data?.forEach(validation => {
+        if (validation.status === 'Fail' || validation.status === 'Failed') {
+          failedSet.add(validation.subsection_id);
+        }
+      });
+      setFailedValidationsBySubsection(failedSet);
+    };
+    
+    fetchCocValidations();
+  }, [subsections]);
 
   // Calculate overall compliance score
   const calculateOverallScore = () => {
@@ -77,6 +106,11 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     let compliantCount = 0;
     
     subsections.forEach(sub => {
+      // Check if any COC validation has failed (including supplementary)
+      if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) {
+        return;
+      }
+      
       // COC Check
       if (sub.is_coc_required && 
           sub.coc_status !== 'Approved' && 
@@ -120,11 +154,13 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       { name: 'Snag Resolution', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-3))' },
     ];
     
-    // COC Compliance
+    // COC Compliance - must have approved primary status AND no failed validations
     const cocRequired = subsections.filter(s => s.is_coc_required);
-    const cocCompliant = cocRequired.filter(s => 
-      s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass'
-    );
+    const cocCompliant = cocRequired.filter(s => {
+      // If any validation failed, not compliant
+      if (failedValidationsBySubsection.has(s.id)) return false;
+      return s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass';
+    });
     categories[0].total = cocRequired.length;
     categories[0].compliant = cocCompliant.length;
     categories[0].score = cocRequired.length > 0 
@@ -351,6 +387,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
             <Progress value={overallScore} className="mt-4 h-3" />
             <p className="text-sm text-muted-foreground mt-2">
               {subsections.filter(s => {
+                // Check for failed validations (including supplementary)
+                if (s.is_coc_required && failedValidationsBySubsection.has(s.id)) return false;
                 if (s.is_coc_required && s.coc_status !== 'Approved' && s.coc_status !== 'Valid' && s.coc_status !== 'Pass') return false;
                 if (s.is_coc_required && s.metering_status === 'Missing') return false;
                 return true;
