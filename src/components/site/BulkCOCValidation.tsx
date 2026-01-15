@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,7 +15,8 @@ import {
   Loader2,
   FileCheck,
   AlertTriangle,
-  RefreshCw
+  RefreshCw,
+  StopCircle
 } from "lucide-react";
 
 interface ValidationResult {
@@ -29,13 +30,15 @@ interface ValidationResult {
   error?: string;
 }
 
-interface BulkValidationSummary {
-  total: number;
-  success: number;
-  failed: number;
-  skipped: number;
-  passed: number;
-  failedValidation: number;
+interface COCDocument {
+  subsectionId: string;
+  subsectionName: string;
+  documentId: string;
+  fileName: string;
+  fileUrl: string;
+  documentCocType: string | null;
+  subsectionCocType: string | null;
+  alreadyValidated: boolean;
 }
 
 interface BulkCOCValidationProps {
@@ -46,16 +49,127 @@ interface BulkCOCValidationProps {
 
 export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValidationProps) {
   const [isRunning, setIsRunning] = useState(false);
+  const [isStopping, setIsStopping] = useState(false);
   const [skipValidated, setSkipValidated] = useState(true);
   const [results, setResults] = useState<ValidationResult[]>([]);
-  const [summary, setSummary] = useState<BulkValidationSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [currentDoc, setCurrentDoc] = useState<string | null>(null);
+  const [progress, setProgress] = useState({ current: 0, total: 0 });
+  const [shouldStop, setShouldStop] = useState(false);
+
+  const fetchCOCDocuments = useCallback(async (): Promise<COCDocument[]> => {
+    // Get all subsections with COC documents for this site
+    const { data: subsections, error: subsectionsError } = await supabase
+      .from('subsections')
+      .select(`
+        id,
+        name,
+        coc_type,
+        subsection_documents!inner (
+          id,
+          file_name,
+          file_url,
+          coc_type,
+          category_id,
+          document_categories!inner (
+            name
+          )
+        )
+      `)
+      .eq('site_id', siteId);
+
+    if (subsectionsError) {
+      throw new Error(`Failed to fetch subsections: ${subsectionsError.message}`);
+    }
+
+    // Get existing validations
+    const { data: existingValidations } = await supabase
+      .from('coc_validations')
+      .select('document_id');
+
+    const validatedDocIds = new Set((existingValidations || []).map(v => v.document_id));
+
+    // Filter to only COC documents
+    const cocDocuments: COCDocument[] = [];
+
+    for (const subsection of subsections || []) {
+      for (const doc of (subsection.subsection_documents as any[]) || []) {
+        const categoryName = doc.document_categories?.name || '';
+        if (categoryName.toLowerCase().includes('coc') || categoryName.toLowerCase().includes('certificate')) {
+          // Skip validation report PDFs
+          if (doc.file_name.includes('COC_Validation_Report')) {
+            continue;
+          }
+          cocDocuments.push({
+            subsectionId: subsection.id,
+            subsectionName: subsection.name,
+            documentId: doc.id,
+            fileName: doc.file_name,
+            fileUrl: doc.file_url,
+            documentCocType: doc.coc_type,
+            subsectionCocType: subsection.coc_type,
+            alreadyValidated: validatedDocIds.has(doc.id),
+          });
+        }
+      }
+    }
+
+    return cocDocuments;
+  }, [siteId]);
+
+  const validateSingleDocument = async (doc: COCDocument): Promise<ValidationResult> => {
+    try {
+      const approvedCocType = doc.documentCocType || doc.subsectionCocType;
+
+      const response = await supabase.functions.invoke('validate-coc', {
+        body: {
+          documentId: doc.documentId,
+          documentUrl: doc.fileUrl,
+          subsectionId: doc.subsectionId,
+          approvedCocType: approvedCocType,
+        },
+      });
+
+      if (response.error) {
+        return {
+          subsectionId: doc.subsectionId,
+          subsectionName: doc.subsectionName,
+          documentId: doc.documentId,
+          fileName: doc.fileName,
+          status: 'failed',
+          error: response.error.message,
+        };
+      }
+
+      const validationResult = response.data;
+      return {
+        subsectionId: doc.subsectionId,
+        subsectionName: doc.subsectionName,
+        documentId: doc.documentId,
+        fileName: doc.fileName,
+        status: 'success',
+        validationStatus: validationResult.complianceStatus,
+        violationsCount: validationResult.violations?.length || 0,
+      };
+    } catch (err) {
+      return {
+        subsectionId: doc.subsectionId,
+        subsectionName: doc.subsectionName,
+        documentId: doc.documentId,
+        fileName: doc.fileName,
+        status: 'failed',
+        error: err instanceof Error ? err.message : 'Unknown error',
+      };
+    }
+  };
 
   const runBulkValidation = async () => {
     setIsRunning(true);
+    setIsStopping(false);
+    setShouldStop(false);
     setError(null);
     setResults([]);
-    setSummary(null);
+    setProgress({ current: 0, total: 0 });
 
     try {
       const { data: { session } } = await supabase.auth.getSession();
@@ -63,28 +177,89 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
         throw new Error('You must be logged in to run bulk validation');
       }
 
-      toast.info('Starting bulk COC validation...', { 
-        description: 'This may take several minutes depending on the number of documents.' 
-      });
+      toast.info('Fetching COC documents...'); 
 
-      const response = await supabase.functions.invoke('bulk-validate-coc', {
-        body: {
-          siteId,
-          skipValidated,
-        },
-      });
+      const allDocs = await fetchCOCDocuments();
+      
+      // Filter based on skipValidated option
+      const docsToValidate = skipValidated 
+        ? allDocs.filter(d => !d.alreadyValidated)
+        : allDocs;
+      
+      const skippedDocs = skipValidated 
+        ? allDocs.filter(d => d.alreadyValidated)
+        : [];
 
-      if (response.error) {
-        throw new Error(response.error.message || 'Bulk validation failed');
+      setProgress({ current: 0, total: docsToValidate.length });
+
+      if (docsToValidate.length === 0) {
+        toast.info('No documents to validate', { 
+          description: `All ${allDocs.length} COC documents have already been validated.` 
+        });
+        
+        // Add skipped results
+        const skippedResults: ValidationResult[] = skippedDocs.map(doc => ({
+          subsectionId: doc.subsectionId,
+          subsectionName: doc.subsectionName,
+          documentId: doc.documentId,
+          fileName: doc.fileName,
+          status: 'skipped' as const,
+          error: 'Already validated',
+        }));
+        setResults(skippedResults);
+        setIsRunning(false);
+        return;
       }
 
-      const data = response.data;
-      setResults(data.results || []);
-      setSummary(data.summary);
+      toast.info(`Starting validation of ${docsToValidate.length} documents...`);
 
-      const { summary: s } = data;
+      const allResults: ValidationResult[] = [];
+
+      // Add skipped results first
+      for (const doc of skippedDocs) {
+        allResults.push({
+          subsectionId: doc.subsectionId,
+          subsectionName: doc.subsectionName,
+          documentId: doc.documentId,
+          fileName: doc.fileName,
+          status: 'skipped',
+          error: 'Already validated',
+        });
+      }
+
+      // Process documents one at a time
+      for (let i = 0; i < docsToValidate.length; i++) {
+        // Check if user requested stop
+        if (shouldStop) {
+          toast.info('Validation stopped by user');
+          break;
+        }
+
+        const doc = docsToValidate[i];
+        setCurrentDoc(`${doc.subsectionName} - ${doc.fileName}`);
+        setProgress({ current: i + 1, total: docsToValidate.length });
+
+        const result = await validateSingleDocument(doc);
+        allResults.push(result);
+        setResults([...allResults]);
+
+        // Brief delay between documents to avoid rate limiting
+        if (i < docsToValidate.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+      }
+
+      setCurrentDoc(null);
+
+      // Calculate summary
+      const successCount = allResults.filter(r => r.status === 'success').length;
+      const failedCount = allResults.filter(r => r.status === 'failed').length;
+      const skippedCount = allResults.filter(r => r.status === 'skipped').length;
+      const passedCount = allResults.filter(r => r.validationStatus === 'Pass').length;
+      const failedValidationCount = allResults.filter(r => r.validationStatus === 'Fail').length;
+
       toast.success('Bulk validation complete!', {
-        description: `Processed ${s.total} documents: ${s.success} validated, ${s.skipped} skipped, ${s.failed} failed`,
+        description: `Processed ${successCount} documents: ${passedCount} passed, ${failedValidationCount} failed compliance, ${skippedCount} skipped, ${failedCount} errors`,
       });
 
       onComplete?.();
@@ -95,8 +270,26 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
       toast.error('Bulk validation failed', { description: errorMessage });
     } finally {
       setIsRunning(false);
+      setIsStopping(false);
+      setCurrentDoc(null);
     }
   };
+
+  const handleStop = () => {
+    setShouldStop(true);
+    setIsStopping(true);
+    toast.info('Stopping after current document...');
+  };
+
+  // Calculate summary from results
+  const summary = results.length > 0 ? {
+    total: results.length,
+    success: results.filter(r => r.status === 'success').length,
+    failed: results.filter(r => r.status === 'failed').length,
+    skipped: results.filter(r => r.status === 'skipped').length,
+    passed: results.filter(r => r.validationStatus === 'Pass').length,
+    failedValidation: results.filter(r => r.validationStatus === 'Fail').length,
+  } : null;
 
   const getStatusIcon = (result: ValidationResult) => {
     if (result.status === 'skipped') {
@@ -124,6 +317,8 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
     return <Badge variant="destructive">Fail ({result.violationsCount} issues)</Badge>;
   };
 
+  const progressPercent = progress.total > 0 ? (progress.current / progress.total) * 100 : 0;
+
   return (
     <Card>
       <CardHeader>
@@ -137,23 +332,36 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
               Validate all COC documents for {siteName} against SANS 10142-1:2020
             </CardDescription>
           </div>
-          <Button 
-            onClick={runBulkValidation} 
-            disabled={isRunning}
-            className="gap-2"
-          >
-            {isRunning ? (
-              <>
-                <Loader2 className="h-4 w-4 animate-spin" />
-                Validating...
-              </>
-            ) : (
-              <>
-                <PlayCircle className="h-4 w-4" />
-                Run Bulk Validation
-              </>
+          <div className="flex gap-2">
+            {isRunning && (
+              <Button 
+                variant="outline"
+                onClick={handleStop} 
+                disabled={isStopping}
+                className="gap-2"
+              >
+                <StopCircle className="h-4 w-4" />
+                {isStopping ? 'Stopping...' : 'Stop'}
+              </Button>
             )}
-          </Button>
+            <Button 
+              onClick={runBulkValidation} 
+              disabled={isRunning}
+              className="gap-2"
+            >
+              {isRunning ? (
+                <>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Validating...
+                </>
+              ) : (
+                <>
+                  <PlayCircle className="h-4 w-4" />
+                  Run Bulk Validation
+                </>
+              )}
+            </Button>
+          </div>
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -214,11 +422,16 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
         {/* Progress indicator when running */}
         {isRunning && (
           <div className="space-y-2">
-            <div className="flex items-center gap-2 text-sm text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Processing COC documents... This may take several minutes.
+            <div className="flex items-center justify-between text-sm">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Processing: {currentDoc || 'Starting...'}</span>
+              </div>
+              <span className="text-muted-foreground">
+                {progress.current} / {progress.total}
+              </span>
             </div>
-            <Progress value={undefined} className="w-full" />
+            <Progress value={progressPercent} className="w-full" />
           </div>
         )}
 
@@ -230,8 +443,9 @@ export function BulkCOCValidation({ siteId, siteName, onComplete }: BulkCOCValid
               <Button 
                 variant="ghost" 
                 size="sm" 
-                onClick={() => { setResults([]); setSummary(null); }}
+                onClick={() => { setResults([]); }}
                 className="gap-1"
+                disabled={isRunning}
               >
                 <RefreshCw className="h-3 w-3" />
                 Clear
