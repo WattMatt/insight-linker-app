@@ -812,6 +812,13 @@ serve(async (req) => {
   try {
     const { documentUrl, fileName, retryFields, documentId, subsectionId, forceReextract, userId } = await req.json();
     
+    console.log('Extract-COC request received:', { 
+      fileName, 
+      hasDocumentId: !!documentId, 
+      forceReextract: !!forceReextract,
+      retryFields: retryFields || 'none'
+    });
+    
     if (!documentUrl) {
       return new Response(
         JSON.stringify({ error: 'Missing required parameter: documentUrl' }),
@@ -998,12 +1005,14 @@ serve(async (req) => {
     }
 
     // ============ PASS 1: Full Extraction with Enhanced Prompt ============
-    console.log('PASS 1: Full extraction with enhanced prompts...');
+    // Use more accurate model for force re-extracts
+    const extractionModel = forceReextract ? 'google/gemini-3-pro-preview' : 'google/gemini-2.5-flash';
+    console.log(`PASS 1: Full extraction with enhanced prompts using ${extractionModel}...`);
     
     let extractedData: any = null;
     
     try {
-      const content = await callGeminiExtraction(base64, FULL_EXTRACTION_PROMPT, LOVABLE_API_KEY);
+      const content = await callGeminiExtraction(base64, FULL_EXTRACTION_PROMPT, LOVABLE_API_KEY, extractionModel);
       extractedData = parseAIResponse(content);
       
       if (!extractedData) {
@@ -1092,6 +1101,12 @@ serve(async (req) => {
     }
 
     // ============ Normalize COC Type ============
+    // Log raw checkbox states if returned by AI
+    if (extractedData.checkboxStates) {
+      console.log('Raw checkbox states from AI:', JSON.stringify(extractedData.checkboxStates));
+    }
+    console.log('Raw COC Type from AI before normalization:', extractedData.cocType);
+    
     // CRITICAL: Ensure cocType defaults to "Unknown" if not explicitly confirmed
     extractedData.cocType = normalizeCocType(extractedData.cocType);
     console.log('Normalized COC Type:', extractedData.cocType);
@@ -1127,7 +1142,7 @@ serve(async (req) => {
           subsection_id: subsectionId,
           extracted_data: extractedData,
           confidence: extractedData.confidence || 'medium',
-          extraction_method: 'google/gemini-3-pro-preview',
+          extraction_method: extractionModel,
           extraction_notes: extractedData.extractionNotes,
           extracted_at: new Date().toISOString(),
           extracted_by: userId || null
