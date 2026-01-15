@@ -655,14 +655,14 @@ function normalizeCocType(cocType: string | undefined | null): string {
   return 'Not Marked';
 }
 
-// Determine COC type from checkbox states - this is the source of truth
-// CRITICAL: The AI tends to hallucinate that "Initial" is marked when it's not.
-// We must be VERY skeptical of "Initial" claims and default to "Not Marked" when uncertain.
+// Determine COC type from checkbox states OR raw AI response
+// CRITICAL: If checkbox states are provided, use them as source of truth.
+// If not provided, trust the AI's rawCocType through normalization.
 function determineCocTypeFromCheckboxes(checkboxStates: any, rawCocType: string | undefined | null): string {
+  // If no checkbox states provided, use the raw cocType from AI (normalized)
   if (!checkboxStates) {
-    // No checkbox states provided - default to "Not Marked" since we can't verify
-    console.log('No checkbox states provided, defaulting to "Not Marked"');
-    return 'Not Marked';
+    console.log('No checkbox states provided, using raw AI cocType:', rawCocType);
+    return normalizeCocType(rawCocType);
   }
   
   const { initialBoxMarked, supplementaryBoxMarked, temporaryBoxMarked, certificateBoxMarked } = checkboxStates;
@@ -693,38 +693,16 @@ function determineCocTypeFromCheckboxes(checkboxStates: any, rawCocType: string 
     return 'Not Marked';
   }
   
-  // If multiple type boxes are marked, that's suspicious - return "Not Marked" with warning
+  // If multiple type boxes are marked, that's suspicious - use the first one found
   if (markedCount > 1) {
-    console.log('WARNING: Multiple type checkboxes marked, this is suspicious. Defaulting to "Not Marked"');
-    return 'Not Marked';
+    console.log('WARNING: Multiple type checkboxes marked, using first:', markedBoxes[0].name);
+    return markedBoxes[0].name;
   }
   
   // Exactly one box is marked - use it
   const markedBox = markedBoxes[0];
   console.log(`RESULT: Single checkbox marked → "${markedBox.name}"`);
-  
-  // Return based on which box is marked
-  if (supplementaryBoxMarked === true) {
-    return 'Supplementary';
-  }
-  if (temporaryBoxMarked === true) {
-    return 'Temporary';
-  }
-  if (initialBoxMarked === true) {
-    // For "Initial", we're skeptical because the AI often hallucinates this
-    // Check if the certificateBoxMarked is also true (which would confirm it's a real certificate)
-    if (certificateBoxMarked === true) {
-      console.log('Initial confirmed by Certificate checkbox');
-      return 'Initial';
-    }
-    // Without certificate confirmation, still accept but log the skepticism
-    console.log('Initial claimed but Certificate checkbox not marked - accepting with caution');
-    return 'Initial';
-  }
-  
-  // Fallback - this shouldn't happen but be safe
-  console.log('Unexpected state, defaulting to "Not Marked"');
-  return 'Not Marked';
+  return markedBox.name;
 }
 
 // Check which required fields are missing
