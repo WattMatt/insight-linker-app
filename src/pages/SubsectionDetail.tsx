@@ -111,8 +111,11 @@ const SubsectionDetail = () => {
   const [cocExtractions, setCocExtractions] = useState<Record<string, any>>({});
   const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
   const [reExtractingDocId, setReExtractingDocId] = useState<string | null>(null);
-  const [selectedValidation, setSelectedValidation] = useState<any>(null);
+  const [selectedValidationDocId, setSelectedValidationDocId] = useState<string | null>(null);
   const [validationReportOpen, setValidationReportOpen] = useState(false);
+  
+  // Derive selectedValidation from state to always get fresh data
+  const selectedValidation = selectedValidationDocId ? cocValidations[selectedValidationDocId] : null;
   const [deleteSubsectionDialogOpen, setDeleteSubsectionDialogOpen] = useState(false);
   const [cocPreviewData, setCocPreviewData] = useState<any>(null);
   const [showCocPreview, setShowCocPreview] = useState(false);
@@ -3239,7 +3242,7 @@ const SubsectionDetail = () => {
                                         size="sm"
                                         variant="ghost"
                                         onClick={() => {
-                                          setSelectedValidation(cocValidations[doc.id]);
+                                          setSelectedValidationDocId(doc.id);
                                           setValidationReportOpen(true);
                                         }}
                                         title="View full validation report"
