@@ -436,6 +436,13 @@ DO NOT assume Initial. Many COCs are Supplementary certificates.
   "cocNumber": "string - CERTIFICATE NUMBER FROM TOP RIGHT",
   "cocType": "Initial | Supplementary | Temporary | Not Marked (if no checkbox is marked)",
   "cocIssueDate": "YYYY-MM-DD",
+  "checkboxStates": {
+    "initialBoxMarked": "true ONLY if you see a DEFINITE tick/check mark INSIDE the Initial checkbox, otherwise false",
+    "supplementaryBoxMarked": "true ONLY if you see a DEFINITE tick/check mark INSIDE the Supplementary checkbox, otherwise false",
+    "temporaryBoxMarked": "true ONLY if you see a DEFINITE tick/check mark INSIDE the Temporary checkbox, otherwise false",
+    "certificateBoxMarked": "true ONLY if you see a DEFINITE tick/check mark INSIDE the Certificate checkbox, otherwise false",
+    "checkboxNotes": "Describe exactly what you see in the checkbox area - which boxes have marks, which are empty"
+  },
   "supplementDetails": {
     "supplementNo": "LOOK FOR 'Supplement No.' field below checkboxes - extract the number (1, 2, 3)",
     "initialCertificateNo": "CRITICAL: Look for 'Initial Certificate No.' or 'Ini. Initial Certificate No.' field - this is the PARENT COC number",
@@ -661,25 +668,44 @@ function normalizeCocType(cocType: string | undefined | null): string {
 function determineCocTypeFromCheckboxes(checkboxStates: any, rawCocType: string | undefined | null): string {
   // If no checkbox states provided, use the raw cocType from AI (normalized)
   if (!checkboxStates) {
-    console.log('No checkbox states provided, using raw AI cocType:', rawCocType);
+    console.log('WARNING: No checkbox states provided by AI, falling back to raw cocType:', rawCocType);
     return normalizeCocType(rawCocType);
   }
   
-  const { initialBoxMarked, supplementaryBoxMarked, temporaryBoxMarked, certificateBoxMarked } = checkboxStates;
+  // Log checkbox notes if provided for debugging
+  if (checkboxStates.checkboxNotes) {
+    console.log('Checkbox notes from AI:', checkboxStates.checkboxNotes);
+  }
+  
+  // Parse checkbox values - handle both boolean and string representations
+  const parseCheckbox = (value: any): boolean => {
+    if (typeof value === 'boolean') return value;
+    if (typeof value === 'string') {
+      const lowerValue = value.toLowerCase().trim();
+      return lowerValue === 'true' || lowerValue === 'yes';
+    }
+    return false;
+  };
+  
+  const initialMarked = parseCheckbox(checkboxStates.initialBoxMarked);
+  const supplementaryMarked = parseCheckbox(checkboxStates.supplementaryBoxMarked);
+  const temporaryMarked = parseCheckbox(checkboxStates.temporaryBoxMarked);
+  const certificateMarked = parseCheckbox(checkboxStates.certificateBoxMarked);
   
   // Log all values for debugging
-  console.log('Checkbox states received:', JSON.stringify({
-    initialBoxMarked,
-    supplementaryBoxMarked,
-    temporaryBoxMarked,
-    certificateBoxMarked
+  console.log('Checkbox states received (parsed):', JSON.stringify({
+    initialBoxMarked: initialMarked,
+    supplementaryBoxMarked: supplementaryMarked,
+    temporaryBoxMarked: temporaryMarked,
+    certificateBoxMarked: certificateMarked,
+    notes: checkboxStates.checkboxNotes || 'none'
   }));
   
   // Count how many type boxes are marked (excluding "certificate" which is just a confirmation checkbox)
   const typeBoxes = [
-    { name: 'Initial', marked: initialBoxMarked === true },
-    { name: 'Supplementary', marked: supplementaryBoxMarked === true },
-    { name: 'Temporary', marked: temporaryBoxMarked === true }
+    { name: 'Initial', marked: initialMarked },
+    { name: 'Supplementary', marked: supplementaryMarked },
+    { name: 'Temporary', marked: temporaryMarked }
   ];
   
   const markedBoxes = typeBoxes.filter(b => b.marked);
