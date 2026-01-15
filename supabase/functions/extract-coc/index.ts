@@ -23,24 +23,45 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 - READ EACH DIGIT EXTREMELY CAREFULLY: 0≠6≠8, 1≠7, 2≠3, 4≠9, 5≠6
 - This is a UNIQUE identifier - each document has a DIFFERENT number
 
-### 2. CERTIFICATE TYPE (CRITICAL - CHECKBOX VERIFICATION REQUIRED)
-📍 LOCATION: Near certificate number or in header area - boxes labeled "Initial", "Supplementary", "Certificate"
-- There are THREE checkboxes: "Initial" / "Supplementary" / "Certificate"
-- You MUST identify which checkbox has a VISIBLE TICK/CHECK MARK (☑, ✓, X, or filled box)
-- RULES FOR DETERMINING TYPE:
-  a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
-  b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
-  c) If BOTH "Initial" and "Supplementary" are empty but "Certificate" is marked → return "Initial"
-  d) If NO checkbox has a visible mark/tick/check → return "Not Marked"
-  e) If you cannot clearly see the checkboxes → return "Not Marked"
-- **NEVER ASSUME "Initial" - if you're not 100% certain you see a tick mark, return "Not Marked"**
-- **"Not Marked" is the SAFE default - it's better to say Not Marked than guess wrong**
-- IF SUPPLEMENTARY: MUST find reference to Initial COC number (see below)
-- IF TEMPORARY: Look for expiry date or validity period
+### 2. CERTIFICATE TYPE (CRITICAL - VISUAL CHECKBOX VERIFICATION)
+📍 LOCATION: TOP RIGHT of page 1, next to Certificate Number - there are boxes labeled "Initial", "Supplementary", "Certificate"
 
-### 2a. SUPPLEMENTARY CERTIFICATE FIELDS (CRITICAL FOR SUPPLEMENTARY TYPE)
+⚠️ **CRITICAL VISUAL INSPECTION REQUIRED** ⚠️
+There are THREE checkboxes arranged in a row:
+  [□] Initial        [□] Supplementary      [□] Certificate
+
+You MUST VISUALLY INSPECT EACH CHECKBOX for a TICK/CHECK MARK:
+- A MARKED checkbox contains: ☑, ✓, ✔, X, or any visible mark INSIDE the box
+- An EMPTY checkbox is: □ or ☐ with NO mark inside
+
+**STEP-BY-STEP CHECKBOX ANALYSIS:**
+1. Look at the "Initial" checkbox - is there a visible tick/mark INSIDE it?
+2. Look at the "Supplementary" checkbox - is there a visible tick/mark INSIDE it?
+3. Look at the "Certificate" checkbox - this is usually ticked as confirmation
+
+**DETERMINING TYPE (ONLY based on what is actually ticked):**
+- If "Initial" box has a VISIBLE TICK → cocType = "Initial"
+- If "Supplementary" box has a VISIBLE TICK → cocType = "Supplementary"  
+- If "Temporary" box has a VISIBLE TICK → cocType = "Temporary"
+- If NO checkbox has a visible tick → cocType = "Not Marked"
+
+**⛔ DO NOT DEFAULT TO "Initial"** - This is the #1 extraction error.
+Many COCs are Supplementary with only the Supplementary box ticked.
+If the "Initial" box is EMPTY but "Supplementary" is TICKED → return "Supplementary"
+
+**CHECKBOX STATES TO REPORT:**
+You MUST include in your response:
+{
+  "checkboxStates": {
+    "initialBoxMarked": true | false,
+    "supplementaryBoxMarked": true | false,  
+    "certificateBoxMarked": true | false
+  }
+}
+
+### 2a. SUPPLEMENTARY CERTIFICATE FIELDS (EXTRACT IF SUPPLEMENTARY)
 📍 LOCATION: DIRECTLY BELOW the certificate number area, BEFORE "Identification of the relevant electrical installation"
-- Look for fields labeled "Supplement No." and "Initial Certificate No." (also written as "Ini. Initial Certificate No.")
+- Look for fields labeled "Supplement No." and "Initial Certificate No." (or "Ini. Initial Certificate No.")
 - These fields appear in a ROW under the certificate type checkboxes
 - **"Supplement No."**: Contains a number like "1", "2", "3" indicating which supplement this is
 - **"Initial Certificate No."** (CRITICAL): Contains the ORIGINAL COC number this supplements (e.g., "ECA 1234567")
@@ -329,19 +350,35 @@ Use EXTREME care when reading numbers and dates.
 - READ EACH DIGIT VERY CAREFULLY: 0≠6≠8, 1≠7, 2≠3
 - Common format: "ECA 1738009" or just "1738009"
 
-### PRIORITY 2: Certificate Type (CRITICAL - CHECKBOX VERIFICATION REQUIRED)
-📍 Near certificate number - boxes labeled "Initial", "Supplementary", "Certificate"
-- There are THREE checkboxes in a row: "Initial" / "Supplementary" / "Certificate"
-- You MUST identify which checkbox has a VISIBLE TICK/CHECK MARK (☑, ✓, X, or filled box)
-- RULES FOR DETERMINING TYPE:
-  a) If "Initial" box is CLEARLY MARKED with tick/check → return "Initial"
-  b) If "Supplementary" box is CLEARLY MARKED with tick/check → return "Supplementary"  
-  c) If you see "Temporary" checkbox marked → return "Temporary"
-  d) If NO checkbox has a visible mark/tick/check → return "Not Marked"
-  e) If you cannot clearly see the checkboxes → return "Not Marked"
-- **NEVER ASSUME "Initial" by default - "Not Marked" is the safe choice if unsure**
-- IF SUPPLEMENTARY: You MUST find the Initial COC number it references
-- IF TEMPORARY: Look for expiry date and the Initial COC it references
+### PRIORITY 2: Certificate Type (CRITICAL - VISUAL CHECKBOX VERIFICATION)
+📍 TOP RIGHT of page 1, next to Certificate Number
+
+⚠️ **THIS IS THE MOST COMMON EXTRACTION ERROR - PAY CLOSE ATTENTION** ⚠️
+
+There are THREE checkboxes arranged horizontally:
+  [□] Initial    [□] Supplementary    [□] Certificate
+
+**STEP-BY-STEP VERIFICATION:**
+1. LOOK at the checkbox next to "Initial" - Is there a ✓ or ☑ INSIDE the box?
+2. LOOK at the checkbox next to "Supplementary" - Is there a ✓ or ☑ INSIDE the box?
+3. ONLY report what you ACTUALLY SEE marked
+
+**DETERMINING cocType:**
+- "Initial" box TICKED → cocType = "Initial"
+- "Supplementary" box TICKED → cocType = "Supplementary"
+- "Temporary" box TICKED → cocType = "Temporary"  
+- NO checkbox ticked → cocType = "Not Marked"
+
+**⛔ COMMON ERROR: Defaulting to "Initial" when "Supplementary" is actually ticked.**
+If "Supplementary" checkbox contains a tick/check mark, you MUST return "Supplementary".
+DO NOT assume Initial. Many COCs are Supplementary certificates.
+
+**INCLUDE IN RESPONSE:**
+"checkboxStates": {
+  "initialBoxMarked": true/false,
+  "supplementaryBoxMarked": true/false,
+  "certificateBoxMarked": true/false
+}
 
 ### PRIORITY 2a: SUPPLEMENTARY CERTIFICATE FIELDS (EXTRACT IF SUPPLEMENTARY)
 📍 LOCATION: DIRECTLY BELOW certificate number, ABOVE "Identification of the relevant electrical installation"
