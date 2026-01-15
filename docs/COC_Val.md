@@ -328,47 +328,88 @@ interface ValidationCheck {
 
 ### 5.1 COC Type Determination
 
-The system uses a **checkbox-first approach** to determine COC type:
+The system uses a **checkbox-first approach** to determine COC type. This is the **MOST CRITICAL** step in extraction.
+
+> ⚠️ **COMMON EXTRACTION ERROR:** The AI has historically defaulted to "Initial" when "Supplementary" is actually ticked. This section provides explicit guidance to prevent this error.
+
+#### Visual Layout of ECA COC Form
+
+The checkboxes appear in the TOP RIGHT of Page 1, arranged horizontally:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  STEP 1: Locate Checkboxes                                 │
-│  □ Initial    □ Supplementary    □ Temporary               │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STEP 2: Examine Each Checkbox                              │
-│  MARKED = ☑, ✓, X, filled box, handwritten tick            │
-│  EMPTY = □, ☐, only outline visible                        │
-└─────────────────────────────────────────────────────────────┘
-                           │
-                           ▼
-┌─────────────────────────────────────────────────────────────┐
-│  STEP 3: Set cocType Based on Marked Box                   │
-│  - initialBox MARKED → cocType = "Initial"                 │
-│  - supplementaryBox MARKED → cocType = "Supplementary"     │
-│  - temporaryBox MARKED → cocType = "Temporary"             │
-│  - ALL EMPTY → cocType = null (FAIL)                       │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────────────────┐
+│  CERTIFICATE NO.     │  [Initial side appropriate block]                    │
+│  ECA M0313005        │                                                      │
+│                      │   □ Initial   ☑ Supplementary    ☑ Certificate      │
+│                      │                     ↑                                │
+│                      │           THIS IS THE ONE TICKED!                    │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
+
+#### Step-by-Step Checkbox Verification
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 1: Locate Checkboxes (TOP RIGHT of page 1)               │
+│                                                                 │
+│    [□] Initial    [□] Supplementary    [□] Certificate         │
+│                                                                 │
+│  NOTE: "Certificate" is usually always ticked as confirmation  │
+│  The determining factor is Initial vs Supplementary            │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 2: VISUALLY EXAMINE Each Checkbox                        │
+│                                                                 │
+│  MARKED = ☑, ✓, ✔, X, filled box, handwritten tick inside     │
+│  EMPTY = □, ☐, only outline visible, NO mark inside            │
+│                                                                 │
+│  ⚠️ Look INSIDE the box, not beside it!                        │
+└─────────────────────────────────────────────────────────────────┘
+                           │
+                           ▼
+┌─────────────────────────────────────────────────────────────────┐
+│  STEP 3: Set cocType Based on WHICH BOX is Actually Ticked     │
+│                                                                 │
+│  • "Initial" box has tick → cocType = "Initial"                │
+│  • "Supplementary" box has tick → cocType = "Supplementary"    │
+│  • "Temporary" box has tick → cocType = "Temporary"            │
+│  • NO box has a tick → cocType = "Not Marked" (FAIL)           │
+│                                                                 │
+│  ⛔ DO NOT DEFAULT TO "Initial" if Supplementary is ticked!    │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+#### Key Rule: Never Assume "Initial"
+
+Many COC documents are **Supplementary** certificates, meaning:
+- They supplement/extend an existing Initial COC
+- The "Supplementary" checkbox is the one that's ticked
+- The "Initial" checkbox is EMPTY
+
+**If the Supplementary checkbox contains a visible tick mark, the cocType MUST be "Supplementary", NOT "Initial".**
 
 ### 5.2 Mandatory Checkbox States Response
 
-The AI **MUST** include `checkboxStates` in every validation response:
+The AI **MUST** include `checkboxStates` in every extraction/validation response:
 
 ```json
 {
   "checkboxStates": {
-    "initialBox": "MARKED | EMPTY",
-    "initialBoxDescription": "Description of what is visible",
-    "supplementaryBox": "MARKED | EMPTY",
-    "supplementaryBoxDescription": "Description of what is visible",
-    "temporaryBox": "MARKED | EMPTY",
-    "temporaryBoxDescription": "Description of what is visible"
-  }
+    "initialBoxMarked": true | false,
+    "supplementaryBoxMarked": true | false,
+    "certificateBoxMarked": true | false,
+    "temporaryBoxMarked": true | false
+  },
+  "cocType": "Initial | Supplementary | Temporary | Not Marked"
 }
 ```
+
+**Validation Rule:** The `cocType` value MUST match the checkbox state:
+- If `supplementaryBoxMarked: true` → `cocType` MUST be "Supplementary"
+- If `initialBoxMarked: true` → `cocType` MUST be "Initial"
+- If neither is marked → `cocType` MUST be "Not Marked"
 
 ### 5.3 Hierarchy Validation Rules
 
@@ -379,10 +420,11 @@ The AI **MUST** include `checkboxStates` in every validation response:
 - Set COC-SUPP-001 and COC-TEMP-001 to "Not Applicable"
 
 #### Supplementary COC Rules (ONLY if cocType = "Supplementary")
-- **MUST** reference an Initial COC number
-- Initial COC must exist and be valid
-- Cannot replace Initial COC, only extends/modifies
-- Fail COC-SUPP-001 if Initial reference is missing
+- **MUST** reference an Initial COC number in the "Initial Certificate No." field
+- The referenced Initial COC should exist and be valid
+- Cannot replace Initial COC, only extends/modifies specific aspects
+- Fail COC-SUPP-001 if Initial reference is missing or blank
+- The "Supplement No." field indicates which supplement this is (1, 2, 3, etc.)
 
 #### Temporary COC Rules (ONLY if cocType = "Temporary")
 - **MUST** reference an Initial COC number
@@ -399,6 +441,7 @@ Premises are **NON-COMPLIANT** if:
 | COC Type checkbox NOT marked | All COC types |
 | Supplementary COC without Initial reference | Supplementary only |
 | Temporary COC without Initial reference | Temporary only |
+| cocType extracted incorrectly (e.g., "Initial" when Supplementary is ticked) | All COC types |
 
 ### 5.5 Important Notes
 
@@ -408,6 +451,16 @@ Premises are **NON-COMPLIANT** if:
 > - The COC is formally revoked by authorities
 >
 > **DO NOT** report COC expiry as a failure condition.
+
+### 5.6 Extraction Accuracy Checklist
+
+Before accepting a COC type extraction, verify:
+
+- [ ] Did the AI visually examine each checkbox?
+- [ ] Is `checkboxStates` included in the response?
+- [ ] Does `cocType` match the actual marked checkbox?
+- [ ] If Supplementary, was "Initial Certificate No." extracted?
+- [ ] If type is "Initial", confirm the Initial checkbox truly has a tick
 
 ---
 
