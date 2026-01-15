@@ -399,6 +399,42 @@ export function COCPreviewApproval({
     }
   };
 
+  // Force re-extract ALL fields (bypasses cache, clears and re-extracts everything)
+  const handleForceReExtractAll = async () => {
+    setIsRetryingAll(true);
+    toast.info('Re-extracting all fields from document...');
+    
+    try {
+      // Call extract-coc with forceReextract to bypass cache and get fresh extraction
+      const { data, error } = await supabase.functions.invoke('extract-coc', {
+        body: { 
+          documentUrl, 
+          fileName: documentName,
+          forceReextract: true // This bypasses cache and forces fresh extraction (note: lowercase 'e')
+        }
+      });
+
+      if (error) {
+        toast.error('Failed to re-extract document');
+        console.error('Force re-extract error:', error);
+        return;
+      }
+
+      if (data?.extractedData) {
+        // Replace all extracted data with fresh extraction
+        setEditedData(data.extractedData);
+        toast.success('All fields re-extracted successfully!');
+      } else {
+        toast.warning('No data could be extracted from the document');
+      }
+    } catch (err) {
+      console.error('Force re-extract error:', err);
+      toast.error('Failed to re-extract document');
+    } finally {
+      setIsRetryingAll(false);
+    }
+  };
+
   // Re-extract all missing fields
   const handleRetryAllMissing = async () => {
     const missing = getMissingFields();
@@ -813,7 +849,7 @@ export function COCPreviewApproval({
                     variant="outline"
                     size="sm"
                     className="ml-4 gap-2"
-                    onClick={handleRetryAllMissing}
+                    onClick={handleForceReExtractAll}
                     disabled={isRetryingAll || isProcessing}
                   >
                     {isRetryingAll ? (
@@ -836,7 +872,7 @@ export function COCPreviewApproval({
                     variant="outline"
                     size="sm"
                     className="ml-4 gap-2"
-                    onClick={handleRetryAllMissing}
+                    onClick={handleForceReExtractAll}
                     disabled={isRetryingAll || isProcessing}
                   >
                     {isRetryingAll ? (
