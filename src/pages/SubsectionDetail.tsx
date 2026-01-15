@@ -852,12 +852,13 @@ const SubsectionDetail = () => {
         }
       }));
 
-      // Now run the validation
+      // Now run the validation - PASS the approved cocType to skip AI checkbox analysis
       const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
         body: {
           documentId: docId,
           documentUrl: pendingDocumentForVerification.url,
-          subsectionId: subsectionId
+          subsectionId: subsectionId,
+          approvedCocType: normalizedCocType // Pass approved type to override AI detection
         }
       });
 

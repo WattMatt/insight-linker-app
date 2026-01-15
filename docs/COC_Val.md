@@ -677,7 +677,8 @@ const { data, error } = await supabase.functions.invoke('validate-coc', {
   body: {
     documentId: 'uuid-of-document',
     documentUrl: 'https://signed-url-to-pdf',
-    subsectionId: 'uuid-of-subsection'
+    subsectionId: 'uuid-of-subsection',
+    approvedCocType: 'Initial' // OPTIONAL: User-approved COC type from extraction UI
   }
 });
 
@@ -686,6 +687,22 @@ if (data.success) {
   console.log('Violations:', data.violations);
   console.log('Full Report:', data.report);
 }
+```
+
+#### Parameter Details
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `documentId` | Yes | UUID of the document in subsection_documents table |
+| `documentUrl` | Yes | Signed URL to the PDF/image document |
+| `subsectionId` | Yes | UUID of the subsection |
+| `approvedCocType` | No | User-approved COC type from extraction UI. If provided, **overrides AI checkbox analysis** |
+
+#### Priority Hierarchy for COC Type Detection
+
+1. **User-approved type** (`approvedCocType` parameter) - Highest priority
+2. **Checkbox state analysis** - If AI's checkboxStates don't match reported cocType, override
+3. **AI's detected cocType** - Lowest priority (fallback)
 ```
 
 ### 11.2 Invoke Extraction
@@ -737,7 +754,31 @@ const { data: validations } = await supabase
 | Supplementary COC with blank reference field | Fail COC-SUPP-001 |
 | Initial COC misidentified as needing reference | Post-processing removes false violation |
 
-### 12.3 Technical Validation Tests
+### 12.3 User-Approved COC Type Override Tests
+
+| Test Case | Scenario | Expected Behavior |
+|-----------|----------|-------------------|
+| Extraction shows "Initial", validation detects "Supplementary", user approves "Initial" | AI vision mismatch | User-approved "Initial" overrides AI detection |
+| Extraction shows "Supplementary", user approves "Supplementary" | Consistent detection | Uses approved type, skips checkbox reanalysis |
+| No approved type passed, AI detects "Supplementary" with initialBox: "MARKED" | Checkbox mismatch | Server overrides to "Initial" based on checkboxStates |
+| User approves "Initial", AI generated "Missing Initial Reference" violation | Post-processing | Violation removed because Final cocType = "Initial" |
+
+### 12.4 Initial COC Validation Scenario (YARONA CENTRE > Capitec)
+
+**Scenario**: Document NM1915589 is an Initial COC but AI incorrectly detects "Supplementary"
+
+| Step | Action | Expected Log Output |
+|------|--------|---------------------|
+| 1 | User clicks "Verify COC" → Extraction runs | `Normalized COC Type: Initial` |
+| 2 | Extraction modal shows | Certificate Type: **Initial** |
+| 3 | User approves extraction with "Initial" | UI saves `coc_type: 'Initial'` to DB |
+| 4 | Validation starts with `approvedCocType: 'Initial'` | `🎯 USER-APPROVED COC TYPE OVERRIDE` |
+| 5 | Final cocType before post-processing | `Final cocType: Initial` |
+| 6 | Post-processing checks | `Current COC Type: initial` |
+| 7 | Any "Missing Initial Reference" violations | `❌ REMOVED invalid violation` |
+| 8 | Final overallStatus | Should be "Pass" if no other failures |
+
+### 12.5 Technical Validation Tests
 
 | Test Case | Check ID | Expected Result |
 |-----------|----------|-----------------|
@@ -748,7 +789,7 @@ const { data: validations } = await supabase
 | RCD trips at 250ms (1×IΔn) | RCD-001 | Pass |
 | RCD trips at 400ms (1×IΔn) | RCD-001 | Fail |
 
-### 12.4 System Integration Tests
+### 12.6 System Integration Tests
 
 | Test Case | Check ID | Expected Result |
 |-----------|----------|-----------------|
@@ -762,6 +803,7 @@ const { data: validations } = await supabase
 
 | Date | Version | Changes |
 |------|---------|---------|
+| 2026-01-15 | 2.1 | Added `approvedCocType` parameter to validate-coc; User-approved type now takes highest priority over AI detection |
 | 2026-01-14 | 2.0 | Added post-processing logic for Initial COC violations; Updated checkbox state handling |
 | 2025-12-01 | 1.5 | Enhanced COC type detection with mandatory checkboxStates |
 | 2025-11-15 | 1.0 | Initial specification release |

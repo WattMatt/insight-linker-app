@@ -575,13 +575,20 @@ serve(async (req) => {
   }
 
   try {
-    const { documentId, documentUrl, subsectionId } = await req.json();
+    // Accept approvedCocType as optional parameter - if provided, skip checkbox analysis
+    const { documentId, documentUrl, subsectionId, approvedCocType } = await req.json();
     
     if (!documentId || !documentUrl || !subsectionId) {
       return new Response(
         JSON.stringify({ error: 'Missing required parameters' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+    
+    // Log if user-approved cocType was provided
+    if (approvedCocType) {
+      console.log('📋 User-approved COC type provided:', approvedCocType);
+      console.log('   This will OVERRIDE any AI checkbox analysis');
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -760,82 +767,115 @@ serve(async (req) => {
         
         validationResult = JSON.parse(jsonStr);
         
-        // ===== CHECKBOX STATES VALIDATION & LOGGING =====
-        // Log the raw checkbox states for debugging
-        console.log('=== CHECKBOX STATES DEBUG ===');
-        console.log('Raw checkboxStates:', JSON.stringify(validationResult.checkboxStates, null, 2));
-        console.log('Reported cocType:', validationResult.cocType);
-        
-        // Validate checkbox states match cocType - SERVER-SIDE OVERRIDE if mismatch
-        if (validationResult.checkboxStates) {
-          const cs = validationResult.checkboxStates;
-          const initialMarked = cs.initialBox?.toUpperCase() === 'MARKED';
-          const supplementaryMarked = cs.supplementaryBox?.toUpperCase() === 'MARKED';
-          const temporaryMarked = cs.temporaryBox?.toUpperCase() === 'MARKED';
+        // ===== USER-APPROVED COC TYPE OVERRIDE (HIGHEST PRIORITY) =====
+        // If the user approved a cocType from extraction UI, use that instead of AI detection
+        if (approvedCocType) {
+          const normalizedApproved = approvedCocType.charAt(0).toUpperCase() + approvedCocType.slice(1).toLowerCase();
+          console.log('🎯 USER-APPROVED COC TYPE OVERRIDE');
+          console.log(`   AI detected cocType: ${validationResult.cocType}`);
+          console.log(`   User approved cocType: ${normalizedApproved}`);
+          console.log(`   USING user-approved type: ${normalizedApproved}`);
           
-          console.log('Checkbox analysis:', {
-            initialMarked,
-            supplementaryMarked,
-            temporaryMarked,
-            initialDesc: cs.initialBoxDescription,
-            supplementaryDesc: cs.supplementaryBoxDescription,
-            temporaryDesc: cs.temporaryBoxDescription
-          });
-          
-          // Determine correct cocType from checkbox states
-          let correctCocType: string | null = null;
-          if (initialMarked && !supplementaryMarked && !temporaryMarked) {
-            correctCocType = 'Initial';
-          } else if (supplementaryMarked && !initialMarked && !temporaryMarked) {
-            correctCocType = 'Supplementary';
-          } else if (temporaryMarked && !initialMarked && !supplementaryMarked) {
-            correctCocType = 'Temporary';
-          } else if (!initialMarked && !supplementaryMarked && !temporaryMarked) {
-            correctCocType = null; // No checkbox marked
-          } else {
-            // Multiple marked - unusual, log and use AI's decision
-            console.log('WARNING: Multiple checkboxes reported as marked, using AI decision');
-            correctCocType = validationResult.cocType;
-          }
-          
-          // Check for mismatch and OVERRIDE if necessary
-          if (correctCocType !== validationResult.cocType) {
-            console.log('🚨 COC TYPE MISMATCH DETECTED!');
-            console.log(`   AI reported cocType: ${validationResult.cocType}`);
-            console.log(`   Checkbox states indicate: ${correctCocType}`);
-            console.log(`   OVERRIDING cocType to: ${correctCocType}`);
-            
-            // Add extraction note about the override
-            if (!validationResult.extractionNotes) {
-              validationResult.extractionNotes = [];
-            }
-            validationResult.extractionNotes.push(
-              `SERVER OVERRIDE: cocType changed from "${validationResult.cocType}" to "${correctCocType}" based on checkboxStates analysis`
-            );
-            
-            // Apply the override
-            validationResult.cocType = correctCocType;
-            
-            // Also update hierarchyValidation if present
-            if (validationResult.hierarchyValidation) {
-              validationResult.hierarchyValidation.cocTypeIdentified = correctCocType;
-            }
-          } else {
-            console.log('✓ cocType matches checkboxStates - no override needed');
-          }
-        } else {
-          console.log('⚠️ WARNING: checkboxStates field missing from AI response');
           if (!validationResult.extractionNotes) {
             validationResult.extractionNotes = [];
           }
-          validationResult.extractionNotes.push('WARNING: AI did not provide checkboxStates field');
+          validationResult.extractionNotes.push(
+            `USER OVERRIDE: cocType set to "${normalizedApproved}" from extraction approval (AI detected: "${validationResult.cocType}")`
+          );
+          
+          // Apply the user-approved override
+          validationResult.cocType = normalizedApproved;
+          
+          // Update hierarchyValidation if present
+          if (validationResult.hierarchyValidation) {
+            validationResult.hierarchyValidation.cocTypeIdentified = normalizedApproved;
+          }
+          
+          // Skip checkbox analysis since user already confirmed the type
+          console.log('   Skipping checkbox analysis - user approval takes precedence');
+        } else {
+          // ===== CHECKBOX STATES VALIDATION & LOGGING =====
+          // Log the raw checkbox states for debugging
+          console.log('=== CHECKBOX STATES DEBUG ===');
+          console.log('Raw checkboxStates:', JSON.stringify(validationResult.checkboxStates, null, 2));
+          console.log('Reported cocType:', validationResult.cocType);
+          
+          // Validate checkbox states match cocType - SERVER-SIDE OVERRIDE if mismatch
+          if (validationResult.checkboxStates) {
+            const cs = validationResult.checkboxStates;
+            const initialMarked = cs.initialBox?.toUpperCase() === 'MARKED';
+            const supplementaryMarked = cs.supplementaryBox?.toUpperCase() === 'MARKED';
+            const temporaryMarked = cs.temporaryBox?.toUpperCase() === 'MARKED';
+            
+            console.log('Checkbox analysis:', {
+              initialMarked,
+              supplementaryMarked,
+              temporaryMarked,
+              initialDesc: cs.initialBoxDescription,
+              supplementaryDesc: cs.supplementaryBoxDescription,
+              temporaryDesc: cs.temporaryBoxDescription
+            });
+            
+            // Determine correct cocType from checkbox states
+            let correctCocType: string | null = null;
+            if (initialMarked && !supplementaryMarked && !temporaryMarked) {
+              correctCocType = 'Initial';
+            } else if (supplementaryMarked && !initialMarked && !temporaryMarked) {
+              correctCocType = 'Supplementary';
+            } else if (temporaryMarked && !initialMarked && !supplementaryMarked) {
+              correctCocType = 'Temporary';
+            } else if (!initialMarked && !supplementaryMarked && !temporaryMarked) {
+              correctCocType = null; // No checkbox marked
+            } else {
+              // Multiple marked - unusual, log and use AI's decision
+              console.log('WARNING: Multiple checkboxes reported as marked, using AI decision');
+              correctCocType = validationResult.cocType;
+            }
+            
+            // Check for mismatch and OVERRIDE if necessary
+            if (correctCocType !== validationResult.cocType) {
+              console.log('🚨 COC TYPE MISMATCH DETECTED!');
+              console.log(`   AI reported cocType: ${validationResult.cocType}`);
+              console.log(`   Checkbox states indicate: ${correctCocType}`);
+              console.log(`   OVERRIDING cocType to: ${correctCocType}`);
+              
+              // Add extraction note about the override
+              if (!validationResult.extractionNotes) {
+                validationResult.extractionNotes = [];
+              }
+              validationResult.extractionNotes.push(
+                `SERVER OVERRIDE: cocType changed from "${validationResult.cocType}" to "${correctCocType}" based on checkboxStates analysis`
+              );
+              
+              // Apply the override
+              validationResult.cocType = correctCocType;
+              
+              // Also update hierarchyValidation if present
+              if (validationResult.hierarchyValidation) {
+                validationResult.hierarchyValidation.cocTypeIdentified = correctCocType;
+              }
+            } else {
+              console.log('✓ cocType matches checkboxStates - no override needed');
+            }
+          } else {
+            console.log('⚠️ WARNING: checkboxStates field missing from AI response');
+            if (!validationResult.extractionNotes) {
+              validationResult.extractionNotes = [];
+            }
+            validationResult.extractionNotes.push('WARNING: AI did not provide checkboxStates field');
+          }
         }
+        
+        // ===== LOG FINAL COC TYPE BEFORE POST-PROCESSING =====
+        console.log('=== FINAL COC TYPE BEFORE POST-PROCESSING ===');
+        console.log('Final cocType:', validationResult.cocType);
         
         // ===== POST-PROCESSING: REMOVE INVALID VIOLATIONS FOR INITIAL COCs =====
         // If this is an Initial COC, remove any "Missing Initial COC Reference" violations
         // because Initial COCs do NOT need to reference another COC
         const currentCocType = validationResult.cocType?.toLowerCase();
         console.log('=== POST-PROCESSING VIOLATIONS ===');
+        console.log('Current COC Type:', currentCocType);
         console.log('Current COC Type:', currentCocType);
         
         if (currentCocType === 'initial') {
