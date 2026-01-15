@@ -26,35 +26,51 @@ Focus ONLY on PAGE 1 of this ECA Certificate of Compliance document.
 ### 2. CERTIFICATE TYPE (CRITICAL - VISUAL CHECKBOX VERIFICATION)
 📍 LOCATION: TOP RIGHT of page 1, next to Certificate Number - there are boxes labeled "Initial", "Supplementary", "Certificate"
 
-⚠️ **CRITICAL VISUAL INSPECTION REQUIRED** ⚠️
+⚠️ **CRITICAL VISUAL INSPECTION REQUIRED - READ VERY CAREFULLY** ⚠️
 There are THREE checkboxes arranged in a row:
   [□] Initial        [□] Supplementary      [□] Certificate
 
-You MUST VISUALLY INSPECT EACH CHECKBOX for a TICK/CHECK MARK:
-- A MARKED checkbox contains: ☑, ✓, ✔, X, or any visible mark INSIDE the box
-- An EMPTY checkbox is: □ or ☐ with NO mark inside
+**WHAT COUNTS AS A MARKED CHECKBOX:**
+- A tick/check mark: ✓ ✔ ☑
+- An X mark: ✗ ✘ X
+- A filled box: ■ ▪
+- Handwritten mark INSIDE the box
+- ANY visible marking that is CLEARLY INSIDE the box boundaries
+
+**WHAT DOES NOT COUNT AS MARKED:**
+- An empty box: □ ☐
+- A box with only its border visible
+- Marks OUTSIDE or NEXT TO the box
+- Smudges, shadows, or printing artifacts
+- The box label text itself
+
+**⛔ CRITICAL WARNING - DO NOT HALLUCINATE MARKS ⛔**
+If you are UNCERTAIN whether a box has a mark, report it as FALSE (unmarked).
+It is better to report "Not Marked" than to incorrectly claim a box is checked.
+Many COC documents have NO checkboxes marked - this is valid and should be reported as cocType = "Not Marked".
 
 **STEP-BY-STEP CHECKBOX ANALYSIS:**
-1. Look at the "Initial" checkbox - is there a visible tick/mark INSIDE it?
-2. Look at the "Supplementary" checkbox - is there a visible tick/mark INSIDE it?
-3. Look at the "Certificate" checkbox - this is usually ticked as confirmation
+1. Zoom into the checkbox area mentally
+2. For EACH checkbox, ask: "Is there a DEFINITE, CLEAR mark INSIDE this box?"
+3. If the answer is "maybe" or "unclear", report FALSE
+4. Only report TRUE if you can clearly see a deliberate mark
 
-**DETERMINING TYPE (ONLY based on what is actually ticked):**
-- If "Initial" box has a VISIBLE TICK → cocType = "Initial"
-- If "Supplementary" box has a VISIBLE TICK → cocType = "Supplementary"  
-- If "Temporary" box has a VISIBLE TICK → cocType = "Temporary"
-- If NO checkbox has a visible tick → cocType = "Not Marked"
+**DETERMINING TYPE (ONLY based on what is DEFINITELY ticked):**
+- If "Initial" box has a DEFINITE VISIBLE TICK → cocType = "Initial"
+- If "Supplementary" box has a DEFINITE VISIBLE TICK → cocType = "Supplementary"  
+- If "Temporary" box has a DEFINITE VISIBLE TICK → cocType = "Temporary"
+- If NO checkbox has a definite visible tick → cocType = "Not Marked"
 
 **⛔ DO NOT DEFAULT TO "Initial"** - This is the #1 extraction error.
-Many COCs are Supplementary with only the Supplementary box ticked.
-If the "Initial" box is EMPTY but "Supplementary" is TICKED → return "Supplementary"
+When in doubt, return "Not Marked". It's safer to say unknown than to guess wrong.
 
-**CHECKBOX STATES TO REPORT:**
+**CHECKBOX STATES TO REPORT (be conservative - false unless DEFINITELY marked):**
 You MUST include in your response:
 {
   "checkboxStates": {
     "initialBoxMarked": true | false,
     "supplementaryBoxMarked": true | false,  
+    "temporaryBoxMarked": true | false,
     "certificateBoxMarked": true | false
   }
 }
@@ -631,6 +647,47 @@ function normalizeCocType(cocType: string | undefined | null): string {
   return 'Not Marked';
 }
 
+// Determine COC type from checkbox states - this is the source of truth
+function determineCocTypeFromCheckboxes(checkboxStates: any, rawCocType: string | undefined | null): string {
+  if (!checkboxStates) {
+    // No checkbox states provided - use the raw value with normalization
+    return normalizeCocType(rawCocType);
+  }
+  
+  const { initialBoxMarked, supplementaryBoxMarked, temporaryBoxMarked, certificateBoxMarked } = checkboxStates;
+  
+  // Count how many boxes are marked
+  const markedCount = [initialBoxMarked, supplementaryBoxMarked, temporaryBoxMarked].filter(Boolean).length;
+  
+  console.log(`Checkbox analysis: Initial=${initialBoxMarked}, Supplementary=${supplementaryBoxMarked}, Temporary=${temporaryBoxMarked}, Marked count=${markedCount}`);
+  
+  // If NO boxes are marked, return "Not Marked" regardless of what cocType says
+  if (markedCount === 0) {
+    console.log('OVERRIDE: No checkboxes marked, forcing cocType to "Not Marked"');
+    return 'Not Marked';
+  }
+  
+  // If multiple boxes are marked, that's unusual - flag it
+  if (markedCount > 1) {
+    console.log('WARNING: Multiple checkboxes marked, this may indicate misreading');
+    // Still proceed with the highest priority marked
+  }
+  
+  // Return based on which box is marked (priority order)
+  if (supplementaryBoxMarked === true) {
+    return 'Supplementary';
+  }
+  if (temporaryBoxMarked === true) {
+    return 'Temporary';
+  }
+  if (initialBoxMarked === true) {
+    return 'Initial';
+  }
+  
+  // Fallback to normalization of raw type
+  return normalizeCocType(rawCocType);
+}
+
 // Check which required fields are missing
 function getMissingRequiredFields(data: any): string[] {
   const missing: string[] = [];
@@ -1100,16 +1157,17 @@ serve(async (req) => {
       }
     }
 
-    // ============ Normalize COC Type ============
+    // ============ Normalize COC Type Using Checkbox States ============
     // Log raw checkbox states if returned by AI
     if (extractedData.checkboxStates) {
       console.log('Raw checkbox states from AI:', JSON.stringify(extractedData.checkboxStates));
     }
     console.log('Raw COC Type from AI before normalization:', extractedData.cocType);
     
-    // CRITICAL: Ensure cocType defaults to "Unknown" if not explicitly confirmed
-    extractedData.cocType = normalizeCocType(extractedData.cocType);
-    console.log('Normalized COC Type:', extractedData.cocType);
+    // CRITICAL: Use checkbox states as the source of truth for COC type
+    // This function will override the AI's cocType if checkbox states indicate no boxes are marked
+    extractedData.cocType = determineCocTypeFromCheckboxes(extractedData.checkboxStates, extractedData.cocType);
+    console.log('Final COC Type (after checkbox validation):', extractedData.cocType);
 
     // ============ Final Confidence Assessment ============
     const finalMissing = getMissingRequiredFields(extractedData);
