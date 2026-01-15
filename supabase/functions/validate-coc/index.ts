@@ -1141,9 +1141,15 @@ serve(async (req) => {
         // 1. The COC Type checkbox was marked on the certificate
         // 2. The COC validation passed (status = Approved)
         // 3. Hierarchy rules are satisfied (Initial COC exists and is valid for Supplementary/Temporary)
+        // 
+        // IMPORTANT: "Not Marked" means NO checkbox was ticked - this is a FAIL condition
+        const cocTypeIsValid = validationResult.cocType && 
+                               validationResult.cocType !== 'Not Marked' &&
+                               validationResult.cocType.toLowerCase() !== 'not marked' &&
+                               validationResult.cocType.toLowerCase() !== 'unknown';
         const cocTypeMarked = validationResult.cocTypeMarked !== false && 
                               validationResult.hierarchyValidation?.cocTypeMarked !== false &&
-                              validationResult.cocType !== null;
+                              cocTypeIsValid;
         const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - COC Type Not Marked' &&
@@ -1177,9 +1183,14 @@ serve(async (req) => {
       } else {
         // Even if we don't update COC details, we should still update is_compliant if this validation failed
         // This ensures failed validations always mark the subsection as non-compliant
+        // IMPORTANT: "Not Marked" means NO checkbox was ticked - this is a FAIL condition
+        const cocTypeIsValid2 = validationResult.cocType && 
+                                validationResult.cocType !== 'Not Marked' &&
+                                validationResult.cocType.toLowerCase() !== 'not marked' &&
+                                validationResult.cocType.toLowerCase() !== 'unknown';
         const cocTypeMarked = validationResult.cocTypeMarked !== false && 
                               validationResult.hierarchyValidation?.cocTypeMarked !== false &&
-                              validationResult.cocType !== null;
+                              cocTypeIsValid2;
         const hierarchyValid = validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - Missing Reference' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid' &&
                                validationResult.hierarchyValidation?.hierarchyStatus !== 'Invalid - COC Type Not Marked' &&
