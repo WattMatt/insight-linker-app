@@ -1062,8 +1062,8 @@ serve(async (req) => {
     }
 
     // ============ PASS 1: Full Extraction with Enhanced Prompt ============
-    // Use more accurate model for force re-extracts
-    const extractionModel = forceReextract ? 'google/gemini-3-pro-preview' : 'google/gemini-2.5-flash';
+    // Use gemini-2.5-pro for force re-extracts (more accurate), gemini-2.5-flash for normal (faster)
+    const extractionModel = forceReextract ? 'google/gemini-2.5-pro' : 'google/gemini-2.5-flash';
     console.log(`PASS 1: Full extraction with enhanced prompts using ${extractionModel}...`);
     
     let extractedData: any = null;
