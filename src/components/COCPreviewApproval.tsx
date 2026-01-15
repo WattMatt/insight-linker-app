@@ -807,8 +807,22 @@ export function COCPreviewApproval({
             {hasExtractedData && isComplete && warnings.length === 0 && (
               <Alert>
                 <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>
-                  All required fields complete. Review and approve to verify.
+                <AlertDescription className="flex items-center justify-between">
+                  <span>All required fields complete. Review and approve to verify.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-4 gap-2"
+                    onClick={handleRetryAllMissing}
+                    disabled={isRetryingAll || isProcessing}
+                  >
+                    {isRetryingAll ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    {isRetryingAll ? 'Re-extracting...' : 'Re-extract All'}
+                  </Button>
                 </AlertDescription>
               </Alert>
             )}
@@ -816,8 +830,22 @@ export function COCPreviewApproval({
             {hasExtractedData && isComplete && warnings.length > 0 && (
               <Alert>
                 <CheckCircle2 className="h-4 w-4" />
-                <AlertDescription>
-                  Required fields complete. You can approve now - verification will check optional fields.
+                <AlertDescription className="flex items-center justify-between">
+                  <span>Required fields complete. You can approve now - verification will check optional fields.</span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="ml-4 gap-2"
+                    onClick={handleRetryAllMissing}
+                    disabled={isRetryingAll || isProcessing}
+                  >
+                    {isRetryingAll ? (
+                      <RefreshCw className="h-4 w-4 animate-spin" />
+                    ) : (
+                      <RotateCcw className="h-4 w-4" />
+                    )}
+                    {isRetryingAll ? 'Re-extracting...' : 'Re-extract All'}
+                  </Button>
                 </AlertDescription>
               </Alert>
             )}
