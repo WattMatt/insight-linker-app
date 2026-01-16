@@ -584,15 +584,60 @@ If AI response cannot be parsed:
 
 | Date | Version | Changes | Author |
 |------|---------|---------|--------|
+| 2026-01-16 | 1.1 | Added Configuration System with database-driven settings, dynamic AI prompt generation, and enhanced test validation UI | System |
 | 2026-01-13 | 1.0 | Initial specification document | System |
 
 ### Pending Improvements
 
 - [ ] Add "Re-extract All" batch function
 - [ ] Show raw extracted vs validated data comparison
-- [ ] Add manual override capability for AI errors
+- [x] Add manual override capability for AI errors
 - [ ] Implement document versioning for re-validations
 - [ ] Add email notifications for failed validations
+- [x] Integrate validation settings with edge function
+- [x] Add settings audit trail to report_data
+
+---
+
+## 11. Configuration System
+
+### 11.1 Settings Table Schema
+
+**Table:** `coc_validation_settings`
+
+| Column | Type | Default | Description |
+|--------|------|---------|-------------|
+| `earth_continuity_max_ohms` | numeric | 5.0 | Maximum earth continuity resistance (Ω) |
+| `insulation_resistance_min_mohms` | numeric | 0.25 | Minimum insulation resistance (MΩ) |
+| `rcd_trip_1x_max_ms` | integer | 300 | RCD trip time at 1×IΔn (ms) |
+| `rcd_trip_5x_max_ms` | integer | 150 | RCD trip time at 5×IΔn (ms) |
+| `mandatory_failures_for_fail` | integer | 2 | # mandatory failures triggering FAIL |
+| `safety_critical_failures_for_fail` | integer | 1 | # safety-critical failures triggering FAIL |
+| `ai_model` | text | google/gemini-3-pro-preview | AI model for validation |
+| `ai_temperature` | numeric | 0.1 | AI temperature setting |
+| `hierarchy_check_enabled` | boolean | true | Enable COC hierarchy validation |
+| `earth_continuity_check_enabled` | boolean | true | Enable earth continuity check |
+| `insulation_resistance_check_enabled` | boolean | true | Enable insulation resistance check |
+| `rcd_function_check_enabled` | boolean | true | Enable RCD function check |
+| `auto_fail_future_dated` | boolean | true | Auto-fail future-dated certificates |
+| `auto_fail_missing_signature` | boolean | true | Auto-fail missing signatures |
+
+### 11.2 Preset Configurations
+
+| Preset | Description | Key Differences |
+|--------|-------------|-----------------|
+| **Strict** | Maximum validation | 50% confidence, 1 mandatory failure = FAIL |
+| **Standard** | Balanced (default) | 30% confidence, 2 mandatory failures = FAIL |
+| **Relaxed** | Legacy systems | 20% confidence, 3 mandatory failures = FAIL |
+
+### 11.3 Dynamic Prompt Generation
+
+The `validate-coc` edge function now builds prompts dynamically:
+1. Fetches settings from `coc_validation_settings` or uses `testSettings` from request
+2. Injects configurable thresholds into the AI prompt
+3. Indicates which checks are enabled/disabled
+4. Applies auto-fail rules during post-processing
+5. Stores `settingsApplied` in `report_data` for audit
 
 ---
 
@@ -608,9 +653,9 @@ If AI response cannot be parsed:
 
 | Prompt | File | Line Range |
 |--------|------|------------|
-| VALIDATION_PROMPT | validate-coc/index.ts | 11-479 |
+| VALIDATION_PROMPT | validate-coc/index.ts | 11-569 |
+| buildDynamicPrompt() | validate-coc/index.ts | 627-666 |
 | EXTRACTION_PROMPT | extract-coc/index.ts | 48-391 |
-| DATE_EXTRACTION_PROMPT | extract-coc/index.ts | 11-45 |
 
 ---
 
