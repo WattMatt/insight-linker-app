@@ -1155,6 +1155,7 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
                         </div>
                       ) : (
                         <div className="space-y-4">
+                          {/* Status Overview */}
                           <div className="flex flex-wrap items-center gap-4">
                             <Badge 
                               variant={testResult.status === 'Pass' ? 'default' : 'destructive'}
@@ -1163,55 +1164,167 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
                               {testResult.status}
                             </Badge>
                             <span className="text-sm text-muted-foreground">
-                              COC Type: <span className="font-medium">{testResult.cocType || 'Unknown'}</span>
+                              COC Type: <span className="font-medium">{testResult.report?.cocType || 'Unknown'}</span>
                             </span>
-                            {testResult.confidence && (
+                            {testResult.confidenceScore && (
                               <span className="text-sm text-muted-foreground">
-                                Confidence: <span className="font-medium">{testResult.confidence}%</span>
+                                Confidence: <span className="font-medium">{testResult.confidenceScore}%</span>
                               </span>
                             )}
-                            {testResult.cocNumber && (
+                            {testResult.report?.cocNumber && (
                               <span className="text-sm text-muted-foreground">
-                                COC #: <span className="font-medium">{testResult.cocNumber}</span>
+                                COC #: <span className="font-medium">{testResult.report.cocNumber}</span>
                               </span>
                             )}
                           </div>
 
-                          {/* Checks performed */}
-                          {testResult.checks && testResult.checks.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium">Checks Performed ({testResult.checks.length}):</p>
-                              <div className="grid gap-2">
-                                {testResult.checks.map((check: any, i: number) => (
-                                  <div 
-                                    key={i} 
-                                    className={cn(
-                                      "flex items-start gap-2 p-2 rounded-md text-sm",
-                                      check.passed ? "bg-green-500/10" : "bg-destructive/10"
-                                    )}
-                                  >
-                                    {check.passed ? (
-                                      <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-500" />
-                                    ) : (
-                                      <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-destructive" />
-                                    )}
-                                    <div>
-                                      <span className="font-medium">{check.name}</span>
-                                      {check.message && (
-                                        <p className="text-muted-foreground">{check.message}</p>
-                                      )}
+                          {/* Settings Applied (NEW) */}
+                          {testResult.settingsApplied && (
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="settings" className="border rounded-lg">
+                                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                                  <div className="flex items-center gap-2">
+                                    <Settings2 className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Settings Applied</span>
+                                    <Badge variant="secondary" className="ml-2 text-xs">
+                                      {testResult.settingsApplied.ai_model?.split('/').pop()}
+                                    </Badge>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-4">
+                                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-sm">
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">AI Model</p>
+                                      <p className="font-medium truncate">{testResult.settingsApplied.ai_model?.split('/').pop()}</p>
+                                    </div>
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">Temperature</p>
+                                      <p className="font-medium">{testResult.settingsApplied.ai_temperature}</p>
+                                    </div>
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">Earth Max</p>
+                                      <p className="font-medium">{testResult.settingsApplied.earth_continuity_max_ohms}Ω</p>
+                                    </div>
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">IR Min</p>
+                                      <p className="font-medium">{testResult.settingsApplied.insulation_resistance_min_mohms}MΩ</p>
+                                    </div>
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">Mandatory Fail Threshold</p>
+                                      <p className="font-medium">{testResult.settingsApplied.mandatory_failures_for_fail}</p>
+                                    </div>
+                                    <div className="p-2 bg-muted/50 rounded">
+                                      <p className="text-muted-foreground text-xs">Safety Critical Threshold</p>
+                                      <p className="font-medium">{testResult.settingsApplied.safety_critical_failures_for_fail}</p>
                                     </div>
                                   </div>
-                                ))}
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          )}
+
+                          {/* Summary Statistics */}
+                          {testResult.summary && (
+                            <div className="grid grid-cols-3 md:grid-cols-6 gap-2">
+                              <div className="p-2 bg-green-500/10 rounded text-center">
+                                <p className="text-lg font-bold text-green-600">{testResult.summary.passedChecks || 0}</p>
+                                <p className="text-xs text-muted-foreground">Passed</p>
+                              </div>
+                              <div className="p-2 bg-destructive/10 rounded text-center">
+                                <p className="text-lg font-bold text-destructive">{testResult.summary.failedChecks || 0}</p>
+                                <p className="text-xs text-muted-foreground">Failed</p>
+                              </div>
+                              <div className="p-2 bg-amber-500/10 rounded text-center">
+                                <p className="text-lg font-bold text-amber-600">{testResult.summary.criticalFailures || 0}</p>
+                                <p className="text-xs text-muted-foreground">Critical</p>
+                              </div>
+                              <div className="p-2 bg-muted rounded text-center">
+                                <p className="text-lg font-bold">{testResult.summary.notTested || 0}</p>
+                                <p className="text-xs text-muted-foreground">Not Tested</p>
+                              </div>
+                              <div className="p-2 bg-muted rounded text-center">
+                                <p className="text-lg font-bold">{testResult.summary.notApplicable || 0}</p>
+                                <p className="text-xs text-muted-foreground">N/A</p>
+                              </div>
+                              <div className="p-2 bg-muted rounded text-center">
+                                <p className="text-lg font-bold">{testResult.summary.totalChecks || 0}</p>
+                                <p className="text-xs text-muted-foreground">Total</p>
                               </div>
                             </div>
+                          )}
+
+                          {/* Checks performed */}
+                          {testResult.checks && testResult.checks.length > 0 && (
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="checks" className="border rounded-lg">
+                                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                                  <div className="flex items-center gap-2">
+                                    <FileCheck className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Checks Performed</span>
+                                    <Badge variant="secondary" className="ml-2 text-xs">
+                                      {testResult.checks.length}
+                                    </Badge>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-4">
+                                  <ScrollArea className="h-[300px]">
+                                    <div className="grid gap-2">
+                                      {testResult.checks.map((check: any, i: number) => (
+                                        <div 
+                                          key={i} 
+                                          className={cn(
+                                            "flex items-start gap-2 p-2 rounded-md text-sm",
+                                            check.result === 'Pass' ? "bg-green-500/10" : 
+                                            check.result === 'Fail' ? "bg-destructive/10" :
+                                            check.result === 'Not Applicable' ? "bg-muted" : "bg-amber-500/10"
+                                          )}
+                                        >
+                                          {check.result === 'Pass' ? (
+                                            <CheckCircle2 className="h-4 w-4 mt-0.5 flex-shrink-0 text-green-500" />
+                                          ) : check.result === 'Fail' ? (
+                                            <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-destructive" />
+                                          ) : (
+                                            <AlertCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-muted-foreground" />
+                                          )}
+                                          <div className="flex-1">
+                                            <div className="flex items-center gap-2">
+                                              <span className="font-medium">{check.description || check.checkId}</span>
+                                              {check.clause && (
+                                                <Badge variant="outline" className="text-xs">
+                                                  Clause {check.clause}
+                                                </Badge>
+                                              )}
+                                            </div>
+                                            {check.measuredValue && (
+                                              <p className="text-muted-foreground text-xs mt-1">
+                                                Measured: {check.measuredValue} {check.limit && `(Limit: ${check.limit})`}
+                                              </p>
+                                            )}
+                                            {check.remediation && check.result === 'Fail' && (
+                                              <p className="text-xs text-destructive mt-1">{check.remediation}</p>
+                                            )}
+                                          </div>
+                                          <Badge 
+                                            variant={check.result === 'Pass' ? 'default' : check.result === 'Fail' ? 'destructive' : 'secondary'}
+                                            className="text-xs"
+                                          >
+                                            {check.result}
+                                          </Badge>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ScrollArea>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
                           )}
 
                           {/* Violations */}
                           {testResult.violations && testResult.violations.length > 0 && (
                             <div className="space-y-2">
-                              <p className="text-sm font-medium text-destructive">
-                                Violations Found ({testResult.violations.length}):
+                              <p className="text-sm font-medium text-destructive flex items-center gap-2">
+                                <AlertTriangle className="h-4 w-4" />
+                                Critical Violations ({testResult.violations.length})
                               </p>
                               <div className="space-y-2">
                                 {testResult.violations.map((v: any, i: number) => (
@@ -1220,11 +1333,23 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
                                     className="flex items-start gap-2 p-3 bg-destructive/10 border border-destructive/20 rounded-md"
                                   >
                                     <XCircle className="h-4 w-4 mt-0.5 flex-shrink-0 text-destructive" />
-                                    <div className="space-y-1">
-                                      <span className="text-sm font-medium">{v.rule || v.check || 'Violation'}</span>
+                                    <div className="space-y-1 flex-1">
+                                      <div className="flex items-center gap-2">
+                                        <span className="text-sm font-medium">{v.description || v.rule || 'Violation'}</span>
+                                        {v.severity && (
+                                          <Badge variant={v.severity === 'Critical' ? 'destructive' : 'secondary'} className="text-xs">
+                                            {v.severity}
+                                          </Badge>
+                                        )}
+                                      </div>
                                       <p className="text-sm text-muted-foreground">
-                                        {v.message || v.description || JSON.stringify(v)}
+                                        {v.reason || v.message}
                                       </p>
+                                      {v.immediateAction && (
+                                        <p className="text-xs text-amber-600 dark:text-amber-400">
+                                          Action: {v.immediateAction}
+                                        </p>
+                                      )}
                                       {v.clause && (
                                         <Badge variant="outline" className="text-xs">
                                           Clause {v.clause}
@@ -1239,17 +1364,55 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
 
                           {/* Recommendations */}
                           {testResult.recommendations && testResult.recommendations.length > 0 && (
-                            <div className="space-y-2">
-                              <p className="text-sm font-medium">Recommendations:</p>
-                              <ul className="space-y-1">
-                                {testResult.recommendations.map((rec: string, i: number) => (
-                                  <li key={i} className="text-sm text-muted-foreground flex items-start gap-2">
-                                    <Info className="h-3 w-3 mt-1 flex-shrink-0 text-blue-500" />
-                                    <span>{rec}</span>
-                                  </li>
-                                ))}
-                              </ul>
-                            </div>
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="recommendations" className="border rounded-lg">
+                                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                                  <div className="flex items-center gap-2">
+                                    <Info className="h-4 w-4 text-blue-500" />
+                                    <span className="text-sm font-medium">Recommendations</span>
+                                    <Badge variant="secondary" className="ml-2 text-xs">
+                                      {testResult.recommendations.length}
+                                    </Badge>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-4">
+                                  <ul className="space-y-2">
+                                    {testResult.recommendations.map((rec: string, i: number) => (
+                                      <li key={i} className="text-sm text-muted-foreground flex items-start gap-2 p-2 bg-blue-500/10 rounded">
+                                        <Info className="h-3 w-3 mt-1 flex-shrink-0 text-blue-500" />
+                                        <span>{rec}</span>
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
+                          )}
+
+                          {/* Extraction Notes */}
+                          {testResult.extractionNotes && testResult.extractionNotes.length > 0 && (
+                            <Accordion type="single" collapsible className="w-full">
+                              <AccordionItem value="notes" className="border rounded-lg">
+                                <AccordionTrigger className="px-4 py-2 hover:no-underline">
+                                  <div className="flex items-center gap-2">
+                                    <FileText className="h-4 w-4" />
+                                    <span className="text-sm font-medium">Processing Notes</span>
+                                    <Badge variant="secondary" className="ml-2 text-xs">
+                                      {testResult.extractionNotes.length}
+                                    </Badge>
+                                  </div>
+                                </AccordionTrigger>
+                                <AccordionContent className="px-4 pb-4">
+                                  <ul className="space-y-1">
+                                    {testResult.extractionNotes.map((note: string, i: number) => (
+                                      <li key={i} className="text-xs text-muted-foreground p-2 bg-muted rounded">
+                                        {note}
+                                      </li>
+                                    ))}
+                                  </ul>
+                                </AccordionContent>
+                              </AccordionItem>
+                            </Accordion>
                           )}
                         </div>
                       )}

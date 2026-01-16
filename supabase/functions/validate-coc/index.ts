@@ -568,6 +568,107 @@ When analyzing a PDF or image:
 
 Now analyze the provided COC document with strict SANS 10142-1:2020 compliance:`;
 
+// Interface for validation settings from database
+interface ValidationSettings {
+  earth_continuity_max_ohms: number;
+  insulation_resistance_min_mohms: number;
+  rcd_trip_1x_max_ms: number;
+  rcd_trip_5x_max_ms: number;
+  rcd_trip_max_ms: number;
+  coc_expiry_domestic_years: number;
+  coc_expiry_commercial_years: number;
+  ai_confidence_threshold_percent: number;
+  hierarchy_check_enabled: boolean;
+  earth_continuity_check_enabled: boolean;
+  insulation_resistance_check_enabled: boolean;
+  protective_conductor_check_enabled: boolean;
+  certificate_date_validation_enabled: boolean;
+  rcd_function_check_enabled: boolean;
+  signature_check_enabled: boolean;
+  auto_fail_missing_initial_ref: boolean;
+  auto_fail_invalid_certificate: boolean;
+  auto_fail_future_dated: boolean;
+  auto_fail_earth_resistance_threshold: boolean;
+  auto_fail_missing_signature: boolean;
+  mandatory_failures_for_fail: number;
+  safety_critical_failures_for_fail: number;
+  ai_model: string;
+  ai_temperature: number;
+}
+
+// Default settings matching SANS 10142-1:2020
+const DEFAULT_SETTINGS: ValidationSettings = {
+  earth_continuity_max_ohms: 5.0,
+  insulation_resistance_min_mohms: 0.25,
+  rcd_trip_1x_max_ms: 300,
+  rcd_trip_5x_max_ms: 150,
+  rcd_trip_max_ms: 40,
+  coc_expiry_domestic_years: 5,
+  coc_expiry_commercial_years: 2,
+  ai_confidence_threshold_percent: 30,
+  hierarchy_check_enabled: true,
+  earth_continuity_check_enabled: true,
+  insulation_resistance_check_enabled: true,
+  protective_conductor_check_enabled: true,
+  certificate_date_validation_enabled: true,
+  rcd_function_check_enabled: true,
+  signature_check_enabled: true,
+  auto_fail_missing_initial_ref: true,
+  auto_fail_invalid_certificate: true,
+  auto_fail_future_dated: true,
+  auto_fail_earth_resistance_threshold: true,
+  auto_fail_missing_signature: true,
+  mandatory_failures_for_fail: 2,
+  safety_critical_failures_for_fail: 1,
+  ai_model: 'google/gemini-3-pro-preview',
+  ai_temperature: 0.1,
+};
+
+// Build dynamic validation prompt based on settings
+function buildDynamicPrompt(settings: ValidationSettings): string {
+  const skipChecks: string[] = [];
+  if (!settings.hierarchy_check_enabled) skipChecks.push('COC Hierarchy checks');
+  if (!settings.earth_continuity_check_enabled) skipChecks.push('Earth Continuity checks (Clause 8.4)');
+  if (!settings.insulation_resistance_check_enabled) skipChecks.push('Insulation Resistance checks (Clause 8.6)');
+  if (!settings.protective_conductor_check_enabled) skipChecks.push('Protective Conductor checks (Clause 8.7)');
+  if (!settings.certificate_date_validation_enabled) skipChecks.push('Certificate Date validation');
+  if (!settings.rcd_function_check_enabled) skipChecks.push('RCD Function checks (Clause 8.8)');
+  if (!settings.signature_check_enabled) skipChecks.push('Signature verification');
+  
+  const skipSection = skipChecks.length > 0 
+    ? `\n\n## ⏭️ SKIPPED CHECKS (Disabled by Configuration)
+The following checks are DISABLED and should be marked as "Not Applicable" in your response:
+${skipChecks.map(c => `- ${c}`).join('\n')}
+`
+    : '';
+
+  const configSection = `
+## ⚙️ CONFIGURABLE THRESHOLDS (Applied from Settings)
+The following thresholds are configured for this validation:
+
+### Technical Thresholds:
+- **Earth Continuity Maximum**: ${settings.earth_continuity_max_ohms}Ω (SANS default: 5Ω)
+- **Insulation Resistance Minimum**: ${settings.insulation_resistance_min_mohms}MΩ (SANS default: 0.25MΩ)
+- **RCD Trip @ 1×IΔn Maximum**: ${settings.rcd_trip_1x_max_ms}ms (SANS default: 300ms)
+- **RCD Trip @ 5×IΔn Maximum**: ${settings.rcd_trip_5x_max_ms}ms (SANS default: 40ms)
+- **RCD Trip Maximum**: ${settings.rcd_trip_max_ms}ms
+
+### Certificate Validity:
+- **Domestic COC Expiry**: ${settings.coc_expiry_domestic_years} years
+- **Commercial COC Expiry**: ${settings.coc_expiry_commercial_years} years
+
+### Confidence Threshold:
+- **Minimum AI Confidence**: ${settings.ai_confidence_threshold_percent}%
+${skipSection}
+`;
+
+  // Insert the configuration section after the objective in the main prompt
+  return VALIDATION_PROMPT.replace(
+    '## 📜 COC TYPE HIERARCHY',
+    `${configSection}\n## 📜 COC TYPE HIERARCHY`
+  );
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
@@ -575,8 +676,8 @@ serve(async (req) => {
   }
 
   try {
-    // Accept approvedCocType as optional parameter - if provided, skip checkbox analysis
-    const { documentId, documentUrl, subsectionId, approvedCocType } = await req.json();
+    // Accept approvedCocType and testSettings as optional parameters
+    const { documentId, documentUrl, subsectionId, approvedCocType, testSettings } = await req.json();
     
     if (!documentId || !documentUrl || !subsectionId) {
       return new Response(
@@ -600,6 +701,37 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Fetch validation settings from database or use testSettings if provided
+    let validationSettings: ValidationSettings = { ...DEFAULT_SETTINGS };
+    
+    if (testSettings) {
+      console.log('📋 Using test settings from request');
+      validationSettings = { ...DEFAULT_SETTINGS, ...testSettings };
+    } else {
+      // Fetch from database
+      const { data: dbSettings, error: settingsError } = await supabase
+        .from('coc_validation_settings')
+        .select('*')
+        .limit(1)
+        .single();
+      
+      if (settingsError) {
+        console.log('⚠️ Could not fetch settings from database, using defaults:', settingsError.message);
+      } else if (dbSettings) {
+        console.log('✅ Loaded validation settings from database');
+        validationSettings = { ...DEFAULT_SETTINGS, ...dbSettings };
+      }
+    }
+    
+    console.log('🔧 Validation settings:', {
+      ai_model: validationSettings.ai_model,
+      ai_temperature: validationSettings.ai_temperature,
+      earth_continuity_max_ohms: validationSettings.earth_continuity_max_ohms,
+      insulation_resistance_min_mohms: validationSettings.insulation_resistance_min_mohms,
+      hierarchy_check_enabled: validationSettings.hierarchy_check_enabled,
+      mandatory_failures_for_fail: validationSettings.mandatory_failures_for_fail
+    });
 
     // Get user from auth header
     const authHeader = req.headers.get('Authorization');
@@ -657,10 +789,13 @@ serve(async (req) => {
       
       console.log('Using vision model for document analysis, size:', arrayBuffer.byteLength);
       
+      // Build dynamic prompt with configured thresholds
+      const dynamicPrompt = buildDynamicPrompt(validationSettings);
+      
       messages = [
         { 
           role: 'system', 
-          content: VALIDATION_PROMPT
+          content: dynamicPrompt
         },
         { 
           role: 'user', 
@@ -683,10 +818,13 @@ serve(async (req) => {
       const documentText = await fileData.text();
       const truncatedText = documentText.substring(0, 15000); // Increased context for better extraction
       
+      // Build dynamic prompt with configured thresholds
+      const dynamicPrompt = buildDynamicPrompt(validationSettings);
+      
       messages = [
         { 
           role: 'system', 
-          content: VALIDATION_PROMPT
+          content: dynamicPrompt
         },
         { 
           role: 'user', 
@@ -712,9 +850,9 @@ serve(async (req) => {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            model: 'google/gemini-3-pro-preview',
+            model: validationSettings.ai_model || 'google/gemini-3-pro-preview',
             messages,
-            temperature: 0.1, // Very low temperature for consistent, accurate validation
+            temperature: validationSettings.ai_temperature ?? 0.1,
             max_tokens: 16384, // Ensure complete JSON response
           }),
         });
@@ -977,6 +1115,70 @@ serve(async (req) => {
         // ===== END POST-PROCESSING =====
         // ===== END CHECKBOX STATES VALIDATION =====
         
+        // ===== APPLY AUTO-FAIL RULES FROM SETTINGS =====
+        console.log('=== APPLYING AUTO-FAIL RULES ===');
+        if (!validationResult.criticalFailures) {
+          validationResult.criticalFailures = [];
+        }
+        
+        // Check auto-fail conditions based on settings
+        if (validationSettings.auto_fail_future_dated && validationResult.cocIssueDate) {
+          const issueDate = new Date(validationResult.cocIssueDate);
+          const today = new Date();
+          if (issueDate > today) {
+            console.log('🚨 AUTO-FAIL: Future-dated certificate detected');
+            validationResult.criticalFailures.push({
+              category: 'Administrative',
+              clause: 'CERT-DATE-001',
+              description: 'Future-dated certificate',
+              reason: `Certificate issue date (${validationResult.cocIssueDate}) is in the future`,
+              immediateAction: 'Verify the certificate date with the issuer',
+              riskLevel: 'Critical'
+            });
+          }
+        }
+        
+        if (validationSettings.auto_fail_missing_signature) {
+          const signatureCheck = validationResult.checks?.find((c: any) => 
+            c.checkId === 'SIG-001' || c.description?.toLowerCase().includes('signature')
+          );
+          if (signatureCheck?.result === 'Fail') {
+            console.log('🚨 AUTO-FAIL: Missing signature detected');
+          }
+        }
+        
+        // Apply mandatory/safety-critical failure thresholds
+        const mandatoryFailures = validationResult.checks?.filter((c: any) => 
+          c.result === 'Fail' && c.category === 'Mandatory'
+        ).length || 0;
+        
+        const safetyCriticalFailures = validationResult.checks?.filter((c: any) => 
+          c.result === 'Fail' && c.category === 'Safety-Critical'
+        ).length || 0;
+        
+        console.log('Failure counts:', { mandatoryFailures, safetyCriticalFailures });
+        
+        // Determine if status should be FAIL based on thresholds
+        if (safetyCriticalFailures >= validationSettings.safety_critical_failures_for_fail) {
+          console.log(`🚨 FAIL: ${safetyCriticalFailures} safety-critical failures >= threshold ${validationSettings.safety_critical_failures_for_fail}`);
+          validationResult.overallStatus = 'Fail';
+        } else if (mandatoryFailures >= validationSettings.mandatory_failures_for_fail) {
+          console.log(`🚨 FAIL: ${mandatoryFailures} mandatory failures >= threshold ${validationSettings.mandatory_failures_for_fail}`);
+          validationResult.overallStatus = 'Fail';
+        }
+        
+        // Add settings used to extraction notes for transparency
+        if (!validationResult.extractionNotes) {
+          validationResult.extractionNotes = [];
+        }
+        validationResult.extractionNotes.push(
+          `Settings Applied: AI Model=${validationSettings.ai_model}, ` +
+          `Earth Max=${validationSettings.earth_continuity_max_ohms}Ω, ` +
+          `IR Min=${validationSettings.insulation_resistance_min_mohms}MΩ, ` +
+          `Mandatory Fail Threshold=${validationSettings.mandatory_failures_for_fail}`
+        );
+        // ===== END AUTO-FAIL RULES =====
+        
         // Validate required fields
         if (!validationResult.overallStatus) {
           validationResult.overallStatus = 'Incomplete';
@@ -1216,7 +1418,7 @@ serve(async (req) => {
       }
     }
 
-    // Store validation result in database with full report details
+    // Store validation result in database with full report details including settings used
     const { error: dbError } = await supabase
       .from('coc_validations')
       .upsert({
@@ -1229,8 +1431,22 @@ serve(async (req) => {
         report_data: {
           ...validationResult,
           validatedAt: new Date().toISOString(),
-          validationEngine: 'SANS-10142-1-2020-v2',
-          modelUsed: 'google/gemini-3-pro-preview'
+          validationEngine: 'SANS-10142-1-2020-v3',
+          modelUsed: validationSettings.ai_model,
+          settingsApplied: {
+            ai_model: validationSettings.ai_model,
+            ai_temperature: validationSettings.ai_temperature,
+            earth_continuity_max_ohms: validationSettings.earth_continuity_max_ohms,
+            insulation_resistance_min_mohms: validationSettings.insulation_resistance_min_mohms,
+            rcd_trip_1x_max_ms: validationSettings.rcd_trip_1x_max_ms,
+            rcd_trip_5x_max_ms: validationSettings.rcd_trip_5x_max_ms,
+            mandatory_failures_for_fail: validationSettings.mandatory_failures_for_fail,
+            safety_critical_failures_for_fail: validationSettings.safety_critical_failures_for_fail,
+            hierarchy_check_enabled: validationSettings.hierarchy_check_enabled,
+            earth_continuity_check_enabled: validationSettings.earth_continuity_check_enabled,
+            insulation_resistance_check_enabled: validationSettings.insulation_resistance_check_enabled,
+            rcd_function_check_enabled: validationSettings.rcd_function_check_enabled
+          }
         }
       }, {
         onConflict: 'document_id'
@@ -1256,7 +1472,15 @@ serve(async (req) => {
         technicalEvaluation: validationResult.technicalEvaluation,
         recommendations: validationResult.recommendations,
         extractionNotes: validationResult.extractionNotes,
-        report: validationResult
+        report: validationResult,
+        settingsApplied: {
+          ai_model: validationSettings.ai_model,
+          ai_temperature: validationSettings.ai_temperature,
+          earth_continuity_max_ohms: validationSettings.earth_continuity_max_ohms,
+          insulation_resistance_min_mohms: validationSettings.insulation_resistance_min_mohms,
+          mandatory_failures_for_fail: validationSettings.mandatory_failures_for_fail,
+          safety_critical_failures_for_fail: validationSettings.safety_critical_failures_for_fail
+        }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
