@@ -268,7 +268,19 @@ Provide a structured review with:
 2. **Critical Issues** - Must-fix problems (if any)
 3. **Recommendations** - Prioritized improvement suggestions
 4. **Code Examples** - Refactored code snippets where helpful
-5. **Quality Score** - Rate overall quality (1-10) with breakdown by category`;
+5. **Quality Score** - Rate overall quality (1-10) with breakdown by category
+
+IMPORTANT: At the end of your review, generate a **Development Prompt** section formatted as:
+
+\`\`\`prompt
+[A comprehensive, actionable development prompt that can be copied directly into a development platform like Lovable, Cursor, or similar AI-assisted development tools. This prompt should:
+- Summarize the key issues found
+- Provide specific, step-by-step instructions for fixes
+- Include code patterns or examples where helpful
+- Be structured for immediate use by a developer or AI assistant]
+\`\`\`
+
+This development prompt should be self-contained and actionable without needing to reference the original review.`;
 
     // Call Abacus AI RouteLLM API (OpenAI-compatible interface)
     // Documentation: https://abacus.ai/help/developer-platform/route-llm/api
@@ -331,12 +343,20 @@ Provide a structured review with:
       qualityScore = parseFloat(scoreMatch[1]);
     }
 
+    // Extract development prompt from the review
+    let developmentPrompt = null;
+    const promptMatch = review.match(/```prompt\n([\s\S]*?)```/);
+    if (promptMatch) {
+      developmentPrompt = promptMatch[1].trim();
+    }
+
     // Extract model used if available
     const modelUsed = data.model || data.choices?.[0]?.model || "route-llm";
 
     return new Response(
       JSON.stringify({ 
         review,
+        developmentPrompt,
         qualityScore,
         reviewType,
         filesReviewed: codeFiles.map(f => f.path),
