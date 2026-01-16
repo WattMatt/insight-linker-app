@@ -270,22 +270,22 @@ Provide a structured review with:
 4. **Code Examples** - Refactored code snippets where helpful
 5. **Quality Score** - Rate overall quality (1-10) with breakdown by category`;
 
-    // Call Abacus AI API
-    // Using the ChatLLM endpoint (adjust based on your Abacus AI model)
-    const response = await fetch("https://api.abacus.ai/api/v0/chatLLM", {
+    // Call Abacus AI RouteLLM API (OpenAI-compatible interface)
+    // Documentation: https://abacus.ai/help/developer-platform/route-llm/api
+    const response = await fetch("https://routellm.abacus.ai/v1/chat/completions", {
       method: "POST",
       headers: {
         "Authorization": `Bearer ${ABACUS_API_KEY}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
+        model: "route-llm", // Uses Abacus AI's intelligent routing to select best model
         messages: [
           { role: "system", content: systemPrompt },
           { role: "user", content: userPrompt }
         ],
-        llmName: "CLAUDE_V3_5_SONNET", // Abacus AI supports various models
         temperature: 0.2,
-        maxTokens: 8000,
+        max_tokens: 8000,
       }),
     });
 
@@ -305,14 +305,24 @@ Provide a structured review with:
           { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
+      if (response.status === 400) {
+        return new Response(
+          JSON.stringify({ error: "Bad request. Code may be too long or contain invalid characters." }),
+          { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+        );
+      }
       
       throw new Error(`Abacus AI API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
+    console.log("Abacus AI response structure:", JSON.stringify(Object.keys(data)));
     
-    // Abacus AI response structure may vary - adapt as needed
-    const review = data.response || data.content || data.message?.content || JSON.stringify(data);
+    // OpenAI-compatible response format: choices[0].message.content
+    const review = data.choices?.[0]?.message?.content || 
+                   data.response || 
+                   data.content || 
+                   JSON.stringify(data);
 
     // Parse quality score if present in the review
     let qualityScore = null;
@@ -321,12 +331,16 @@ Provide a structured review with:
       qualityScore = parseFloat(scoreMatch[1]);
     }
 
+    // Extract model used if available
+    const modelUsed = data.model || data.choices?.[0]?.model || "route-llm";
+
     return new Response(
       JSON.stringify({ 
         review,
         qualityScore,
         reviewType,
         filesReviewed: codeFiles.map(f => f.path),
+        modelUsed,
         timestamp: new Date().toISOString()
       }),
       { headers: { ...corsHeaders, "Content-Type": "application/json" } }
