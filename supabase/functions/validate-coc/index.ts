@@ -650,8 +650,8 @@ The following thresholds are configured for this validation:
 - **Earth Continuity Maximum**: ${settings.earth_continuity_max_ohms}Ω (SANS default: 5Ω)
 - **Insulation Resistance Minimum**: ${settings.insulation_resistance_min_mohms}MΩ (SANS default: 0.25MΩ)
 - **RCD Trip @ 1×IΔn Maximum**: ${settings.rcd_trip_1x_max_ms}ms (SANS default: 300ms)
-- **RCD Trip @ 5×IΔn Maximum**: ${settings.rcd_trip_5x_max_ms}ms (SANS default: 40ms)
-- **RCD Trip Maximum**: ${settings.rcd_trip_max_ms}ms
+- **RCD Trip @ 5×IΔn Maximum**: ${settings.rcd_trip_5x_max_ms}ms (SANS default: 150ms)
+- **RCD Trip Maximum (for 2×IΔn)**: ${settings.rcd_trip_max_ms}ms (SANS default: 40ms)
 
 ### Certificate Validity:
 - **Domestic COC Expiry**: ${settings.coc_expiry_domestic_years} years
@@ -1135,6 +1135,7 @@ serve(async (req) => {
               immediateAction: 'Verify the certificate date with the issuer',
               riskLevel: 'Critical'
             });
+            validationResult.overallStatus = 'Fail';
           }
         }
         
@@ -1144,6 +1145,87 @@ serve(async (req) => {
           );
           if (signatureCheck?.result === 'Fail') {
             console.log('🚨 AUTO-FAIL: Missing signature detected');
+            validationResult.overallStatus = 'Fail';
+          }
+        }
+        
+        // NEW: Auto-fail on earth resistance threshold
+        if (validationSettings.auto_fail_earth_resistance_threshold) {
+          const earthCheck = validationResult.checks?.find((c: any) => 
+            c.checkId === 'EARTH-001' || c.description?.toLowerCase().includes('earth')
+          );
+          if (earthCheck?.result === 'Fail') {
+            console.log('🚨 AUTO-FAIL: Earth resistance exceeded threshold');
+            if (!validationResult.criticalFailures.some((f: any) => f.clause === 'EARTH-001')) {
+              validationResult.criticalFailures.push({
+                category: 'Safety-Critical',
+                clause: 'EARTH-001',
+                description: 'Earth resistance exceeds threshold',
+                reason: `Earth resistance value exceeds configured maximum of ${validationSettings.earth_continuity_max_ohms}Ω`,
+                immediateAction: 'Verify earth electrode installation and bonding',
+                riskLevel: 'Critical'
+              });
+            }
+            validationResult.overallStatus = 'Fail';
+          }
+        }
+        
+        // NEW: Enforce confidence threshold
+        if (validationResult.confidenceScore && validationResult.confidenceScore < validationSettings.ai_confidence_threshold_percent) {
+          console.log(`⚠️ Low confidence: ${validationResult.confidenceScore}% < ${validationSettings.ai_confidence_threshold_percent}% threshold`);
+          if (!validationResult.extractionNotes) {
+            validationResult.extractionNotes = [];
+          }
+          validationResult.extractionNotes.push(
+            `LOW CONFIDENCE WARNING: AI confidence (${validationResult.confidenceScore}%) is below threshold (${validationSettings.ai_confidence_threshold_percent}%). Results may be unreliable.`
+          );
+          // Mark as Incomplete if confidence is too low
+          if (validationResult.overallStatus !== 'Fail') {
+            validationResult.overallStatus = 'Incomplete';
+          }
+        }
+        
+        // NEW: Mark disabled checks as "Skipped" in results for transparency
+        const skippedChecks: string[] = [];
+        if (!validationSettings.hierarchy_check_enabled) skippedChecks.push('Hierarchy');
+        if (!validationSettings.earth_continuity_check_enabled) skippedChecks.push('Earth Continuity');
+        if (!validationSettings.insulation_resistance_check_enabled) skippedChecks.push('Insulation Resistance');
+        if (!validationSettings.protective_conductor_check_enabled) skippedChecks.push('Protective Conductor');
+        if (!validationSettings.certificate_date_validation_enabled) skippedChecks.push('Certificate Date');
+        if (!validationSettings.rcd_function_check_enabled) skippedChecks.push('RCD Function');
+        if (!validationSettings.signature_check_enabled) skippedChecks.push('Signature');
+        
+        if (skippedChecks.length > 0) {
+          if (!validationResult.skippedChecks) {
+            validationResult.skippedChecks = [];
+          }
+          validationResult.skippedChecks = skippedChecks;
+          validationResult.extractionNotes?.push(`Skipped checks (disabled): ${skippedChecks.join(', ')}`);
+          
+          // Filter out failed checks for disabled validation rules
+          if (validationResult.checks) {
+            validationResult.checks = validationResult.checks.map((check: any) => {
+              const checkDesc = (check.description || check.checkId || '').toLowerCase();
+              const shouldSkip = (
+                (!validationSettings.hierarchy_check_enabled && checkDesc.includes('hierarchy')) ||
+                (!validationSettings.earth_continuity_check_enabled && checkDesc.includes('earth')) ||
+                (!validationSettings.insulation_resistance_check_enabled && checkDesc.includes('insulation')) ||
+                (!validationSettings.protective_conductor_check_enabled && checkDesc.includes('conductor')) ||
+                (!validationSettings.certificate_date_validation_enabled && checkDesc.includes('date')) ||
+                (!validationSettings.rcd_function_check_enabled && checkDesc.includes('rcd')) ||
+                (!validationSettings.signature_check_enabled && checkDesc.includes('signature'))
+              );
+              
+              if (shouldSkip && check.result === 'Fail') {
+                console.log(`  🔧 Marking disabled check as Skipped: ${check.description || check.checkId}`);
+                return {
+                  ...check,
+                  result: 'Skipped',
+                  notes: (check.notes || '') + ' [Validation check disabled in settings]'
+                };
+              }
+              return check;
+            });
           }
         }
         
@@ -1175,7 +1257,8 @@ serve(async (req) => {
           `Settings Applied: AI Model=${validationSettings.ai_model}, ` +
           `Earth Max=${validationSettings.earth_continuity_max_ohms}Ω, ` +
           `IR Min=${validationSettings.insulation_resistance_min_mohms}MΩ, ` +
-          `Mandatory Fail Threshold=${validationSettings.mandatory_failures_for_fail}`
+          `Mandatory Fail Threshold=${validationSettings.mandatory_failures_for_fail}, ` +
+          `Confidence Threshold=${validationSettings.ai_confidence_threshold_percent}%`
         );
         // ===== END AUTO-FAIL RULES =====
         
@@ -1468,6 +1551,7 @@ serve(async (req) => {
         violations: validationResult.criticalFailures || [],
         summary: validationResult.summary,
         checks: validationResult.checks,
+        skippedChecks: validationResult.skippedChecks || [],
         administrativeDetails: validationResult.administrativeDetails,
         technicalEvaluation: validationResult.technicalEvaluation,
         recommendations: validationResult.recommendations,
@@ -1476,10 +1560,20 @@ serve(async (req) => {
         settingsApplied: {
           ai_model: validationSettings.ai_model,
           ai_temperature: validationSettings.ai_temperature,
+          ai_confidence_threshold_percent: validationSettings.ai_confidence_threshold_percent,
           earth_continuity_max_ohms: validationSettings.earth_continuity_max_ohms,
           insulation_resistance_min_mohms: validationSettings.insulation_resistance_min_mohms,
+          rcd_trip_1x_max_ms: validationSettings.rcd_trip_1x_max_ms,
+          rcd_trip_5x_max_ms: validationSettings.rcd_trip_5x_max_ms,
           mandatory_failures_for_fail: validationSettings.mandatory_failures_for_fail,
-          safety_critical_failures_for_fail: validationSettings.safety_critical_failures_for_fail
+          safety_critical_failures_for_fail: validationSettings.safety_critical_failures_for_fail,
+          hierarchy_check_enabled: validationSettings.hierarchy_check_enabled,
+          earth_continuity_check_enabled: validationSettings.earth_continuity_check_enabled,
+          insulation_resistance_check_enabled: validationSettings.insulation_resistance_check_enabled,
+          rcd_function_check_enabled: validationSettings.rcd_function_check_enabled,
+          signature_check_enabled: validationSettings.signature_check_enabled,
+          certificate_date_validation_enabled: validationSettings.certificate_date_validation_enabled,
+          protective_conductor_check_enabled: validationSettings.protective_conductor_check_enabled
         }
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
