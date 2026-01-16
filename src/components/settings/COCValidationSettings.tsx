@@ -164,6 +164,7 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
   const [expandedSections, setExpandedSections] = useState<string[]>(["thresholds", "rules"]);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [testResultExpanded, setTestResultExpanded] = useState(true);
+  const [documentSearchQuery, setDocumentSearchQuery] = useState("");
 
   // Fetch settings from database
   const { data: dbSettings, isLoading, refetch: refetchSettings } = useQuery({
@@ -250,6 +251,51 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
     if (settings.auto_fail_earth_resistance_threshold) count++;
     if (settings.auto_fail_missing_signature) count++;
     return count;
+  }, [settings]);
+
+  // Calculate which checks will be skipped
+  const skippedChecksList = useMemo(() => {
+    const skipped: string[] = [];
+    if (!settings.hierarchy_check_enabled) skipped.push('COC Hierarchy');
+    if (!settings.earth_continuity_check_enabled) skipped.push('Earth Continuity');
+    if (!settings.insulation_resistance_check_enabled) skipped.push('Insulation Resistance');
+    if (!settings.protective_conductor_check_enabled) skipped.push('Protective Conductor');
+    if (!settings.certificate_date_validation_enabled) skipped.push('Certificate Date');
+    if (!settings.rcd_function_check_enabled) skipped.push('RCD Function');
+    if (!settings.signature_check_enabled) skipped.push('Signature');
+    return skipped;
+  }, [settings]);
+
+  // Filter documents based on search query
+  const filteredDocuments = useMemo(() => {
+    if (!cocDocuments) return [];
+    if (!documentSearchQuery.trim()) return cocDocuments;
+    
+    const query = documentSearchQuery.toLowerCase();
+    return cocDocuments.filter((doc: any) => {
+      const fileName = (doc.file_name || '').toLowerCase();
+      const siteName = (doc.subsections?.sites?.name || '').toLowerCase();
+      const subsectionName = (doc.subsections?.name || '').toLowerCase();
+      return fileName.includes(query) || siteName.includes(query) || subsectionName.includes(query);
+    });
+  }, [cocDocuments, documentSearchQuery]);
+
+  // Calculate settings that differ from SANS defaults
+  const settingsDiffFromSANS = useMemo(() => {
+    const diffs: { key: string; current: number; sans: number; unit: string }[] = [];
+    if ((settings.earth_continuity_max_ohms ?? 5) !== 5) {
+      diffs.push({ key: 'Earth Continuity Max', current: settings.earth_continuity_max_ohms ?? 5, sans: 5, unit: 'Ω' });
+    }
+    if ((settings.insulation_resistance_min_mohms ?? 0.25) !== 0.25) {
+      diffs.push({ key: 'Insulation Resistance Min', current: settings.insulation_resistance_min_mohms ?? 0.25, sans: 0.25, unit: 'MΩ' });
+    }
+    if ((settings.rcd_trip_1x_max_ms ?? 300) !== 300) {
+      diffs.push({ key: 'RCD Trip 1×IΔn', current: settings.rcd_trip_1x_max_ms ?? 300, sans: 300, unit: 'ms' });
+    }
+    if ((settings.rcd_trip_5x_max_ms ?? 150) !== 150) {
+      diffs.push({ key: 'RCD Trip 5×IΔn', current: settings.rcd_trip_5x_max_ms ?? 150, sans: 150, unit: 'ms' });
+    }
+    return diffs;
   }, [settings]);
 
   // Save mutation
@@ -1044,71 +1090,127 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
-              <div className="flex-1 space-y-2">
-                <Label>Select COC Document</Label>
-                <Select value={testDocumentId} onValueChange={setTestDocumentId}>
-                  <SelectTrigger>
-                    <SelectValue placeholder={loadingDocs ? "Loading documents..." : "Select a document to test..."} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <ScrollArea className="h-72">
-                      {cocDocuments?.length === 0 ? (
-                        <div className="p-4 text-center text-muted-foreground text-sm">
-                          No COC documents found
-                        </div>
-                      ) : (
-                        cocDocuments?.map((doc: any) => (
-                          <SelectItem key={doc.id} value={doc.id}>
-                            <div className="flex items-center gap-2">
-                              <FileCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
-                              <div className="flex flex-col min-w-0">
-                                <span className="truncate max-w-[280px] text-sm">{doc.file_name}</span>
-                                <span className="text-xs text-muted-foreground truncate max-w-[280px]">
-                                  {doc.subsections?.sites?.name} → {doc.subsections?.name}
-                                </span>
-                              </div>
-                              {doc.coc_status && (
-                                <Badge variant="outline" className="ml-auto text-xs flex-shrink-0">
-                                  {doc.coc_status}
-                                </Badge>
-                              )}
-                            </div>
-                          </SelectItem>
-                        ))
-                      )}
-                    </ScrollArea>
-                  </SelectContent>
-                </Select>
+            {/* Validation Preview - Shows what will run */}
+            <div className="p-3 bg-muted/50 border rounded-lg space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-sm font-medium flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Validation Preview
+                </span>
+                <Badge variant="secondary">{enabledChecksCount}/7 checks enabled</Badge>
               </div>
-              <div className="flex gap-2">
-                <Button 
-                  variant="outline"
-                  onClick={() => {
-                    setTestResult(null);
-                    setTestDocumentId("");
-                  }}
-                  disabled={!testResult && !testDocumentId}
-                >
-                  <RefreshCw className="h-4 w-4" />
-                </Button>
-                <Button 
-                  onClick={handleTestValidation} 
-                  disabled={!testDocumentId || isTesting}
-                  className="min-w-[140px]"
-                >
-                  {isTesting ? (
-                    <>
-                      <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                      Validating...
-                    </>
-                  ) : (
-                    <>
-                      <PlayCircle className="h-4 w-4 mr-2" />
-                      Run Test
-                    </>
-                  )}
-                </Button>
+              
+              {skippedChecksList.length > 0 && (
+                <div className="flex flex-wrap gap-1 mt-2">
+                  <span className="text-xs text-muted-foreground">Skipped:</span>
+                  {skippedChecksList.map(check => (
+                    <Badge key={check} variant="outline" className="text-xs bg-muted">
+                      <EyeOff className="h-3 w-3 mr-1" />
+                      {check}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {settingsDiffFromSANS.length > 0 && (
+                <div className="mt-2 p-2 bg-amber-500/10 border border-amber-500/20 rounded text-xs">
+                  <span className="text-amber-600 dark:text-amber-400 font-medium flex items-center gap-1">
+                    <AlertCircle className="h-3 w-3" />
+                    Thresholds differ from SANS 10142-1 defaults:
+                  </span>
+                  <div className="mt-1 flex flex-wrap gap-2">
+                    {settingsDiffFromSANS.map(diff => (
+                      <span key={diff.key} className="text-muted-foreground">
+                        {diff.key}: {diff.current}{diff.unit} (SANS: {diff.sans}{diff.unit})
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <div className="flex flex-col gap-4">
+              {/* Document search */}
+              <div className="space-y-2">
+                <Label>Search Documents</Label>
+                <Input
+                  placeholder="Search by filename, site, or subsection..."
+                  value={documentSearchQuery}
+                  onChange={(e) => setDocumentSearchQuery(e.target.value)}
+                  className="mb-2"
+                />
+              </div>
+              
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-end gap-4">
+                <div className="flex-1 space-y-2">
+                  <Label>Select COC Document</Label>
+                  <Select value={testDocumentId} onValueChange={setTestDocumentId}>
+                    <SelectTrigger>
+                      <SelectValue placeholder={loadingDocs ? "Loading documents..." : `Select from ${filteredDocuments?.length || 0} documents...`} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <ScrollArea className="h-72">
+                        {filteredDocuments?.length === 0 ? (
+                          <div className="p-4 text-center text-muted-foreground text-sm">
+                            {documentSearchQuery ? 'No matching documents found' : 'No COC documents found'}
+                          </div>
+                        ) : (
+                          filteredDocuments?.map((doc: any) => (
+                            <SelectItem key={doc.id} value={doc.id}>
+                              <div className="flex items-center gap-2">
+                                <FileCheck className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+                                <div className="flex flex-col min-w-0">
+                                  <span className="truncate max-w-[280px] text-sm">{doc.file_name}</span>
+                                  <span className="text-xs text-muted-foreground truncate max-w-[280px]">
+                                    {doc.subsections?.sites?.name} → {doc.subsections?.name}
+                                  </span>
+                                </div>
+                                {doc.coc_status && (
+                                  <Badge 
+                                    variant={doc.coc_status === 'approved' ? 'default' : doc.coc_status === 'rejected' ? 'destructive' : 'outline'} 
+                                    className="ml-auto text-xs flex-shrink-0"
+                                  >
+                                    {doc.coc_status}
+                                  </Badge>
+                                )}
+                              </div>
+                            </SelectItem>
+                          ))
+                        )}
+                      </ScrollArea>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="outline"
+                    onClick={() => {
+                      setTestResult(null);
+                      setTestDocumentId("");
+                      setDocumentSearchQuery("");
+                    }}
+                    disabled={!testResult && !testDocumentId}
+                  >
+                    <RefreshCw className="h-4 w-4" />
+                  </Button>
+                  <Button 
+                    onClick={handleTestValidation} 
+                    disabled={!testDocumentId || isTesting}
+                    className="min-w-[140px]"
+                  >
+                    {isTesting ? (
+                      <>
+                        <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                        Validating...
+                      </>
+                    ) : (
+                      <>
+                        <PlayCircle className="h-4 w-4 mr-2" />
+                        Run Test
+                      </>
+                    )}
+                  </Button>
+                </div>
               </div>
             </div>
 
@@ -1155,28 +1257,68 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          {/* Status Overview */}
-                          <div className="flex flex-wrap items-center gap-4">
-                            <Badge 
-                              variant={testResult.status === 'Pass' ? 'default' : 'destructive'}
-                              className="text-sm px-3 py-1"
+                          {/* Status Overview with Re-test button */}
+                          <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                              <Badge 
+                                variant={testResult.status === 'Pass' ? 'default' : testResult.status === 'Incomplete' ? 'secondary' : 'destructive'}
+                                className="text-sm px-3 py-1"
+                              >
+                                {testResult.status}
+                              </Badge>
+                              <span className="text-sm text-muted-foreground">
+                                COC Type: <span className="font-medium">{testResult.report?.cocType || 'Unknown'}</span>
+                              </span>
+                              {testResult.confidenceScore && (
+                                <span className={cn(
+                                  "text-sm",
+                                  testResult.confidenceScore < (settings.ai_confidence_threshold_percent ?? 30) 
+                                    ? "text-amber-600 dark:text-amber-400" 
+                                    : "text-muted-foreground"
+                                )}>
+                                  Confidence: <span className="font-medium">{testResult.confidenceScore}%</span>
+                                  {testResult.confidenceScore < (settings.ai_confidence_threshold_percent ?? 30) && (
+                                    <span className="ml-1">(below threshold)</span>
+                                  )}
+                                </span>
+                              )}
+                              {testResult.report?.cocNumber && (
+                                <span className="text-sm text-muted-foreground">
+                                  COC #: <span className="font-medium">{testResult.report.cocNumber}</span>
+                                </span>
+                              )}
+                            </div>
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={handleTestValidation}
+                              disabled={isTesting}
                             >
-                              {testResult.status}
-                            </Badge>
-                            <span className="text-sm text-muted-foreground">
-                              COC Type: <span className="font-medium">{testResult.report?.cocType || 'Unknown'}</span>
-                            </span>
-                            {testResult.confidenceScore && (
-                              <span className="text-sm text-muted-foreground">
-                                Confidence: <span className="font-medium">{testResult.confidenceScore}%</span>
-                              </span>
-                            )}
-                            {testResult.report?.cocNumber && (
-                              <span className="text-sm text-muted-foreground">
-                                COC #: <span className="font-medium">{testResult.report.cocNumber}</span>
-                              </span>
-                            )}
+                              {isTesting ? (
+                                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-4 w-4 mr-2" />
+                              )}
+                              Re-test
+                            </Button>
                           </div>
+
+                          {/* Skipped Checks Display */}
+                          {testResult.skippedChecks && testResult.skippedChecks.length > 0 && (
+                            <div className="p-3 bg-muted/50 border rounded-lg">
+                              <p className="text-sm font-medium flex items-center gap-2 mb-2">
+                                <EyeOff className="h-4 w-4 text-muted-foreground" />
+                                Checks Skipped ({testResult.skippedChecks.length})
+                              </p>
+                              <div className="flex flex-wrap gap-1">
+                                {testResult.skippedChecks.map((check: string, i: number) => (
+                                  <Badge key={i} variant="outline" className="text-xs">
+                                    {check}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          )}
 
                           {/* Settings Applied (NEW) */}
                           {testResult.settingsApplied && (

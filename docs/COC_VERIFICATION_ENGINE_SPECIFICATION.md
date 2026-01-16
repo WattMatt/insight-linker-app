@@ -1,7 +1,7 @@
 # COC Verification Engine Specification
 
-**Document Version:** 1.0  
-**Last Updated:** 2026-01-13  
+**Document Version:** 1.1  
+**Last Updated:** 2026-01-16  
 **Status:** Active  
 **Owner:** Watson Mattheus Electrical Compliance
 
@@ -610,7 +610,9 @@ If AI response cannot be parsed:
 | `earth_continuity_max_ohms` | numeric | 5.0 | Maximum earth continuity resistance (Ω) |
 | `insulation_resistance_min_mohms` | numeric | 0.25 | Minimum insulation resistance (MΩ) |
 | `rcd_trip_1x_max_ms` | integer | 300 | RCD trip time at 1×IΔn (ms) |
-| `rcd_trip_5x_max_ms` | integer | 150 | RCD trip time at 5×IΔn (ms) |
+| `rcd_trip_5x_max_ms` | integer | 150 | RCD trip time at 5×IΔn (ms) - SANS default |
+| `rcd_trip_max_ms` | integer | 40 | RCD trip time at 2×IΔn (ms) |
+| `ai_confidence_threshold_percent` | integer | 30 | Minimum confidence for valid results |
 | `mandatory_failures_for_fail` | integer | 2 | # mandatory failures triggering FAIL |
 | `safety_critical_failures_for_fail` | integer | 1 | # safety-critical failures triggering FAIL |
 | `ai_model` | text | google/gemini-3-pro-preview | AI model for validation |
@@ -618,9 +620,15 @@ If AI response cannot be parsed:
 | `hierarchy_check_enabled` | boolean | true | Enable COC hierarchy validation |
 | `earth_continuity_check_enabled` | boolean | true | Enable earth continuity check |
 | `insulation_resistance_check_enabled` | boolean | true | Enable insulation resistance check |
+| `protective_conductor_check_enabled` | boolean | true | Enable protective conductor check |
+| `certificate_date_validation_enabled` | boolean | true | Enable certificate date check |
 | `rcd_function_check_enabled` | boolean | true | Enable RCD function check |
+| `signature_check_enabled` | boolean | true | Enable signature verification |
 | `auto_fail_future_dated` | boolean | true | Auto-fail future-dated certificates |
 | `auto_fail_missing_signature` | boolean | true | Auto-fail missing signatures |
+| `auto_fail_earth_resistance_threshold` | boolean | true | Auto-fail on earth > threshold |
+| `auto_fail_missing_initial_ref` | boolean | true | Auto-fail Supp/Temp without Initial ref |
+| `auto_fail_invalid_certificate` | boolean | true | Auto-fail invalid certificate format |
 
 ### 11.2 Preset Configurations
 
@@ -637,7 +645,31 @@ The `validate-coc` edge function now builds prompts dynamically:
 2. Injects configurable thresholds into the AI prompt
 3. Indicates which checks are enabled/disabled
 4. Applies auto-fail rules during post-processing
-5. Stores `settingsApplied` in `report_data` for audit
+5. Marks disabled checks as "Skipped" in results
+6. Enforces confidence threshold - marks as Incomplete if below
+7. Stores `settingsApplied` in `report_data` for audit
+
+### 11.4 API Request Parameters
+
+**`validate-coc` Edge Function Request Body:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `documentId` | string | Yes | UUID of the document to validate |
+| `documentUrl` | string | Yes | Signed URL or public URL of the document |
+| `subsectionId` | string | Yes | UUID of the subsection |
+| `approvedCocType` | string | No | User-approved COC type (overrides AI detection) |
+| `testSettings` | object | No | Settings object for test validation (overrides database settings) |
+
+### 11.5 Response Fields
+
+**New fields in validation response:**
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `skippedChecks` | string[] | List of check names that were disabled |
+| `settingsApplied` | object | Complete settings used during validation |
+| `settingsApplied.ai_confidence_threshold_percent` | number | Confidence threshold that was applied |
 
 ---
 
