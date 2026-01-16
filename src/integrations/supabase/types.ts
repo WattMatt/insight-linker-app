@@ -309,6 +309,99 @@ export type Database = {
           },
         ]
       }
+      coc_validation_settings: {
+        Row: {
+          ai_confidence_threshold_percent: number
+          ai_model: string
+          ai_temperature: number
+          auto_fail_earth_resistance_threshold: boolean
+          auto_fail_future_dated: boolean
+          auto_fail_invalid_certificate: boolean
+          auto_fail_missing_initial_ref: boolean
+          auto_fail_missing_signature: boolean
+          certificate_date_validation_enabled: boolean
+          coc_expiry_commercial_years: number
+          coc_expiry_domestic_years: number
+          created_at: string
+          earth_continuity_check_enabled: boolean
+          earth_continuity_max_ohms: number
+          hierarchy_check_enabled: boolean
+          id: string
+          insulation_resistance_check_enabled: boolean
+          insulation_resistance_min_mohms: number
+          mandatory_failures_for_fail: number
+          protective_conductor_check_enabled: boolean
+          rcd_function_check_enabled: boolean
+          rcd_trip_1x_max_ms: number
+          rcd_trip_5x_max_ms: number
+          rcd_trip_max_ms: number
+          safety_critical_failures_for_fail: number
+          signature_check_enabled: boolean
+          updated_at: string
+          updated_by: string | null
+        }
+        Insert: {
+          ai_confidence_threshold_percent?: number
+          ai_model?: string
+          ai_temperature?: number
+          auto_fail_earth_resistance_threshold?: boolean
+          auto_fail_future_dated?: boolean
+          auto_fail_invalid_certificate?: boolean
+          auto_fail_missing_initial_ref?: boolean
+          auto_fail_missing_signature?: boolean
+          certificate_date_validation_enabled?: boolean
+          coc_expiry_commercial_years?: number
+          coc_expiry_domestic_years?: number
+          created_at?: string
+          earth_continuity_check_enabled?: boolean
+          earth_continuity_max_ohms?: number
+          hierarchy_check_enabled?: boolean
+          id?: string
+          insulation_resistance_check_enabled?: boolean
+          insulation_resistance_min_mohms?: number
+          mandatory_failures_for_fail?: number
+          protective_conductor_check_enabled?: boolean
+          rcd_function_check_enabled?: boolean
+          rcd_trip_1x_max_ms?: number
+          rcd_trip_5x_max_ms?: number
+          rcd_trip_max_ms?: number
+          safety_critical_failures_for_fail?: number
+          signature_check_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Update: {
+          ai_confidence_threshold_percent?: number
+          ai_model?: string
+          ai_temperature?: number
+          auto_fail_earth_resistance_threshold?: boolean
+          auto_fail_future_dated?: boolean
+          auto_fail_invalid_certificate?: boolean
+          auto_fail_missing_initial_ref?: boolean
+          auto_fail_missing_signature?: boolean
+          certificate_date_validation_enabled?: boolean
+          coc_expiry_commercial_years?: number
+          coc_expiry_domestic_years?: number
+          created_at?: string
+          earth_continuity_check_enabled?: boolean
+          earth_continuity_max_ohms?: number
+          hierarchy_check_enabled?: boolean
+          id?: string
+          insulation_resistance_check_enabled?: boolean
+          insulation_resistance_min_mohms?: number
+          mandatory_failures_for_fail?: number
+          protective_conductor_check_enabled?: boolean
+          rcd_function_check_enabled?: boolean
+          rcd_trip_1x_max_ms?: number
+          rcd_trip_5x_max_ms?: number
+          rcd_trip_max_ms?: number
+          safety_critical_failures_for_fail?: number
+          signature_check_enabled?: boolean
+          updated_at?: string
+          updated_by?: string | null
+        }
+        Relationships: []
+      }
       coc_validations: {
         Row: {
           created_at: string
