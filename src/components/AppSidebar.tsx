@@ -18,7 +18,8 @@ import {
   Lightbulb,
   Shield,
   FileCode,
-  Key
+  Key,
+  Sparkles
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -52,6 +53,7 @@ const menuItems = [
   { title: "Portal Management", url: "/portal-management", icon: Eye, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
   { title: "Offline Review", url: "/offline-review", icon: FileCode, adminOnly: true },
+  { title: "AI Code Review", url: "/code-review", icon: Sparkles, adminOnly: true },
   { title: "API Clients", url: "/api-clients", icon: Key, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
 ];

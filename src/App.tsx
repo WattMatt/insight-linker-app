@@ -33,6 +33,7 @@ const NotFound = lazy(() => import("./pages/NotFound"));
 const ValidationFeedback = lazy(() => import("./pages/ValidationFeedback"));
 const PortalManagement = lazy(() => import("./pages/PortalManagement"));
 const OfflineReview = lazy(() => import("./pages/OfflineReview"));
+const CodeReview = lazy(() => import("./pages/CodeReview"));
 const ClientPortalDashboard = lazy(() => import("./pages/ClientPortalDashboard"));
 const ClientPortalSites = lazy(() => import("./pages/ClientPortalSites"));
 const ClientPortalSiteDetail = lazy(() => import("./pages/ClientPortalSiteDetail"));
@@ -301,6 +302,10 @@ const App = () => (
           <Route
             path="/offline-review"
             element={<ProtectedRoute><DashboardLayout><OfflineReview /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
+            path="/code-review"
+            element={<ProtectedRoute><DashboardLayout><CodeReview /></DashboardLayout></ProtectedRoute>}
           />
           <Route
           path="/validation-feedback"
