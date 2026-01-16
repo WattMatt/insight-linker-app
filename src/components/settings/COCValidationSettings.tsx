@@ -13,10 +13,12 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { Progress } from "@/components/ui/progress";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { cn } from "@/lib/utils";
+import { SANSReferenceTab } from "./SANSReferenceTab";
 import { 
   Shield, 
   Zap, 
@@ -43,7 +45,9 @@ import {
   HelpCircle,
   Sparkles,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  BookOpen,
+  Settings
 } from "lucide-react";
 
 // Type for database settings
@@ -415,52 +419,66 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
   return (
     <TooltipProvider>
       <div className={cn("space-y-6", className)}>
-        {/* Header with save/reset buttons */}
+        {/* Main Header */}
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <h2 className="text-xl font-semibold flex items-center gap-2">
               <Shield className="h-5 w-5 text-primary" />
-              COC Validation Configuration
+              COC Validation
             </h2>
             <p className="text-sm text-muted-foreground mt-1">
-              Configure validation rules based on SANS 10142-1:2020 standards
+              Configure validation rules and reference SANS 10142-1:2020 standards
             </p>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            {hasChanges && (
-              <Badge variant="outline" className="text-amber-600 border-amber-600 animate-pulse">
-                <AlertCircle className="h-3 w-3 mr-1" />
-                Unsaved changes
-              </Badge>
-            )}
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button variant="ghost" size="icon" onClick={copySettingsToClipboard}>
-                  <Copy className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Copy settings as JSON</TooltipContent>
-            </Tooltip>
-            <Button variant="outline" onClick={handleReset} size="sm">
-              <RotateCcw className="h-4 w-4 mr-2" />
-              Reset
-            </Button>
-            <Button 
-              onClick={handleSave} 
-              size="sm" 
-              disabled={!hasChanges || saveMutation.isPending}
-            >
-              {saveMutation.isPending ? (
-                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-              ) : (
-                <Save className="h-4 w-4 mr-2" />
-              )}
-              Save Changes
-            </Button>
           </div>
         </div>
 
-        {/* Quick Presets */}
+        {/* Sub-tabs for Configuration and SANS Reference */}
+        <Tabs defaultValue="configuration" className="w-full">
+          <TabsList className="grid w-full grid-cols-2 lg:w-[400px]">
+            <TabsTrigger value="configuration" className="flex items-center gap-2">
+              <Settings className="h-4 w-4" />
+              Configuration
+            </TabsTrigger>
+            <TabsTrigger value="sans-reference" className="flex items-center gap-2">
+              <BookOpen className="h-4 w-4" />
+              SANS Reference
+            </TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="configuration" className="mt-6 space-y-6">
+            {/* Configuration Header with save/reset buttons */}
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {hasChanges && (
+                <Badge variant="outline" className="text-amber-600 border-amber-600 animate-pulse">
+                  <AlertCircle className="h-3 w-3 mr-1" />
+                  Unsaved changes
+                </Badge>
+              )}
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="icon" onClick={copySettingsToClipboard}>
+                    <Copy className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>Copy settings as JSON</TooltipContent>
+              </Tooltip>
+              <Button variant="outline" onClick={handleReset} size="sm">
+                <RotateCcw className="h-4 w-4 mr-2" />
+                Reset
+              </Button>
+              <Button 
+                onClick={handleSave} 
+                size="sm" 
+                disabled={!hasChanges || saveMutation.isPending}
+              >
+                {saveMutation.isPending ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Save className="h-4 w-4 mr-2" />
+                )}
+                Save Changes
+              </Button>
+            </div>
         <Card>
           <CardHeader className="pb-3">
             <CardTitle className="flex items-center gap-2 text-base">
@@ -1320,6 +1338,12 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
             </CollapsibleContent>
           </Card>
         </Collapsible>
+          </TabsContent>
+
+          <TabsContent value="sans-reference" className="mt-6">
+            <SANSReferenceTab />
+          </TabsContent>
+        </Tabs>
       </div>
     </TooltipProvider>
   );
