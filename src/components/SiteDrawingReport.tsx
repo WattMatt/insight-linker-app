@@ -99,13 +99,13 @@ export const SiteDrawingReport = ({
 
       const generalInfo = inspectionData?.jsonData?.generalInfo || {};
       const generalInfoTable = createDataTable(
-        [],
+        [{ field: 'field', header: 'Field' }, { field: 'value', header: 'Value' }],
         [
-          ['Project Name', generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'N/A'],
-          ['Inspector Name', generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'N/A'],
-          ['Inspection Date', generalInfo.date || inspectionData.date || inspectionData.inspection_date || 'N/A'],
-          ['Location', generalInfo.location || inspectionData.location || 'N/A'],
-          ['Total Pins', pins.length.toString()],
+          { field: 'Project Name', value: generalInfo.projectName || inspectionData.projectName || inspectionData.project_name || 'N/A' },
+          { field: 'Inspector Name', value: generalInfo.inspectorName || inspectionData.inspectorName || inspectionData.inspector_name || 'N/A' },
+          { field: 'Inspection Date', value: generalInfo.date || inspectionData.date || inspectionData.inspection_date || 'N/A' },
+          { field: 'Location', value: generalInfo.location || inspectionData.location || 'N/A' },
+          { field: 'Total Pins', value: pins.length.toString() },
         ]
       );
       content.push(generalInfoTable);
@@ -218,8 +218,8 @@ export const SiteDrawingReport = ({
       ]);
 
       const indexTable = createDataTable(
-        ['#', 'Location/Item', 'Images'],
-        indexData
+        [{ field: 'number', header: '#' }, { field: 'location', header: 'Location/Item' }, { field: 'images', header: 'Images' }],
+        indexData.map(row => ({ number: row[0], location: row[1], images: row[2] }))
       );
       content.push(indexTable);
 

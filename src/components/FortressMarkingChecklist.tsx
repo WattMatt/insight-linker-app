@@ -269,13 +269,13 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     // Summary stats table
     content.push(createSectionHeader('Summary Statistics', 'muted'));
     const summaryTable = createDataTable(
-      ['Metric', 'Value'],
+      [{ field: 'metric', header: 'Metric' }, { field: 'value', header: 'Value' }],
       [
-        ['Total Items', totalItems.toString()],
-        ['Completed', checkedItems.toString()],
-        ['Pending', (totalItems - checkedItems).toString()],
-        ['Not Applicable', notApplicableCount.toString()],
-        ['Completion Rate', `${completionPercentage}%`],
+        { metric: 'Total Items', value: totalItems.toString() },
+        { metric: 'Completed', value: checkedItems.toString() },
+        { metric: 'Pending', value: (totalItems - checkedItems).toString() },
+        { metric: 'Not Applicable', value: notApplicableCount.toString() },
+        { metric: 'Completion Rate', value: `${completionPercentage}%` },
       ]
     );
     content.push(summaryTable);
@@ -297,8 +297,8 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       ]);
 
       const sectionTable = createDataTable(
-        ['Status', 'Item', 'Progress'],
-        tableData
+        [{ field: 'status', header: 'Status' }, { field: 'item', header: 'Item' }, { field: 'progress', header: 'Progress' }],
+        tableData.map(row => ({ status: row[0], item: row[1], progress: row[2] }))
       );
       content.push(sectionTable);
     });
