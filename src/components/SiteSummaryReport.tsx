@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Eye, Loader2 } from "lucide-react";
+import { FileText, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
@@ -306,8 +306,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
           </>
         ) : (
           <>
-            <Eye className="h-4 w-4 mr-2" />
-            Preview Report
+            <FileText className="h-4 w-4 mr-2" />
+            Generate PDF
           </>
         )}
       </Button>
