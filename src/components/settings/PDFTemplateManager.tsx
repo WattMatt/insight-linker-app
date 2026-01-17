@@ -47,58 +47,88 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
     customization: {
       ...DEFAULT_CUSTOMIZATION,
       coverTitle: "Site Summary Report",
-      coverSubtitle: "Comprehensive Site Analysis",
+      coverSubtitle: "Comprehensive Site Health & Compliance Overview",
       accentColor: "blue"
     },
     sections: [
       { 
-        id: "site-info", 
-        title: "Site Information", 
-        type: "table", 
+        id: "health-metrics", 
+        title: "Health Metrics", 
+        type: "kpi", 
         enabled: true, 
         order: 0, 
         editable: true,
-        columns: [
-          { id: "name", label: "Site Name", field: "name", visible: true },
-          { id: "client", label: "Client", field: "client", visible: true },
-          { id: "address", label: "Address", field: "address", visible: true },
+        kpiItems: [
+          { id: "health", label: "Overall Health", field: "overallHealth", visible: true, color: "green" },
+          { id: "coc", label: "COC Compliance", field: "cocCompliance", visible: true, color: "orange" },
+          { id: "metering", label: "Metering Data", field: "meteringData", visible: true, color: "blue" },
+          { id: "snags", label: "Snag Free", field: "snagFree", visible: true, color: "red" },
         ]
       },
       { 
-        id: "subsections", 
-        title: "Subsections Overview", 
-        type: "table", 
+        id: "health-by-category", 
+        title: "Health by Category", 
+        type: "kpi", 
         enabled: true, 
         order: 1, 
         editable: true,
-        columns: [
-          { id: "name", label: "Shop Name", field: "name", visible: true },
-          { id: "tenant", label: "Tenant", field: "tenant", visible: true },
-          { id: "category", label: "Category", field: "category", visible: true },
-          { id: "cocStatus", label: "COC Status", field: "cocStatus", visible: true },
-          { id: "documents", label: "Documents", field: "documents", visible: true },
-        ]
       },
       { 
-        id: "compliance", 
-        title: "Compliance Summary", 
-        type: "kpi", 
+        id: "summary-statistics", 
+        title: "Summary Statistics", 
+        type: "table", 
         enabled: true, 
         order: 2, 
         editable: true,
-        kpiItems: [
-          { id: "total", label: "Total Subsections", field: "totalSubsections", visible: true, color: "blue" },
-          { id: "pass", label: "COC Pass", field: "cocPass", visible: true, color: "green" },
-          { id: "missing", label: "Missing", field: "cocMissing", visible: true, color: "red" },
-          { id: "rate", label: "Compliance Rate", field: "complianceRate", visible: true, color: "purple" },
+        columns: [
+          { id: "metric", label: "Metric", field: "metric", visible: true },
+          { id: "value", label: "Value", field: "value", visible: true },
+        ]
+      },
+      { 
+        id: "subsection-details", 
+        title: "Subsection Details", 
+        type: "table", 
+        enabled: true, 
+        order: 3, 
+        editable: true,
+        columns: [
+          { id: "name", label: "Shop Name", field: "name", visible: true },
+          { id: "category", label: "Category", field: "category", visible: true },
+          { id: "cocStatus", label: "COC Status", field: "cocStatus", visible: true },
+          { id: "metering", label: "Metering", field: "metering", visible: true },
+          { id: "snags", label: "Snags", field: "snags", visible: true },
+          { id: "compliance", label: "Compliance", field: "compliance", visible: true },
+        ]
+      },
+      { 
+        id: "subsection-qr-codes", 
+        title: "Subsection QR Codes", 
+        type: "table", 
+        enabled: true, 
+        order: 4, 
+        editable: true,
+      },
+      { 
+        id: "coc-validations", 
+        title: "COC Validation Summary", 
+        type: "table", 
+        enabled: true, 
+        order: 5, 
+        editable: true,
+        columns: [
+          { id: "subsection", label: "Subsection", field: "subsection", visible: true },
+          { id: "cocNumber", label: "COC Number", field: "cocNumber", visible: true },
+          { id: "status", label: "Status", field: "status", visible: true },
+          { id: "date", label: "Date", field: "date", visible: true },
         ]
       },
       { 
         id: "inspections", 
         title: "Recent Inspections", 
         type: "table", 
-        enabled: true, 
-        order: 3, 
+        enabled: false, 
+        order: 6, 
         editable: true,
         columns: [
           { id: "title", label: "Title", field: "title", visible: true },
