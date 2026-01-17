@@ -17,10 +17,15 @@ import {
   Edit,
   RotateCcw,
   Loader2,
-  Save
+  Save,
+  Database,
+  CheckCircle2,
+  Building2
 } from "lucide-react";
 import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/components/pdf-editor/types";
 import { PDFWYSIWYGEditor } from "./PDFWYSIWYGEditor";
+import { InspectionTemplatePreview } from "./preview-renderers/InspectionTemplatePreview";
+import { useAvailableSites } from "@/hooks/useSampleReportData";
 import { Json } from "@/integrations/supabase/types";
 
 interface PDFTemplate {
@@ -345,11 +350,22 @@ export const PDFTemplateManager = () => {
   const [sections, setSections] = useState<ReportSection[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
   
+  // Reference site selection for realistic previews
+  const { sites: availableSites, loading: loadingSites } = useAvailableSites();
+  const [referenceSiteId, setReferenceSiteId] = useState<string | null>(null);
+  
   // Inspection template selection state
   const [selectedInspectionTemplateId, setSelectedInspectionTemplateId] = useState<string | null>(null);
   const [inspectionPreviewSections, setInspectionPreviewSections] = useState<ReportSection[]>([]);
   const [inspectionHasChanges, setInspectionHasChanges] = useState(false);
   const [savingInspection, setSavingInspection] = useState(false);
+
+  // Auto-select best reference site when available
+  useEffect(() => {
+    if (availableSites.length > 0 && !referenceSiteId) {
+      setReferenceSiteId(availableSites[0].id);
+    }
+  }, [availableSites, referenceSiteId]);
 
   useEffect(() => {
     fetchTemplates();
@@ -541,6 +557,57 @@ export const PDFTemplateManager = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Reference Project Selector */}
+        <div className="mb-6 p-4 bg-primary/5 border border-primary/20 rounded-lg">
+          <div className="flex items-center gap-4 flex-wrap">
+            <div className="flex items-center gap-2 text-primary">
+              <Database className="h-5 w-5" />
+              <div>
+                <Label className="text-sm font-medium">Reference Project</Label>
+                <p className="text-xs text-muted-foreground">
+                  Select a project with complete data to see realistic previews
+                </p>
+              </div>
+            </div>
+            <Select 
+              value={referenceSiteId || ""} 
+              onValueChange={setReferenceSiteId}
+              disabled={loadingSites}
+            >
+              <SelectTrigger className="w-[350px]">
+                <SelectValue placeholder={loadingSites ? "Loading sites..." : "Choose a reference project..."} />
+              </SelectTrigger>
+              <SelectContent>
+                {availableSites.map((site) => (
+                  <SelectItem key={site.id} value={site.id}>
+                    <div className="flex items-center gap-2">
+                      <Building2 className="h-4 w-4 text-muted-foreground" />
+                      <span>{site.name}</span>
+                      <Badge variant="outline" className="text-xs ml-2">
+                        {site.subsectionCount} shops
+                      </Badge>
+                      {site.inspectionCount > 0 && (
+                        <Badge variant="secondary" className="text-xs">
+                          {site.inspectionCount} inspections
+                        </Badge>
+                      )}
+                      {site.completenessScore >= 80 && (
+                        <CheckCircle2 className="h-3 w-3 text-green-600 ml-1" />
+                      )}
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {referenceSiteId && availableSites.find(s => s.id === referenceSiteId)?.completenessScore >= 80 && (
+              <Badge variant="outline" className="text-green-600 border-green-300 bg-green-50">
+                <CheckCircle2 className="h-3 w-3 mr-1" />
+                Best for previews
+              </Badge>
+            )}
+          </div>
+        </div>
+
         <Tabs value={selectedType} onValueChange={setSelectedType}>
           <TabsList className="grid grid-cols-5 w-full mb-6">
             {REPORT_TYPES.map(type => {
@@ -644,22 +711,27 @@ export const PDFTemplateManager = () => {
                           )}
                         </div>
 
-                        {/* Dynamic Preview based on selected template */}
+                        {/* Dynamic Preview based on selected template - Use InspectionTemplatePreview */}
                         {selectedInspectionTemplateId ? (
-                          <PDFWYSIWYGEditor
-                            customization={{
-                              ...template.customization,
-                              coverTitle: inspectionTemplates.find(t => t.id === selectedInspectionTemplateId)?.name || "Inspection Report",
-                              coverSubtitle: inspectionTemplates.find(t => t.id === selectedInspectionTemplateId)?.description || "Inspection Details"
-                            }}
-                            sections={inspectionPreviewSections}
-                            reportType="inspection"
-                            onCustomizationChange={() => {}}
-                            onSectionsChange={(newSections) => {
-                              setInspectionPreviewSections(newSections);
-                              setInspectionHasChanges(true);
-                            }}
-                          />
+                          <div className="border rounded-lg overflow-hidden bg-gray-100 p-4">
+                            <InspectionTemplatePreview
+                              template={inspectionTemplates.find(t => t.id === selectedInspectionTemplateId)!}
+                              sampleData={
+                                referenceSiteId && availableSites.find(s => s.id === referenceSiteId)
+                                  ? {
+                                      siteName: availableSites.find(s => s.id === referenceSiteId)?.name,
+                                      clientName: availableSites.find(s => s.id === referenceSiteId)?.clientName,
+                                    }
+                                  : undefined
+                              }
+                              zoom={0.7}
+                              colors={{ 
+                                primary: '#16a34a', 
+                                light: '#dcfce7', 
+                                text: '#166534' 
+                              }}
+                            />
+                          </div>
                         ) : (
                           <div className="text-center py-12 text-muted-foreground border-2 border-dashed rounded-lg">
                             <ClipboardCheck className="h-12 w-12 mx-auto mb-4 opacity-50" />
@@ -675,6 +747,7 @@ export const PDFTemplateManager = () => {
                           customization={template.customization}
                           sections={template.sections}
                           reportType={type.id}
+                          referenceSiteId={referenceSiteId}
                           onCustomizationChange={() => {}}
                           onSectionsChange={() => {}}
                         />
@@ -708,6 +781,7 @@ export const PDFTemplateManager = () => {
                   customization={customization}
                   sections={sections}
                   reportType={editingTemplate.report_type}
+                  referenceSiteId={referenceSiteId}
                   onCustomizationChange={(updates) => {
                     setCustomization(prev => ({ ...prev, ...updates }));
                     setHasChanges(true);
