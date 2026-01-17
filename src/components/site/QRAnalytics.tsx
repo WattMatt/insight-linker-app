@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import JSZip from 'jszip';
+import { generatePdfBlob, DEFAULT_STYLES } from "@/lib/pdfMakeUtils";
 
 interface QRAnalyticsProps {
     site: Site;
@@ -74,7 +75,6 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
         try {
             // Import dynamically to keep bundle size small for this specific feature
             const QRCode = await import('qrcode');
-            const { default: jsPDF } = await import('jspdf');
             const zip = new JSZip();
 
             // Get QR base URL from settings
@@ -174,41 +174,40 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                 }
             }
 
-            // Generate PDF
-            const pageWidth = 210;
-            const margin = 15;
+            // Generate PDF using pdfmake
             const cols = 3;
-            const colGap = 10;
-            const qrWidth = (pageWidth - (margin * 2) - (colGap * (cols - 1))) / cols;
-            const qrHeight = qrWidth;
-            const rowSpacing = 15;
-            const totalRows = Math.ceil(qrCodeDataUrls.length / cols);
-            const totalHeight = margin + (totalRows * qrHeight) + ((totalRows - 1) * rowSpacing) + margin;
-
-            const pdf = new jsPDF({
-                orientation: 'portrait',
-                unit: 'mm',
-                format: [pageWidth, totalHeight]
-            });
-
-            let currentX = margin;
-            let currentY = margin;
-            let col = 0;
-
-            for (let i = 0; i < qrCodeDataUrls.length; i++) {
-                const { dataUrl } = qrCodeDataUrls[i];
-                pdf.addImage(dataUrl, 'PNG', currentX, currentY, qrWidth, qrHeight);
-                col++;
-                if (col >= cols) {
-                    col = 0;
-                    currentX = margin;
-                    currentY += qrHeight + rowSpacing;
-                } else {
-                    currentX += qrWidth + colGap;
+            const qrImagesPerRow: any[] = [];
+            
+            // Build rows of QR code images
+            for (let i = 0; i < qrCodeDataUrls.length; i += cols) {
+                const rowImages = qrCodeDataUrls.slice(i, i + cols).map(({ dataUrl }) => ({
+                    image: dataUrl,
+                    width: 170,
+                    margin: [5, 5, 5, 5] as [number, number, number, number]
+                }));
+                
+                // Pad row if needed
+                while (rowImages.length < cols) {
+                    rowImages.push({ text: '', width: 170 } as any);
                 }
+                
+                qrImagesPerRow.push({
+                    columns: rowImages,
+                    columnGap: 10
+                });
             }
 
-            const pdfBlob = pdf.output('blob');
+            const docDefinition: any = {
+                pageSize: 'A4',
+                pageMargins: [20, 20, 20, 20],
+                content: [
+                    { text: `${site.name} - QR Codes`, style: 'header', alignment: 'center', margin: [0, 0, 0, 20] },
+                    ...qrImagesPerRow
+                ],
+                styles: DEFAULT_STYLES
+            };
+
+            const pdfBlob = await generatePdfBlob(docDefinition);
             zip.file(`${site.name}-All-QR-Codes.pdf`.replace(/[^a-zA-Z0-9.-]/g, '_'), pdfBlob);
 
             const content = await zip.generateAsync({ type: 'blob' });
