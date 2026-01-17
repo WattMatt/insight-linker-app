@@ -10,6 +10,17 @@ export interface SampleSite {
   clientLogoUrl: string | null;
 }
 
+// Interface for site selection with data quality info
+export interface SiteWithStats {
+  id: string;
+  name: string;
+  clientName: string;
+  subsectionCount: number;
+  inspectionCount: number;
+  hasLogo: boolean;
+  completenessScore: number;
+}
+
 export interface SampleSubsection {
   id: string;
   name: string;
@@ -61,7 +72,77 @@ export interface SampleReportData {
 
 type ReportType = 'site_summary' | 'inspection' | 'floor_plan' | 'asset_verification' | 'compliance';
 
-export const useSampleReportData = (reportType: ReportType): SampleReportData => {
+// Hook to fetch available sites with data quality stats for reference selection
+export const useAvailableSites = () => {
+  const [sites, setSites] = useState<SiteWithStats[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const fetchSites = async () => {
+      try {
+        // Fetch sites with counts
+        const { data: sitesData, error } = await supabase
+          .from("sites")
+          .select(`
+            id,
+            name,
+            site_image_url,
+            clients!inner(name, logo_url)
+          `)
+          .order("name");
+
+        if (error) throw error;
+
+        // Get counts for each site
+        const sitesWithStats = await Promise.all(
+          (sitesData || []).map(async (site) => {
+            const [subsectionRes, inspectionRes] = await Promise.all([
+              supabase.from("subsections").select("id", { count: "exact", head: true }).eq("site_id", site.id),
+              supabase.from("inspections").select("id", { count: "exact", head: true }).eq("site_id", site.id),
+            ]);
+
+            const clientData = site.clients as any;
+            const subsectionCount = subsectionRes.count || 0;
+            const inspectionCount = inspectionRes.count || 0;
+            const hasLogo = !!(clientData?.logo_url || site.site_image_url);
+            
+            // Calculate completeness score (0-100)
+            let score = 0;
+            if (subsectionCount > 0) score += 30;
+            if (subsectionCount > 10) score += 20;
+            if (inspectionCount > 0) score += 20;
+            if (inspectionCount > 5) score += 15;
+            if (hasLogo) score += 15;
+
+            return {
+              id: site.id,
+              name: site.name,
+              clientName: clientData?.name || "Unknown",
+              subsectionCount,
+              inspectionCount,
+              hasLogo,
+              completenessScore: score,
+            };
+          })
+        );
+
+        // Sort by completeness score
+        sitesWithStats.sort((a, b) => b.completenessScore - a.completenessScore);
+        setSites(sitesWithStats);
+      } catch (err) {
+        console.error("Error fetching sites:", err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchSites();
+  }, []);
+
+  return { sites, loading };
+};
+
+export const useSampleReportData = (reportType: ReportType, referenceSiteId?: string): SampleReportData => {
   const [site, setSite] = useState<SampleSite | null>(null);
   const [subsections, setSubsections] = useState<SampleSubsection[]>([]);
   const [assets, setAssets] = useState<SampleAsset[]>([]);
@@ -85,8 +166,8 @@ export const useSampleReportData = (reportType: ReportType): SampleReportData =>
         setLoading(true);
         setError(null);
 
-        // Fetch a sample site with client info
-        const { data: siteData, error: siteError } = await supabase
+        // Fetch site with client info - use reference site if provided
+        let query = supabase
           .from("sites")
           .select(`
             id,
@@ -95,9 +176,13 @@ export const useSampleReportData = (reportType: ReportType): SampleReportData =>
             site_image_url,
             client_logo_url,
             clients!inner(name, logo_url)
-          `)
-          .limit(1)
-          .single();
+          `);
+
+        if (referenceSiteId) {
+          query = query.eq("id", referenceSiteId);
+        }
+        
+        const { data: siteData, error: siteError } = await query.limit(1).single();
 
         if (siteError && siteError.code !== 'PGRST116') {
           console.error("Error fetching site:", siteError);
@@ -242,7 +327,7 @@ export const useSampleReportData = (reportType: ReportType): SampleReportData =>
     };
 
     fetchSampleData();
-  }, [reportType]);
+  }, [reportType, referenceSiteId]);
 
   return {
     site,

@@ -57,6 +57,7 @@ interface PDFWYSIWYGEditorProps {
   customization: ReportCustomization;
   sections: ReportSection[];
   reportType: string;
+  referenceSiteId?: string | null;
   onCustomizationChange: (updates: Partial<ReportCustomization>) => void;
   onSectionsChange: (sections: ReportSection[]) => void;
 }
@@ -210,11 +211,12 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   customization,
   sections,
   reportType,
+  referenceSiteId,
   onCustomizationChange,
   onSectionsChange,
 }) => {
   const colors = ACCENT_COLORS.find(c => c.value === customization.accentColor) || ACCENT_COLORS[0];
-  const sampleData = useSampleReportData(reportType as any);
+  const sampleData = useSampleReportData(reportType as any, referenceSiteId || undefined);
   const [currentPage, setCurrentPage] = useState(0);
   const [zoom, setZoom] = useState(0.8);
   
