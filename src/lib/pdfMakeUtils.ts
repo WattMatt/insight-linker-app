@@ -2,8 +2,11 @@
  * PDFMAKE UTILITIES
  * Reusable document building functions for pdfmake
  * 
- * These utilities mirror the jsPDF pdfUtils.ts functions but for pdfmake,
- * providing consistent cover pages, headers, footers, tables, and styling.
+ * This is the PRIMARY utility library for PDF generation.
+ * All PDF generators should use these functions to ensure consistent
+ * branding, typography, colors, and layout across all documents.
+ * 
+ * NOTE: This library completely replaces the legacy pdfUtils.ts (jsPDF).
  */
 
 import {
@@ -25,7 +28,7 @@ import {
   getLightTableLayout,
   getKpiTableLayout,
 } from './pdfMakeConfig';
-import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
+import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from './documentDesignStandards';
 
 // Re-export for convenience
 export {
@@ -46,6 +49,7 @@ export {
   getStandardTableLayout,
   getLightTableLayout,
   getKpiTableLayout,
+  generateDocumentFilename,
 };
 
 const { typography, margins, footers } = DOCUMENT_DESIGN_STANDARDS;

@@ -21,7 +21,7 @@ import {
 } from 'lucide-react';
 import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
-import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfUtils';
+import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
