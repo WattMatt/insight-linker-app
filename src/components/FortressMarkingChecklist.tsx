@@ -7,24 +7,32 @@ import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
 import { CheckCircle2, Eye } from "lucide-react";
 import { generateFortressTemplate } from "@/lib/fortressTemplate";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
-  drawProgressBar,
-  RGB_COLORS,
-  PAGE,
-  logComplianceCheck,
-  PDFComplianceCheck,
-} from "@/lib/pdfUtils";
-import { DOCUMENT_DESIGN_STANDARDS } from "@/lib/documentDesignStandards";
+  generatePdfBlob,
+  createCoverPage,
+  createDataTable,
+  createSectionHeader,
+  COLORS,
+  DEFAULT_STYLES,
+} from "@/lib/pdfMakeUtils";
 
-const { margins, typography, tables } = DOCUMENT_DESIGN_STANDARDS;
+type Content = any;
+type TDocumentDefinitions = any;
+
+const PDF_COLORS = COLORS;
+
+// Simple progress bar for pdfmake
+function createProgressBar(percentage: number): Content {
+  return {
+    canvas: [
+      { type: 'rect', x: 0, y: 0, w: 200, h: 10, color: '#E5E7EB' },
+      { type: 'rect', x: 0, y: 0, w: 200 * (percentage / 100), h: 10, color: percentage >= 80 ? '#22C55E' : percentage >= 50 ? '#F59E0B' : '#EF4444' }
+    ],
+    width: 200
+  };
+}
 
 interface ChecklistItem {
   id: string;
@@ -51,7 +59,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
   const [generating, setGenerating] = useState(false);
-  const [complianceChecks, setComplianceChecks] = useState<PDFComplianceCheck | null>(null);
 
   useEffect(() => {
     initializeChecklist();
@@ -61,7 +68,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     try {
       setLoading(true);
       
-      // Get existing checklist items from database
       const { data: existingItems, error: fetchError } = await supabase
         .from('site_marking_checklist')
         .select('*')
@@ -69,14 +75,11 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
       if (fetchError) throw fetchError;
 
-      // Get template structure
       const template = generateFortressTemplate();
       const allItems: ChecklistItem[] = [];
 
-      // Build complete checklist from template
       template.sections.forEach((section) => {
         section.items.forEach((item) => {
-          // Only include checkbox items for the marking checklist
           if (item.type === 'checkbox') {
             const existingItem = existingItems?.find(i => i.item_id === item.id);
             
@@ -116,7 +119,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       const newState = !currentState;
       const newStatus = newState ? 'completed' : 'pending';
 
-      // Upsert the checklist item
       const { error } = await supabase
         .from('site_marking_checklist')
         .upsert({
@@ -134,7 +136,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
       if (error) throw error;
 
-      // Update local state
       setChecklistItems(items =>
         items.map(i =>
           i.item_id === itemId
@@ -164,7 +165,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
       const newStatus = item.status === 'not_applicable' ? 'pending' : 'not_applicable';
 
-      // Upsert the checklist item
       const { error } = await supabase
         .from('site_marking_checklist')
         .upsert({
@@ -182,7 +182,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
 
       if (error) throw error;
 
-      // Update local state
       setChecklistItems(items =>
         items.map(i =>
           i.item_id === itemId
@@ -224,7 +223,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     }
   };
 
-  // Calculate stats for PDF generation
+  // Calculate stats
   const applicableItems = checklistItems.filter(i => i.status !== 'not_applicable');
   const totalItems = applicableItems.length;
   const checkedItems = applicableItems.filter(i => i.is_checked).length;
@@ -240,13 +239,11 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     return acc;
   }, {} as Record<string, ChecklistItem[]>);
 
-  const generatePDFDocument = (): { doc: jsPDF; fileName: string; blob: Blob; complianceChecks: PDFComplianceCheck } => {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-    
-    // ===== COVER PAGE =====
-    addCoverPage(doc, {
+  const generatePDFDocument = async (): Promise<{ fileName: string; blob: Blob }> => {
+    const content: Content[] = [];
+
+    // Cover page
+    const coverPage = createCoverPage({
       title: 'Fortress Site Close-Out Checklist',
       subtitle: `Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`,
       siteName: 'Site Checklist',
@@ -254,139 +251,101 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       organizationName: 'Fortress',
       reportDate: new Date(),
     });
+    content.push(coverPage);
 
-    // ===== SUMMARY PAGE =====
-    doc.addPage();
-    addStandardHeader(doc, 'Checklist Summary', null);
-    
-    let yPos = PAGE.contentStartY;
+    // Summary page
+    content.push({ text: '', pageBreak: 'after' } as Content);
+    content.push(createSectionHeader('Checklist Summary', 'secondary'));
 
     // Progress bar
-    doc.setFontSize(typography.scale.body);
-    doc.setFont(typography.fonts.heading, 'bold');
-    doc.setTextColor(...RGB_COLORS.textPrimary);
-    doc.text('Overall Progress', margins.left, yPos);
-    
-    drawProgressBar(doc, margins.left + 40, yPos - 4, PAGE.contentWidth - 60, completionPercentage);
-    yPos += 20;
+    content.push({
+      columns: [
+        { text: 'Overall Progress', bold: true, width: 100 },
+        createProgressBar(completionPercentage)
+      ],
+      margin: [0, 10, 0, 20]
+    } as Content);
 
-    // Summary stats
-    yPos = addSectionHeader(doc, 'Summary Statistics', yPos);
-    
-    autoTable(doc, {
-      startY: yPos,
-      head: [['Metric', 'Value']],
-      body: [
+    // Summary stats table
+    content.push(createSectionHeader('Summary Statistics', 'muted'));
+    const summaryTable = createDataTable(
+      ['Metric', 'Value'],
+      [
         ['Total Items', totalItems.toString()],
         ['Completed', checkedItems.toString()],
         ['Pending', (totalItems - checkedItems).toString()],
         ['Not Applicable', notApplicableCount.toString()],
         ['Completion Rate', `${completionPercentage}%`],
-      ],
-      theme: 'grid',
-      headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
-      styles: { fontSize: 10, cellPadding: 4 },
-      margin: { left: margins.left, right: margins.right },
-      columnStyles: {
-        0: { cellWidth: 100 },
-        1: { cellWidth: 50, halign: 'center', fontStyle: 'bold' }
-      }
-    });
+      ]
+    );
+    content.push(summaryTable);
 
-    yPos = (doc as any).lastAutoTable.finalY + 15;
-
-    // ===== SECTION DETAIL PAGES =====
+    // Section details
     Object.entries(sections).forEach(([sectionName, items]) => {
       const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
       const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
       const sectionTotal = sectionApplicable.length;
       const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
 
-      // Check if we need a new page
-      if (yPos > pageHeight - 80) {
-        doc.addPage();
-        addStandardHeader(doc, 'Checklist Details', null);
-        yPos = PAGE.contentStartY;
-      }
+      content.push({ text: '', pageBreak: 'before' } as Content);
+      content.push(createSectionHeader(`${sectionName} (${sectionProgress}%)`, 'secondary'));
 
-      yPos = addSectionHeader(doc, `${sectionName} (${sectionProgress}%)`, yPos);
-
-      // Section items table
       const tableData = items.map(item => [
         item.status === 'not_applicable' ? 'N/A' : (item.is_checked ? '✓' : '☐'),
         item.item_name,
         item.status === 'not_applicable' ? 'Not Applicable' : (item.is_checked ? 'Complete' : 'Pending')
       ]);
 
-      autoTable(doc, {
-        startY: yPos,
-        head: [['Status', 'Item', 'Progress']],
-        body: tableData,
-        theme: 'grid',
-        headStyles: { fillColor: RGB_COLORS.primary, textColor: RGB_COLORS.white },
-        columnStyles: {
-          0: { cellWidth: 15, halign: 'center' },
-          1: { cellWidth: 130 },
-          2: { cellWidth: 30, halign: 'center' }
-        },
-        styles: { fontSize: 9 },
-        margin: { left: margins.left, right: margins.right },
-        didParseCell: (data) => {
-          if (data.section === 'body' && data.column.index === 0) {
-            const value = data.cell.raw as string;
-            if (value === '✓') {
-              data.cell.styles.textColor = RGB_COLORS.success;
-              data.cell.styles.fontStyle = 'bold';
-            } else if (value === 'N/A') {
-              data.cell.styles.textColor = RGB_COLORS.textMuted;
-            }
-          }
-          if (data.section === 'body' && data.column.index === 2) {
-            const value = data.cell.raw as string;
-            if (value === 'Complete') {
-              data.cell.styles.textColor = RGB_COLORS.success;
-            } else if (value === 'Pending') {
-              data.cell.styles.textColor = RGB_COLORS.warning;
-            }
-          }
-        }
-      });
-
-      yPos = (doc as any).lastAutoTable.finalY + 15;
+      const sectionTable = createDataTable(
+        ['Status', 'Item', 'Progress'],
+        tableData
+      );
+      content.push(sectionTable);
     });
 
-    // Add footers to all pages (skip cover page)
-    addFootersToAllPages(doc, true);
-
-    // Log compliance
-    const checks = logComplianceCheck('FortressMarkingChecklist', {
-      hasCoverPage: true,
-      logoPlacement: false,
-      standardMargins: true,
-      typographyScale: true,
-      brandColors: true,
-      pageHeaders: true,
-      pageFooters: true,
-      tableStyles: true,
-      pageBreaks: true,
+    // Build document definition
+    const date = new Date().toLocaleDateString('en-US', { 
+      year: 'numeric', 
+      month: 'long', 
+      day: 'numeric' 
     });
 
+    const docDefinition: TDocumentDefinitions = {
+      content,
+      styles: DEFAULT_STYLES,
+      defaultStyle: {
+        font: 'Helvetica',
+        fontSize: 10,
+      },
+      pageMargins: [40, 40, 40, 60],
+      footer: (currentPage: number, pageCount: number) => {
+        if (currentPage === 1) return null;
+        return {
+          columns: [
+            { text: 'Confidential', fontSize: 8, color: PDF_COLORS.textMuted, margin: [40, 0, 0, 0] },
+            { text: `Page ${currentPage - 1} of ${pageCount - 1}`, fontSize: 8, alignment: 'center', color: PDF_COLORS.textMuted },
+            { text: date, fontSize: 8, alignment: 'right', color: PDF_COLORS.textMuted, margin: [0, 0, 40, 0] }
+          ],
+          margin: [0, 20, 0, 0]
+        };
+      }
+    };
+
+    const blob = await generatePdfBlob(docDefinition);
     const fileName = `fortress-checklist-${new Date().getTime()}.pdf`;
-    const blob = doc.output('blob');
     
-    return { doc, fileName, blob, complianceChecks: checks };
+    return { fileName, blob };
   };
 
   const handlePreviewReport = async () => {
     try {
       setGenerating(true);
-      const result = generatePDFDocument();
+      const result = await generatePDFDocument();
       
       const url = URL.createObjectURL(result.blob);
       setPreviewUrl(url);
       setPreviewFileName(result.fileName);
       setPdfBlob(result.blob);
-      setComplianceChecks(result.complianceChecks);
       setPreviewOpen(true);
     } catch (error) {
       console.error('Error generating PDF:', error);
@@ -500,37 +459,34 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
                         <Checkbox
                           id={item.item_id}
                           checked={item.is_checked}
-                          onCheckedChange={() => toggleCheckbox(item.item_id, item.is_checked)}
                           disabled={updating === item.item_id || item.status === 'not_applicable'}
-                          className="mt-0.5"
+                          onCheckedChange={() => toggleCheckbox(item.item_id, item.is_checked)}
                         />
-                        <label
-                          htmlFor={item.item_id}
-                          className={`flex-1 cursor-pointer text-sm leading-relaxed ${
-                            item.is_checked ? 'text-muted-foreground line-through' : ''
-                          } ${
-                            item.status === 'not_applicable' ? 'text-muted-foreground italic' : ''
-                          }`}
-                        >
-                          {item.item_name}
-                          {item.status === 'not_applicable' && (
-                            <span className="ml-2 text-xs">(N/A)</span>
-                          )}
-                        </label>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            onClick={() => toggleNotApplicable(item.item_id)}
-                            disabled={updating === item.item_id}
-                            className="h-6 px-2 text-xs"
+                        <div className="flex-1">
+                          <label
+                            htmlFor={item.item_id}
+                            className={`text-sm font-medium cursor-pointer ${
+                              item.status === 'not_applicable' ? 'text-muted-foreground line-through' : ''
+                            }`}
                           >
-                            {item.status === 'not_applicable' ? 'Undo N/A' : 'N/A'}
-                          </Button>
-                          {item.is_checked && item.status !== 'not_applicable' && (
-                            <CheckCircle2 className="h-4 w-4 text-green-600" />
+                            {item.item_name}
+                          </label>
+                          {item.is_checked && item.checked_at && (
+                            <p className="text-xs text-muted-foreground flex items-center gap-1 mt-1">
+                              <CheckCircle2 className="h-3 w-3 text-green-500" />
+                              Completed {new Date(item.checked_at).toLocaleDateString()}
+                            </p>
                           )}
                         </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-xs"
+                          onClick={() => toggleNotApplicable(item.item_id)}
+                          disabled={updating === item.item_id}
+                        >
+                          {item.status === 'not_applicable' ? 'Undo N/A' : 'N/A'}
+                        </Button>
                       </div>
                     ))}
                   </div>
@@ -556,7 +512,6 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
         saveLocation="site"
         contextName="Site Documents"
         isSaving={saving}
-        complianceChecks={complianceChecks || undefined}
       />
     </div>
   );
