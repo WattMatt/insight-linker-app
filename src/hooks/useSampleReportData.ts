@@ -40,6 +40,30 @@ export interface SampleAsset {
   meterType: string | null;
 }
 
+// Extracted line shop data from inspection json_data
+export interface LineShopData {
+  id: string;
+  shopName: string;
+  shopNumber?: string;
+  meterSerial?: string;
+  ctRatio?: string;
+  breakerSize?: string;
+  cableSize?: string;
+  meterSerialImages?: Record<string, { downloadURL: string; originalFilename: string }>;
+  breakerSizeImages?: Record<string, { downloadURL: string; originalFilename: string }>;
+  ctRatioImages?: Record<string, { downloadURL: string; originalFilename: string }>;
+}
+
+// Inspection finding from json_data sections
+export interface InspectionFinding {
+  id: string;
+  name: string;
+  status?: 'Pass' | 'Fail' | 'N/A';
+  notes?: string;
+  referenceStandard?: string;
+  images?: Record<string, { downloadURL: string; originalFilename: string }>;
+}
+
 export interface SampleInspection {
   id: string;
   title: string;
@@ -47,6 +71,12 @@ export interface SampleInspection {
   inspectorName: string | null;
   inspectionDate: string | null;
   siteName: string;
+  subsectionName?: string;
+  templateName?: string;
+  // Rich data extracted from json_data
+  lineShops?: LineShopData[];
+  findings?: Record<string, InspectionFinding>;
+  jsonData?: Record<string, any>;
 }
 
 export interface SampleKPIs {
@@ -249,24 +279,102 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
             );
           }
 
-          // Fetch inspections for this site
+          // Fetch inspections for this site - WITH json_data for rich content
           const { data: inspectionsData } = await supabase
             .from("inspections")
-            .select("id, title, status, inspector_name, inspection_date")
+            .select(`
+              id, title, status, inspector_name, inspection_date, json_data,
+              subsections(name),
+              inspection_templates(name)
+            `)
             .eq("site_id", siteData.id)
-            .limit(5);
+            .not("json_data", "is", null)
+            .order("updated_at", { ascending: false })
+            .limit(10);
 
           if (inspectionsData) {
-            setInspections(
-              inspectionsData.map((insp) => ({
+            const richInspections: SampleInspection[] = inspectionsData.map((insp) => {
+              const jsonData = insp.json_data as Record<string, any> | null;
+              
+              // Extract lineShops array if present
+              let lineShops: LineShopData[] = [];
+              if (jsonData?.lineShops && Array.isArray(jsonData.lineShops)) {
+                lineShops = jsonData.lineShops.map((shop: any) => ({
+                  id: shop.id || '',
+                  shopName: shop.shopName || shop.name || '',
+                  shopNumber: shop.shopNumber || '',
+                  meterSerial: shop.meterSerial || '',
+                  ctRatio: shop.ctRatio || '',
+                  breakerSize: shop.breakerSize || '',
+                  cableSize: shop.cableSize || '',
+                  meterSerialImages: shop.meterSerialImages || {},
+                  breakerSizeImages: shop.breakerSizeImages || {},
+                  ctRatioImages: shop.ctRatioImages || {},
+                }));
+              }
+
+              // Extract findings from various sections in json_data
+              const findings: Record<string, InspectionFinding> = {};
+              if (jsonData) {
+                Object.entries(jsonData).forEach(([sectionKey, sectionData]) => {
+                  if (sectionKey === 'lineShops') return; // Skip, handled above
+                  if (typeof sectionData === 'object' && sectionData !== null) {
+                    // Check if it's a section with items (has status/notes/images)
+                    const section = sectionData as Record<string, any>;
+                    if (section.status || section.notes || section.images) {
+                      findings[sectionKey] = {
+                        id: sectionKey,
+                        name: sectionKey.replace(/([A-Z])/g, ' $1').trim(),
+                        status: section.status,
+                        notes: section.notes,
+                        referenceStandard: section.referenceStandard,
+                        images: section.images,
+                      };
+                    }
+                    // Check nested items
+                    Object.entries(section).forEach(([itemKey, itemData]) => {
+                      if (typeof itemData === 'object' && itemData !== null) {
+                        const item = itemData as Record<string, any>;
+                        if (item.status || item.notes || item.images) {
+                          findings[`${sectionKey}.${itemKey}`] = {
+                            id: itemKey,
+                            name: itemKey.replace(/([A-Z])/g, ' $1').trim(),
+                            status: item.status,
+                            notes: item.notes,
+                            referenceStandard: item.referenceStandard,
+                            images: item.images,
+                          };
+                        }
+                      }
+                    });
+                  }
+                });
+              }
+
+              const subsectionData = insp.subsections as any;
+              const templateData = insp.inspection_templates as any;
+
+              return {
                 id: insp.id,
-                title: insp.title,
+                title: insp.title || 'Untitled Inspection',
                 status: insp.status,
                 inspectorName: insp.inspector_name,
                 inspectionDate: insp.inspection_date,
                 siteName: siteData.name,
-              }))
+                subsectionName: subsectionData?.name,
+                templateName: templateData?.name,
+                lineShops: lineShops.length > 0 ? lineShops : undefined,
+                findings: Object.keys(findings).length > 0 ? findings : undefined,
+                jsonData: jsonData || undefined,
+              };
+            });
+
+            // Filter to inspections that actually have data
+            const inspectionsWithData = richInspections.filter(
+              i => (i.lineShops && i.lineShops.length > 0) || (i.findings && Object.keys(i.findings).length > 0)
             );
+
+            setInspections(inspectionsWithData.length > 0 ? inspectionsWithData : richInspections.slice(0, 5));
           }
 
           // Calculate KPIs
