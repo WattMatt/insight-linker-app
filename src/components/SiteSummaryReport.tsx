@@ -64,6 +64,22 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     return hasCoc || hasDocuments || subsection.is_compliant;
   };
 
+  // Helper function to convert image URL to base64
+  const imageUrlToBase64 = async (url: string): Promise<string | null> => {
+    try {
+      const response = await fetch(url);
+      const blob = await response.blob();
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    } catch {
+      return null;
+    }
+  };
+
   const generatePdfDocument = async (): Promise<{ blob: Blob; filename: string }> => {
     // Fetch all necessary data
     const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes] = await Promise.all([
@@ -174,15 +190,13 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const subDocs = subsectionDocuments.filter(d => d.subsection_id === sub.id);
       const isCompliant = calculateSubsectionCompliance(sub, subInspections, subDocs);
       
-      // Build QR code image if available
-      const qrCodeImage = sub.qr_code_url ? {
-        image: sub.qr_code_url,
-        width: 60,
-        height: 60,
-        alignment: 'right' as const,
-      } : null;
+      // Convert QR code URL to base64 for pdfMake
+      let qrCodeBase64: string | null = null;
+      if (sub.qr_code_url) {
+        qrCodeBase64 = await imageUrlToBase64(sub.qr_code_url);
+      }
 
-      // Create card content
+      // Create card content with QR code in top right
       const cardContent: any[] = [
         {
           columns: [
@@ -193,7 +207,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                 { text: `Category: ${getCategoryAbbreviation(sub.category || 'Other')}`, fontSize: 9, color: COLORS.textMuted },
               ]
             },
-            qrCodeImage ? { width: 70, ...qrCodeImage } : { width: 0, text: '' },
+            qrCodeBase64 ? { 
+              width: 70,
+              stack: [
+                { image: qrCodeBase64, width: 55, height: 55, alignment: 'right' as const },
+              ]
+            } : { width: 0, text: '' },
           ],
           margin: [0, 0, 0, 8],
         },
