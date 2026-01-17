@@ -28,7 +28,9 @@ import {
   FileText,
   Maximize2,
   ZoomIn,
-  ZoomOut
+  ZoomOut,
+  Pencil,
+  Database
 } from "lucide-react";
 import {
   Popover,
@@ -91,7 +93,43 @@ const KPI_FIELD_OPTIONS = [
 const A4_WIDTH = 595;
 const A4_HEIGHT = 842;
 
-// Inline editable cell component
+// ============================================
+// PLACEHOLDER DATA COMPONENT
+// Shows data that will be replaced with real values when generating PDF
+// ============================================
+interface PlaceholderDataProps {
+  value: React.ReactNode;
+  label?: string;
+  className?: string;
+  style?: React.CSSProperties;
+}
+
+const PlaceholderData: React.FC<PlaceholderDataProps> = ({ 
+  value, 
+  label, 
+  className, 
+  style,
+}) => (
+  <span
+    className={cn(
+      "relative inline-block border border-dashed border-amber-400/50 bg-amber-50/30 rounded px-0.5 py-px",
+      "hover:border-amber-500 hover:bg-amber-100/40 transition-all group cursor-default",
+      className
+    )}
+    style={style}
+    title={`Sample data${label ? ` for "${label}"` : ''} – will be replaced with actual values when generating PDF`}
+  >
+    {value}
+    <span className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-3 h-3 bg-amber-100 rounded-full border border-amber-400 z-10">
+      <Database className="w-1.5 h-1.5 text-amber-600" />
+    </span>
+  </span>
+);
+
+// ============================================
+// EDITABLE CELL COMPONENT
+// Template fields that can be customized and persist in the template
+// ============================================
 interface EditableCellProps {
   value: string;
   onChange: (value: string) => void;
@@ -129,7 +167,7 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onChange, className,
         onChange={(e) => setTempValue(e.target.value)}
         onBlur={handleSave}
         onKeyDown={(e) => e.key === 'Escape' && setIsEditing(false)}
-        className={cn("w-full border rounded px-1 py-0.5 text-inherit resize-none bg-white", className)}
+        className={cn("w-full border border-primary rounded px-1 py-0.5 text-inherit resize-none bg-white focus:ring-2 focus:ring-primary/20", className)}
         style={style}
         rows={3}
       />
@@ -143,7 +181,7 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onChange, className,
           if (e.key === 'Enter') handleSave();
           if (e.key === 'Escape') setIsEditing(false);
         }}
-        className={cn("w-full border rounded px-1 py-0.5 text-inherit bg-white", className)}
+        className={cn("w-full border border-primary rounded px-1 py-0.5 text-inherit bg-white focus:ring-2 focus:ring-primary/20", className)}
         style={style}
       />
     );
@@ -153,14 +191,17 @@ const EditableCell: React.FC<EditableCellProps> = ({ value, onChange, className,
     <span
       onClick={() => setIsEditing(true)}
       className={cn(
-        "cursor-text hover:bg-blue-50 px-1 py-0.5 rounded transition-all inline-block",
+        "relative cursor-pointer hover:bg-blue-50 border border-transparent hover:border-blue-300 px-1 py-0.5 rounded transition-all inline-block group",
         !value && "text-gray-400 italic",
         className
       )}
       style={style}
-      title="Click to edit"
+      title="Click to edit this template field"
     >
       {value || 'Click to edit'}
+      <span className="absolute -top-1 -right-1 hidden group-hover:flex items-center justify-center w-3 h-3 bg-blue-100 rounded-full border border-blue-400 z-10">
+        <Pencil className="w-1.5 h-1.5 text-blue-600" />
+      </span>
     </span>
   );
 };
@@ -414,15 +455,15 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           <div style={{ fontSize: 14 * zoom }}>
             <div className="flex items-center gap-2 mb-2">
               <Building2 style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
-              <span className="font-semibold">{siteName}</span>
+              <PlaceholderData value={siteName} label="Site Name" className="font-semibold" />
             </div>
             <div className="flex items-center gap-2 mb-2">
               <User style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
-              <span>{clientName}</span>
+              <PlaceholderData value={clientName} label="Client Name" />
             </div>
             <div className="flex items-center gap-2">
               <MapPin style={{ width: 16 * zoom, height: 16 * zoom, color: colors.primary }} />
-              <span className="text-gray-500">{siteAddress}</span>
+              <PlaceholderData value={siteAddress} label="Site Address" className="text-gray-500" />
             </div>
           </div>
         </div>
@@ -432,13 +473,13 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
           {customization.includeDate && (
             <div className="flex items-center gap-1 text-gray-500">
               <Calendar style={{ width: 12 * zoom, height: 12 * zoom }} />
-              <span>{format(new Date(), 'dd MMMM yyyy')}</span>
+              <PlaceholderData value={format(new Date(), 'dd MMMM yyyy')} label="Report Date" />
             </div>
           )}
           {customization.includeReference && (
             <div className="flex items-center gap-1 text-gray-500">
               <Hash style={{ width: 12 * zoom, height: 12 * zoom }} />
-              <span>REF-2026-0001</span>
+              <PlaceholderData value="REF-2026-0001" label="Reference Number" />
             </div>
           )}
         </div>
@@ -500,7 +541,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             }}
           >
             <div style={{ fontSize: 20 * zoom, fontWeight: 'bold', color: stat.color.primary }}>
-              {stat.value}
+              <PlaceholderData value={stat.value} label={stat.label} />
             </div>
             <div style={{ fontSize: 9 * zoom, color: '#6b7280', marginTop: 4 * zoom }}>
               <EditableCell value={stat.label} onChange={() => {}} />
@@ -587,13 +628,10 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
                               (row as any)[col.field] === 'Missing' ? '#dc2626' : '#ea580c'
                           }}
                         >
-                          {(row as any)[col.field]}
+                          <PlaceholderData value={(row as any)[col.field]} label={col.label} className="text-white bg-transparent border-white/30" />
                         </span>
                       ) : (
-                        <EditableCell 
-                          value={(row as any)[col.field] || '—'} 
-                          onChange={() => {}} 
-                        />
+                        <PlaceholderData value={(row as any)[col.field] || '—'} label={col.label} />
                       )}
                     </td>
                   ))}
@@ -636,19 +674,19 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             {assetsData.map((asset, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <EditableCell value={asset.serialNumber || '—'} onChange={() => {}} />
+                  <PlaceholderData value={asset.serialNumber || '—'} label="Serial Number" />
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <EditableCell value={asset.premisesId} onChange={() => {}} />
+                  <PlaceholderData value={asset.premisesId} label="Premises ID" />
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <EditableCell value={asset.tradeAs || '—'} onChange={() => {}} />
+                  <PlaceholderData value={asset.tradeAs || '—'} label="Trade As" />
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <EditableCell value={asset.breakerSize || '—'} onChange={() => {}} />
+                  <PlaceholderData value={asset.breakerSize || '—'} label="Breaker Size" />
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <EditableCell value={asset.ctRatio || '—'} onChange={() => {}} />
+                  <PlaceholderData value={asset.ctRatio || '—'} label="CT Ratio" />
                 </td>
               </tr>
             ))}
@@ -713,6 +751,23 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 
   return (
     <div className="flex flex-col h-full">
+      {/* Legend Bar - Visual indicator guide */}
+      <div className="flex items-center gap-6 px-4 py-2 bg-muted/40 border-b text-xs text-muted-foreground">
+        <span className="font-medium text-foreground">Field Types:</span>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 px-1.5 py-0.5 border border-blue-300 bg-blue-50/50 rounded">
+            <Pencil className="w-2.5 h-2.5 text-blue-600" />
+            <span>Editable template field</span>
+          </div>
+        </div>
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 px-1.5 py-0.5 border border-dashed border-amber-400/60 bg-amber-50/40 rounded">
+            <Database className="w-2.5 h-2.5 text-amber-600" />
+            <span>Sample data (replaced when generating)</span>
+          </div>
+        </div>
+      </div>
+
       {/* Toolbar */}
       <div className="flex items-center justify-between gap-4 p-3 bg-muted/30 border-b flex-wrap">
         <div className="flex items-center gap-4">
