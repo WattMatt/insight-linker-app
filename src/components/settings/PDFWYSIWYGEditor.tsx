@@ -248,14 +248,38 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
         { name: 'SHOP L03', tenantName: 'CASH CRUSADERS', category: 'LS', cocStatus: 'Missing' },
       ];
 
-  // Get assets data
-  const assetsData = sampleData.assets.length > 0
-    ? sampleData.assets
-    : [
-        { serialNumber: '35778057', premisesId: 'YA - BULK METER', tradeAs: 'BULK SUPPLY', breakerSize: '1000A', ctRatio: '1000/5A' },
-        { serialNumber: '35778055', premisesId: 'YA - SHOP 050', tradeAs: 'SHOPRITE', breakerSize: '800A', ctRatio: '800/5A' },
-        { serialNumber: '36084016', premisesId: 'YA - SHOP 004', tradeAs: 'ACKERMANS', breakerSize: '63A', ctRatio: '—' },
-      ];
+  // Get assets data - first try lineShops from inspections, then site_assets, then fallback
+  const lineShopsFromInspections = sampleData.inspections
+    .filter(insp => insp.lineShops && insp.lineShops.length > 0)
+    .flatMap(insp => insp.lineShops || []);
+
+  const assetsData = lineShopsFromInspections.length > 0
+    ? lineShopsFromInspections.slice(0, 10).map(shop => ({
+        serialNumber: shop.meterSerial || '—',
+        premisesId: shop.shopNumber || shop.shopName,
+        tradeAs: shop.shopName,
+        breakerSize: shop.breakerSize || '—',
+        ctRatio: shop.ctRatio || '—',
+        cableSize: shop.cableSize || '—',
+        hasPhoto: !!(shop.meterSerialImages && Object.keys(shop.meterSerialImages).length > 0),
+      }))
+    : sampleData.assets.length > 0
+      ? sampleData.assets.map(a => ({
+          serialNumber: a.serialNumber || '—',
+          premisesId: a.premisesId,
+          tradeAs: a.tradeAs || '—',
+          breakerSize: a.breakerSize || '—',
+          ctRatio: a.ctRatio || '—',
+          cableSize: '—',
+          hasPhoto: false,
+        }))
+      : [
+          { serialNumber: '35778057', premisesId: 'YA - BULK METER', tradeAs: 'BULK SUPPLY', breakerSize: '1000A', ctRatio: '1000/5A', cableSize: '185mm', hasPhoto: false },
+          { serialNumber: '35778055', premisesId: 'YA - SHOP 050', tradeAs: 'SHOPRITE', breakerSize: '800A', ctRatio: '800/5A', cableSize: '120mm', hasPhoto: false },
+          { serialNumber: '36084016', premisesId: 'YA - SHOP 004', tradeAs: 'ACKERMANS', breakerSize: '63A', ctRatio: '—', cableSize: '16mm', hasPhoto: false },
+        ];
+
+  const hasRealMeterData = lineShopsFromInspections.length > 0;
 
   // KPI values
   const kpiValues = {
@@ -653,15 +677,22 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
   // Assets/Meters Page
   const renderAssetsPage = () => (
     <PageWrapper pageNum={customization.includeTableOfContents ? 5 : 4}>
-      <h2 style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 16 * zoom }}>
-        <EditableCell value="Electrical Meters Register" onChange={() => {}} />
-      </h2>
+      <div className="flex items-center justify-between mb-4">
+        <h2 style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary }}>
+          <EditableCell value="Electrical Meters Register" onChange={() => {}} />
+        </h2>
+        {hasRealMeterData && (
+          <span className="px-2 py-1 rounded text-xs bg-green-100 text-green-700 border border-green-200">
+            ✓ {lineShopsFromInspections.length} meters from {siteName}
+          </span>
+        )}
+      </div>
 
       <div className="border border-gray-200 rounded overflow-hidden">
         <table className="w-full" style={{ fontSize: 9 * zoom }}>
           <thead>
             <tr style={{ backgroundColor: colors.light }}>
-              {['Serial Number', 'Premises ID', 'Trade As', 'Breaker Size', 'CT Ratio'].map((label) => (
+              {['Serial Number', 'Shop Name', 'Breaker Size', 'CT Ratio', 'Cable Size', '📷'].map((label) => (
                 <th 
                   key={label}
                   className="text-left border-b border-gray-200"
@@ -676,25 +707,49 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             {assetsData.map((asset, idx) => (
               <tr key={idx} className="hover:bg-gray-50">
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <PlaceholderData value={asset.serialNumber || '—'} label="Serial Number" />
+                  {hasRealMeterData 
+                    ? <span>{asset.serialNumber}</span>
+                    : <PlaceholderData value={asset.serialNumber || '—'} label="Serial Number" />
+                  }
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <PlaceholderData value={asset.premisesId} label="Premises ID" />
+                  {hasRealMeterData 
+                    ? <span className="font-medium">{asset.tradeAs}</span>
+                    : <PlaceholderData value={asset.tradeAs || '—'} label="Shop Name" />
+                  }
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <PlaceholderData value={asset.tradeAs || '—'} label="Trade As" />
+                  {hasRealMeterData 
+                    ? <span>{asset.breakerSize}</span>
+                    : <PlaceholderData value={asset.breakerSize || '—'} label="Breaker Size" />
+                  }
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <PlaceholderData value={asset.breakerSize || '—'} label="Breaker Size" />
+                  {hasRealMeterData 
+                    ? <span>{asset.ctRatio}</span>
+                    : <PlaceholderData value={asset.ctRatio || '—'} label="CT Ratio" />
+                  }
                 </td>
                 <td className="border-b border-gray-100" style={{ padding: `${6 * zoom}px` }}>
-                  <PlaceholderData value={asset.ctRatio || '—'} label="CT Ratio" />
+                  {hasRealMeterData 
+                    ? <span>{asset.cableSize}</span>
+                    : <PlaceholderData value={asset.cableSize || '—'} label="Cable Size" />
+                  }
+                </td>
+                <td className="border-b border-gray-100 text-center" style={{ padding: `${6 * zoom}px` }}>
+                  {asset.hasPhoto && <span className="text-green-600">✓</span>}
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {hasRealMeterData && lineShopsFromInspections.length > 10 && (
+        <div className="text-right text-gray-500" style={{ fontSize: 9 * zoom, marginTop: 8 * zoom }}>
+          +{lineShopsFromInspections.length - 10} more meters in full report
+        </div>
+      )}
     </PageWrapper>
   );
 
