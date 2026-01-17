@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 
-import { FileText, QrCode, Layers, MapPin, Building, FileDown, LayoutGrid, ClipboardCheck, Shield, Plus, ShieldCheck } from "lucide-react";
+import { FileText, QrCode, Layers, MapPin, Building, FileBarChart, LayoutGrid, ClipboardCheck, Shield, Plus, ShieldCheck } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
@@ -13,7 +13,7 @@ import { SiteOverview } from "@/components/site/SiteOverview";
 import { SubsectionList } from "@/components/site/SubsectionList";
 import { SiteDocuments as SiteDocumentsComponent } from "@/components/site/SiteDocuments";
 import { QRAnalytics } from "@/components/site/QRAnalytics";
-import { SiteExport } from "@/components/site/SiteExport";
+import { SiteReports } from "@/components/site/SiteReports";
 import { SiteEditDialog } from "@/components/site/SiteEditDialog";
 import { SiteLevelInspections } from "@/components/site/SiteLevelInspections";
 import { DocumentDialogs } from "@/components/site/DocumentDialogs";
@@ -607,9 +607,9 @@ const SiteDetail = () => {
             <ClipboardCheck className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Fortress Checklist</span>
           </TabsTrigger>
-          <TabsTrigger value="export" className="gap-2">
-            <FileDown className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Export</span>
+          <TabsTrigger value="reports" className="gap-2">
+            <FileBarChart className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Reports</span>
           </TabsTrigger>
         </TabsList>
 
@@ -666,8 +666,8 @@ const SiteDetail = () => {
           <FortressMarkingChecklist siteId={siteId!} />
         </TabsContent>
 
-        <TabsContent value="export">
-          <SiteExport site={site} />
+        <TabsContent value="reports">
+          <SiteReports site={site} />
         </TabsContent>
       </Tabs>
 
