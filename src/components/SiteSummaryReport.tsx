@@ -52,16 +52,32 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     return snags;
   };
 
+  // Match dashboard compliance logic exactly (strict multi-point check)
   const calculateSubsectionCompliance = (
     subsection: any,
-    inspections: any[],
-    documents: any[]
+    snags: any[]
   ): boolean => {
-    const hasCoc = subsection.coc_status === 'Approved' ||
-                   subsection.coc_status === 'Valid' ||
-                   subsection.coc_status === 'Pass';
-    const hasDocuments = documents.some(d => d.subsection_id === subsection.id);
-    return hasCoc || hasDocuments || subsection.is_compliant;
+    // If COC is required, status must be Approved/Valid/Pass
+    if (subsection.is_coc_required && 
+        !['Approved', 'Valid', 'Pass'].includes(subsection.coc_status || '')) {
+      return false;
+    }
+    // If COC is required, metering must not be missing
+    if (subsection.is_coc_required && 
+        subsection.metering_status === 'Missing' && 
+        !subsection.meter_serial_number) {
+      return false;
+    }
+    // Must have zero open snags
+    const subsectionSnags = snags.filter(snag =>
+      snag.subsection_id === subsection.id &&
+      snag.status !== 'rectified' &&
+      snag.status !== 'Rectified'
+    );
+    if (subsectionSnags.length > 0) {
+      return false;
+    }
+    return true;
   };
 
   // Helper function to convert image URL to base64
@@ -87,7 +103,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*").eq("site_id", siteId),
-      supabase.from("subsection_documents").select("subsection_id, file_name, category_id")
+      supabase.from("subsection_documents").select("subsection_id, file_name, category_id"),
     ]);
 
     if (siteRes.error) throw siteRes.error;
@@ -98,8 +114,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const siteDocuments = docsRes.data || [];
     const subsectionDocuments = subsectionDocsRes.data || [];
 
-    // Get COC validations
+    // Fetch snags separately to avoid type instantiation depth issue
     const subsectionIds = subsections.map(s => s.id);
+    const snagsRes = await supabase.from("snags").select("id, subsection_id, status").in("subsection_id", subsectionIds);
+    const allSnags = snagsRes.data || [];
+
+    // Get COC validations
     const cocValidationsQuery = await supabase
       .from("coc_validations")
       .select("*")
@@ -108,11 +128,12 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     const cocValidations = cocValidationsQuery.data || [];
 
-    // Calculate metrics
+    // Calculate metrics - matching dashboard logic exactly
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
-    const cocCompliant = subsections.filter(s => ['Approved', 'Valid', 'Pass'].includes(s.coc_status)).length;
+    const cocCompliant = subsections.filter(s => s.is_coc_required && ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '')).length;
     const meteringInstalled = subsections.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length;
-    const compliantCount = subsections.filter(s => calculateSubsectionCompliance(s, allInspections, subsectionDocuments)).length;
+    const compliantCount = subsections.filter(s => calculateSubsectionCompliance(s, allSnags)).length;
+    const openSnags = allSnags.filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length;
 
     let totalSnags = 0;
     const subsectionsWithSnags = new Set<string>();
@@ -186,9 +207,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     // Create subsection cards with QR codes
     for (const sub of subsections) {
       const subInspections = allInspections.filter(i => i.subsection_id === sub.id);
-      const subSnags = subInspections.reduce((count, insp) => count + extractSnags(insp.json_data).length, 0);
+      const subSnagCount = allSnags.filter(s => s.subsection_id === sub.id && !['rectified', 'Rectified'].includes(s.status || '')).length;
       const subDocs = subsectionDocuments.filter(d => d.subsection_id === sub.id);
-      const isCompliant = calculateSubsectionCompliance(sub, subInspections, subDocs);
+      const isCompliant = calculateSubsectionCompliance(sub, allSnags);
       
       // Convert QR code URL to base64 for pdfMake
       let qrCodeBase64: string | null = null;
@@ -247,7 +268,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         {
           columns: [
             { width: '*', text: 'Snags:', fontSize: 9, bold: true },
-            { width: 'auto', text: subSnags.toString(), fontSize: 9, color: subSnags > 0 ? COLORS.error : COLORS.success },
+            { width: 'auto', text: subSnagCount.toString(), fontSize: 9, color: subSnagCount > 0 ? COLORS.error : COLORS.success },
           ],
           margin: [0, 2, 0, 2],
         },
