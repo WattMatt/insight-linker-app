@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings, Upload } from "lucide-react";
+import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   generatePdfBlob,
@@ -85,6 +85,223 @@ const TEMPLATE_CATEGORIES = [
   { value: "Site Drawing", label: "Drawings", icon: Map, description: "Site drawing inspections", color: "bg-cyan-600" },
 ] as const;
 
+// Inline template editor component
+const InlineTemplateEditor = ({ 
+  template, 
+  onSave, 
+  onCancel 
+}: { 
+  template: InspectionTemplate; 
+  onSave: () => void; 
+  onCancel: () => void;
+}) => {
+  const [name, setName] = useState(template.name);
+  const [description, setDescription] = useState(template.description || "");
+  const [category, setCategory] = useState(template.category);
+  const [sections, setSections] = useState<TemplateSection[]>(template.sections || []);
+  const [saving, setSaving] = useState(false);
+
+  const addSection = () => {
+    setSections([...sections, {
+      id: `section_${Date.now()}`,
+      name: "New Section",
+      order_index: sections.length,
+      items: []
+    }]);
+  };
+
+  const updateSection = (sectionId: string, updates: Partial<TemplateSection>) => {
+    setSections(sections.map(s => s.id === sectionId ? { ...s, ...updates } : s));
+  };
+
+  const deleteSection = (sectionId: string) => {
+    setSections(sections.filter(s => s.id !== sectionId));
+  };
+
+  const addItem = (sectionId: string) => {
+    setSections(sections.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          items: [...(s.items || []), {
+            id: `item_${Date.now()}`,
+            name: "New Field",
+            type: "text",
+            required: false
+          }]
+        };
+      }
+      return s;
+    }));
+  };
+
+  const updateItem = (sectionId: string, itemId: string, updates: any) => {
+    setSections(sections.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          items: (s.items || []).map(i => i.id === itemId ? { ...i, ...updates } : i)
+        };
+      }
+      return s;
+    }));
+  };
+
+  const deleteItem = (sectionId: string, itemId: string) => {
+    setSections(sections.map(s => {
+      if (s.id === sectionId) {
+        return { ...s, items: (s.items || []).filter(i => i.id !== itemId) };
+      }
+      return s;
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("inspection_templates")
+        .update({
+          name,
+          description,
+          category,
+          sections: sections as any,
+          sections_count: sections.length,
+          pages_count: sections.length + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", template.id);
+
+      if (error) throw error;
+      onSave();
+    } catch (error) {
+      console.error("Error saving:", error);
+      toast.error("Failed to save template");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Basic Info */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="space-y-2">
+          <Label>Template Name</Label>
+          <Input value={name} onChange={(e) => setName(e.target.value)} />
+        </div>
+        <div className="space-y-2">
+          <Label>Category</Label>
+          <Select value={category} onValueChange={setCategory}>
+            <SelectTrigger>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {["General", "Medium Voltage", "Low Voltage", "Generator", "Solar", "Progress", "Site Drawing"].map(cat => (
+                <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="space-y-2">
+          <Label>Description</Label>
+          <Textarea 
+            value={description} 
+            onChange={(e) => setDescription(e.target.value)}
+            className="h-[38px] min-h-[38px]"
+          />
+        </div>
+      </div>
+
+      {/* Sections */}
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h4 className="font-semibold">Sections & Fields</h4>
+          <Button variant="outline" size="sm" onClick={addSection}>
+            <Plus className="mr-2 h-4 w-4" />
+            Add Section
+          </Button>
+        </div>
+
+        {sections.length === 0 ? (
+          <div className="text-center py-8 text-muted-foreground border rounded-lg">
+            No sections defined. Click "Add Section" to start.
+          </div>
+        ) : (
+          <div className="space-y-3">
+            {sections.map((section, idx) => (
+              <div key={section.id} className="border rounded-lg p-4 bg-muted/30">
+                <div className="flex items-center gap-3 mb-3">
+                  <span className="text-sm font-medium text-muted-foreground w-6">{idx + 1}.</span>
+                  <Input 
+                    value={section.name} 
+                    onChange={(e) => updateSection(section.id, { name: e.target.value })}
+                    className="flex-1 font-medium"
+                  />
+                  <Button variant="ghost" size="sm" onClick={() => deleteSection(section.id)}>
+                    <Trash2 className="h-4 w-4 text-destructive" />
+                  </Button>
+                </div>
+                
+                {/* Fields */}
+                <div className="space-y-2 ml-9">
+                  {(section.items || []).map((item, itemIdx) => (
+                    <div key={item.id} className="flex items-center gap-2 p-2 bg-background rounded border">
+                      <span className="text-xs text-muted-foreground w-6">{idx + 1}.{itemIdx + 1}</span>
+                      <Input 
+                        value={item.name} 
+                        onChange={(e) => updateItem(section.id, item.id, { name: e.target.value })}
+                        className="flex-1 h-8 text-sm"
+                        placeholder="Field name"
+                      />
+                      <Select 
+                        value={item.type} 
+                        onValueChange={(v) => updateItem(section.id, item.id, { type: v })}
+                      >
+                        <SelectTrigger className="w-32 h-8">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="text">Text</SelectItem>
+                          <SelectItem value="textarea">Text Area</SelectItem>
+                          <SelectItem value="number">Number</SelectItem>
+                          <SelectItem value="checkbox">Checkbox</SelectItem>
+                          <SelectItem value="image">Image</SelectItem>
+                          <SelectItem value="select">Dropdown</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <Button variant="ghost" size="sm" onClick={() => deleteItem(section.id, item.id)}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </div>
+                  ))}
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="w-full text-muted-foreground"
+                    onClick={() => addItem(section.id)}
+                  >
+                    <Plus className="mr-2 h-3 w-3" />
+                    Add field
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="flex justify-end gap-2 pt-4 border-t">
+        <Button variant="outline" onClick={onCancel}>Cancel</Button>
+        <Button onClick={handleSave} disabled={saving}>
+          {saving ? "Saving..." : "Save Changes"}
+        </Button>
+      </div>
+    </div>
+  );
+};
+
 const InspectionTemplates = () => {
   const navigate = useNavigate();
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
@@ -94,6 +311,7 @@ const InspectionTemplates = () => {
   const [previewTemplate, setPreviewTemplate] = useState<InspectionTemplate | null>(null);
   const [showUploader, setShowUploader] = useState(false);
   const [exportTemplate, setExportTemplate] = useState<InspectionTemplate | null>(null);
+  const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTemplates();
@@ -349,98 +567,76 @@ const InspectionTemplates = () => {
               </Card>
             ) : (
               <>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {/* Full list of all templates with expand/edit capability */}
+          <div className="space-y-4">
             {currentTemplates.map((template) => {
               const categoryConfig = TEMPLATE_CATEGORIES.find(c => c.value === template.category);
               const CategoryIcon = categoryConfig?.icon || FileText;
+              const isExpanded = expandedTemplateId === template.id;
               
               return (
-                <Card key={template.id} className="hover:shadow-lg transition-shadow group">
+                <Card key={template.id} className="hover:shadow-md transition-shadow">
                   <CardHeader className="pb-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className={`p-2 rounded-lg ${categoryConfig?.color || 'bg-gray-500'} text-white`}>
-                        <CategoryIcon className="h-4 w-4" />
-                      </div>
-                      <Badge 
-                        variant="secondary" 
-                        className={`${categoryConfig?.color || 'bg-gray-500'} text-white border-0`}
-                      >
-                        {template.category}
-                      </Badge>
-                    </div>
-                    <CardTitle className="text-lg group-hover:text-primary transition-colors">{template.name}</CardTitle>
-                    {template.description && (
-                      <CardDescription className="line-clamp-2">
-                        {template.description}
-                      </CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="space-y-4">
-                    {/* Category-colored preview area */}
-                    <div className={`w-full h-40 rounded-md overflow-hidden flex items-center justify-center relative ${categoryConfig?.color || 'bg-gray-500'} bg-opacity-10`}>
-                      <div className="absolute inset-0 bg-gradient-to-br from-transparent to-black/5"></div>
-                      {template.cover_page?.logo_url ? (
-                        <img 
-                          src={template.cover_page.logo_url} 
-                          alt={template.name}
-                          className="w-full h-full object-cover"
-                        />
-                      ) : (
-                        <div className="text-center">
-                          <CategoryIcon className={`h-12 w-12 mx-auto mb-2 opacity-50`} style={{ color: categoryConfig?.color?.replace('bg-', '#').replace('-500', '') || '#6b7280' }} />
-                          <p className="text-xs text-muted-foreground font-medium">{template.category}</p>
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-lg ${categoryConfig?.color || 'bg-gray-500'} text-white`}>
+                          <CategoryIcon className="h-4 w-4" />
                         </div>
-                      )}
+                        <div>
+                          <CardTitle className="text-lg">{template.name}</CardTitle>
+                          <CardDescription className="flex items-center gap-2 mt-1">
+                            <Badge variant="secondary" className="text-xs">
+                              {template.category}
+                            </Badge>
+                            <span className="text-xs text-muted-foreground">
+                              {template.sections_count} sections • {template.pages_count} pages
+                            </span>
+                          </CardDescription>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <Button 
+                          variant="outline" 
+                          size="sm"
+                          onClick={() => setPreviewTemplate(template)}
+                        >
+                          <Eye className="mr-2 h-4 w-4" />
+                          Preview
+                        </Button>
+                        <Button
+                          variant={isExpanded ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => setExpandedTemplateId(isExpanded ? null : template.id)}
+                        >
+                          <Settings className={`mr-2 h-4 w-4 transition-transform ${isExpanded ? 'rotate-90' : ''}`} />
+                          {isExpanded ? 'Close' : 'Tweak'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => generatePDF(template)}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </div>
-                  <div className="flex gap-4 text-sm text-muted-foreground">
-                    <div>
-                      <span className="font-semibold text-foreground">
-                        {template.sections_count}
-                      </span>{" "}
-                      Sections
-                    </div>
-                    <div>
-                      <span className="font-semibold text-foreground">
-                        {template.pages_count}
-                      </span>{" "}
-                      Pages
-                    </div>
-                  </div>
-                  <div className="flex gap-2">
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      className="flex-1"
-                      onClick={() => {
-                        console.log('Preview clicked for template:', {
-                          name: template.name,
-                          hasSections: Array.isArray(template.sections),
-                          sectionsCount: template.sections?.length || 0,
-                          sections: template.sections
-                        });
-                        setPreviewTemplate(template);
-                      }}
-                    >
-                      <Eye className="mr-2 h-4 w-4" />
-                      View
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => navigate(`/inspection-templates/${template.id}/edit`)}
-                    >
-                      <Edit className="h-4 w-4" />
-                    </Button>
-                    <Button
-                      variant="default"
-                      size="sm"
-                      onClick={() => generatePDF(template)}
-                    >
-                      <Download className="h-4 w-4" />
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
+                  </CardHeader>
+                  
+                  {/* Expanded inline editor */}
+                  {isExpanded && (
+                    <CardContent className="border-t pt-6">
+                      <InlineTemplateEditor 
+                        template={template} 
+                        onSave={() => {
+                          fetchTemplates();
+                          setExpandedTemplateId(null);
+                          toast.success("Template updated");
+                        }}
+                        onCancel={() => setExpandedTemplateId(null)}
+                      />
+                    </CardContent>
+                  )}
+                </Card>
               );
             })}
           </div>
