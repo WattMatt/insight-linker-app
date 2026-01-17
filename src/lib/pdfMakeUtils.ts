@@ -73,6 +73,7 @@ export interface CoverPageOptions {
   reportDate?: Date;
   referenceNumber?: string;
   preparedBy?: string;
+  qrCodeDataUrl?: string | null;
 }
 
 /**
@@ -90,6 +91,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     reportDate = new Date(),
     referenceNumber,
     preparedBy,
+    qrCodeDataUrl,
   } = options;
 
   const formattedDate = reportDate.toLocaleDateString('en-GB', {
@@ -244,9 +246,26 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     });
   }
 
+  // QR Code if provided
+  if (qrCodeDataUrl) {
+    content.push({
+      image: qrCodeDataUrl,
+      width: 80,
+      alignment: 'center',
+      margin: [0, 20, 0, 5],
+    });
+    content.push({
+      text: 'Scan for digital access',
+      fontSize: 8,
+      color: COLORS.textMuted,
+      alignment: 'center',
+      margin: [0, 0, 0, 20],
+    });
+  }
+
   content.push({
     stack: metaContent,
-    margin: [0, 60, 0, 0],
+    margin: [0, qrCodeDataUrl ? 20 : 60, 0, 0],
   });
 
   // Confidentiality notice

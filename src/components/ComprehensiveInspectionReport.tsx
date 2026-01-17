@@ -2,26 +2,25 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Eye } from "lucide-react";
 import { toast } from "sonner";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { supabase } from "@/integrations/supabase/client";
 import { fetchImageAsDataUrl } from "@/lib/imageUrlResolver";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import {
-  addCoverPage,
-  addStandardHeader,
-  addFootersToAllPages,
-  addSectionHeader,
-  addFullWidthSectionHeader,
-  logComplianceCheck,
-  getTableOptionsWithSafeMargins,
-  RGB_COLORS,
-  PAGE,
-  SAFE_BOTTOM_MARGIN,
-  PDFComplianceCheck,
-} from "@/lib/pdfUtils";
-import { DOCUMENT_DESIGN_STANDARDS, getContentWidth } from "@/lib/documentDesignStandards";
+  generatePdfBlob,
+  createCoverPage,
+  createInfoTable,
+  createSectionHeader,
+  createStatusBadge,
+  COLORS,
+  DEFAULT_STYLES,
+} from "@/lib/pdfMakeUtils";
+
+type Content = any;
+type TDocumentDefinitions = any;
+
+const PDF_COLORS = COLORS;
+
 // Standalone interface for external use
 export interface GenerateReportOptions {
   inspectionId: string;
@@ -91,7 +90,7 @@ export async function generateAndSaveComprehensiveReport(
       .eq('subsection_id', subsectionId);
     const snags = snagsData || [];
 
-    // Import and use the internal PDF generator
+    // Generate PDF using internal generator
     const result = await generatePDFInternal({
       inspectionData: { ...inspection, jsonData: inspection.json_data },
       siteName,
@@ -134,12 +133,11 @@ export async function generateAndSaveComprehensiveReport(
       categoryId = newCategory.id;
     }
 
-    const pdfBlob = result.doc.output('blob');
     const storagePath = `${subsectionId}/Inspection Reports/${result.fileName}`;
     
     const { error: uploadError } = await supabase.storage
       .from('documents')
-      .upload(storagePath, pdfBlob, {
+      .upload(storagePath, result.blob, {
         contentType: 'application/pdf',
         upsert: true
       });
@@ -169,7 +167,7 @@ export async function generateAndSaveComprehensiveReport(
           category_id: categoryId,
           file_name: result.fileName,
           file_url: urlData.publicUrl,
-          file_size: pdfBlob.size,
+          file_size: result.blob.size,
           uploaded_by: user.id
         })
         .select()
@@ -184,7 +182,7 @@ export async function generateAndSaveComprehensiveReport(
         .from('subsection_documents')
         .update({
           file_url: urlData.publicUrl,
-          file_size: pdfBlob.size,
+          file_size: result.blob.size,
           uploaded_at: new Date().toISOString()
         })
         .eq('id', existingDoc.id);
@@ -203,7 +201,7 @@ export async function generateAndSaveComprehensiveReport(
   }
 }
 
-// Internal PDF generation function - extracted from component for reuse
+// Internal PDF generation function using pdfmake
 async function generatePDFInternal(options: {
   inspectionData: any;
   siteName: string;
@@ -215,14 +213,11 @@ async function generatePDFInternal(options: {
   clientName?: string;
   snags?: any[];
   template: any;
-}): Promise<{ doc: jsPDF, fileName: string, blob: Blob } | null> {
-  const { inspectionData, siteName, subsectionName, templateId, subsectionId, siteLogoUrl, inspectionId, clientName, snags = [], template } = options;
+}): Promise<{ fileName: string; blob: Blob } | null> {
+  const { inspectionData, siteName, subsectionName, subsectionId, siteLogoUrl, inspectionId, clientName, snags = [], template } = options;
   
   try {
-    const doc = new jsPDF();
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
-
+    const content: Content[] = [];
     let jsonData = inspectionData?.jsonData?.jsonData || inspectionData?.jsonData || inspectionData?.json_data || {};
 
     const date = new Date().toLocaleDateString('en-US', { 
@@ -232,6 +227,7 @@ async function generatePDFInternal(options: {
     });
 
     const generalInfo = jsonData.generalInfo || {};
+    const reportTitle = template?.name || 'Inspection Report';
 
     // Fetch company logo for QR code
     let companyLogoForQR: string | null = null;
@@ -298,109 +294,44 @@ async function generatePDFInternal(options: {
       }
     }
 
-    // ===== COVER PAGE =====
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, pageWidth, pageHeight, 'F');
-    
-    doc.setFillColor(21, 122, 171);
-    doc.rect(0, 0, pageWidth, 20, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.text(`${siteName} - ${subsectionName}`, pageWidth / 2, 13, { align: 'center' });
-    
-    doc.setFillColor(21, 122, 171);
-    doc.rect(0, pageHeight - 20, pageWidth, 20, 'F');
-    
-    doc.setTextColor(255, 255, 255);
-    doc.setFontSize(8);
-    doc.setFont(undefined, 'normal');
-    doc.text(date, pageWidth / 2, pageHeight - 10, { align: 'center' });
-
-    // Site logo
-    let startY = 40;
-    const siteLogoToUse = options.siteLogoUrl || companyLogoForQR;
+    // Load logo
+    let logoDataUrl: string | null = null;
+    const siteLogoToUse = siteLogoUrl || companyLogoForQR;
     if (siteLogoToUse) {
       try {
-        const logoDataUrl = await fetchImageAsDataUrl(siteLogoToUse);
-        if (logoDataUrl) {
-          const logoWidth = 80;
-          const logoHeight = 40;
-          doc.addImage(logoDataUrl, 'PNG', (pageWidth - logoWidth) / 2, startY, logoWidth, logoHeight);
-          startY += logoHeight + 15;
-        }
+        logoDataUrl = await fetchImageAsDataUrl(siteLogoToUse);
       } catch (error) {
         console.error('Error loading site logo:', error);
-        startY += 15;
       }
     }
 
-    // Report title
-    const reportTitle = template?.name || 'Inspection Report';
-    doc.setTextColor(21, 122, 171);
-    doc.setFontSize(22);
-    doc.setFont(undefined, 'bold');
-    doc.text(reportTitle, pageWidth / 2, startY, { align: 'center' });
-    startY += 15;
-
-    // Site and subsection info
-    doc.setTextColor(80, 80, 80);
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'normal');
-    doc.text(siteName, pageWidth / 2, startY, { align: 'center' });
-    startY += 8;
-    doc.text(subsectionName, pageWidth / 2, startY, { align: 'center' });
-    startY += 20;
-
-    // QR code
-    if (qrCodeDataUrl) {
-      const qrWidth = 50;
-      doc.addImage(qrCodeDataUrl, 'PNG', (pageWidth - qrWidth) / 2, startY, qrWidth, qrWidth);
-      startY += qrWidth + 5;
-      doc.setFontSize(8);
-      doc.setTextColor(100, 100, 100);
-      doc.text('Scan for digital access', pageWidth / 2, startY, { align: 'center' });
-    }
+    // ===== COVER PAGE =====
+    const coverPage = createCoverPage({
+      title: reportTitle,
+      subtitle: `${siteName} - ${subsectionName}`,
+      siteName,
+      reportType: 'Inspection Report',
+      organizationName: clientName || 'Watson Mattheus',
+      reportDate: new Date(),
+      logoDataUrl: logoDataUrl || undefined,
+      qrCodeDataUrl: qrCodeDataUrl || undefined,
+    });
+    content.push(coverPage);
 
     // ===== GENERAL INFORMATION PAGE =====
-    doc.addPage();
-    let yPos = 20;
-
-    doc.setFillColor(21, 122, 171);
-    doc.rect(0, yPos, pageWidth, 15, 'F');
-    doc.setFontSize(14);
-    doc.setFont(undefined, 'bold');
-    doc.setTextColor(255, 255, 255);
-    doc.text('GENERAL INFORMATION', pageWidth / 2, yPos + 10, { align: 'center' });
-    yPos += 25;
-
-    doc.setTextColor(0, 0, 0);
+    content.push({ text: '', pageBreak: 'after' } as Content);
+    content.push(createSectionHeader('General Information', 'primary'));
     
-    const infoItems = [
-      { label: 'Site Name', value: siteName },
-      { label: 'Subsection', value: subsectionName },
-      { label: 'Client', value: clientName || generalInfo.clientName || 'N/A' },
-      { label: 'Inspection Date', value: generalInfo.inspectionDate || date },
-      { label: 'Inspector', value: generalInfo.inspectorName || inspectionData.inspector_name || 'N/A' },
-      { label: 'Contractor', value: generalInfo.contractor || inspectionData.contractor || 'N/A' },
-      { label: 'Consultant', value: generalInfo.consultant || inspectionData.consultant || 'N/A' },
+    const infoData: [string, string][] = [
+      ['Site Name', siteName],
+      ['Subsection', subsectionName],
+      ['Client', clientName || generalInfo.clientName || 'N/A'],
+      ['Inspection Date', generalInfo.inspectionDate || date],
+      ['Inspector', generalInfo.inspectorName || inspectionData.inspector_name || 'N/A'],
+      ['Contractor', generalInfo.contractor || inspectionData.contractor || 'N/A'],
+      ['Consultant', generalInfo.consultant || inspectionData.consultant || 'N/A'],
     ];
-
-    autoTable(doc, {
-      startY: yPos,
-      margin: { left: 20, right: 20, bottom: SAFE_BOTTOM_MARGIN },
-      head: [],
-      body: infoItems.map(item => [item.label, item.value]),
-      theme: 'striped',
-      styles: { fontSize: 10, cellPadding: 4, overflow: 'linebreak' },
-      columnStyles: {
-        0: { fontStyle: 'bold', cellWidth: 50 },
-        1: { cellWidth: 'auto' }
-      }
-    });
-
-    yPos = (doc as any).lastAutoTable?.finalY + 15 || yPos + 80;
+    content.push(createInfoTable(infoData));
 
     // ===== TEMPLATE SECTIONS =====
     const sections = template?.sections || [];
@@ -409,18 +340,8 @@ async function generatePDFInternal(options: {
       const sectionKey = section.key || section.name?.toLowerCase().replace(/\s+/g, '_');
       const sectionData = jsonData[sectionIndex] || jsonData[String(sectionIndex)] || jsonData[sectionKey] || {};
 
-      doc.addPage();
-      yPos = 20;
-
-      doc.setFillColor(21, 122, 171);
-      doc.rect(0, yPos, pageWidth, 15, 'F');
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(255, 255, 255);
-      doc.text((section.name || 'Section').toUpperCase(), pageWidth / 2, yPos + 10, { align: 'center' });
-      yPos += 25;
-
-      doc.setTextColor(0, 0, 0);
+      content.push({ text: '', pageBreak: 'before' } as Content);
+      content.push(createSectionHeader((section.name || 'Section').toUpperCase(), 'primary'));
 
       const items = section.items || [];
       for (let itemIndex = 0; itemIndex < items.length; itemIndex++) {
@@ -428,195 +349,171 @@ async function generatePDFInternal(options: {
         const itemKey = item.key || item.name?.toLowerCase().replace(/\s+/g, '_');
         const itemData = sectionData[itemIndex] || sectionData[String(itemIndex)] || sectionData[itemKey] || {};
 
-        if (yPos > pageHeight - 60) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text(item.name || 'Item', 20, yPos);
-        yPos += 6;
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
+        const itemContent: Content[] = [];
         
+        // Item name
+        itemContent.push({
+          text: item.name || 'Item',
+          bold: true,
+          fontSize: 11,
+          margin: [0, 10, 0, 4]
+        } as Content);
+
+        // Status
         if (itemData.status) {
-          const statusColor = itemData.status === 'Pass' ? [40, 167, 69] : itemData.status === 'Fail' ? [220, 53, 69] : [108, 117, 125];
-          doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-          doc.text(`Status: ${itemData.status}`, 25, yPos);
-          doc.setTextColor(0, 0, 0);
-          yPos += 5;
+          itemContent.push({
+            columns: [
+              { text: 'Status: ', bold: true, width: 50, fontSize: 9 },
+              createStatusBadge(itemData.status)
+            ],
+            margin: [10, 0, 0, 4]
+          } as Content);
         }
 
+        // Notes
         if (itemData.notes) {
-          const wrappedNotes = doc.splitTextToSize(`Notes: ${itemData.notes}`, pageWidth - 50);
-          doc.text(wrappedNotes, 25, yPos);
-          yPos += wrappedNotes.length * 4 + 2;
+          itemContent.push({
+            text: `Notes: ${itemData.notes}`,
+            fontSize: 9,
+            color: PDF_COLORS.textSecondary,
+            margin: [10, 0, 0, 4]
+          } as Content);
         }
 
+        // Images
         const imageUrls = itemData.photos || itemData.images || itemData.imageUrls || [];
         if (imageUrls.length > 0) {
-          const imgWidth = 45;
-          const imgHeight = 35;
-          let imgX = 25;
-          
+          const imageColumns: Content[] = [];
           for (const imgUrl of imageUrls.slice(0, 3)) {
             try {
               const dataUrl = await fetchImageAsDataUrl(imgUrl);
               if (dataUrl) {
-                if (yPos + imgHeight > pageHeight - 30) {
-                  doc.addPage();
-                  yPos = 20;
-                  imgX = 25;
-                }
-                doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                imgX += imgWidth + 5;
-                if (imgX > pageWidth - imgWidth - 20) {
-                  imgX = 25;
-                  yPos += imgHeight + 5;
-                }
+                imageColumns.push({
+                  image: dataUrl,
+                  width: 100,
+                  height: 75,
+                  margin: [0, 5, 10, 5]
+                } as Content);
               }
             } catch (error) {
               console.error('Error embedding image:', error);
             }
           }
-          if (imgX > 25) yPos += imgHeight + 5;
+          if (imageColumns.length > 0) {
+            itemContent.push({
+              columns: imageColumns,
+              margin: [10, 5, 0, 5]
+            } as Content);
+          }
         }
 
-        yPos += 8;
+        content.push({ stack: itemContent } as Content);
       }
     }
 
     // ===== TENANTS SECTION =====
     const tenants = jsonData.tenants || [];
     if (tenants.length > 0) {
-      doc.addPage();
-      yPos = 20;
-
-      doc.setFillColor(40, 167, 69);
-      doc.rect(0, yPos, pageWidth, 15, 'F');
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(255, 255, 255);
-      doc.text('TENANTS / METERS', pageWidth / 2, yPos + 10, { align: 'center' });
-      yPos += 25;
-      doc.setTextColor(0, 0, 0);
+      content.push({ text: '', pageBreak: 'before' } as Content);
+      content.push(createSectionHeader('TENANTS / METERS', 'secondary'));
 
       let tenantNumber = 1;
       for (const tenant of tenants) {
-        if (yPos > pageHeight - 80) {
-          doc.addPage();
-          yPos = 20;
+        const tenantContent: Content[] = [];
+        
+        const tenantTitle = `${tenantNumber}. ${tenant.shopName || 'Unnamed Tenant'}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`;
+        tenantContent.push({
+          text: tenantTitle,
+          bold: true,
+          fontSize: 11,
+          margin: [0, 10, 0, 5]
+        } as Content);
+
+        const tenantDetails: string[] = [];
+        if (tenant.breakerSize) tenantDetails.push(`Breaker Size: ${tenant.breakerSize}`);
+        if (tenant.ctSizeAndRatio) tenantDetails.push(`CT Ratio: ${tenant.ctSizeAndRatio}`);
+        if (tenant.meterSerialNumber) tenantDetails.push(`Meter S/N: ${tenant.meterSerialNumber}`);
+        if (tenant.controlStatus48V) tenantDetails.push(`48V Control: ${tenant.controlStatus48V}`);
+
+        if (tenantDetails.length > 0) {
+          tenantContent.push({
+            ul: tenantDetails,
+            fontSize: 9,
+            margin: [10, 0, 0, 5]
+          } as Content);
         }
 
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        const tenantTitle = `${tenantNumber}. ${tenant.shopName || 'Unnamed Tenant'}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`;
-        doc.text(tenantTitle, 20, yPos);
-        yPos += 8;
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
-        
-        if (tenant.breakerSize) { doc.text(`Breaker Size: ${tenant.breakerSize}`, 25, yPos); yPos += 5; }
-        if (tenant.ctSizeAndRatio) { doc.text(`CT Ratio: ${tenant.ctSizeAndRatio}`, 25, yPos); yPos += 5; }
-        if (tenant.meterSerialNumber) { doc.text(`Meter S/N: ${tenant.meterSerialNumber}`, 25, yPos); yPos += 5; }
-        if (tenant.controlStatus48V) { doc.text(`48V Control: ${tenant.controlStatus48V}`, 25, yPos); yPos += 5; }
-
+        // Tenant images
         const tenantImages = [];
         if (tenant.breakerImage) tenantImages.push({ label: 'Breaker', url: tenant.breakerImage });
         if (tenant.ctRatioImage) tenantImages.push({ label: 'CT Ratio', url: tenant.ctRatioImage });
         if (tenant.meterImage) tenantImages.push({ label: 'Meter', url: tenant.meterImage });
 
         if (tenantImages.length > 0) {
-          const imgWidth = 45;
-          const imgHeight = 35;
-          let imgX = 25;
-          let imagesEmbedded = 0;
-          
+          const imageColumns: Content[] = [];
           for (const img of tenantImages) {
             if (!img.url) continue;
-            
             try {
               const dataUrl = await fetchImageAsDataUrl(img.url);
               if (dataUrl) {
-                if (yPos + imgHeight > pageHeight - 30) {
-                  doc.addPage();
-                  yPos = 20;
-                  imgX = 25;
-                }
-                doc.setFontSize(7);
-                doc.setFont(undefined, 'normal');
-                doc.text(img.label, imgX, yPos - 2);
-                doc.addImage(dataUrl, 'JPEG', imgX, yPos, imgWidth, imgHeight);
-                imgX += imgWidth + 5;
-                imagesEmbedded++;
-                
-                if (imgX > pageWidth - imgWidth - 20) {
-                  imgX = 25;
-                  yPos += imgHeight + 10;
-                }
+                imageColumns.push({
+                  stack: [
+                    { text: img.label, fontSize: 7, margin: [0, 0, 0, 2] },
+                    { image: dataUrl, width: 100, height: 75 }
+                  ],
+                  margin: [0, 0, 10, 0]
+                } as Content);
               }
             } catch (error) {
-              console.error(`Error embedding tenant image:`, error);
+              console.error('Error embedding tenant image:', error);
             }
           }
-          
-          if (imagesEmbedded > 0 && imgX > 25) {
-            yPos += imgHeight + 10;
-          } else if (imagesEmbedded === 0) {
-            yPos += 5;
+          if (imageColumns.length > 0) {
+            tenantContent.push({
+              columns: imageColumns,
+              margin: [10, 5, 0, 10]
+            } as Content);
           }
-        } else {
-          yPos += 10;
         }
 
+        content.push({ stack: tenantContent } as Content);
         tenantNumber++;
       }
     }
 
     // ===== SNAGS SECTION =====
     if (snags.length > 0) {
-      doc.addPage();
-      yPos = 20;
-
-      doc.setFillColor(220, 53, 69);
-      doc.rect(0, yPos, pageWidth, 15, 'F');
-      doc.setFontSize(14);
-      doc.setFont(undefined, 'bold');
-      doc.setTextColor(255, 255, 255);
-      doc.text('SNAGS / ISSUES', pageWidth / 2, yPos + 10, { align: 'center' });
-      yPos += 25;
-      doc.setTextColor(0, 0, 0);
+      content.push({ text: '', pageBreak: 'before' } as Content);
+      content.push(createSectionHeader('SNAGS / ISSUES', 'primary'));
 
       for (const snag of snags) {
-        if (yPos > pageHeight - 50) {
-          doc.addPage();
-          yPos = 20;
-        }
-
-        doc.setFontSize(11);
-        doc.setFont(undefined, 'bold');
-        doc.text(snag.title || 'Snag', 20, yPos);
-        yPos += 6;
-
-        doc.setFontSize(9);
-        doc.setFont(undefined, 'normal');
+        const snagContent: Content[] = [];
         
-        const statusColor = snag.status === 'Resolved' ? [40, 167, 69] : [220, 53, 69];
-        doc.setTextColor(statusColor[0], statusColor[1], statusColor[2]);
-        doc.text(`Status: ${snag.status}`, 25, yPos);
-        doc.setTextColor(0, 0, 0);
-        yPos += 5;
+        snagContent.push({
+          text: snag.title || 'Snag',
+          bold: true,
+          fontSize: 11,
+          margin: [0, 10, 0, 4]
+        } as Content);
+
+        snagContent.push({
+          columns: [
+            { text: 'Status: ', bold: true, width: 50, fontSize: 9 },
+            createStatusBadge(snag.status)
+          ],
+          margin: [10, 0, 0, 4]
+        } as Content);
 
         if (snag.description) {
-          const wrappedDesc = doc.splitTextToSize(snag.description, pageWidth - 50);
-          doc.text(wrappedDesc, 25, yPos);
-          yPos += wrappedDesc.length * 4 + 2;
+          snagContent.push({
+            text: snag.description,
+            fontSize: 9,
+            color: PDF_COLORS.textSecondary,
+            margin: [10, 0, 0, 4]
+          } as Content);
         }
 
-        yPos += 10;
+        content.push({ stack: snagContent } as Content);
       }
     }
 
@@ -630,43 +527,37 @@ async function generatePDFInternal(options: {
           .eq('inspection_id', inspId);
 
         if (signatures && signatures.length > 0) {
-          doc.addPage();
-          yPos = 20;
-
-          doc.setFillColor(21, 122, 171);
-          doc.rect(0, yPos, pageWidth, 15, 'F');
-          doc.setFontSize(14);
-          doc.setFont(undefined, 'bold');
-          doc.setTextColor(255, 255, 255);
-          doc.text('SIGNATURES', pageWidth / 2, yPos + 10, { align: 'center' });
-          yPos += 25;
-          doc.setTextColor(0, 0, 0);
+          content.push({ text: '', pageBreak: 'before' } as Content);
+          content.push(createSectionHeader('SIGNATURES', 'primary'));
 
           for (const sig of signatures) {
-            if (yPos > pageHeight - 60) {
-              doc.addPage();
-              yPos = 20;
-            }
-
-            doc.setFontSize(10);
-            doc.setFont(undefined, 'bold');
-            doc.text(`${sig.signer_type}: ${sig.signer_name}`, 20, yPos);
-            yPos += 6;
+            const sigContent: Content[] = [];
+            
+            sigContent.push({
+              text: `${sig.signer_type}: ${sig.signer_name}`,
+              bold: true,
+              fontSize: 10,
+              margin: [0, 10, 0, 5]
+            } as Content);
 
             if (sig.signature_data) {
-              try {
-                doc.addImage(sig.signature_data, 'PNG', 20, yPos, 60, 25);
-                yPos += 30;
-              } catch (e) {
-                console.error('Error adding signature:', e);
-              }
+              sigContent.push({
+                image: sig.signature_data,
+                width: 150,
+                height: 60,
+                margin: [0, 5, 0, 5]
+              } as Content);
             }
 
-            doc.setFontSize(8);
-            doc.setFont(undefined, 'normal');
             const signedDate = new Date(sig.signed_at).toLocaleString();
-            doc.text(`Signed: ${signedDate}`, 20, yPos);
-            yPos += 15;
+            sigContent.push({
+              text: `Signed: ${signedDate}`,
+              fontSize: 8,
+              color: PDF_COLORS.textMuted,
+              margin: [0, 0, 0, 10]
+            } as Content);
+
+            content.push({ stack: sigContent } as Content);
           }
         }
       } catch (error) {
@@ -674,21 +565,33 @@ async function generatePDFInternal(options: {
       }
     }
 
-    // ===== FOOTER =====
-    const totalPages = doc.getNumberOfPages();
-    for (let i = 2; i <= totalPages; i++) {
-      doc.setPage(i);
-      doc.setFontSize(9);
-      doc.setTextColor(100, 100, 100);
-      doc.setFont(undefined, 'normal');
-      doc.text(`${reportTitle} - Page ${i - 1}`, pageWidth / 2, pageHeight - 10, { align: 'center' });
-    }
+    // Build document definition
+    const docDefinition: TDocumentDefinitions = {
+      content,
+      styles: DEFAULT_STYLES,
+      defaultStyle: {
+        font: 'Helvetica',
+        fontSize: 10,
+      },
+      pageMargins: [40, 40, 40, 60],
+      footer: (currentPage: number, pageCount: number) => {
+        if (currentPage === 1) return null;
+        return {
+          columns: [
+            { text: 'Confidential', fontSize: 8, color: PDF_COLORS.textMuted, margin: [40, 0, 0, 0] },
+            { text: `Page ${currentPage - 1} of ${pageCount - 1}`, fontSize: 8, alignment: 'center', color: PDF_COLORS.textMuted },
+            { text: date, fontSize: 8, alignment: 'right', color: PDF_COLORS.textMuted, margin: [0, 0, 40, 0] }
+          ],
+          margin: [0, 20, 0, 0]
+        };
+      }
+    };
 
+    const blob = await generatePdfBlob(docDefinition);
     const fileDate = new Date().toLocaleDateString('en-ZA').replace(/\//g, '-');
     const fileName = `${subsectionName}_Inspection_Report_${fileDate}.pdf`;
-    const blob = doc.output('blob');
     
-    return { doc, fileName, blob };
+    return { fileName, blob };
   } catch (error) {
     console.error("Error generating PDF:", error);
     return null;
@@ -736,7 +639,7 @@ export const ComprehensiveInspectionReport = ({
   const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
 
-  const generatePDFDocument = async (): Promise<{ doc: jsPDF, fileName: string, blob: Blob } | null> => {
+  const generatePDFDocument = async (): Promise<{ fileName: string; blob: Blob } | null> => {
     let template: any = null;
     if (templateId) {
       const { data: templateData } = await supabase
