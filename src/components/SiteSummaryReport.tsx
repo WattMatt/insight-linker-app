@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import QRCode from "qrcode";
 import {
   generatePdfBlob,
   buildDocument,
@@ -80,18 +81,28 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     return true;
   };
 
-  // Helper function to convert image URL to base64
-  const imageUrlToBase64 = async (url: string): Promise<string | null> => {
+  // Helper function to generate QR code as base64 data URL
+  const generateQRCodeBase64 = async (subsectionId: string): Promise<string | null> => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      return new Promise((resolve) => {
-        const reader = new FileReader();
-        reader.onloadend = () => resolve(reader.result as string);
-        reader.onerror = () => resolve(null);
-        reader.readAsDataURL(blob);
+      // Get QR base URL from settings
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('qr_base_url')
+        .single();
+      
+      const baseUrl = (settings?.qr_base_url || 'https://watsonmattheus.com').replace(/\/$/, '');
+      const qrTargetUrl = `${baseUrl}/public/subsections/${subsectionId}`;
+      
+      // Generate QR code as data URL
+      const dataUrl = await QRCode.toDataURL(qrTargetUrl, {
+        width: 150,
+        margin: 1,
+        errorCorrectionLevel: 'M'
       });
-    } catch {
+      
+      return dataUrl;
+    } catch (error) {
+      console.error('Failed to generate QR code:', error);
       return null;
     }
   };
@@ -211,11 +222,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       const subDocs = subsectionDocuments.filter(d => d.subsection_id === sub.id);
       const isCompliant = calculateSubsectionCompliance(sub, allSnags);
       
-      // Convert QR code URL to base64 for pdfMake
-      let qrCodeBase64: string | null = null;
-      if (sub.qr_code_url) {
-        qrCodeBase64 = await imageUrlToBase64(sub.qr_code_url);
-      }
+      // Generate QR code dynamically for this subsection
+      const qrCodeBase64 = await generateQRCodeBase64(sub.id);
 
       // Create card content with QR code in top right
       const cardContent: any[] = [
