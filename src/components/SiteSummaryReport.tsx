@@ -67,7 +67,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
   const generatePdfDocument = async (): Promise<{ blob: Blob; filename: string }> => {
     // Fetch all necessary data
     const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes] = await Promise.all([
-      supabase.from("sites").select("*, clients(name)").eq("id", siteId).single(),
+      supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*").eq("site_id", siteId),
@@ -163,26 +163,99 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       ['Overall Health Rate', `${overallHealth}%`],
     ]));
 
-    // ===== SUBSECTION DETAILS =====
+    // ===== SUBSECTION DETAILS WITH QR CODES =====
     content.push({ text: '', pageBreak: 'before' });
     content.push(createSectionHeader('Subsection Details', 'primary'));
 
-    content.push(createDataTable(
-      [
-        { header: 'Name', field: 'name', width: '*' },
-        { header: 'Category', field: 'category', width: 80 },
-        { header: 'COC Status', field: 'cocStatus', width: 80 },
-        { header: 'Metering', field: 'metering', width: 70 },
-        { header: 'Status', field: 'status', width: 70, alignment: 'center' },
-      ],
-      subsections.map(sub => ({
-        name: sub.name,
-        category: getCategoryAbbreviation(sub.category || 'Other'),
-        cocStatus: sub.coc_status || 'Not Set',
-        metering: sub.metering_status || 'Unknown',
-        status: calculateSubsectionCompliance(sub, allInspections, subsectionDocuments) ? '✓' : '✗',
-      }))
-    ));
+    // Create subsection cards with QR codes
+    for (const sub of subsections) {
+      const subInspections = allInspections.filter(i => i.subsection_id === sub.id);
+      const subSnags = subInspections.reduce((count, insp) => count + extractSnags(insp.json_data).length, 0);
+      const subDocs = subsectionDocuments.filter(d => d.subsection_id === sub.id);
+      const isCompliant = calculateSubsectionCompliance(sub, subInspections, subDocs);
+      
+      // Build QR code image if available
+      const qrCodeImage = sub.qr_code_url ? {
+        image: sub.qr_code_url,
+        width: 60,
+        height: 60,
+        alignment: 'right' as const,
+      } : null;
+
+      // Create card content
+      const cardContent: any[] = [
+        {
+          columns: [
+            {
+              width: '*',
+              stack: [
+                { text: sub.name, style: 'h3', color: COLORS.primary, margin: [0, 0, 0, 4] },
+                { text: `Category: ${getCategoryAbbreviation(sub.category || 'Other')}`, fontSize: 9, color: COLORS.textMuted },
+              ]
+            },
+            qrCodeImage ? { width: 70, ...qrCodeImage } : { width: 0, text: '' },
+          ],
+          margin: [0, 0, 0, 8],
+        },
+        {
+          columns: [
+            { width: '*', text: 'COC Status:', fontSize: 9, bold: true },
+            { width: 'auto', text: sub.coc_status || 'Not Set', fontSize: 9, color: sub.coc_status === 'Approved' ? COLORS.success : COLORS.textMuted },
+          ],
+          margin: [0, 2, 0, 2],
+        },
+        {
+          columns: [
+            { width: '*', text: 'Metering:', fontSize: 9, bold: true },
+            { width: 'auto', text: sub.metering_status || 'Unknown', fontSize: 9 },
+          ],
+          margin: [0, 2, 0, 2],
+        },
+        sub.meter_serial_number ? {
+          columns: [
+            { width: '*', text: 'Meter S/N:', fontSize: 9, bold: true },
+            { width: 'auto', text: sub.meter_serial_number, fontSize: 9 },
+          ],
+          margin: [0, 2, 0, 2],
+        } : null,
+        sub.ct_ratio ? {
+          columns: [
+            { width: '*', text: 'CT Ratio:', fontSize: 9, bold: true },
+            { width: 'auto', text: sub.ct_ratio, fontSize: 9 },
+          ],
+          margin: [0, 2, 0, 2],
+        } : null,
+        {
+          columns: [
+            { width: '*', text: 'Snags:', fontSize: 9, bold: true },
+            { width: 'auto', text: subSnags.toString(), fontSize: 9, color: subSnags > 0 ? COLORS.error : COLORS.success },
+          ],
+          margin: [0, 2, 0, 2],
+        },
+        {
+          columns: [
+            { width: '*', text: 'Compliance:', fontSize: 9, bold: true },
+            { width: 'auto', text: isCompliant ? '✓ Compliant' : '✗ Non-Compliant', fontSize: 9, color: isCompliant ? COLORS.success : COLORS.error },
+          ],
+          margin: [0, 2, 0, 2],
+        },
+      ].filter(Boolean);
+
+      content.push({
+        table: {
+          widths: ['*'],
+          body: [[{ stack: cardContent, margin: [8, 8, 8, 8] }]],
+        },
+        layout: {
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          hLineColor: () => '#e2e8f0',
+          vLineColor: () => '#e2e8f0',
+        },
+        margin: [0, 0, 0, 10],
+        unbreakable: true,
+      });
+    }
 
     // ===== COC VALIDATIONS SUMMARY =====
     if (cocValidations.length > 0) {
