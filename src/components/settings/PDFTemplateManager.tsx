@@ -4,6 +4,11 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { 
@@ -15,7 +20,12 @@ import {
   Edit,
   RotateCcw,
   Loader2,
-  Save
+  Save,
+  ChevronDown,
+  ChevronRight,
+  Plus,
+  Trash2,
+  Settings
 } from "lucide-react";
 import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/components/pdf-editor/types";
 import { PDFWYSIWYGEditor } from "./PDFWYSIWYGEditor";
@@ -287,8 +297,277 @@ const getDefaultTemplates = (): Record<string, { customization: Omit<ReportCusto
   }
 });
 
+// Inspection form template types
+interface InspectionFormTemplate {
+  id: string;
+  name: string;
+  category: string;
+  description: string | null;
+  sections: any[];
+  created_at: string;
+  updated_at: string;
+}
+
+// Inline inspection template editor card component
+const InspectionTemplateCard = ({ 
+  template, 
+  isExpanded, 
+  onToggle, 
+  onSave 
+}: { 
+  template: InspectionFormTemplate;
+  isExpanded: boolean;
+  onToggle: () => void;
+  onSave: () => void;
+}) => {
+  const [name, setName] = useState(template.name);
+  const [description, setDescription] = useState(template.description || "");
+  const [category, setCategory] = useState(template.category);
+  const [templateSections, setTemplateSections] = useState<any[]>(template.sections || []);
+  const [saving, setSaving] = useState(false);
+
+  const CATEGORIES = ["General", "Medium Voltage", "Low Voltage", "Generator", "Solar", "Progress", "Site Drawing"];
+
+  const addSection = () => {
+    setTemplateSections([...templateSections, {
+      id: `section_${Date.now()}`,
+      name: "New Section",
+      order_index: templateSections.length,
+      items: []
+    }]);
+  };
+
+  const updateSection = (sectionId: string, updates: any) => {
+    setTemplateSections(templateSections.map(s => s.id === sectionId ? { ...s, ...updates } : s));
+  };
+
+  const deleteSection = (sectionId: string) => {
+    setTemplateSections(templateSections.filter(s => s.id !== sectionId));
+  };
+
+  const addItem = (sectionId: string) => {
+    setTemplateSections(templateSections.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          items: [...(s.items || []), {
+            id: `item_${Date.now()}`,
+            name: "New Field",
+            type: "text",
+            required: false
+          }]
+        };
+      }
+      return s;
+    }));
+  };
+
+  const updateItem = (sectionId: string, itemId: string, updates: any) => {
+    setTemplateSections(templateSections.map(s => {
+      if (s.id === sectionId) {
+        return {
+          ...s,
+          items: (s.items || []).map((i: any) => i.id === itemId ? { ...i, ...updates } : i)
+        };
+      }
+      return s;
+    }));
+  };
+
+  const deleteItem = (sectionId: string, itemId: string) => {
+    setTemplateSections(templateSections.map(s => {
+      if (s.id === sectionId) {
+        return { ...s, items: (s.items || []).filter((i: any) => i.id !== itemId) };
+      }
+      return s;
+    }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const { error } = await supabase
+        .from("inspection_templates")
+        .update({
+          name,
+          description,
+          category,
+          sections: templateSections,
+          sections_count: templateSections.length,
+          pages_count: templateSections.length + 1,
+          updated_at: new Date().toISOString()
+        })
+        .eq("id", template.id);
+
+      if (error) throw error;
+      toast.success("Template saved");
+      onSave();
+    } catch (error) {
+      console.error("Error saving:", error);
+      toast.error("Failed to save template");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <div className="border rounded-lg bg-card">
+      <div 
+        className="flex items-center justify-between p-4 cursor-pointer hover:bg-muted/50 transition-colors"
+        onClick={onToggle}
+      >
+        <div className="flex items-center gap-3">
+          {isExpanded ? (
+            <ChevronDown className="h-4 w-4 text-muted-foreground" />
+          ) : (
+            <ChevronRight className="h-4 w-4 text-muted-foreground" />
+          )}
+          <div>
+            <h4 className="font-medium">{template.name}</h4>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <Badge variant="outline" className="text-xs">{template.category}</Badge>
+              <span>{template.sections?.length || 0} sections</span>
+            </div>
+          </div>
+        </div>
+        <Button 
+          variant="ghost" 
+          size="sm"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
+        >
+          <Settings className="h-4 w-4 mr-2" />
+          {isExpanded ? 'Close' : 'Tweak'}
+        </Button>
+      </div>
+
+      {isExpanded && (
+        <div className="border-t p-4 space-y-6">
+          {/* Basic Info */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="space-y-2">
+              <Label>Template Name</Label>
+              <Input value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>Category</Label>
+              <Select value={category} onValueChange={setCategory}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {CATEGORIES.map(cat => (
+                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-2">
+              <Label>Description</Label>
+              <Textarea 
+                value={description} 
+                onChange={(e) => setDescription(e.target.value)}
+                className="h-[38px] min-h-[38px]"
+              />
+            </div>
+          </div>
+
+          {/* Sections */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between">
+              <h4 className="font-semibold">Sections & Fields</h4>
+              <Button variant="outline" size="sm" onClick={addSection}>
+                <Plus className="mr-2 h-4 w-4" />
+                Add Section
+              </Button>
+            </div>
+
+            {templateSections.length === 0 ? (
+              <div className="text-center py-8 text-muted-foreground border rounded-lg">
+                No sections defined. Click "Add Section" to start.
+              </div>
+            ) : (
+              <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2">
+                {templateSections.map((section, idx) => (
+                  <div key={section.id} className="border rounded-lg p-4 bg-muted/30">
+                    <div className="flex items-center gap-3 mb-3">
+                      <span className="text-sm font-medium text-muted-foreground w-6">{idx + 1}.</span>
+                      <Input 
+                        value={section.name} 
+                        onChange={(e) => updateSection(section.id, { name: e.target.value })}
+                        className="flex-1 font-medium"
+                      />
+                      <Button variant="ghost" size="sm" onClick={() => deleteSection(section.id)}>
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                    
+                    {/* Fields */}
+                    <div className="space-y-2 ml-9">
+                      {(section.items || []).map((item: any, itemIdx: number) => (
+                        <div key={item.id} className="flex items-center gap-2 p-2 bg-background rounded border">
+                          <span className="text-xs text-muted-foreground w-6">{idx + 1}.{itemIdx + 1}</span>
+                          <Input 
+                            value={item.name} 
+                            onChange={(e) => updateItem(section.id, item.id, { name: e.target.value })}
+                            className="flex-1 h-8 text-sm"
+                            placeholder="Field name"
+                          />
+                          <Select 
+                            value={item.type} 
+                            onValueChange={(v) => updateItem(section.id, item.id, { type: v })}
+                          >
+                            <SelectTrigger className="w-32 h-8">
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="text">Text</SelectItem>
+                              <SelectItem value="textarea">Text Area</SelectItem>
+                              <SelectItem value="number">Number</SelectItem>
+                              <SelectItem value="checkbox">Checkbox</SelectItem>
+                              <SelectItem value="image">Image</SelectItem>
+                              <SelectItem value="select">Dropdown</SelectItem>
+                            </SelectContent>
+                          </Select>
+                          <Button variant="ghost" size="sm" onClick={() => deleteItem(section.id, item.id)}>
+                            <Trash2 className="h-3 w-3 text-destructive" />
+                          </Button>
+                        </div>
+                      ))}
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        className="w-full text-muted-foreground"
+                        onClick={() => addItem(section.id)}
+                      >
+                        <Plus className="mr-2 h-3 w-3" />
+                        Add field
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* Actions */}
+          <div className="flex justify-end gap-2 pt-4 border-t">
+            <Button variant="outline" onClick={onToggle}>Cancel</Button>
+            <Button onClick={handleSave} disabled={saving}>
+              {saving ? "Saving..." : "Save Changes"}
+            </Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};
+
 export const PDFTemplateManager = () => {
   const [templates, setTemplates] = useState<PDFTemplate[]>([]);
+  const [inspectionTemplates, setInspectionTemplates] = useState<InspectionFormTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [selectedType, setSelectedType] = useState('site_summary');
@@ -297,9 +576,11 @@ export const PDFTemplateManager = () => {
   const [customization, setCustomization] = useState<ReportCustomization>(DEFAULT_CUSTOMIZATION);
   const [sections, setSections] = useState<ReportSection[]>([]);
   const [hasChanges, setHasChanges] = useState(false);
+  const [expandedInspectionId, setExpandedInspectionId] = useState<string | null>(null);
 
   useEffect(() => {
     fetchTemplates();
+    fetchInspectionTemplates();
   }, []);
 
   const fetchTemplates = async () => {
@@ -327,6 +608,28 @@ export const PDFTemplateManager = () => {
       toast.error("Failed to load PDF templates");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchInspectionTemplates = async () => {
+    try {
+      const { data, error } = await supabase
+        .from("inspection_templates")
+        .select("*")
+        .order("category")
+        .order("name");
+
+      if (error) throw error;
+      
+      const parsed = (data || []).map(t => ({
+        ...t,
+        sections: Array.isArray(t.sections) ? t.sections : 
+          (typeof t.sections === 'string' ? JSON.parse(t.sections) : [])
+      }));
+      
+      setInspectionTemplates(parsed as InspectionFormTemplate[]);
+    } catch (error) {
+      console.error("Error fetching inspection templates:", error);
     }
   };
 
@@ -489,6 +792,37 @@ export const PDFTemplateManager = () => {
                     <p className="text-sm text-muted-foreground">
                       Last updated: {new Date(template.updated_at).toLocaleString()}
                     </p>
+
+                    {/* Show ALL inspection form templates when on Inspection tab */}
+                    {type.id === 'inspection' && inspectionTemplates.length > 0 && (
+                      <div className="mt-8 pt-6 border-t">
+                        <div className="flex items-center justify-between mb-4">
+                          <div>
+                            <h3 className="font-semibold text-lg">Inspection Form Templates</h3>
+                            <p className="text-sm text-muted-foreground">
+                              {inspectionTemplates.length} templates available for customization
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="space-y-3">
+                          {inspectionTemplates.map(insp => (
+                            <InspectionTemplateCard
+                              key={insp.id}
+                              template={insp}
+                              isExpanded={expandedInspectionId === insp.id}
+                              onToggle={() => setExpandedInspectionId(
+                                expandedInspectionId === insp.id ? null : insp.id
+                              )}
+                              onSave={() => {
+                                fetchInspectionTemplates();
+                                setExpandedInspectionId(null);
+                              }}
+                            />
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-muted-foreground">
