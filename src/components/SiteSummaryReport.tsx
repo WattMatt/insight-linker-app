@@ -8,15 +8,13 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import QRCode from "qrcode";
 import {
-  generatePdfBlob,
-  buildDocument,
+  generateReport,
   createSectionHeader,
   createInfoTable,
   createDataTable,
   createKpiRow,
-  logComplianceCheck,
   COLORS,
-} from "@/lib/pdfMakeUtils";
+} from "@/lib/pdfEngine";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 
 interface SiteSummaryReportProps {
@@ -441,40 +439,30 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       }
     }
 
-    // Build document with template customization
-    const docDefinition = buildDocument({
+    // Use unified PDF engine for generation
+    const result = await generateReport({
+      type: 'site-summary',
       title: customization.coverTitle || 'Site Summary Report',
+      content,
       coverPage: {
         title: customization.coverTitle || 'Site Summary Report',
         subtitle: customization.coverSubtitle || 'Comprehensive Site Health & Compliance Overview',
         siteName: siteName,
         clientName: clientName,
-        reportType: 'Summary Report',
+        reportType: 'Site Summary Report',
         organizationName: 'Asset Management System',
         reportDate: new Date(),
       },
-      content,
+      options: {
+        includeCoverPage: true,
+        skipCoverPageInHeaderFooter: true,
+        filename: `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
+      },
     });
 
-    // Generate blob
-    const blob = await generatePdfBlob(docDefinition);
+    console.log('[SiteSummaryReport] Generated via pdfEngine:', result.complianceChecks);
 
-    // Log compliance
-    logComplianceCheck('SiteSummaryReport', {
-      hasCoverPage: true,
-      logoPlacement: false,
-      standardMargins: true,
-      typographyScale: true,
-      brandColors: true,
-      pageHeaders: true,
-      pageFooters: true,
-      tableStyles: true,
-      pageBreaks: true,
-    });
-
-    const filename = `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
-
-    return { blob, filename };
+    return { blob: result.blob, filename: result.filename };
   };
 
   const handlePreview = async () => {
