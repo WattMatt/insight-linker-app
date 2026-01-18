@@ -28,6 +28,12 @@ export interface SampleSubsection {
   category: string | null;
   cocStatus: string | null;
   documentCount: number;
+  // Full data fields for actual reports
+  meterSerialNumber: string | null;
+  ctRatio: string | null;
+  meteringStatus: string | null;
+  isCompliant: boolean | null;
+  snagCount: number;
 }
 
 export interface SampleAsset {
@@ -244,20 +250,28 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
           });
 
           // Fetch subsections for this site
+          // Fetch ALL subsections when a reference site is selected (no limit)
           const { data: subsectionsData } = await supabase
             .from("subsections")
-            .select("id, name, tenant_name, category, coc_status")
+            .select("id, name, tenant_name, category, coc_status, meter_serial_number, ct_ratio, metering_status, is_compliant")
             .eq("site_id", siteData.id)
-            .limit(5);
+            .order("name");
 
           if (subsectionsData) {
-            // Get document counts for each subsection
+            // Get document counts and snag counts for each subsection
             const subsectionsWithCounts = await Promise.all(
               subsectionsData.map(async (sub) => {
-                const { count } = await supabase
-                  .from("subsection_documents")
-                  .select("*", { count: "exact", head: true })
-                  .eq("subsection_id", sub.id);
+                const [docResult, snagResult] = await Promise.all([
+                  supabase
+                    .from("subsection_documents")
+                    .select("*", { count: "exact", head: true })
+                    .eq("subsection_id", sub.id),
+                  supabase
+                    .from("snags")
+                    .select("*", { count: "exact", head: true })
+                    .eq("subsection_id", sub.id)
+                    .not("status", "in", '("rectified","Rectified")')
+                ]);
 
                 return {
                   id: sub.id,
@@ -265,28 +279,60 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
                   tenantName: sub.tenant_name,
                   category: sub.category,
                   cocStatus: sub.coc_status,
-                  documentCount: count || 0,
+                  documentCount: docResult.count || 0,
+                  meterSerialNumber: sub.meter_serial_number,
+                  ctRatio: sub.ct_ratio,
+                  meteringStatus: sub.metering_status,
+                  isCompliant: sub.is_compliant,
+                  snagCount: snagResult.count || 0,
                 };
               })
             );
             setSubsections(subsectionsWithCounts);
 
-            // Generate COC validations from subsections
-            const cocVals: SampleCocValidation[] = subsectionsWithCounts.map(sub => ({
-              subsectionName: sub.name,
-              cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
-              status: sub.cocStatus || 'Pending',
-              date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
-            }));
-            setCocValidations(cocVals);
+            // Fetch actual COC validations from database
+            const subsectionIds = subsectionsWithCounts.map(s => s.id);
+            const { data: cocValidationsData } = await supabase
+              .from("coc_validations")
+              .select(`
+                id, status, validated_at,
+                subsection_documents!inner(coc_number, subsection_id),
+                subsections!inner(name)
+              `)
+              .in("subsection_id", subsectionIds);
+
+            if (cocValidationsData && cocValidationsData.length > 0) {
+              const cocVals: SampleCocValidation[] = cocValidationsData.map(val => {
+                const doc = val.subsection_documents as any;
+                const sub = val.subsections as any;
+                return {
+                  subsectionName: sub?.name || 'Unknown',
+                  cocNumber: doc?.coc_number || '-',
+                  status: val.status || 'Pending',
+                  date: val.validated_at ? new Date(val.validated_at).toLocaleDateString() : '-',
+                };
+              });
+              setCocValidations(cocVals);
+            } else {
+              // Fallback: Generate from subsection COC status if no validations exist
+              const cocVals: SampleCocValidation[] = subsectionsWithCounts
+                .filter(sub => sub.cocStatus)
+                .map(sub => ({
+                  subsectionName: sub.name,
+                  cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
+                  status: sub.cocStatus || 'Pending',
+                  date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
+                }));
+              setCocValidations(cocVals);
+            }
           }
 
-          // Fetch assets for this site
+          // Fetch ALL assets for this site (no limit)
           const { data: assetsData } = await supabase
             .from("site_assets")
             .select("id, meter_serial_number, premises_id, trade_as, breaker_size, ct_ratio, meter_type")
             .eq("site_id", siteData.id)
-            .limit(5);
+            .order("premises_id");
 
           if (assetsData) {
             setAssets(
@@ -302,7 +348,7 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
             );
           }
 
-          // Fetch inspections for this site - WITH json_data for rich content
+          // Fetch ALL inspections for this site - WITH json_data for rich content
           const { data: inspectionsData } = await supabase
             .from("inspections")
             .select(`
@@ -311,9 +357,7 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
               inspection_templates(name)
             `)
             .eq("site_id", siteData.id)
-            .not("json_data", "is", null)
-            .order("updated_at", { ascending: false })
-            .limit(10);
+            .order("inspection_date", { ascending: false });
 
           if (inspectionsData) {
             const richInspections: SampleInspection[] = inspectionsData.map((insp) => {
@@ -392,12 +436,8 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
               };
             });
 
-            // Filter to inspections that actually have data
-            const inspectionsWithData = richInspections.filter(
-              i => (i.lineShops && i.lineShops.length > 0) || (i.findings && Object.keys(i.findings).length > 0)
-            );
-
-            setInspections(inspectionsWithData.length > 0 ? inspectionsWithData : richInspections.slice(0, 5));
+            // Include ALL inspections for the site
+            setInspections(richInspections);
           }
 
           // Calculate KPIs

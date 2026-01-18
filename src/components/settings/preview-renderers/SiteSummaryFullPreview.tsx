@@ -83,34 +83,32 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   const accentPalette = getAccentPalette(customization.accentColor || 'blue');
   const colors = { primary: accentPalette.primary, light: accentPalette.light, text: accentPalette.dark };
 
-  // Convert sample subsections to spec format
+  // Convert sample subsections to spec format - use ACTUAL data from subsections
   const subsectionData: SubsectionData[] = (subsections || []).map(sub => ({
     id: sub.id,
     name: sub.name,
     category: sub.category || 'LS',
     cocStatus: sub.cocStatus,
-    meteringStatus: sub.cocStatus === 'Pass' ? 'Installed' : 'Unknown',
-    meterSerialNumber: sub.cocStatus === 'Pass' ? '35778057' : null,
-    ctRatio: '100/5A',
-    snagCount: sub.cocStatus === 'Pass' ? 0 : 2,
-    isCompliant: sub.cocStatus === 'Pass',
+    meteringStatus: sub.meteringStatus || (sub.meterSerialNumber ? 'Installed' : 'Unknown'),
+    meterSerialNumber: sub.meterSerialNumber || null,
+    ctRatio: sub.ctRatio || null,
+    snagCount: sub.snagCount ?? 0,
+    isCompliant: sub.isCompliant ?? (sub.cocStatus === 'Pass'),
   }));
 
-  // Generate sample COC validations if not provided
+  // Use actual COC validations - fallback to generating from subsection data only if none provided
   const sampleCocValidations: CocValidationData[] = cocValidations.length > 0 
     ? cocValidations 
-    : subsectionData.slice(0, 5).map(sub => ({
+    : subsectionData.map(sub => ({
         subsectionName: sub.name,
-        cocNumber: sub.cocStatus === 'Pass' ? `COC-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : '-',
+        cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
         status: sub.cocStatus || 'Pending',
         date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
       }));
 
-  // Generate sample inspections if not provided
+  // Use actual inspections - only fallback to sample if none provided
   const sampleInspections = inspections.length > 0 ? inspections : [
-    { id: '1', title: 'Electrical Safety Inspection', status: 'Completed', inspectorName: 'John Smith', inspectionDate: new Date().toISOString(), siteName },
-    { id: '2', title: 'Fire Safety Audit', status: 'In Progress', inspectorName: 'Jane Doe', inspectionDate: new Date().toISOString(), siteName },
-    { id: '3', title: 'Metering Verification', status: 'Pending', inspectorName: 'Bob Wilson', inspectionDate: null, siteName },
+    { id: '1', title: 'No inspections found', status: 'N/A', inspectorName: '-', inspectionDate: null, siteName },
   ];
 
   // Calculate metrics
