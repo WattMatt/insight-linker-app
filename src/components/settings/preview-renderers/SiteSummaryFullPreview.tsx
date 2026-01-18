@@ -1,22 +1,37 @@
 /**
  * Full Site Summary Preview - TRUE WYSIWYG
  * Uses shared siteSummaryRenderSpec.ts for exact matching with PDF output.
+ * 
+ * Renders ALL 7 section types:
+ * 1. Health Metrics (KPI cards)
+ * 2. Health by Category (KPI cards per category)
+ * 3. Summary Statistics (key-value table)
+ * 4. Subsection Details (cards with all fields)
+ * 5. Subsection QR Codes (QR code grid)
+ * 6. COC Validations (table)
+ * 7. Inspections (table)
  */
 import React from "react";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 import { cn } from "@/lib/utils";
 import { QrCode, Building2 } from "lucide-react";
-import { SampleSubsection, SampleKPIs } from "@/hooks/useSampleReportData";
+import { SampleSubsection, SampleKPIs, SampleInspection } from "@/hooks/useSampleReportData";
 import {
   LAYOUT,
   HEALTH_METRICS_CARDS,
   SUMMARY_STAT_ROWS,
+  COC_VALIDATION_COLUMNS,
+  INSPECTION_COLUMNS,
+  SUBSECTION_CARD_FIELDS,
   getAccentPalette,
   getSectionTitle,
   getEnabledSections,
   matchesSectionId,
   calculateMetrics,
+  calculateCategoryHealth,
+  findSectionSpec,
   SubsectionData,
+  CocValidationData,
   STATUS_COLORS,
 } from "@/lib/siteSummaryRenderSpec";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
@@ -32,6 +47,8 @@ interface SiteSummaryFullPreviewProps {
   clientLogoUrl: string | null;
   subsections: SampleSubsection[];
   kpis: SampleKPIs;
+  inspections?: SampleInspection[];
+  cocValidations?: CocValidationData[];
   onSectionTitleChange?: (sectionId: string, title: string) => void;
 }
 
@@ -60,6 +77,8 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   clientLogoUrl,
   subsections,
   kpis,
+  inspections = [],
+  cocValidations = [],
 }) => {
   const accentPalette = getAccentPalette(customization.accentColor || 'blue');
   const colors = { primary: accentPalette.primary, light: accentPalette.light, text: accentPalette.dark };
@@ -77,6 +96,23 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     isCompliant: sub.cocStatus === 'Pass',
   }));
 
+  // Generate sample COC validations if not provided
+  const sampleCocValidations: CocValidationData[] = cocValidations.length > 0 
+    ? cocValidations 
+    : subsectionData.slice(0, 5).map(sub => ({
+        subsectionName: sub.name,
+        cocNumber: sub.cocStatus === 'Pass' ? `COC-${Math.random().toString(36).substring(2, 8).toUpperCase()}` : '-',
+        status: sub.cocStatus || 'Pending',
+        date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
+      }));
+
+  // Generate sample inspections if not provided
+  const sampleInspections = inspections.length > 0 ? inspections : [
+    { id: '1', title: 'Electrical Safety Inspection', status: 'Completed', inspectorName: 'John Smith', inspectionDate: new Date().toISOString(), siteName },
+    { id: '2', title: 'Fire Safety Audit', status: 'In Progress', inspectorName: 'Jane Doe', inspectionDate: new Date().toISOString(), siteName },
+    { id: '3', title: 'Metering Verification', status: 'Pending', inspectorName: 'Bob Wilson', inspectionDate: null, siteName },
+  ];
+
   // Calculate metrics
   const metrics = calculateMetrics(subsectionData, kpis?.cocRequired, kpis?.snagOpen);
   if (kpis) {
@@ -85,8 +121,23 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     metrics.overallHealth = metrics.subsectionCount > 0 ? Math.round((metrics.cocCompliant / metrics.subsectionCount) * 100) : 0;
   }
 
+  // Calculate category health
+  const categoryHealth = calculateCategoryHealth(subsectionData, getCategoryAbbreviation, 4);
+
   const enabledSections = getEnabledSections(sections || []);
   const scale = (pt: number) => pt * zoom;
+
+  // Page break indicator
+  const PageBreakIndicator: React.FC = () => (
+    <div className="relative my-4 flex items-center justify-center">
+      <div className="absolute inset-0 flex items-center">
+        <div className="w-full border-t-2 border-dashed border-gray-300" />
+      </div>
+      <span className="relative bg-gray-100 px-2 text-xs text-gray-500 font-medium">
+        PAGE BREAK
+      </span>
+    </div>
+  );
 
   // Page wrapper
   const PageWrapper: React.FC<{ children: React.ReactNode; pageNum: number }> = ({ children, pageNum }) => (
@@ -125,7 +176,10 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   const renderSection = (section: ReportSection) => {
     if (!section.enabled) return null;
     const title = getSectionTitle(section);
+    const spec = findSectionSpec(section.id);
+    const showPageBreak = spec?.pageBreakBefore;
 
+    // 1. Health Metrics (4 KPI cards)
     if (matchesSectionId(section, 'health-metrics')) {
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
@@ -139,6 +193,28 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       );
     }
 
+    // 2. Health by Category (KPI cards per category)
+    if (matchesSectionId(section, 'health-by-category')) {
+      if (categoryHealth.length === 0) return null;
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} />
+          <div className="grid grid-cols-4 gap-2">
+            {categoryHealth.map(cat => (
+              <KpiCard 
+                key={cat.category}
+                value={`${cat.percentage}%`} 
+                label={cat.abbreviation} 
+                color={cat.percentage >= 80 ? STATUS_COLORS.success : 
+                       cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error} 
+              />
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 3. Summary Statistics (key-value table)
     if (matchesSectionId(section, 'summary-statistics')) {
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
@@ -155,25 +231,37 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       );
     }
 
+    // 4. Subsection Details (cards with ALL fields)
     if (matchesSectionId(section, 'subsection-details')) {
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
+          {showPageBreak && <PageBreakIndicator />}
           <SectionHeader title={title} withBorder />
           <div className="space-y-3">
-            {subsectionData.slice(0, 4).map(sub => (
+            {subsectionData.slice(0, 6).map(sub => (
               <div key={sub.id} className="border rounded p-3" style={{ fontSize: scale(9) }}>
                 <div className="flex justify-between items-start mb-2">
                   <div>
                     <PlaceholderBadge className="font-bold" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
-                    <div style={{ fontSize: scale(8), color: STATUS_COLORS.muted }}>Category: {getCategoryAbbreviation(sub.category || 'Other')}</div>
+                    <div style={{ fontSize: scale(LAYOUT.subsectionCard.categoryFontSize), color: STATUS_COLORS.muted }}>
+                      Category: {getCategoryAbbreviation(sub.category || 'Other')}
+                    </div>
                   </div>
-                  <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(55), height: scale(55) }}>
+                  <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(LAYOUT.subsectionCard.qrCodeSize), height: scale(LAYOUT.subsectionCard.qrCodeSize) }}>
                     <QrCode style={{ width: scale(24), height: scale(24) }} className="text-gray-400" />
                   </div>
                 </div>
-                <div className="grid grid-cols-2 gap-1 text-gray-600">
-                  <div>COC Status: <PlaceholderBadge style={{ color: sub.isCompliant ? STATUS_COLORS.success : STATUS_COLORS.muted }}>{sub.cocStatus || 'Not Set'}</PlaceholderBadge></div>
-                  <div>Snags: <PlaceholderBadge style={{ color: sub.snagCount > 0 ? STATUS_COLORS.error : STATUS_COLORS.success }}>{sub.snagCount}</PlaceholderBadge></div>
+                {/* Render ALL card fields from spec */}
+                <div className="grid grid-cols-3 gap-1 text-gray-600">
+                  {SUBSECTION_CARD_FIELDS
+                    .filter(field => !field.showIf || field.showIf(sub))
+                    .map(field => (
+                      <div key={field.id}>
+                        {field.label}: <PlaceholderBadge style={{ color: field.getColor?.(sub) || STATUS_COLORS.muted }}>
+                          {field.getValue(sub)}
+                        </PlaceholderBadge>
+                      </div>
+                    ))}
                 </div>
               </div>
             ))}
@@ -182,8 +270,143 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       );
     }
 
+    // 5. Subsection QR Codes (grid of QR codes)
+    if (matchesSectionId(section, 'subsection-qr-codes')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} />
+          <div className="grid grid-cols-4 gap-3">
+            {subsectionData.slice(0, 8).map(sub => (
+              <div key={sub.id} className="border rounded p-2 text-center" style={{ fontSize: scale(8) }}>
+                <div className="bg-gray-100 rounded flex items-center justify-center mx-auto mb-1" style={{ width: scale(50), height: scale(50) }}>
+                  <QrCode style={{ width: scale(30), height: scale(30) }} className="text-gray-400" />
+                </div>
+                <PlaceholderBadge className="truncate block" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    // 6. COC Validations (table)
+    if (matchesSectionId(section, 'coc-validations')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          {showPageBreak && <PageBreakIndicator />}
+          <SectionHeader title={title} withBorder />
+          <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
+            <thead>
+              <tr style={{ backgroundColor: colors.light }}>
+                {COC_VALIDATION_COLUMNS.map(col => (
+                  <th 
+                    key={col.id} 
+                    className="border px-2 py-1 text-left font-medium"
+                    style={{ 
+                      textAlign: col.alignment || 'left',
+                      fontSize: scale(LAYOUT.table.headerFontSize),
+                      color: colors.text,
+                    }}
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sampleCocValidations.map((row, i) => (
+                <tr key={i} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
+                  <td className="border px-2 py-1"><PlaceholderBadge>{row.subsectionName}</PlaceholderBadge></td>
+                  <td className="border px-2 py-1"><PlaceholderBadge>{row.cocNumber}</PlaceholderBadge></td>
+                  <td className="border px-2 py-1 text-center">
+                    <PlaceholderBadge style={{ 
+                      color: row.status === 'Pass' ? STATUS_COLORS.success : 
+                             row.status === 'Pending' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
+                    }}>
+                      {row.status}
+                    </PlaceholderBadge>
+                  </td>
+                  <td className="border px-2 py-1"><PlaceholderBadge>{row.date}</PlaceholderBadge></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
+    // 7. Inspections (table)
+    if (matchesSectionId(section, 'inspections')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          {showPageBreak && <PageBreakIndicator />}
+          <SectionHeader title={title} withBorder />
+          <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
+            <thead>
+              <tr style={{ backgroundColor: colors.light }}>
+                {INSPECTION_COLUMNS.map(col => (
+                  <th 
+                    key={col.id} 
+                    className="border px-2 py-1 text-left font-medium"
+                    style={{ 
+                      textAlign: col.alignment || 'left',
+                      fontSize: scale(LAYOUT.table.headerFontSize),
+                      color: colors.text,
+                    }}
+                  >
+                    {col.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {sampleInspections.slice(0, 5).map((insp, i) => (
+                <tr key={insp.id} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
+                  <td className="border px-2 py-1"><PlaceholderBadge>{insp.title}</PlaceholderBadge></td>
+                  <td className="border px-2 py-1">
+                    <PlaceholderBadge style={{ 
+                      color: insp.status === 'Completed' ? STATUS_COLORS.success : 
+                             insp.status === 'In Progress' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
+                    }}>
+                      {insp.status}
+                    </PlaceholderBadge>
+                  </td>
+                  <td className="border px-2 py-1"><PlaceholderBadge>{insp.inspectorName || '-'}</PlaceholderBadge></td>
+                  <td className="border px-2 py-1">
+                    <PlaceholderBadge>
+                      {insp.inspectionDate ? new Date(insp.inspectionDate).toLocaleDateString() : '-'}
+                    </PlaceholderBadge>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+
     return null;
   };
+
+  // Group sections for pages
+  const page1Sections = enabledSections.filter(s => 
+    matchesSectionId(s, 'health-metrics') || 
+    matchesSectionId(s, 'health-by-category') || 
+    matchesSectionId(s, 'summary-statistics')
+  );
+  
+  const page2Sections = enabledSections.filter(s => 
+    matchesSectionId(s, 'subsection-details') || 
+    matchesSectionId(s, 'subsection-qr-codes')
+  );
+
+  const page3Sections = enabledSections.filter(s => 
+    matchesSectionId(s, 'coc-validations')
+  );
+
+  const page4Sections = enabledSections.filter(s => 
+    matchesSectionId(s, 'inspections')
+  );
 
   return (
     <div className="space-y-4">
@@ -225,14 +448,31 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
         </div>
       </PageWrapper>
 
-      {/* Content Pages */}
-      <PageWrapper pageNum={2}>
-        {enabledSections.slice(0, 3).map(section => renderSection(section))}
-      </PageWrapper>
+      {/* Page 2: Health Metrics, Health by Category, Summary Statistics */}
+      {page1Sections.length > 0 && (
+        <PageWrapper pageNum={2}>
+          {page1Sections.map(section => renderSection(section))}
+        </PageWrapper>
+      )}
 
-      {enabledSections.find(s => matchesSectionId(s, 'subsection-details')) && (
+      {/* Page 3: Subsection Details & QR Codes */}
+      {page2Sections.length > 0 && (
         <PageWrapper pageNum={3}>
-          {renderSection(enabledSections.find(s => matchesSectionId(s, 'subsection-details'))!)}
+          {page2Sections.map(section => renderSection(section))}
+        </PageWrapper>
+      )}
+
+      {/* Page 4: COC Validations */}
+      {page3Sections.length > 0 && (
+        <PageWrapper pageNum={4}>
+          {page3Sections.map(section => renderSection(section))}
+        </PageWrapper>
+      )}
+
+      {/* Page 5: Inspections */}
+      {page4Sections.length > 0 && (
+        <PageWrapper pageNum={5}>
+          {page4Sections.map(section => renderSection(section))}
         </PageWrapper>
       )}
     </div>

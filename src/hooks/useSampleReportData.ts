@@ -92,11 +92,20 @@ export interface SampleKPIs {
   snagOpen: number; // Open snags count
 }
 
+// COC Validation data for preview tables
+export interface SampleCocValidation {
+  subsectionName: string;
+  cocNumber: string;
+  status: string;
+  date: string;
+}
+
 export interface SampleReportData {
   site: SampleSite | null;
   subsections: SampleSubsection[];
   assets: SampleAsset[];
   inspections: SampleInspection[];
+  cocValidations: SampleCocValidation[];
   kpis: SampleKPIs;
   loading: boolean;
   error: string | null;
@@ -179,6 +188,7 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
   const [subsections, setSubsections] = useState<SampleSubsection[]>([]);
   const [assets, setAssets] = useState<SampleAsset[]>([]);
   const [inspections, setInspections] = useState<SampleInspection[]>([]);
+  const [cocValidations, setCocValidations] = useState<SampleCocValidation[]>([]);
   const [kpis, setKpis] = useState<SampleKPIs>({
     totalSubsections: 0,
     cocPass: 0,
@@ -260,6 +270,15 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
               })
             );
             setSubsections(subsectionsWithCounts);
+
+            // Generate COC validations from subsections
+            const cocVals: SampleCocValidation[] = subsectionsWithCounts.map(sub => ({
+              subsectionName: sub.name,
+              cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
+              status: sub.cocStatus || 'Pending',
+              date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
+            }));
+            setCocValidations(cocVals);
           }
 
           // Fetch assets for this site
@@ -455,6 +474,7 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
     subsections,
     assets,
     inspections,
+    cocValidations,
     kpis,
     loading,
     error,

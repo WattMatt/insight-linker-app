@@ -353,7 +353,7 @@ const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
   referenceSiteId,
   availableSites,
 }) => {
-  const { site, subsections, kpis, loading } = useSampleReportData('site_summary', referenceSiteId || undefined);
+  const { site, subsections, inspections, cocValidations, kpis, loading } = useSampleReportData('site_summary', referenceSiteId || undefined);
   
   const getAccentColors = (color: string) => ({
     primary: color === 'green' ? '#16a34a' : color === 'orange' ? '#ea580c' : color === 'red' ? '#dc2626' : color === 'purple' ? '#9333ea' : '#2563eb',
@@ -388,6 +388,8 @@ const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
         clientLogoUrl={site?.clientLogoUrl || null}
         subsections={subsections}
         kpis={kpis}
+        inspections={inspections}
+        cocValidations={cocValidations}
       />
     </div>
   );
