@@ -21,15 +21,17 @@ import {
   Database,
   CheckCircle2,
   Building2,
-  Eye,
 } from "lucide-react";
 import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/components/pdf-editor/types";
 import { PDFWYSIWYGEditor } from "./PDFWYSIWYGEditor";
 import { InspectionTemplatePreview } from "./preview-renderers/InspectionTemplatePreview";
 import { SiteSummaryFullPreview } from "./preview-renderers/SiteSummaryFullPreview";
-import { useAvailableSites, useSampleReportData, SiteWithStats } from "@/hooks/useSampleReportData";
+import { FloorPlanPreviewRenderer } from "./preview-renderers/FloorPlanPreviewRenderer";
+import { AssetVerificationPreviewRenderer } from "./preview-renderers/AssetVerificationPreviewRenderer";
+import { CompliancePreviewRenderer } from "./preview-renderers/CompliancePreviewRenderer";
+import { useAvailableSites, SiteWithStats } from "@/hooks/useSampleReportData";
+import { useUnifiedSiteData } from "@/hooks/useUnifiedSiteData";
 import { Json } from "@/integrations/supabase/types";
-import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 
 interface PDFTemplate {
   id: string;
@@ -341,19 +343,22 @@ const convertPreviewToInspectionSections = (previewSections: ReportSection[]): a
   }));
 };
 
-// Wrapper component for Site Summary preview that fetches real sample data
-interface SiteSummaryPreviewWrapperProps {
+// Unified Preview Wrapper - ALL tabs use same data from selected site
+interface UnifiedPreviewWrapperProps {
   template: PDFTemplate;
   referenceSiteId: string | null;
   availableSites: SiteWithStats[];
+  reportType: string;
 }
 
-const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
+const UnifiedPreviewWrapper: React.FC<UnifiedPreviewWrapperProps> = ({
   template,
   referenceSiteId,
   availableSites,
+  reportType,
 }) => {
-  const { site, subsections, inspections, cocValidations, kpis, loading } = useSampleReportData('site_summary', referenceSiteId || undefined);
+  // Single unified data source for ALL report types
+  const { site, subsections, assets, inspections, floorPlans, cocValidations, kpis, loading } = useUnifiedSiteData(referenceSiteId);
   
   const getAccentColors = (color: string) => ({
     primary: color === 'green' ? '#16a34a' : color === 'orange' ? '#ea580c' : color === 'red' ? '#dc2626' : color === 'purple' ? '#9333ea' : '#2563eb',
@@ -362,7 +367,6 @@ const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
   });
   
   const colors = getAccentColors(template.customization.accentColor || 'blue');
-  const selectedSite = availableSites.find(s => s.id === referenceSiteId);
   
   if (loading) {
     return (
@@ -374,24 +378,138 @@ const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
       </div>
     );
   }
+
+  // Convert unified data to format expected by each preview
+  const sampleSubsections = subsections.map(s => ({
+    id: s.id,
+    name: s.name,
+    tenantName: s.tenantName,
+    category: s.category,
+    cocStatus: s.cocStatus,
+    documentCount: s.documentCount,
+    meterSerialNumber: s.meterSerialNumber,
+    ctRatio: s.ctRatio,
+    meteringStatus: s.meteringStatus,
+    isCompliant: s.isCompliant,
+    snagCount: s.snagCount,
+  }));
+
+  const sampleInspections = inspections.map(i => ({
+    id: i.id,
+    title: i.title,
+    status: i.status,
+    inspectorName: i.inspectorName,
+    inspectionDate: i.inspectionDate,
+    siteName: site?.name || 'Sample Site',
+    subsectionName: i.subsectionName || undefined,
+    templateName: i.templateName || undefined,
+  }));
+
+  const sampleCocValidations = cocValidations.map(c => ({
+    subsectionName: c.subsectionName,
+    cocNumber: c.cocNumber || '-',
+    status: c.status,
+    date: c.validatedAt ? new Date(c.validatedAt).toLocaleDateString() : '-',
+  }));
+
+  const sampleKpis = {
+    totalSubsections: kpis.totalSubsections,
+    cocPass: kpis.cocPass,
+    cocMissing: kpis.cocMissing,
+    cocPending: kpis.cocPending,
+    cocRequired: kpis.cocRequired,
+    complianceRate: kpis.complianceRate,
+    totalAssets: kpis.totalAssets,
+    totalInspections: kpis.totalInspections,
+    completedInspections: kpis.completedInspections,
+    snagOpen: kpis.openSnags,
+  };
   
+  // Render appropriate preview based on report type
+  if (reportType === 'site_summary') {
+    return (
+      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+        <SiteSummaryFullPreview
+          sections={template.sections}
+          customization={template.customization}
+          zoom={0.65}
+          colors={colors}
+          siteName={site?.name || 'Sample Site'}
+          clientName={site?.clientName || 'Sample Client'}
+          siteAddress={site?.address || '123 Sample Address, City'}
+          clientLogoUrl={site?.clientLogoUrl || null}
+          subsections={sampleSubsections}
+          kpis={sampleKpis}
+          inspections={sampleInspections}
+          cocValidations={sampleCocValidations}
+        />
+      </div>
+    );
+  }
+
+  if (reportType === 'floor_plan') {
+    return (
+      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+        <FloorPlanPreviewRenderer
+          sections={template.sections}
+          customization={template.customization}
+          zoom={0.65}
+          colors={colors}
+          siteName={site?.name || 'Sample Site'}
+          clientName={site?.clientName || 'Sample Client'}
+          floorPlans={floorPlans}
+          kpis={kpis}
+        />
+      </div>
+    );
+  }
+
+  if (reportType === 'asset_verification') {
+    return (
+      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+        <AssetVerificationPreviewRenderer
+          sections={template.sections}
+          customization={template.customization}
+          zoom={0.65}
+          colors={colors}
+          siteName={site?.name || 'Sample Site'}
+          clientName={site?.clientName || 'Sample Client'}
+          assets={assets}
+          subsections={subsections}
+          kpis={kpis}
+        />
+      </div>
+    );
+  }
+
+  if (reportType === 'compliance') {
+    return (
+      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+        <CompliancePreviewRenderer
+          sections={template.sections}
+          customization={template.customization}
+          zoom={0.65}
+          colors={colors}
+          siteName={site?.name || 'Sample Site'}
+          clientName={site?.clientName || 'Sample Client'}
+          subsections={subsections}
+          cocValidations={cocValidations}
+          kpis={kpis}
+        />
+      </div>
+    );
+  }
+
+  // Fallback to WYSIWYG editor for other types
   return (
-    <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
-      <SiteSummaryFullPreview
-        sections={template.sections}
-        customization={template.customization}
-        zoom={0.65}
-        colors={colors}
-        siteName={site?.name || selectedSite?.name || 'Sample Site'}
-        clientName={site?.clientName || selectedSite?.clientName || 'Sample Client'}
-        siteAddress={site?.address || '123 Sample Address, City'}
-        clientLogoUrl={site?.clientLogoUrl || null}
-        subsections={subsections}
-        kpis={kpis}
-        inspections={inspections}
-        cocValidations={cocValidations}
-      />
-    </div>
+    <PDFWYSIWYGEditor
+      customization={template.customization}
+      sections={template.sections}
+      reportType={reportType}
+      referenceSiteId={referenceSiteId}
+      onCustomizationChange={() => {}}
+      onSectionsChange={() => {}}
+    />
   );
 };
 
@@ -797,25 +915,14 @@ export const PDFTemplateManager = () => {
                           </div>
                         )}
                       </div>
-                    ) : type.id === 'site_summary' ? (
-                      /* Site Summary uses specialized full preview matching actual PDF output */
-                      <SiteSummaryPreviewWrapper
+                    ) : (
+                      /* All other report types use unified preview wrapper */
+                      <UnifiedPreviewWrapper
                         template={template}
                         referenceSiteId={referenceSiteId}
                         availableSites={availableSites}
+                        reportType={type.id}
                       />
-                    ) : (
-                      <>
-                        {/* Visual PDF Preview - Read-only for other report types */}
-                        <PDFWYSIWYGEditor
-                          customization={template.customization}
-                          sections={template.sections}
-                          reportType={type.id}
-                          referenceSiteId={referenceSiteId}
-                          onCustomizationChange={() => {}}
-                          onSectionsChange={() => {}}
-                        />
-                      </>
                     )}
                   </div>
                 ) : (
