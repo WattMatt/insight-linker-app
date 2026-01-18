@@ -1,3 +1,12 @@
+/**
+ * Inspection Report Generator
+ * Generates comprehensive inspection reports as PDF
+ * 
+ * TEMPLATE GATEWAY INTEGRATION:
+ * This generator uses fetchPDFTemplate to get its configuration from the database.
+ * All styling, sections, and branding are controlled by the PDF Template Manager.
+ */
+
 import { supabase } from "@/integrations/supabase/client";
 import { 
   generatePdfBlob, 
@@ -7,6 +16,7 @@ import {
   COLORS,
   DEFAULT_STYLES,
 } from "@/lib/pdfMakeUtils";
+import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
 
 type Content = any;
 type TDocumentDefinitions = any;
@@ -26,8 +36,6 @@ async function loadImageAsDataUrl(url: string): Promise<string | null> {
     return null;
   }
 }
-
-const PDF_COLORS = COLORS;
 
 interface GenerateAndSaveReportOptions {
   inspectionId: string;
@@ -58,6 +66,7 @@ interface SignatureData {
 
 /**
  * Generates a comprehensive inspection report PDF using pdfmake and saves it to the documents folder
+ * Uses PDF Template Gateway for configuration
  */
 export async function generateAndSaveInspectionReport(
   options: GenerateAndSaveReportOptions
@@ -65,6 +74,26 @@ export async function generateAndSaveInspectionReport(
   const { inspectionId, subsectionId, siteName, subsectionName, clientName, templateId, siteLogoUrl } = options;
 
   try {
+    // ===== FETCH TEMPLATE CONFIGURATION =====
+    const { customization, sections, accentColors } = await fetchPDFTemplate('inspection');
+    
+    console.log('[InspectionReport] Template Config Applied:', {
+      coverTitle: customization.coverTitle,
+      accentColor: customization.accentColor,
+      enabledSections: sections.filter(s => s.enabled).map(s => s.id),
+    });
+
+    // Helper to check if section is enabled
+    const isSectionEnabled = (sectionId: string): boolean => {
+      const section = sections.find(s => s.id === sectionId);
+      return section?.enabled ?? true;
+    };
+
+    const PDF_COLORS = {
+      ...COLORS,
+      primary: accentColors.primary,
+    };
+
     // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
@@ -162,40 +191,42 @@ export async function generateAndSaveInspectionReport(
     // Build document content
     const content: Content[] = [];
 
-    // Cover page
+    // Cover page with template customization
     const coverPage = createCoverPage({
-      title: 'INSPECTION REPORT',
-      subtitle: `${siteName} - ${subsectionName}`,
+      title: customization.coverTitle || 'INSPECTION REPORT',
+      subtitle: customization.coverSubtitle || `${siteName} - ${subsectionName}`,
       siteName,
-      reportDate: new Date(),
+      reportDate: customization.includeDate ? new Date() : undefined,
       organizationName: template?.cover_page?.company || 'Watson Mattheus',
       logoDataUrl: companyLogoDataUrl || undefined,
     });
     content.push(coverPage);
 
-    // General Information page
-    content.push({ text: '', pageBreak: 'after' } as Content);
-    content.push(createSectionHeader('General Information', 'primary'));
-    
-    const generalInfoTable = createDataTable(
-      [],
-      [
-        ['PROJECT NAME:', getValue(generalInfo, 'projectName') || inspection.project_name || siteName],
-        ['INSPECTOR NAME:', getValue(generalInfo, 'inspectorName') || inspection.inspector_name || 'N/A'],
-        ['INSPECTION DATE:', getValue(generalInfo, 'date') || inspection.inspection_date || date],
-        ['CLIENT REPRESENTATIVE:', getValue(generalInfo, 'clientRep') || inspection.client_rep || 'N/A'],
-        ['CONSULTANT NAME:', getValue(generalInfo, 'consultant') || inspection.consultant || 'N/A'],
-        ['CONTRACTOR NAME:', getValue(generalInfo, 'contractor') || inspection.contractor || 'N/A'],
-        ['LOCATION:', getValue(generalInfo, 'location') || inspection.location || siteName],
-      ]
-    );
-    content.push(generalInfoTable);
+    // General Information page (inspection-details section)
+    if (isSectionEnabled('inspection-details')) {
+      content.push({ text: '', pageBreak: 'after' } as Content);
+      content.push(createSectionHeader('General Information', 'primary'));
+      
+      const generalInfoTable = createDataTable(
+        [],
+        [
+          ['PROJECT NAME:', getValue(generalInfo, 'projectName') || inspection.project_name || siteName],
+          ['INSPECTOR NAME:', getValue(generalInfo, 'inspectorName') || inspection.inspector_name || 'N/A'],
+          ['INSPECTION DATE:', getValue(generalInfo, 'date') || inspection.inspection_date || date],
+          ['CLIENT REPRESENTATIVE:', getValue(generalInfo, 'clientRep') || inspection.client_rep || 'N/A'],
+          ['CONSULTANT NAME:', getValue(generalInfo, 'consultant') || inspection.consultant || 'N/A'],
+          ['CONTRACTOR NAME:', getValue(generalInfo, 'contractor') || inspection.contractor || 'N/A'],
+          ['LOCATION:', getValue(generalInfo, 'location') || inspection.location || siteName],
+        ]
+      );
+      content.push(generalInfoTable);
+    }
 
-    // Template-based sections
-    if (template && template.sections) {
-      const sections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections);
+    // Template-based sections (findings section)
+    if (isSectionEnabled('findings') && template && template.sections) {
+      const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections);
 
-      for (const section of sections) {
+      for (const section of templateSections) {
         const sectionData = section as any;
         const sectionId = String(sectionData.id ?? '');
         const items = Array.isArray(sectionData.items) ? sectionData.items : Object.values(sectionData.items || {});
@@ -253,8 +284,8 @@ export async function generateAndSaveInspectionReport(
             } as Content);
           }
 
-          // Add images
-          if (allImages.length > 0) {
+          // Add images (photos section)
+          if (isSectionEnabled('photos') && allImages.length > 0) {
             const imageColumns: Content[] = [];
             for (const imgUrl of allImages.slice(0, 4)) {
               try {
@@ -322,7 +353,7 @@ export async function generateAndSaveInspectionReport(
     }
 
     // Signatures section
-    if (signatures.length > 0) {
+    if (isSectionEnabled('signatures') && signatures.length > 0) {
       content.push({ text: '', pageBreak: 'before' } as Content);
       content.push(createSectionHeader('SIGN-OFF SIGNATURES', 'primary'));
 
@@ -362,16 +393,23 @@ export async function generateAndSaveInspectionReport(
       }
     }
 
-    // Build document definition
+    // Build document definition with template accent color
     const docDefinition: TDocumentDefinitions = {
       content,
-      styles: DEFAULT_STYLES,
+      styles: {
+        ...DEFAULT_STYLES,
+        // Override with template accent color
+        sectionHeader: {
+          ...DEFAULT_STYLES.sectionHeader,
+          color: accentColors.primary,
+        },
+      },
       defaultStyle: {
         font: 'Helvetica',
         fontSize: 10,
       },
       pageMargins: [40, 40, 40, 60],
-      footer: (currentPage: number, pageCount: number) => {
+      footer: customization.includePageNumbers ? (currentPage: number, pageCount: number) => {
         if (currentPage === 1) return null;
         return {
           columns: [
@@ -381,7 +419,7 @@ export async function generateAndSaveInspectionReport(
           ],
           margin: [0, 20, 0, 0]
         };
-      }
+      } : undefined
     };
 
     // Generate PDF blob
