@@ -200,24 +200,49 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     });
   }
 
-  // Site & client info box
-  const infoRows: Content[][] = [
-    [
-      { text: 'SITE', color: COLORS.textMuted, fontSize: 10 },
-      { text: siteName, bold: true, fontSize: 11 },
-    ],
-  ];
+  // Site & client info box - styled to match template preview
+  const infoRows: Content[][] = [];
+  
+  // Site name row with icon indicator
+  infoRows.push([
+    { 
+      text: '🏢', 
+      fontSize: 12, 
+      color: primaryAccent,
+      margin: [0, 2, 0, 0],
+    },
+    { text: siteName, bold: true, fontSize: 12, color: COLORS.textPrimary },
+  ]);
 
+  // Client name row  
   if (clientName) {
     infoRows.push([
-      { text: 'CLIENT', color: COLORS.textMuted, fontSize: 10 },
-      { text: clientName, bold: true, fontSize: 11 },
+      { 
+        text: '👤', 
+        fontSize: 12, 
+        color: primaryAccent,
+        margin: [0, 2, 0, 0],
+      },
+      { text: clientName, fontSize: 11, color: COLORS.textSecondary },
+    ]);
+  }
+  
+  // Site address row
+  if (siteAddress) {
+    infoRows.push([
+      { 
+        text: '📍', 
+        fontSize: 12, 
+        color: primaryAccent,
+        margin: [0, 2, 0, 0],
+      },
+      { text: siteAddress, fontSize: 10, color: COLORS.textMuted },
     ]);
   }
 
   content.push({
     table: {
-      widths: [60, '*'],
+      widths: [25, '*'],
       body: infoRows,
     },
     layout: {
@@ -226,11 +251,11 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
       vLineColor: () => primaryAccent,
       paddingLeft: () => 10,
       paddingRight: () => 10,
-      paddingTop: () => 8,
-      paddingBottom: () => 8,
+      paddingTop: () => 6,
+      paddingBottom: () => 6,
       fillColor: () => COLORS.bgCard,
     },
-    margin: [80, 20, 80, 40],
+    margin: [60, 20, 60, 40],
   });
 
   // Metadata section (positioned toward bottom)

@@ -15,7 +15,7 @@ import {
   createKpiRow,
   COLORS,
 } from "@/lib/pdfEngine";
-import { loadCompanyBranding } from "@/lib/pdfBranding";
+import { loadCompanyBranding, loadSiteBranding, imageUrlToBase64 } from "@/lib/pdfBranding";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 
 interface SiteSummaryReportProps {
@@ -440,8 +440,18 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       }
     }
 
-    // Load company branding for the report
-    const branding = await loadCompanyBranding();
+    // Load branding - prefer client logo from site, fallback to company branding
+    const companyBranding = await loadCompanyBranding();
+    
+    // Use client logo from the already-fetched site data if available
+    let logoDataUrl = companyBranding.logoDataUrl;
+    if (site?.client_logo_url) {
+      const clientLogo = await imageUrlToBase64(site.client_logo_url);
+      if (clientLogo) logoDataUrl = clientLogo;
+    } else if ((site?.clients as any)?.logo_url) {
+      const clientLogo = await imageUrlToBase64((site.clients as any).logo_url);
+      if (clientLogo) logoDataUrl = clientLogo;
+    }
 
     // Use unified PDF engine for generation
     const result = await generateReport({
@@ -454,8 +464,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         siteName: siteName,
         clientName: clientName,
         reportType: 'Site Summary Report',
-        organizationName: branding.organizationName,
-        logoDataUrl: branding.logoDataUrl,
+        organizationName: companyBranding.organizationName,
+        logoDataUrl: logoDataUrl,
         accentColor: customization.accentColor || 'blue',
         reportDate: new Date(),
         siteAddress: site?.address || undefined,
@@ -463,8 +473,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       options: {
         includeCoverPage: true,
         skipCoverPageInHeaderFooter: true,
-        logoDataUrl: branding.logoDataUrl,
-        organizationName: branding.organizationName,
+        logoDataUrl: logoDataUrl,
+        organizationName: companyBranding.organizationName,
         filename: `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
       },
     });
