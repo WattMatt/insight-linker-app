@@ -84,10 +84,12 @@ export interface SampleKPIs {
   cocPass: number;
   cocMissing: number;
   cocPending: number;
+  cocRequired: number; // Total requiring COC
   complianceRate: number;
   totalAssets: number;
   totalInspections: number;
   completedInspections: number;
+  snagOpen: number; // Open snags count
 }
 
 export interface SampleReportData {
@@ -182,10 +184,12 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
     cocPass: 0,
     cocMissing: 0,
     cocPending: 0,
+    cocRequired: 0,
     complianceRate: 0,
     totalAssets: 0,
     totalInspections: 0,
     completedInspections: 0,
+    snagOpen: 0,
   });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -415,15 +419,24 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
           const pass = passCount || 0;
           const missing = missingCount || 0;
 
+          // Fetch snag count
+          const { count: snagCount } = await supabase
+            .from("snags")
+            .select("*", { count: "exact", head: true })
+            .in("subsection_id", (subsectionsData || []).map(s => s.id))
+            .not("status", "in", '("rectified","Rectified")');
+
           setKpis({
             totalSubsections: total,
             cocPass: pass,
             cocMissing: missing,
             cocPending: total - pass - missing,
+            cocRequired: total, // Assume all require COC for now
             complianceRate: total > 0 ? Math.round((pass / total) * 100 * 10) / 10 : 0,
             totalAssets: totalAssetCount || 0,
             totalInspections: totalInspCount || 0,
             completedInspections: completedInspCount || 0,
+            snagOpen: snagCount || 0,
           });
         }
       } catch (err: any) {
