@@ -20,13 +20,16 @@ import {
   Save,
   Database,
   CheckCircle2,
-  Building2
+  Building2,
+  Eye,
 } from "lucide-react";
 import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/components/pdf-editor/types";
 import { PDFWYSIWYGEditor } from "./PDFWYSIWYGEditor";
 import { InspectionTemplatePreview } from "./preview-renderers/InspectionTemplatePreview";
-import { useAvailableSites } from "@/hooks/useSampleReportData";
+import { SiteSummaryFullPreview } from "./preview-renderers/SiteSummaryFullPreview";
+import { useAvailableSites, useSampleReportData } from "@/hooks/useSampleReportData";
 import { Json } from "@/integrations/supabase/types";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 
 interface PDFTemplate {
   id: string;
@@ -740,9 +743,47 @@ export const PDFTemplateManager = () => {
                           </div>
                         )}
                       </div>
+                    ) : type.id === 'site_summary' ? (
+                      /* Site Summary uses specialized full preview matching actual PDF output */
+                      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+                        <SiteSummaryFullPreview
+                          sections={template.sections}
+                          customization={template.customization}
+                          zoom={0.65}
+                          colors={{
+                            primary: template.customization.accentColor === 'green' ? '#16a34a' :
+                                     template.customization.accentColor === 'orange' ? '#ea580c' :
+                                     template.customization.accentColor === 'red' ? '#dc2626' :
+                                     template.customization.accentColor === 'purple' ? '#9333ea' : '#2563eb',
+                            light: template.customization.accentColor === 'green' ? '#dcfce7' :
+                                   template.customization.accentColor === 'orange' ? '#ffedd5' :
+                                   template.customization.accentColor === 'red' ? '#fee2e2' :
+                                   template.customization.accentColor === 'purple' ? '#f3e8ff' : '#dbeafe',
+                            text: template.customization.accentColor === 'green' ? '#166534' :
+                                  template.customization.accentColor === 'orange' ? '#c2410c' :
+                                  template.customization.accentColor === 'red' ? '#b91c1c' :
+                                  template.customization.accentColor === 'purple' ? '#7e22ce' : '#1e40af',
+                          }}
+                          siteName={availableSites.find(s => s.id === referenceSiteId)?.name || 'Sample Site'}
+                          clientName={availableSites.find(s => s.id === referenceSiteId)?.clientName || 'Sample Client'}
+                          siteAddress="123 Sample Address, City"
+                          clientLogoUrl={null}
+                          subsections={[]}
+                          kpis={{
+                            totalSubsections: availableSites.find(s => s.id === referenceSiteId)?.subsectionCount || 25,
+                            cocPass: 8,
+                            cocMissing: 10,
+                            cocPending: 7,
+                            complianceRate: 32,
+                            totalAssets: 15,
+                            totalInspections: availableSites.find(s => s.id === referenceSiteId)?.inspectionCount || 5,
+                            completedInspections: 3,
+                          }}
+                        />
+                      </div>
                     ) : (
                       <>
-                        {/* Visual PDF Preview - Read-only for non-inspection types */}
+                        {/* Visual PDF Preview - Read-only for other report types */}
                         <PDFWYSIWYGEditor
                           customization={template.customization}
                           sections={template.sections}
