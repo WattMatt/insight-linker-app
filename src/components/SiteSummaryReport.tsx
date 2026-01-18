@@ -15,6 +15,7 @@ import {
   createKpiRow,
   COLORS,
 } from "@/lib/pdfEngine";
+import { loadCompanyBranding } from "@/lib/pdfBranding";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 
 interface SiteSummaryReportProps {
@@ -439,6 +440,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       }
     }
 
+    // Load company branding for the report
+    const branding = await loadCompanyBranding();
+
     // Use unified PDF engine for generation
     const result = await generateReport({
       type: 'site-summary',
@@ -450,12 +454,17 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         siteName: siteName,
         clientName: clientName,
         reportType: 'Site Summary Report',
-        organizationName: 'Asset Management System',
+        organizationName: branding.organizationName,
+        logoDataUrl: branding.logoDataUrl,
+        accentColor: customization.accentColor || 'blue',
         reportDate: new Date(),
+        siteAddress: site?.address || undefined,
       },
       options: {
         includeCoverPage: true,
         skipCoverPageInHeaderFooter: true,
+        logoDataUrl: branding.logoDataUrl,
+        organizationName: branding.organizationName,
         filename: `Site_Summary_Report_${siteName.replace(/\s+/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`,
       },
     });
