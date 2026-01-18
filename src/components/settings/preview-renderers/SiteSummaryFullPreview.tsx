@@ -24,17 +24,24 @@ interface SiteSummaryFullPreviewProps {
 }
 
 // Placeholder indicator for sample data
-const PlaceholderBadge: React.FC<{ children: React.ReactNode; className?: string }> = ({ children, className }) => (
-  <span 
-    className={cn(
-      "inline-block border border-dashed border-amber-400/60 bg-amber-50/40 rounded px-1 py-px",
-      className
-    )}
-    title="Sample data - will be replaced with actual values"
-  >
-    {children}
-  </span>
-);
+interface PlaceholderBadgeProps {
+  children: React.ReactNode;
+  className?: string;
+}
+
+function PlaceholderBadge({ children, className }: PlaceholderBadgeProps) {
+  return (
+    <span 
+      className={cn(
+        "inline-block border border-dashed border-amber-400/60 bg-amber-50/40 rounded px-1 py-px",
+        className
+      )}
+      title="Sample data - will be replaced with actual values"
+    >
+      {children}
+    </span>
+  );
+}
 
 export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   sections,
@@ -48,19 +55,22 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   subsections,
   kpis,
 }) => {
-  // Sort sections by order
-  const sortedSections = [...sections].sort((a, b) => a.order - b.order);
+  // Sort sections by order - handle undefined/null safely
+  const sortedSections = [...(sections || [])].sort((a, b) => a.order - b.order);
   
-  // Calculate metrics like the actual PDF generator
-  const subsectionCount = kpis.totalSubsections || subsections.length || 1;
-  const cocCompliant = kpis.cocPass || 0;
+  // Ensure subsections is always an array
+  const safeSubsections = subsections || [];
+  
+  // Calculate metrics like the actual PDF generator - prevent NaN with safe defaults
+  const subsectionCount = Math.max(kpis?.totalSubsections || safeSubsections.length || 0, 1);
+  const cocCompliant = kpis?.cocPass || 0;
   const cocRequired = subsectionCount;
   const meteringInstalled = Math.round(subsectionCount * 0.9);
   const openSnags = Math.round(subsectionCount * 0.1);
-  const overallHealth = Math.round((cocCompliant / subsectionCount) * 100);
+  const overallHealth = subsectionCount > 0 ? Math.round((cocCompliant / subsectionCount) * 100) : 0;
   const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
-  const meteringData = Math.round((meteringInstalled / subsectionCount) * 100);
-  const snagFree = 100 - Math.round((openSnags / subsectionCount) * 100);
+  const meteringData = subsectionCount > 0 ? Math.round((meteringInstalled / subsectionCount) * 100) : 0;
+  const snagFree = subsectionCount > 0 ? 100 - Math.round((openSnags / subsectionCount) * 100) : 100;
 
   // Page wrapper component matching A4 styling
   const PageWrapper: React.FC<{ children: React.ReactNode; pageNum: number; title?: string }> = ({ children, pageNum }) => (
@@ -216,7 +226,7 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
 
       case "subsection-details":
       case "subsections":
-        const displaySubs = subsections.slice(0, 4);
+        const displaySubs = safeSubsections.slice(0, 4);
         return (
           <div key={section.id} style={{ marginBottom: 20 * zoom }}>
             <h2 
@@ -272,9 +282,9 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
                   </div>
                 </div>
               ))}
-              {subsections.length > 4 && (
+              {safeSubsections.length > 4 && (
                 <div className="text-center text-gray-400 italic" style={{ fontSize: 9 * zoom }}>
-                  + {subsections.length - 4} more subsection cards in full report...
+                  + {safeSubsections.length - 4} more subsection cards in full report...
                 </div>
               )}
             </div>
