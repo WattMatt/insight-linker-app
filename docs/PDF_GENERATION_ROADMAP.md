@@ -1,19 +1,74 @@
-# PDF Generation System - Improvement Roadmap
+# PDF Generation System - Template Gatekeeper Architecture
 
 ## Executive Summary
 
-This document outlines a comprehensive roadmap to unify all PDF report generation in the application through a centralized **PDF Template Manager** system. The goal is to ensure every report type follows a consistent architecture where:
+The PDF Template Manager is the **SINGLE SOURCE OF TRUTH** for all PDF report formatting. Every report generator MUST fetch its configuration from the template before generating any content.
 
-1. **Templates** are managed in `pdf_report_templates` database table
-2. **WYSIWYG Editor** allows visual customization of each report type
-3. **Report Generators** consume templates to produce consistent, branded PDFs
-4. **pdfMake** is the sole PDF rendering library (jsPDF has been deprecated)
+### Core Principle
+```
+Template Manager → pdf_report_templates DB → usePDFTemplateGateway Hook → Report Generator → pdfEngine → PDF
+```
 
 ---
 
-## Current State Analysis
+## Architecture Overview
 
-### ✅ Completed Infrastructure
+```
+┌─────────────────────────────────────────────────────────────────┐
+│              PDF TEMPLATE MANAGER (Settings Page)                │
+│                    THE GATEKEEPER                               │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  • Site Summary  • Inspection  • Floor Plan  • Assets    │  │
+│  │  • Compliance    • COC Validation                        │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                              ↓                                   │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │  WYSIWYG Editor + Full Preview                            │  │
+│  │  • Edit cover page, sections, colors                      │  │
+│  │  • Preview shows EXACTLY what PDF will look like          │  │
+│  │  • Real data from reference site selection                │  │
+│  └───────────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ SAVES TO
+┌─────────────────────────────────────────────────────────────────┐
+│                    pdf_report_templates TABLE                    │
+│  ├── report_type: 'site_summary' | 'inspection' | ...           │
+│  ├── customization: { coverTitle, accentColor, ... }            │
+│  └── sections: [ { id, title, enabled, order, columns } ]       │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ FETCHED BY
+┌─────────────────────────────────────────────────────────────────┐
+│               usePDFTemplateGateway Hook                         │
+│  src/hooks/usePDFTemplateGateway.ts                             │
+│                                                                 │
+│  Returns:                                                        │
+│  • customization - Cover page, styling, branding                │
+│  • enabledSections - Only sections marked enabled, sorted       │
+│  • accentColors - { primary, light, dark } hex values           │
+│  • isSectionEnabled(id) - Check if section should render        │
+│  • getSectionTitle(id) - Get user-configured title              │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ USED BY
+┌─────────────────────────────────────────────────────────────────┐
+│                    REPORT GENERATORS                             │
+│                                                                 │
+│  SiteSummaryReport.tsx ─────────────────────────┐               │
+│  inspectionReportGenerator.ts ──────────────────┤               │
+│  floorPlanReportGenerator.ts ───────────────────┤→ pdfEngine.ts │
+│  assetVerificationReportGenerator.ts ───────────┤               │
+│  cocValidationPdfGenerator.ts ──────────────────┘               │
+└─────────────────────────────────────────────────────────────────┘
+                               ↓ PRODUCES
+                         ┌──────────────┐
+                         │  PDF OUTPUT  │
+                         │  (Matches    │
+                         │   Preview)   │
+                         └──────────────┘
+```
+
+---
+
+## ✅ Completed Infrastructure
 
 | Component | File | Status |
 |-----------|------|--------|
@@ -24,22 +79,21 @@ This document outlines a comprehensive roadmap to unify all PDF report generatio
 | Template Types | `src/components/pdf-editor/types.ts` | ✅ Complete |
 | WYSIWYG Editor | `src/components/settings/PDFWYSIWYGEditor.tsx` | ✅ Complete |
 | Template Manager | `src/components/settings/PDFTemplateManager.tsx` | ✅ Complete |
+| **Template Gateway Hook** | `src/hooks/usePDFTemplateGateway.ts` | ✅ Complete |
+| **Full Preview Components** | `src/components/settings/preview-renderers/` | ✅ Complete |
 | Database Table | `pdf_report_templates` | ✅ Complete |
 
-### Report Generator Status
+### Report Generator Integration Status
 
-| Report Type | File(s) | Uses pdfMake | Uses Templates | Priority |
-|-------------|---------|--------------|----------------|----------|
-| **Site Summary** | `SiteSummaryReport.tsx` | ✅ Yes | ✅ Yes | - Done |
-| **COC Validation** | `cocValidationPdfGenerator.ts`, `COCValidationReport.tsx` | ✅ Yes | ❌ No | 🔴 High |
-| **Inspection** | `inspectionReportGenerator.ts` | ✅ Yes | ❌ No | 🔴 High |
-| **Comprehensive Inspection** | `ComprehensiveInspectionReport.tsx` | ✅ Yes | ❌ No | 🔴 High |
-| **Floor Plan** | `floorPlanReportGenerator.ts` | ✅ Yes | ❌ No | 🟡 Medium |
-| **Site Drawing** | `SiteDrawingReport.tsx` | ✅ Yes | ❌ No | 🟡 Medium |
-| **Fortress Checklist** | `FortressMarkingChecklist.tsx` | ✅ Yes | ❌ No | 🟡 Medium |
-| **Calendar** | `Calendar.tsx` | ✅ Yes | ❌ No | 🟢 Low |
-| **QR Sheet** | `QRAnalytics.tsx` | ✅ Yes | ❌ No | 🟢 Low |
-| **Asset Verification** | `assetVerificationReportGenerator.ts` | ✅ Yes | ❌ No | 🟡 Medium |
+| Report Type | File(s) | Uses Templates | Status |
+|-------------|---------|----------------|--------|
+| **Site Summary** | `SiteSummaryReport.tsx` | ✅ Yes | ✅ Integrated |
+| **COC Validation** | `cocValidationPdfGenerator.ts` | ❌ No | 🔴 Needs integration |
+| **Inspection** | `inspectionReportGenerator.ts` | ❌ No | 🔴 Needs integration |
+| **Comprehensive Inspection** | `ComprehensiveInspectionReport.tsx` | ❌ No | 🔴 Needs integration |
+| **Floor Plan** | `floorPlanReportGenerator.ts` | ❌ No | 🟡 Needs integration |
+| **Asset Verification** | `assetVerificationReportGenerator.ts` | ❌ No | 🟡 Needs integration |
+| **Compliance** | N/A | ❌ No | 🟡 Needs creation |
 
 ---
 
