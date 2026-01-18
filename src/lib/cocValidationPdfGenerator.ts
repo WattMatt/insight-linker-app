@@ -1,3 +1,12 @@
+/**
+ * COC Validation Report Generator
+ * Generates PDF reports for Certificate of Compliance validations
+ * 
+ * TEMPLATE GATEWAY INTEGRATION:
+ * This generator uses fetchPDFTemplate to get its configuration from the database.
+ * All styling, sections, and branding are controlled by the PDF Template Manager.
+ */
+
 import {
   generatePdfBlob,
   createSectionHeader,
@@ -5,6 +14,7 @@ import {
   createDataTable,
   COLORS,
 } from "@/lib/pdfMakeUtils";
+import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
 
 interface ValidationReport {
   cocNumber?: string;
@@ -68,60 +78,77 @@ interface ValidationData {
 }
 
 export async function generateCOCValidationPDF(validation: ValidationData): Promise<{ blob: Blob; fileName: string }> {
+  // ===== FETCH TEMPLATE CONFIGURATION =====
+  const { customization, sections, accentColors } = await fetchPDFTemplate('coc_validation');
+  
+  console.log('[COCValidationReport] Template Config Applied:', {
+    coverTitle: customization.coverTitle,
+    accentColor: customization.accentColor,
+    enabledSections: sections.filter(s => s.enabled).map(s => s.id),
+  });
+
+  // Helper to check if section is enabled
+  const isSectionEnabled = (sectionId: string): boolean => {
+    const section = sections.find(s => s.id === sectionId);
+    return section?.enabled ?? true;
+  };
+
   const report = (validation.report_data || {}) as ValidationReport;
   const status = report.overallStatus || report.status || validation.status;
   const content: any[] = [];
 
-  // ===== VALIDATION STATUS & SUMMARY =====
-  content.push(createSectionHeader('Validation Status', 'primary'));
-  
-  // Compact status display with COC Type inline
-  content.push({
-    columns: [
-      {
-        width: 'auto',
-        text: (status || 'UNKNOWN').toUpperCase(),
-        fontSize: 20,
-        bold: true,
-        color: status?.toLowerCase() === 'pass' ? COLORS.success :
-               status?.toLowerCase() === 'fail' ? COLORS.error :
-               status?.toLowerCase() === 'incomplete' ? COLORS.warning : COLORS.textMuted,
-      },
-      { width: 20, text: '' },
-      report.cocType ? {
-        width: 'auto',
-        text: `COC Type: ${report.cocType}`,
-        fontSize: 10,
-        margin: [0, 6, 0, 0],
-      } : { text: '' },
-    ],
-    margin: [0, 0, 0, 12],
-  });
-
-  // Installation Summary (compact)
-  if (report.installationSummary) {
+  // ===== VALIDATION STATUS & SUMMARY (validation-status) =====
+  if (isSectionEnabled('validation-status')) {
+    content.push(createSectionHeader('Validation Status', 'primary'));
+    
+    // Compact status display with COC Type inline
     content.push({
-      text: [
-        { text: 'Installation Summary: ', bold: true, fontSize: 10 },
-        { text: report.installationSummary, fontSize: 10, color: COLORS.textSecondary },
-      ],
-      margin: [0, 0, 0, 8],
-    });
-  }
-
-  // Overall Assessment (compact)
-  if (report.overallAssessment) {
-    content.push({
-      text: [
-        { text: 'Assessment: ', bold: true, fontSize: 10 },
-        { text: report.overallAssessment, fontSize: 10, color: COLORS.textSecondary },
+      columns: [
+        {
+          width: 'auto',
+          text: (status || 'UNKNOWN').toUpperCase(),
+          fontSize: 20,
+          bold: true,
+          color: status?.toLowerCase() === 'pass' ? COLORS.success :
+                 status?.toLowerCase() === 'fail' ? COLORS.error :
+                 status?.toLowerCase() === 'incomplete' ? COLORS.warning : COLORS.textMuted,
+        },
+        { width: 20, text: '' },
+        report.cocType ? {
+          width: 'auto',
+          text: `COC Type: ${report.cocType}`,
+          fontSize: 10,
+          margin: [0, 6, 0, 0],
+        } : { text: '' },
       ],
       margin: [0, 0, 0, 12],
     });
+
+    // Installation Summary (compact)
+    if (report.installationSummary) {
+      content.push({
+        text: [
+          { text: 'Installation Summary: ', bold: true, fontSize: 10 },
+          { text: report.installationSummary, fontSize: 10, color: COLORS.textSecondary },
+        ],
+        margin: [0, 0, 0, 8],
+      });
+    }
+
+    // Overall Assessment (compact)
+    if (report.overallAssessment) {
+      content.push({
+        text: [
+          { text: 'Assessment: ', bold: true, fontSize: 10 },
+          { text: report.overallAssessment, fontSize: 10, color: COLORS.textSecondary },
+        ],
+        margin: [0, 0, 0, 12],
+      });
+    }
   }
 
-  // ===== ADMINISTRATIVE DETAILS =====
-  if (report.administrativeDetails) {
+  // ===== ADMINISTRATIVE DETAILS (admin-details) =====
+  if (isSectionEnabled('admin-details') && report.administrativeDetails) {
     content.push(createSectionHeader('Administrative Details', 'secondary'));
 
     const details = report.administrativeDetails;
@@ -143,8 +170,8 @@ export async function generateCOCValidationPDF(validation: ValidationData): Prom
     }
   }
 
-  // ===== TECHNICAL EVALUATION =====
-  if (report.technicalEvaluation && report.technicalEvaluation.length > 0) {
+  // ===== TECHNICAL EVALUATION (technical-evaluation) =====
+  if (isSectionEnabled('technical-evaluation') && report.technicalEvaluation && report.technicalEvaluation.length > 0) {
     content.push(createSectionHeader('Technical Evaluation', 'secondary'));
 
     content.push(createDataTable(
@@ -163,9 +190,31 @@ export async function generateCOCValidationPDF(validation: ValidationData): Prom
     ));
   }
 
-  // ===== CRITICAL FAILURES =====
+  // ===== CHECK RESULTS (check-results) =====
+  if (isSectionEnabled('check-results') && report.checks && report.checks.length > 0) {
+    content.push(createSectionHeader('Check Results', 'secondary'));
+
+    content.push(createDataTable(
+      [
+        { header: 'Clause', field: 'clause', width: 50 },
+        { header: 'Description', field: 'description', width: '*' },
+        { header: 'Measured', field: 'measuredValue', width: 60 },
+        { header: 'Limit', field: 'limit', width: 60 },
+        { header: 'Result', field: 'result', width: 50, alignment: 'center' },
+      ],
+      report.checks.map(check => ({
+        clause: check.clause,
+        description: check.description,
+        measuredValue: check.measuredValue,
+        limit: check.limit,
+        result: check.result,
+      }))
+    ));
+  }
+
+  // ===== CRITICAL FAILURES (critical-failures) =====
   const failures = report.criticalFailures || report.violations || [];
-  if (failures.length > 0) {
+  if (isSectionEnabled('critical-failures') && failures.length > 0) {
     content.push(createSectionHeader(`Critical Failures (${failures.length})`, 'primary'));
 
     const failureRows = failures.map((failure: any, index: number) => [
@@ -203,8 +252,8 @@ export async function generateCOCValidationPDF(validation: ValidationData): Prom
     });
   }
 
-  // ===== RECOMMENDATIONS =====
-  if (report.recommendations && report.recommendations.length > 0) {
+  // ===== RECOMMENDATIONS (recommendations) =====
+  if (isSectionEnabled('recommendations') && report.recommendations && report.recommendations.length > 0) {
     content.push(createSectionHeader('Recommendations', 'secondary'));
 
     content.push({
@@ -217,25 +266,31 @@ export async function generateCOCValidationPDF(validation: ValidationData): Prom
     });
   }
 
-  // Build document
+  // Build document with template styling
   const reportDate = new Date(report.evaluationDate || validation.validated_at);
   const docDefinition = {
     pageSize: 'A4' as const,
     pageMargins: [40, 60, 40, 50] as [number, number, number, number],
     header: {
       columns: [
-        { text: 'COC Validation Report', fontSize: 10, bold: true, margin: [40, 20, 0, 0] },
+        { 
+          text: customization.coverTitle || 'COC Validation Report', 
+          fontSize: 10, 
+          bold: true, 
+          color: accentColors.primary,
+          margin: [40, 20, 0, 0] 
+        },
         { text: `REF: ${report.cocNumber || 'N/A'}`, fontSize: 9, alignment: 'right' as const, margin: [0, 20, 40, 0] },
       ],
     },
-    footer: (currentPage: number, pageCount: number) => ({
+    footer: customization.includePageNumbers ? (currentPage: number, pageCount: number) => ({
       columns: [
         { text: 'CONFIDENTIAL', fontSize: 8, color: COLORS.textMuted, margin: [40, 0, 0, 0] },
         { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, alignment: 'center' as const },
         { text: reportDate.toLocaleDateString(), fontSize: 8, alignment: 'right' as const, margin: [0, 0, 40, 0] },
       ],
       margin: [0, 10, 0, 0],
-    }),
+    }) : undefined,
     content,
     defaultStyle: {
       fontSize: 10,

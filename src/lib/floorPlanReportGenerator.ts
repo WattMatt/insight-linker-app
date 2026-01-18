@@ -1,6 +1,10 @@
 /**
  * Floor Plan Report Generator - pdfmake version
  * Generates PDF reports for floor plan inspections with pins/snags
+ * 
+ * TEMPLATE GATEWAY INTEGRATION:
+ * This generator uses fetchPDFTemplate to get its configuration from the database.
+ * All styling, sections, and branding are controlled by the PDF Template Manager.
  */
 
 import {
@@ -18,6 +22,7 @@ import {
   PDFComplianceCheck,
 } from "./pdfMakeUtils";
 import { DOCUMENT_DESIGN_STANDARDS } from "./documentDesignStandards";
+import { fetchPDFTemplate, AccentColors } from "@/hooks/usePDFTemplateGateway";
 
 const { margins } = DOCUMENT_DESIGN_STANDARDS;
 
@@ -67,8 +72,27 @@ export interface FloorPlanReportResult {
 
 /**
  * Generate a floor plan inspection report using pdfmake
+ * Uses PDF Template Gateway for configuration
  */
 export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPlanReportResult> => {
+  // ===== FETCH TEMPLATE CONFIGURATION =====
+  const { customization, sections, accentColors } = await fetchPDFTemplate('floor_plan');
+  
+  console.log('[FloorPlanReport] Template Config Applied:', {
+    coverTitle: customization.coverTitle,
+    accentColor: customization.accentColor,
+    enabledSections: sections.filter(s => s.enabled).map(s => s.id),
+  });
+
+  // Helper to check if section is enabled
+  const isSectionEnabled = (sectionId: string): boolean => {
+    const section = sections.find(s => s.id === sectionId);
+    return section?.enabled ?? true;
+  };
+
+  // Use template accent color for headers
+  const primaryColor = accentColors.primary;
+  
   const content: Content[] = [];
 
   const snags = data.pins.filter(p => p.pin_type === 'snag');
@@ -85,98 +109,100 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
 
   const totalPins = data.pins.length || 1; // Avoid division by zero
 
-  // ===== EXECUTIVE SUMMARY PAGE =====
-  content.push(createSectionHeader('Executive Summary', 'primary'));
+  // ===== EXECUTIVE SUMMARY PAGE (pins-summary) =====
+  if (isSectionEnabled('pins-summary')) {
+    content.push(createSectionHeader('Executive Summary', 'primary'));
 
-  // KPI row
-  content.push(createKpiRow([
-    { value: data.pins.length.toString(), label: 'Total Items', color: COLORS.primary },
-    { value: snags.length.toString(), label: 'Snags', color: COLORS.error },
-    { value: observations.length.toString(), label: 'Observations', color: COLORS.accent },
-    { value: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%`, label: 'Resolved', color: COLORS.success },
-  ]));
+    // KPI row with template accent color
+    content.push(createKpiRow([
+      { value: data.pins.length.toString(), label: 'Total Items', color: primaryColor },
+      { value: snags.length.toString(), label: 'Snags', color: COLORS.error },
+      { value: observations.length.toString(), label: 'Observations', color: COLORS.accent },
+      { value: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%`, label: 'Resolved', color: COLORS.success },
+    ]));
 
-  // Status breakdown table
-  content.push(createSectionHeader('Status Overview'));
-  content.push(createDataTable(
-    [
-      { header: 'Status', field: 'status', width: '*' },
-      { header: 'Count', field: 'count', width: 60, alignment: 'center' },
-      { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
-    ],
-    [
-      { status: 'Open', count: statusCount.open, percentage: `${Math.round((statusCount.open / totalPins) * 100)}%` },
-      { status: 'In Progress', count: statusCount.in_progress, percentage: `${Math.round((statusCount.in_progress / totalPins) * 100)}%` },
-      { status: 'Finished', count: statusCount.finished, percentage: `${Math.round((statusCount.finished / totalPins) * 100)}%` },
-      { status: 'Closed/Resolved', count: statusCount.closed + statusCount.resolved, percentage: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%` },
-    ]
-  ));
-
-  // Priority breakdown for snags
-  if (snags.length > 0) {
-    content.push(createSectionHeader('Snags by Priority'));
-
-    const priorityCount = {
-      critical: snags.filter(s => s.priority === 'critical').length,
-      high: snags.filter(s => s.priority === 'high').length,
-      medium: snags.filter(s => s.priority === 'medium').length,
-      low: snags.filter(s => s.priority === 'low').length,
-    };
-
-    const snagTotal = snags.length || 1;
-
+    // Status breakdown table
+    content.push(createSectionHeader('Status Overview'));
     content.push(createDataTable(
       [
-        { header: 'Priority', field: 'priority', width: '*' },
+        { header: 'Status', field: 'status', width: '*' },
         { header: 'Count', field: 'count', width: 60, alignment: 'center' },
         { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
       ],
       [
-        { priority: 'Critical', count: priorityCount.critical, percentage: `${Math.round((priorityCount.critical / snagTotal) * 100)}%` },
-        { priority: 'High', count: priorityCount.high, percentage: `${Math.round((priorityCount.high / snagTotal) * 100)}%` },
-        { priority: 'Medium', count: priorityCount.medium, percentage: `${Math.round((priorityCount.medium / snagTotal) * 100)}%` },
-        { priority: 'Low', count: priorityCount.low, percentage: `${Math.round((priorityCount.low / snagTotal) * 100)}%` },
-      ],
-      { headerStyle: 'secondary' }
+        { status: 'Open', count: statusCount.open, percentage: `${Math.round((statusCount.open / totalPins) * 100)}%` },
+        { status: 'In Progress', count: statusCount.in_progress, percentage: `${Math.round((statusCount.in_progress / totalPins) * 100)}%` },
+        { status: 'Finished', count: statusCount.finished, percentage: `${Math.round((statusCount.finished / totalPins) * 100)}%` },
+        { status: 'Closed/Resolved', count: statusCount.closed + statusCount.resolved, percentage: `${Math.round(((statusCount.closed + statusCount.resolved) / totalPins) * 100)}%` },
+      ]
     ));
-  }
 
-  // Contractor breakdown
-  const contractorCounts: Record<string, number> = {};
-  snags.forEach(snag => {
-    if (snag.assigned_contractor) {
-      contractorCounts[snag.assigned_contractor] = (contractorCounts[snag.assigned_contractor] || 0) + 1;
-    }
-  });
+    // Priority breakdown for snags
+    if (snags.length > 0) {
+      content.push(createSectionHeader('Snags by Priority'));
 
-  if (Object.keys(contractorCounts).length > 0) {
-    content.push(createSectionHeader('Snags by Contractor'));
-
-    const contractorData = Object.entries(contractorCounts).map(([contractor]) => {
-      const contractorSnags = snags.filter(s => s.assigned_contractor === contractor);
-      return {
-        contractor,
-        total: contractorSnags.length,
-        open: contractorSnags.filter(s => s.status === 'open').length,
-        inProgress: contractorSnags.filter(s => s.status === 'in_progress').length,
-        finished: contractorSnags.filter(s => ['finished', 'closed', 'resolved'].includes(s.status)).length,
+      const priorityCount = {
+        critical: snags.filter(s => s.priority === 'critical').length,
+        high: snags.filter(s => s.priority === 'high').length,
+        medium: snags.filter(s => s.priority === 'medium').length,
+        low: snags.filter(s => s.priority === 'low').length,
       };
+
+      const snagTotal = snags.length || 1;
+
+      content.push(createDataTable(
+        [
+          { header: 'Priority', field: 'priority', width: '*' },
+          { header: 'Count', field: 'count', width: 60, alignment: 'center' },
+          { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
+        ],
+        [
+          { priority: 'Critical', count: priorityCount.critical, percentage: `${Math.round((priorityCount.critical / snagTotal) * 100)}%` },
+          { priority: 'High', count: priorityCount.high, percentage: `${Math.round((priorityCount.high / snagTotal) * 100)}%` },
+          { priority: 'Medium', count: priorityCount.medium, percentage: `${Math.round((priorityCount.medium / snagTotal) * 100)}%` },
+          { priority: 'Low', count: priorityCount.low, percentage: `${Math.round((priorityCount.low / snagTotal) * 100)}%` },
+        ],
+        { headerStyle: 'secondary' }
+      ));
+    }
+
+    // Contractor breakdown
+    const contractorCounts: Record<string, number> = {};
+    snags.forEach(snag => {
+      if (snag.assigned_contractor) {
+        contractorCounts[snag.assigned_contractor] = (contractorCounts[snag.assigned_contractor] || 0) + 1;
+      }
     });
 
-    content.push(createDataTable(
-      [
-        { header: 'Contractor', field: 'contractor', width: '*' },
-        { header: 'Total', field: 'total', width: 50, alignment: 'center' },
-        { header: 'Open', field: 'open', width: 50, alignment: 'center' },
-        { header: 'In Progress', field: 'inProgress', width: 70, alignment: 'center' },
-        { header: 'Finished', field: 'finished', width: 60, alignment: 'center' },
-      ],
-      contractorData
-    ));
+    if (Object.keys(contractorCounts).length > 0) {
+      content.push(createSectionHeader('Snags by Contractor'));
+
+      const contractorData = Object.entries(contractorCounts).map(([contractor]) => {
+        const contractorSnags = snags.filter(s => s.assigned_contractor === contractor);
+        return {
+          contractor,
+          total: contractorSnags.length,
+          open: contractorSnags.filter(s => s.status === 'open').length,
+          inProgress: contractorSnags.filter(s => s.status === 'in_progress').length,
+          finished: contractorSnags.filter(s => ['finished', 'closed', 'resolved'].includes(s.status)).length,
+        };
+      });
+
+      content.push(createDataTable(
+        [
+          { header: 'Contractor', field: 'contractor', width: '*' },
+          { header: 'Total', field: 'total', width: 50, alignment: 'center' },
+          { header: 'Open', field: 'open', width: 50, alignment: 'center' },
+          { header: 'In Progress', field: 'inProgress', width: 70, alignment: 'center' },
+          { header: 'Finished', field: 'finished', width: 60, alignment: 'center' },
+        ],
+        contractorData
+      ));
+    }
   }
 
-  // ===== FLOOR PLAN OVERVIEW =====
-  if (data.canvasDataUrl) {
+  // ===== FLOOR PLAN OVERVIEW (floor-plan-image) =====
+  if (isSectionEnabled('floor-plan-image') && data.canvasDataUrl) {
     content.push({ text: '', pageBreak: 'before' });
     content.push(createSectionHeader('Floor Plan Overview', 'primary'));
     
@@ -188,212 +214,214 @@ export const generateFloorPlanReport = async (data: ReportData): Promise<FloorPl
     });
   }
 
-  // ===== ITEMS SUMMARY TABLE =====
-  content.push({ text: '', pageBreak: 'before' });
-  content.push(createSectionHeader('Items Summary', 'primary'));
-
-  content.push(createDataTable(
-    [
-      { header: '#', field: 'number', width: 30, alignment: 'center' },
-      { header: 'Type', field: 'type', width: 60 },
-      { header: 'Title', field: 'title', width: '*' },
-      { header: 'Priority', field: 'priority', width: 60 },
-      { header: 'Status', field: 'status', width: 70 },
-      { header: 'Contractor', field: 'contractor', width: 80 },
-    ],
-    data.pins.sort((a, b) => a.pin_number - b.pin_number).map(pin => ({
-      number: pin.pin_number,
-      type: pin.pin_type,
-      title: pin.title || 'Untitled',
-      priority: pin.priority || '-',
-      status: pin.status.replace('_', ' '),
-      contractor: pin.assigned_contractor || '-',
-    }))
-  ));
-
-  // ===== INDIVIDUAL ITEM DETAILS =====
-  for (const pin of data.pins.sort((a, b) => a.pin_number - b.pin_number)) {
+  // ===== ITEMS SUMMARY TABLE (pins-table) =====
+  if (isSectionEnabled('pins-table')) {
     content.push({ text: '', pageBreak: 'before' });
+    content.push(createSectionHeader('Items Summary', 'primary'));
 
-    // Item header with colored bar
-    const headerColor = pin.status === 'closed' || pin.status === 'resolved' ? COLORS.success :
-                        pin.status === 'in_progress' ? COLORS.warning :
-                        pin.status === 'open' && pin.priority === 'critical' ? COLORS.error : COLORS.primary;
+    content.push(createDataTable(
+      [
+        { header: '#', field: 'number', width: 30, alignment: 'center' },
+        { header: 'Type', field: 'type', width: 60 },
+        { header: 'Title', field: 'title', width: '*' },
+        { header: 'Priority', field: 'priority', width: 60 },
+        { header: 'Status', field: 'status', width: 70 },
+        { header: 'Contractor', field: 'contractor', width: 80 },
+      ],
+      data.pins.sort((a, b) => a.pin_number - b.pin_number).map(pin => ({
+        number: pin.pin_number,
+        type: pin.pin_type,
+        title: pin.title || 'Untitled',
+        priority: pin.priority || '-',
+        status: pin.status.replace('_', ' '),
+        contractor: pin.assigned_contractor || '-',
+      }))
+    ));
 
-    content.push({
-      table: {
-        widths: ['*'],
-        body: [[{
-          stack: [
-            {
-              text: `Item #${pin.pin_number}`,
-              fontSize: 18,
-              bold: true,
-              color: COLORS.white,
-            },
-            {
-              text: `${pin.pin_type.toUpperCase()} • ${pin.status.replace('_', ' ').toUpperCase()}`,
-              fontSize: 10,
-              color: COLORS.white,
-              margin: [0, 3, 0, 0],
-            },
-          ],
-        }]],
-      },
-      layout: {
-        hLineWidth: () => 0,
-        vLineWidth: () => 0,
-        paddingLeft: () => mmToPt(margins.left),
-        paddingRight: () => mmToPt(margins.right),
-        paddingTop: () => 12,
-        paddingBottom: () => 12,
-        fillColor: () => headerColor,
-      },
-      margin: [0, 0, 0, 15],
-    });
+    // ===== INDIVIDUAL ITEM DETAILS =====
+    for (const pin of data.pins.sort((a, b) => a.pin_number - b.pin_number)) {
+      content.push({ text: '', pageBreak: 'before' });
 
-    // Info grid
-    const infoData: [string, string][] = [];
-    if (pin.priority) infoData.push(['Priority', pin.priority.toUpperCase()]);
-    if (pin.assigned_contractor) infoData.push(['Contractor', pin.assigned_contractor]);
-    if (pin.stakeholders) infoData.push(['Stakeholders', pin.stakeholders]);
-    if (pin.package) infoData.push(['Package', pin.package]);
-    if (pin.due_date) infoData.push(['Due Date', new Date(pin.due_date).toLocaleDateString()]);
+      // Item header with colored bar - use template accent color
+      const headerColor = pin.status === 'closed' || pin.status === 'resolved' ? COLORS.success :
+                          pin.status === 'in_progress' ? COLORS.warning :
+                          pin.status === 'open' && pin.priority === 'critical' ? COLORS.error : primaryColor;
 
-    if (infoData.length > 0) {
-      content.push(createInfoTable(infoData));
-    }
-
-    // Title
-    if (pin.title) {
-      content.push(createSectionHeader('Title'));
       content.push({
-        text: pin.title,
-        fontSize: 11,
-        margin: [0, 0, 0, 10],
-      });
-    }
-
-    // Photo comparison
-    if (pin.photo_url && pin.rectification_photo_url) {
-      content.push(createSectionHeader('Before / After Comparison'));
-      content.push({
-        columns: [
-          {
+        table: {
+          widths: ['*'],
+          body: [[{
             stack: [
-              { text: 'BEFORE', fontSize: 10, bold: true, color: COLORS.error, margin: [0, 0, 0, 5] },
-              { image: pin.photo_url, width: 200, height: 150 },
+              {
+                text: `Item #${pin.pin_number}`,
+                fontSize: 18,
+                bold: true,
+                color: COLORS.white,
+              },
+              {
+                text: `${pin.pin_type.toUpperCase()} • ${pin.status.replace('_', ' ').toUpperCase()}`,
+                fontSize: 10,
+                color: COLORS.white,
+                margin: [0, 3, 0, 0],
+              },
             ],
-          },
-          {
-            stack: [
-              { text: 'AFTER', fontSize: 10, bold: true, color: COLORS.success, margin: [0, 0, 0, 5] },
-              { image: pin.rectification_photo_url, width: 200, height: 150 },
-            ],
-          },
-        ],
-        columnGap: 20,
-        margin: [0, 0, 0, 10],
+          }]],
+        },
+        layout: {
+          hLineWidth: () => 0,
+          vLineWidth: () => 0,
+          paddingLeft: () => mmToPt(margins.left),
+          paddingRight: () => mmToPt(margins.right),
+          paddingTop: () => 12,
+          paddingBottom: () => 12,
+          fillColor: () => headerColor,
+        },
+        margin: [0, 0, 0, 15],
       });
 
-      if (pin.rectification_notes) {
+      // Info grid
+      const infoData: [string, string][] = [];
+      if (pin.priority) infoData.push(['Priority', pin.priority.toUpperCase()]);
+      if (pin.assigned_contractor) infoData.push(['Contractor', pin.assigned_contractor]);
+      if (pin.stakeholders) infoData.push(['Stakeholders', pin.stakeholders]);
+      if (pin.package) infoData.push(['Package', pin.package]);
+      if (pin.due_date) infoData.push(['Due Date', new Date(pin.due_date).toLocaleDateString()]);
+
+      if (infoData.length > 0) {
+        content.push(createInfoTable(infoData));
+      }
+
+      // Title
+      if (pin.title) {
+        content.push(createSectionHeader('Title'));
         content.push({
-          table: {
-            widths: ['*'],
-            body: [[{
-              stack: [
-                { text: 'Rectification Notes:', bold: true, fontSize: 10 },
-                { text: pin.rectification_notes, fontSize: 9, margin: [0, 3, 0, 0] },
-              ],
-            }]],
-          },
-          layout: {
-            hLineWidth: () => 0,
-            vLineWidth: () => 0,
-            paddingLeft: () => 10,
-            paddingRight: () => 10,
-            paddingTop: () => 8,
-            paddingBottom: () => 8,
-            fillColor: () => '#e8f5e9',
-          },
+          text: pin.title,
+          fontSize: 11,
           margin: [0, 0, 0, 10],
         });
       }
-    } else if (pin.photo_url) {
-      content.push(createSectionHeader('Photo'));
-      content.push({
-        image: pin.photo_url,
-        width: 300,
-        height: 200,
-        margin: [0, 0, 0, 10],
-      });
-    }
 
-    // Detailed description
-    if (pin.detailed_description) {
-      content.push(createSectionHeader('Detailed Description'));
-      content.push({
-        text: pin.detailed_description,
-        fontSize: 10,
-        margin: [0, 0, 0, 10],
-      });
-    }
-
-    // Notes
-    if (pin.notes) {
-      content.push(createSectionHeader('Notes'));
-      content.push({
-        text: pin.notes,
-        fontSize: 10,
-        margin: [0, 0, 0, 10],
-      });
-    }
-
-    // Comments
-    if (pin.comments && pin.comments.length > 0) {
-      content.push(createSectionHeader(`Comments (${pin.comments.length})`));
-
-      pin.comments.forEach(comment => {
+      // Photo comparison
+      if (pin.photo_url && pin.rectification_photo_url) {
+        content.push(createSectionHeader('Before / After Comparison'));
         content.push({
-          table: {
-            widths: ['*'],
-            body: [[{
+          columns: [
+            {
               stack: [
-                {
-                  columns: [
-                    { text: comment.user_name || 'User', bold: true, fontSize: 9 },
-                    { text: new Date(comment.created_at).toLocaleDateString(), fontSize: 8, color: COLORS.textMuted, alignment: 'right' },
-                  ],
-                },
-                { text: comment.comment, fontSize: 9, margin: [0, 3, 0, 0] },
+                { text: 'BEFORE', fontSize: 10, bold: true, color: COLORS.error, margin: [0, 0, 0, 5] },
+                { image: pin.photo_url, width: 200, height: 150 },
               ],
-            }]],
-          },
-          layout: {
-            hLineWidth: () => 0.5,
-            vLineWidth: () => 0,
-            hLineColor: () => COLORS.border,
-            paddingLeft: () => 8,
-            paddingRight: () => 8,
-            paddingTop: () => 6,
-            paddingBottom: () => 6,
-          },
-          margin: [0, 0, 0, 5],
+            },
+            {
+              stack: [
+                { text: 'AFTER', fontSize: 10, bold: true, color: COLORS.success, margin: [0, 0, 0, 5] },
+                { image: pin.rectification_photo_url, width: 200, height: 150 },
+              ],
+            },
+          ],
+          columnGap: 20,
+          margin: [0, 0, 0, 10],
         });
-      });
+
+        if (pin.rectification_notes) {
+          content.push({
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  { text: 'Rectification Notes:', bold: true, fontSize: 10 },
+                  { text: pin.rectification_notes, fontSize: 9, margin: [0, 3, 0, 0] },
+                ],
+              }]],
+            },
+            layout: {
+              hLineWidth: () => 0,
+              vLineWidth: () => 0,
+              paddingLeft: () => 10,
+              paddingRight: () => 10,
+              paddingTop: () => 8,
+              paddingBottom: () => 8,
+              fillColor: () => accentColors.light,
+            },
+            margin: [0, 0, 0, 10],
+          });
+        }
+      } else if (pin.photo_url) {
+        content.push(createSectionHeader('Photo'));
+        content.push({
+          image: pin.photo_url,
+          width: 300,
+          height: 200,
+          margin: [0, 0, 0, 10],
+        });
+      }
+
+      // Detailed description
+      if (pin.detailed_description) {
+        content.push(createSectionHeader('Detailed Description'));
+        content.push({
+          text: pin.detailed_description,
+          fontSize: 10,
+          margin: [0, 0, 0, 10],
+        });
+      }
+
+      // Notes
+      if (pin.notes) {
+        content.push(createSectionHeader('Notes'));
+        content.push({
+          text: pin.notes,
+          fontSize: 10,
+          margin: [0, 0, 0, 10],
+        });
+      }
+
+      // Comments
+      if (pin.comments && pin.comments.length > 0) {
+        content.push(createSectionHeader(`Comments (${pin.comments.length})`));
+
+        pin.comments.forEach(comment => {
+          content.push({
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  {
+                    columns: [
+                      { text: comment.user_name || 'User', bold: true, fontSize: 9 },
+                      { text: new Date(comment.created_at).toLocaleDateString(), fontSize: 8, color: COLORS.textMuted, alignment: 'right' },
+                    ],
+                  },
+                  { text: comment.comment, fontSize: 9, margin: [0, 3, 0, 0] },
+                ],
+              }]],
+            },
+            layout: {
+              hLineWidth: () => 0.5,
+              vLineWidth: () => 0,
+              hLineColor: () => COLORS.border,
+              paddingLeft: () => 8,
+              paddingRight: () => 8,
+              paddingTop: () => 6,
+              paddingBottom: () => 6,
+            },
+            margin: [0, 0, 0, 5],
+          });
+        });
+      }
     }
   }
 
-  // Build document
+  // Build document with template customization
   const docDefinition = buildDocument({
-    title: 'Floor Plan Inspection Report',
+    title: customization.coverTitle || 'Floor Plan Inspection Report',
     coverPage: {
-      title: 'Floor Plan Inspection Report',
-      subtitle: data.subsectionName,
+      title: customization.coverTitle || 'Floor Plan Inspection Report',
+      subtitle: customization.coverSubtitle || data.subsectionName,
       siteName: data.siteName,
       reportType: 'Floor Plan Report',
       organizationName: data.projectName,
-      reportDate: new Date(),
+      reportDate: customization.includeDate ? new Date() : undefined,
     },
     content,
   });
