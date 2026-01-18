@@ -17,6 +17,7 @@ import {
 } from "@/lib/pdfEngine";
 import { loadCompanyBranding, loadSiteBranding, imageUrlToBase64 } from "@/lib/pdfBranding";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
+import { fetchPDFTemplate, getAccentColorPalette } from "@/hooks/usePDFTemplateGateway";
 
 interface SiteSummaryReportProps {
   siteId: string;
@@ -120,26 +121,16 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     }
   };
 
-  // Fetch template configuration from database
+  // Fetch template configuration using the gateway - SINGLE SOURCE OF TRUTH
   const fetchTemplateConfig = async (): Promise<TemplateConfig> => {
     try {
-      const { data: template } = await supabase
-        .from("pdf_report_templates")
-        .select("customization, sections")
-        .eq("report_type", "site_summary")
-        .eq("is_default", true)
-        .single();
-
-      if (template) {
-        const customization = template.customization as unknown as ReportCustomization;
-        const sections = template.sections as unknown as ReportSection[];
-        return {
-          customization: { ...DEFAULT_CUSTOMIZATION, ...customization } as ReportCustomization,
-          sections: sections?.length > 0 ? sections : DEFAULT_SECTIONS,
-        };
-      }
+      const { customization, sections } = await fetchPDFTemplate('site_summary');
+      return {
+        customization: { ...DEFAULT_CUSTOMIZATION, ...customization } as ReportCustomization,
+        sections: sections?.length > 0 ? sections : DEFAULT_SECTIONS,
+      };
     } catch (error) {
-      console.log("No template found, using defaults");
+      console.log("Error fetching template, using defaults:", error);
     }
     
     return {
