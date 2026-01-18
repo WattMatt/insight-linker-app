@@ -595,7 +595,12 @@ export const PDFTemplateManager = () => {
 
       if (error) throw error;
       
-      const parsed = (data || []).map(t => ({
+      // Filter out "Site Summary" from inspection templates - it has its own dedicated tab
+      const filtered = (data || []).filter(t => 
+        !t.name.toLowerCase().includes('site summary')
+      );
+      
+      const parsed = filtered.map(t => ({
         ...t,
         sections: Array.isArray(t.sections) ? t.sections : 
           (typeof t.sections === 'string' ? JSON.parse(t.sections) : [])
