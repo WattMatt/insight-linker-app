@@ -187,9 +187,21 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
   };
 
   const generatePdfDocument = async (): Promise<{ blob: Blob; filename: string }> => {
-    // Fetch template configuration from database
+    // Fetch template configuration from database - SINGLE SOURCE OF TRUTH
     const templateConfig = await fetchTemplateConfig();
     const { customization, sections } = templateConfig;
+
+    // Debug: Log template configuration being applied
+    console.log('[SiteSummaryReport] Template Config Applied:', {
+      coverTitle: customization.coverTitle,
+      coverSubtitle: customization.coverSubtitle,
+      accentColor: customization.accentColor,
+      includeDate: customization.includeDate,
+      includePageNumbers: customization.includePageNumbers,
+      totalSections: sections.length,
+      enabledSections: sections.filter(s => s.enabled).map(s => s.id),
+      disabledSections: sections.filter(s => !s.enabled).map(s => s.id),
+    });
 
     // Sort sections using spec function
     const sortedSections = getEnabledSections(sections);

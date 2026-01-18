@@ -354,6 +354,8 @@ export async function fetchPDFTemplate(reportType: TemplateReportType): Promise<
   sections: ReportSection[];
   accentColors: AccentColors;
 }> {
+  console.log(`[fetchPDFTemplate] Fetching template for: ${reportType}`);
+  
   try {
     const { data, error } = await supabase
       .from("pdf_report_templates")
@@ -365,6 +367,14 @@ export async function fetchPDFTemplate(reportType: TemplateReportType): Promise<
     if (error && error.code !== 'PGRST116') {
       throw error;
     }
+
+    // Log what was fetched from database
+    console.log(`[fetchPDFTemplate] Database result:`, {
+      found: !!data,
+      templateId: data?.id,
+      templateName: data?.name,
+      dbSectionsCount: Array.isArray(data?.sections) ? data.sections.length : 0,
+    });
 
     const customization: ReportCustomization = {
       ...DEFAULT_CUSTOMIZATION,
@@ -379,9 +389,17 @@ export async function fetchPDFTemplate(reportType: TemplateReportType): Promise<
 
     const accentColors = ACCENT_COLOR_PALETTE[customization.accentColor] || ACCENT_COLOR_PALETTE.blue;
 
+    // Log final merged configuration
+    console.log(`[fetchPDFTemplate] Final config:`, {
+      accentColor: customization.accentColor,
+      coverTitle: customization.coverTitle,
+      sectionsCount: sections.length,
+      enabledSections: sections.filter((s: ReportSection) => s.enabled).map((s: ReportSection) => s.id),
+    });
+
     return { customization, sections, accentColors };
   } catch (err) {
-    console.error("Error fetching PDF template:", err);
+    console.error("[fetchPDFTemplate] Error fetching PDF template:", err);
     
     // Return defaults on error
     const defaults = DEFAULT_TEMPLATES[reportType] || DEFAULT_TEMPLATES.site_summary;
@@ -390,6 +408,8 @@ export async function fetchPDFTemplate(reportType: TemplateReportType): Promise<
       ...defaults.customization,
       sections: defaults.sections,
     };
+    
+    console.log(`[fetchPDFTemplate] Using defaults due to error`);
     
     return {
       customization,
