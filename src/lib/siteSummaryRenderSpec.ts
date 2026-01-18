@@ -98,7 +98,7 @@ export interface SectionSpec {
   id: string;
   legacyIds: string[]; // For backwards compatibility with legacy section IDs
   defaultTitle: string;
-  type: 'kpi' | 'table' | 'cards' | 'chart';
+  type: 'summary' | 'table' | 'kpi' | 'text' | 'chart'; // Must match ReportSection type
   pageBreakBefore?: boolean;
   renderPriority: number; // Order for sections without explicit order
 }
@@ -129,7 +129,7 @@ export const SECTION_SPECS: Record<string, SectionSpec> = {
     id: 'subsection-details',
     legacyIds: ['subsections'],
     defaultTitle: 'Subsection Details',
-    type: 'cards',
+    type: 'summary', // 'cards' displayed as summary type
     pageBreakBefore: true,
     renderPriority: 3,
   },
