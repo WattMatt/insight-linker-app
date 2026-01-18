@@ -62,6 +62,15 @@ type TDocumentDefinitions = any;
 // COVER PAGE BUILDERS
 // ============================================================================
 
+// Accent color palette for templates
+export const ACCENT_COLORS: Record<string, { primary: string; light: string; text: string }> = {
+  blue: { primary: '#2563eb', light: '#dbeafe', text: '#1e40af' },
+  green: { primary: '#16a34a', light: '#dcfce7', text: '#166534' },
+  orange: { primary: '#ea580c', light: '#ffedd5', text: '#c2410c' },
+  red: { primary: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
+  purple: { primary: '#9333ea', light: '#f3e8ff', text: '#7e22ce' },
+};
+
 export interface CoverPageOptions {
   title: string;
   subtitle?: string;
@@ -74,6 +83,8 @@ export interface CoverPageOptions {
   referenceNumber?: string;
   preparedBy?: string;
   qrCodeDataUrl?: string | null;
+  accentColor?: 'blue' | 'green' | 'orange' | 'red' | 'purple';
+  siteAddress?: string;
 }
 
 /**
@@ -92,7 +103,13 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     referenceNumber,
     preparedBy,
     qrCodeDataUrl,
+    accentColor = 'blue',
+    siteAddress,
   } = options;
+
+  // Get accent color values from palette
+  const accentPalette = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
+  const primaryAccent = accentPalette.primary;
 
   const formattedDate = reportDate.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -102,7 +119,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
 
   const content: Content[] = [];
 
-  // Top accent bar
+  // Top accent bar - uses dynamic accent color
   content.push({
     canvas: [
       {
@@ -111,7 +128,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         y: 0,
         w: A4_WIDTH_PT,
         h: mmToPt(8),
-        color: COLORS.primary,
+        color: primaryAccent,
       },
     ],
     absolutePosition: { x: 0, y: 0 },
@@ -158,7 +175,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     margin: [0, 0, 0, 10],
   });
 
-  // Decorative line
+  // Decorative line - uses dynamic accent color
   content.push({
     canvas: [
       {
@@ -168,7 +185,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         x2: CONTENT_WIDTH_PT / 2 + 60,
         y2: 0,
         lineWidth: 2,
-        lineColor: COLORS.primary,
+        lineColor: primaryAccent,
       },
     ],
     margin: [0, 5, 0, 15],
@@ -206,7 +223,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     layout: {
       hLineWidth: () => 0,
       vLineWidth: (i: number) => (i === 0 ? 3 : 0),
-      vLineColor: () => COLORS.primary,
+      vLineColor: () => primaryAccent,
       paddingLeft: () => 10,
       paddingRight: () => 10,
       paddingTop: () => 8,
