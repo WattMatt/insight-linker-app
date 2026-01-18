@@ -110,6 +110,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   // Get accent color values from palette
   const accentPalette = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
   const primaryAccent = accentPalette.primary;
+  const lightAccent = accentPalette.light;
 
   const formattedDate = reportDate.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -119,7 +120,9 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
 
   const content: Content[] = [];
 
-  // Top accent bar - uses dynamic accent color
+  // ======================================================================
+  // TOP ACCENT BAR - Matches preview exactly
+  // ======================================================================
   content.push({
     canvas: [
       {
@@ -134,7 +137,9 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     absolutePosition: { x: 0, y: 0 },
   });
 
-  // Logo or organization name
+  // ======================================================================
+  // LOGO OR PLACEHOLDER - Centered like preview
+  // ======================================================================
   if (logoDataUrl) {
     content.push({
       image: logoDataUrl,
@@ -143,14 +148,28 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
       margin: [0, 60, 0, 20],
     });
   } else {
+    // Placeholder box matching preview style
     content.push({
-      text: organizationName,
-      style: 'coverMeta',
-      margin: [0, 80, 0, 25],
+      table: {
+        widths: [120],
+        body: [[{
+          text: '🏢',
+          fontSize: 24,
+          color: primaryAccent,
+          alignment: 'center',
+          fillColor: lightAccent,
+          margin: [0, 20, 0, 20],
+        }]],
+      },
+      layout: 'noBorders',
+      alignment: 'center',
+      margin: [0, 60, 0, 20],
     });
   }
 
-  // Report type badge
+  // ======================================================================
+  // REPORT TYPE BADGE - Gray pill like preview
+  // ======================================================================
   content.push({
     table: {
       widths: ['auto'],
@@ -159,7 +178,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         fontSize: 10,
         bold: true,
         color: COLORS.textSecondary,
-        fillColor: COLORS.bgHeader,
+        fillColor: '#f3f4f6',
         margin: [15, 5, 15, 5],
       }]],
     },
@@ -168,75 +187,70 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     margin: [0, 0, 0, 20],
   });
 
-  // Main title
+  // ======================================================================
+  // MAIN TITLE - Bold, accent color, like preview
+  // ======================================================================
   content.push({
     text: title,
-    style: 'coverTitle',
-    margin: [0, 0, 0, 10],
+    fontSize: 28,
+    bold: true,
+    color: primaryAccent,
+    alignment: 'center',
+    margin: [0, 0, 0, 8],
   });
 
-  // Decorative line - uses dynamic accent color
-  content.push({
-    canvas: [
-      {
-        type: 'line',
-        x1: CONTENT_WIDTH_PT / 2 - 60,
-        y1: 0,
-        x2: CONTENT_WIDTH_PT / 2 + 60,
-        y2: 0,
-        lineWidth: 2,
-        lineColor: primaryAccent,
-      },
-    ],
-    margin: [0, 5, 0, 15],
-  });
-
-  // Subtitle
+  // ======================================================================
+  // SUBTITLE - Gray, lighter weight
+  // ======================================================================
   if (subtitle) {
     content.push({
       text: subtitle,
-      style: 'coverSubtitle',
-      margin: [0, 0, 0, 20],
+      fontSize: 14,
+      color: '#6b7280',
+      alignment: 'center',
+      margin: [0, 0, 0, 32],
     });
   }
 
-  // Site & client info box - styled to match template preview
+  // ======================================================================
+  // SITE INFO BOX - Left border accent, matching preview exactly
+  // ======================================================================
   const infoRows: Content[][] = [];
   
-  // Site name row with icon indicator
+  // Site name row with building icon
   infoRows.push([
     { 
       text: '🏢', 
       fontSize: 12, 
       color: primaryAccent,
-      margin: [0, 2, 0, 0],
+      margin: [0, 2, 8, 0],
     },
     { text: siteName, bold: true, fontSize: 12, color: COLORS.textPrimary },
   ]);
 
-  // Client name row  
+  // Client name row with user icon
   if (clientName) {
     infoRows.push([
       { 
         text: '👤', 
         fontSize: 12, 
         color: primaryAccent,
-        margin: [0, 2, 0, 0],
+        margin: [0, 2, 8, 0],
       },
       { text: clientName, fontSize: 11, color: COLORS.textSecondary },
     ]);
   }
   
-  // Site address row
+  // Site address row with pin icon
   if (siteAddress) {
     infoRows.push([
       { 
         text: '📍', 
         fontSize: 12, 
         color: primaryAccent,
-        margin: [0, 2, 0, 0],
+        margin: [0, 2, 8, 0],
       },
-      { text: siteAddress, fontSize: 10, color: COLORS.textMuted },
+      { text: siteAddress, fontSize: 10, color: '#6b7280' },
     ]);
   }
 
@@ -247,48 +261,20 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     },
     layout: {
       hLineWidth: () => 0,
-      vLineWidth: (i: number) => (i === 0 ? 3 : 0),
+      vLineWidth: (i: number) => (i === 0 ? 4 : 0),
       vLineColor: () => primaryAccent,
-      paddingLeft: () => 10,
-      paddingRight: () => 10,
-      paddingTop: () => 6,
-      paddingBottom: () => 6,
-      fillColor: () => COLORS.bgCard,
+      paddingLeft: () => 12,
+      paddingRight: () => 12,
+      paddingTop: () => 8,
+      paddingBottom: () => 8,
+      fillColor: () => '#f9fafb',
     },
-    margin: [60, 20, 60, 40],
+    margin: [60, 0, 60, 40],
   });
 
-  // Metadata section (positioned toward bottom)
-  const metaContent: Content[] = [];
-
-  if (referenceNumber) {
-    metaContent.push({
-      text: `REF: ${referenceNumber}`,
-      fontSize: 10,
-      color: COLORS.textMuted,
-      alignment: 'center',
-      margin: [0, 0, 0, 5],
-    });
-  }
-
-  metaContent.push({
-    text: `Generated: ${formattedDate}`,
-    fontSize: 11,
-    color: COLORS.textSecondary,
-    alignment: 'center',
-  });
-
-  if (preparedBy) {
-    metaContent.push({
-      text: `Prepared by: ${preparedBy}`,
-      fontSize: 11,
-      color: COLORS.textSecondary,
-      alignment: 'center',
-      margin: [0, 5, 0, 0],
-    });
-  }
-
-  // QR Code if provided
+  // ======================================================================
+  // QR CODE (if provided)
+  // ======================================================================
   if (qrCodeDataUrl) {
     content.push({
       image: qrCodeDataUrl,
@@ -305,12 +291,46 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     });
   }
 
-  content.push({
-    stack: metaContent,
-    margin: [0, qrCodeDataUrl ? 20 : 60, 0, 0],
+  // ======================================================================
+  // METADATA SECTION - Date, reference, prepared by
+  // ======================================================================
+  const metaContent: Content[] = [];
+
+  if (referenceNumber) {
+    metaContent.push({
+      text: `REF: ${referenceNumber}`,
+      fontSize: 10,
+      color: '#6b7280',
+      alignment: 'center',
+      margin: [0, 0, 0, 5],
+    });
+  }
+
+  metaContent.push({
+    text: formattedDate,
+    fontSize: 11,
+    color: '#6b7280',
+    alignment: 'center',
   });
 
-  // Confidentiality notice
+  if (preparedBy) {
+    metaContent.push({
+      text: `Prepared by: ${preparedBy}`,
+      fontSize: 11,
+      color: '#6b7280',
+      alignment: 'center',
+      margin: [0, 5, 0, 0],
+    });
+  }
+
+  content.push({
+    stack: metaContent,
+    margin: [0, qrCodeDataUrl ? 20 : 80, 0, 0],
+  });
+
+  // ======================================================================
+  // CONFIDENTIALITY NOTICE
+  // ======================================================================
   content.push({
     text: footers.confidentialityText,
     fontSize: 8,
@@ -327,7 +347,9 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     alignment: 'center',
   });
 
-  // Bottom accent bar (using pageBreak to separate from next content)
+  // ======================================================================
+  // BOTTOM ACCENT BAR
+  // ======================================================================
   content.push({
     canvas: [
       {
@@ -336,7 +358,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         y: 0,
         w: A4_WIDTH_PT,
         h: mmToPt(8),
-        color: COLORS.primary,
+        color: primaryAccent,
       },
     ],
     absolutePosition: { x: 0, y: A4_HEIGHT_PT - mmToPt(8) },
