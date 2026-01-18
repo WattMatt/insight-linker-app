@@ -47,6 +47,7 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
+const PDFTemplateTestDashboard = lazy(() => import("./pages/PDFTemplateTestDashboard"));
 
 const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
 
@@ -354,6 +355,10 @@ const App = () => (
           <Route
             path="/coc-documentation"
             element={<ProtectedRoute><DashboardLayout><COCDocumentation /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
+            path="/pdf-template-tests"
+            element={<ProtectedRoute><DashboardLayout><PDFTemplateTestDashboard /></DashboardLayout></ProtectedRoute>}
           />
           {/* Client Portal Routes */}
           <Route
