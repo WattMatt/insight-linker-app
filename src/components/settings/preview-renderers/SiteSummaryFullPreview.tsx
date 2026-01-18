@@ -10,11 +10,13 @@
  * 5. Subsection QR Codes (QR code grid)
  * 6. COC Validations (table)
  * 7. Inspections (table)
+ * 
+ * IMPORTANT: Sections should NEVER return null - always render structure with placeholder if no data
  */
 import React from "react";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 import { cn } from "@/lib/utils";
-import { QrCode, Building2 } from "lucide-react";
+import { QrCode, Building2, AlertCircle } from "lucide-react";
 import { SampleSubsection, SampleKPIs, SampleInspection } from "@/hooks/useSampleReportData";
 import {
   LAYOUT,
@@ -67,6 +69,14 @@ const PlaceholderBadge: React.FC<{
   </span>
 );
 
+// Empty section placeholder - shows when section has no data
+const EmptySectionPlaceholder: React.FC<{ sectionName: string }> = ({ sectionName }) => (
+  <div className="flex items-center gap-2 p-4 border border-dashed border-gray-300 rounded bg-gray-50 text-muted-foreground italic">
+    <AlertCircle className="w-4 h-4" />
+    <span>No data available for {sectionName} - will populate from site data</span>
+  </div>
+);
+
 export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   sections,
   customization,
@@ -82,6 +92,15 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
 }) => {
   const accentPalette = getAccentPalette(customization.accentColor || 'blue');
   const colors = { primary: accentPalette.primary, light: accentPalette.light, text: accentPalette.dark };
+
+  // Debug logging
+  console.log('[SiteSummaryFullPreview] Data received:', {
+    sectionsCount: sections?.length || 0,
+    subsectionsCount: subsections?.length || 0,
+    inspectionsCount: inspections?.length || 0,
+    cocValidationsCount: cocValidations?.length || 0,
+    kpis,
+  });
 
   // Convert sample subsections to spec format - use ACTUAL data from subsections
   const subsectionData: SubsectionData[] = (subsections || []).map(sub => ({
@@ -106,10 +125,8 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
         date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
       }));
 
-  // Use actual inspections - only fallback to sample if none provided
-  const sampleInspections = inspections.length > 0 ? inspections : [
-    { id: '1', title: 'No inspections found', status: 'N/A', inspectorName: '-', inspectionDate: null, siteName },
-  ];
+  // Use actual inspections
+  const sampleInspections = inspections.length > 0 ? inspections : [];
 
   // Calculate metrics
   const metrics = calculateMetrics(subsectionData, kpis?.cocRequired, kpis?.snagOpen);
@@ -124,6 +141,9 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
 
   const enabledSections = getEnabledSections(sections || []);
   const scale = (pt: number) => pt * zoom;
+
+  // Debug: Log enabled sections
+  console.log('[SiteSummaryFullPreview] Enabled sections:', enabledSections.map(s => s.id));
 
   // Page break indicator
   const PageBreakIndicator: React.FC = () => (
@@ -170,7 +190,7 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     </div>
   );
 
-  // Render section
+  // Render section - NEVER returns null for enabled sections
   const renderSection = (section: ReportSection) => {
     if (!section.enabled) return null;
     const title = getSectionTitle(section);
@@ -193,21 +213,24 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
 
     // 2. Health by Category (KPI cards per category)
     if (matchesSectionId(section, 'health-by-category')) {
-      if (categoryHealth.length === 0) return null;
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           <SectionHeader title={title} />
-          <div className="grid grid-cols-4 gap-2">
-            {categoryHealth.map(cat => (
-              <KpiCard 
-                key={cat.category}
-                value={`${cat.percentage}%`} 
-                label={cat.abbreviation} 
-                color={cat.percentage >= 80 ? STATUS_COLORS.success : 
-                       cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error} 
-              />
-            ))}
-          </div>
+          {categoryHealth.length > 0 ? (
+            <div className="grid grid-cols-4 gap-2">
+              {categoryHealth.map(cat => (
+                <KpiCard 
+                  key={cat.category}
+                  value={`${cat.percentage}%`} 
+                  label={cat.abbreviation} 
+                  color={cat.percentage >= 80 ? STATUS_COLORS.success : 
+                         cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error} 
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptySectionPlaceholder sectionName="Health by Category" />
+          )}
         </div>
       );
     }
@@ -235,35 +258,44 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           {showPageBreak && <PageBreakIndicator />}
           <SectionHeader title={title} withBorder />
-          <div className="space-y-3">
-            {subsectionData.slice(0, 6).map(sub => (
-              <div key={sub.id} className="border rounded p-3" style={{ fontSize: scale(9) }}>
-                <div className="flex justify-between items-start mb-2">
-                  <div>
-                    <PlaceholderBadge className="font-bold" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
-                    <div style={{ fontSize: scale(LAYOUT.subsectionCard.categoryFontSize), color: STATUS_COLORS.muted }}>
-                      Category: {getCategoryAbbreviation(sub.category || 'Other')}
+          {subsectionData.length > 0 ? (
+            <div className="space-y-3">
+              {subsectionData.slice(0, 6).map(sub => (
+                <div key={sub.id} className="border rounded p-3" style={{ fontSize: scale(9) }}>
+                  <div className="flex justify-between items-start mb-2">
+                    <div>
+                      <PlaceholderBadge className="font-bold" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
+                      <div style={{ fontSize: scale(LAYOUT.subsectionCard.categoryFontSize), color: STATUS_COLORS.muted }}>
+                        Category: {getCategoryAbbreviation(sub.category || 'Other')}
+                      </div>
+                    </div>
+                    <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(LAYOUT.subsectionCard.qrCodeSize), height: scale(LAYOUT.subsectionCard.qrCodeSize) }}>
+                      <QrCode style={{ width: scale(24), height: scale(24) }} className="text-gray-400" />
                     </div>
                   </div>
-                  <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(LAYOUT.subsectionCard.qrCodeSize), height: scale(LAYOUT.subsectionCard.qrCodeSize) }}>
-                    <QrCode style={{ width: scale(24), height: scale(24) }} className="text-gray-400" />
+                  {/* Render ALL card fields from spec */}
+                  <div className="grid grid-cols-3 gap-1 text-gray-600">
+                    {SUBSECTION_CARD_FIELDS
+                      .filter(field => !field.showIf || field.showIf(sub))
+                      .map(field => (
+                        <div key={field.id}>
+                          {field.label}: <PlaceholderBadge style={{ color: field.getColor?.(sub) || STATUS_COLORS.muted }}>
+                            {field.getValue(sub)}
+                          </PlaceholderBadge>
+                        </div>
+                      ))}
                   </div>
                 </div>
-                {/* Render ALL card fields from spec */}
-                <div className="grid grid-cols-3 gap-1 text-gray-600">
-                  {SUBSECTION_CARD_FIELDS
-                    .filter(field => !field.showIf || field.showIf(sub))
-                    .map(field => (
-                      <div key={field.id}>
-                        {field.label}: <PlaceholderBadge style={{ color: field.getColor?.(sub) || STATUS_COLORS.muted }}>
-                          {field.getValue(sub)}
-                        </PlaceholderBadge>
-                      </div>
-                    ))}
+              ))}
+              {subsectionData.length > 6 && (
+                <div className="text-center text-muted-foreground text-sm italic">
+                  ...and {subsectionData.length - 6} more subsections
                 </div>
-              </div>
-            ))}
-          </div>
+              )}
+            </div>
+          ) : (
+            <EmptySectionPlaceholder sectionName="Subsection Details" />
+          )}
         </div>
       );
     }
@@ -273,16 +305,20 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           <SectionHeader title={title} />
-          <div className="grid grid-cols-4 gap-3">
-            {subsectionData.slice(0, 8).map(sub => (
-              <div key={sub.id} className="border rounded p-2 text-center" style={{ fontSize: scale(8) }}>
-                <div className="bg-gray-100 rounded flex items-center justify-center mx-auto mb-1" style={{ width: scale(50), height: scale(50) }}>
-                  <QrCode style={{ width: scale(30), height: scale(30) }} className="text-gray-400" />
+          {subsectionData.length > 0 ? (
+            <div className="grid grid-cols-4 gap-3">
+              {subsectionData.slice(0, 8).map(sub => (
+                <div key={sub.id} className="border rounded p-2 text-center" style={{ fontSize: scale(8) }}>
+                  <div className="bg-gray-100 rounded flex items-center justify-center mx-auto mb-1" style={{ width: scale(50), height: scale(50) }}>
+                    <QrCode style={{ width: scale(30), height: scale(30) }} className="text-gray-400" />
+                  </div>
+                  <PlaceholderBadge className="truncate block" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
                 </div>
-                <PlaceholderBadge className="truncate block" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          ) : (
+            <EmptySectionPlaceholder sectionName="QR Codes" />
+          )}
         </div>
       );
     }
@@ -293,42 +329,51 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           {showPageBreak && <PageBreakIndicator />}
           <SectionHeader title={title} withBorder />
-          <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
-            <thead>
-              <tr style={{ backgroundColor: colors.light }}>
-                {COC_VALIDATION_COLUMNS.map(col => (
-                  <th 
-                    key={col.id} 
-                    className="border px-2 py-1 text-left font-medium"
-                    style={{ 
-                      textAlign: col.alignment || 'left',
-                      fontSize: scale(LAYOUT.table.headerFontSize),
-                      color: colors.text,
-                    }}
-                  >
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sampleCocValidations.map((row, i) => (
-                <tr key={i} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
-                  <td className="border px-2 py-1"><PlaceholderBadge>{row.subsectionName}</PlaceholderBadge></td>
-                  <td className="border px-2 py-1"><PlaceholderBadge>{row.cocNumber}</PlaceholderBadge></td>
-                  <td className="border px-2 py-1 text-center">
-                    <PlaceholderBadge style={{ 
-                      color: row.status === 'Pass' ? STATUS_COLORS.success : 
-                             row.status === 'Pending' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
-                    }}>
-                      {row.status}
-                    </PlaceholderBadge>
-                  </td>
-                  <td className="border px-2 py-1"><PlaceholderBadge>{row.date}</PlaceholderBadge></td>
+          {sampleCocValidations.length > 0 ? (
+            <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
+              <thead>
+                <tr style={{ backgroundColor: colors.light }}>
+                  {COC_VALIDATION_COLUMNS.map(col => (
+                    <th 
+                      key={col.id} 
+                      className="border px-2 py-1 text-left font-medium"
+                      style={{ 
+                        textAlign: col.alignment || 'left',
+                        fontSize: scale(LAYOUT.table.headerFontSize),
+                        color: colors.text,
+                      }}
+                    >
+                      {col.header}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sampleCocValidations.slice(0, 10).map((row, i) => (
+                  <tr key={i} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
+                    <td className="border px-2 py-1"><PlaceholderBadge>{row.subsectionName}</PlaceholderBadge></td>
+                    <td className="border px-2 py-1"><PlaceholderBadge>{row.cocNumber}</PlaceholderBadge></td>
+                    <td className="border px-2 py-1 text-center">
+                      <PlaceholderBadge style={{ 
+                        color: row.status === 'Pass' ? STATUS_COLORS.success : 
+                               row.status === 'Pending' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
+                      }}>
+                        {row.status}
+                      </PlaceholderBadge>
+                    </td>
+                    <td className="border px-2 py-1"><PlaceholderBadge>{row.date}</PlaceholderBadge></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptySectionPlaceholder sectionName="COC Validations" />
+          )}
+          {sampleCocValidations.length > 10 && (
+            <div className="text-center text-muted-foreground text-sm italic mt-2">
+              ...and {sampleCocValidations.length - 10} more validations
+            </div>
+          )}
         </div>
       );
     }
@@ -339,51 +384,62 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           {showPageBreak && <PageBreakIndicator />}
           <SectionHeader title={title} withBorder />
-          <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
-            <thead>
-              <tr style={{ backgroundColor: colors.light }}>
-                {INSPECTION_COLUMNS.map(col => (
-                  <th 
-                    key={col.id} 
-                    className="border px-2 py-1 text-left font-medium"
-                    style={{ 
-                      textAlign: col.alignment || 'left',
-                      fontSize: scale(LAYOUT.table.headerFontSize),
-                      color: colors.text,
-                    }}
-                  >
-                    {col.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-            <tbody>
-              {sampleInspections.slice(0, 5).map((insp, i) => (
-                <tr key={insp.id} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
-                  <td className="border px-2 py-1"><PlaceholderBadge>{insp.title}</PlaceholderBadge></td>
-                  <td className="border px-2 py-1">
-                    <PlaceholderBadge style={{ 
-                      color: insp.status === 'Completed' ? STATUS_COLORS.success : 
-                             insp.status === 'In Progress' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
-                    }}>
-                      {insp.status}
-                    </PlaceholderBadge>
-                  </td>
-                  <td className="border px-2 py-1"><PlaceholderBadge>{insp.inspectorName || '-'}</PlaceholderBadge></td>
-                  <td className="border px-2 py-1">
-                    <PlaceholderBadge>
-                      {insp.inspectionDate ? new Date(insp.inspectionDate).toLocaleDateString() : '-'}
-                    </PlaceholderBadge>
-                  </td>
+          {sampleInspections.length > 0 ? (
+            <table className="w-full border-collapse" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
+              <thead>
+                <tr style={{ backgroundColor: colors.light }}>
+                  {INSPECTION_COLUMNS.map(col => (
+                    <th 
+                      key={col.id} 
+                      className="border px-2 py-1 text-left font-medium"
+                      style={{ 
+                        textAlign: col.alignment || 'left',
+                        fontSize: scale(LAYOUT.table.headerFontSize),
+                        color: colors.text,
+                      }}
+                    >
+                      {col.header}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {sampleInspections.slice(0, 5).map((insp, i) => (
+                  <tr key={insp.id} style={{ backgroundColor: i % 2 === 1 ? colors.light : 'transparent' }}>
+                    <td className="border px-2 py-1"><PlaceholderBadge>{insp.title}</PlaceholderBadge></td>
+                    <td className="border px-2 py-1">
+                      <PlaceholderBadge style={{ 
+                        color: insp.status === 'Completed' ? STATUS_COLORS.success : 
+                               insp.status === 'In Progress' ? STATUS_COLORS.warning : STATUS_COLORS.muted 
+                      }}>
+                        {insp.status}
+                      </PlaceholderBadge>
+                    </td>
+                    <td className="border px-2 py-1"><PlaceholderBadge>{insp.inspectorName || '-'}</PlaceholderBadge></td>
+                    <td className="border px-2 py-1">
+                      <PlaceholderBadge>
+                        {insp.inspectionDate ? new Date(insp.inspectionDate).toLocaleDateString() : '-'}
+                      </PlaceholderBadge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <EmptySectionPlaceholder sectionName="Inspections" />
+          )}
         </div>
       );
     }
 
-    return null;
+    // Unknown section - render placeholder
+    console.warn(`[SiteSummaryFullPreview] Unknown section type: ${section.id}`);
+    return (
+      <div key={section.id} style={{ marginBottom: scale(20) }}>
+        <SectionHeader title={title} />
+        <EmptySectionPlaceholder sectionName={title} />
+      </div>
+    );
   };
 
   // Group sections for pages
@@ -405,6 +461,14 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   const page4Sections = enabledSections.filter(s => 
     matchesSectionId(s, 'inspections')
   );
+
+  // Debug: Log page groupings
+  console.log('[SiteSummaryFullPreview] Page groupings:', {
+    page1: page1Sections.map(s => s.id),
+    page2: page2Sections.map(s => s.id),
+    page3: page3Sections.map(s => s.id),
+    page4: page4Sections.map(s => s.id),
+  });
 
   return (
     <div className="space-y-4">
@@ -471,6 +535,20 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       {page4Sections.length > 0 && (
         <PageWrapper pageNum={5}>
           {page4Sections.map(section => renderSection(section))}
+        </PageWrapper>
+      )}
+
+      {/* Debug info when no sections are grouped to pages */}
+      {page1Sections.length === 0 && page2Sections.length === 0 && page3Sections.length === 0 && page4Sections.length === 0 && (
+        <PageWrapper pageNum={2}>
+          <div className="p-4 border border-dashed border-orange-300 bg-orange-50 rounded">
+            <h3 className="font-bold text-orange-700 mb-2">⚠️ No sections enabled</h3>
+            <p className="text-orange-600 text-sm">
+              Enable sections in the template configuration to see the preview.
+              <br />
+              Available sections: {sections.map(s => s.id).join(', ')}
+            </p>
+          </div>
         </PageWrapper>
       )}
     </div>
