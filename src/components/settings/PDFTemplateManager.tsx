@@ -27,7 +27,7 @@ import { ReportCustomization, ReportSection, DEFAULT_CUSTOMIZATION } from "@/com
 import { PDFWYSIWYGEditor } from "./PDFWYSIWYGEditor";
 import { InspectionTemplatePreview } from "./preview-renderers/InspectionTemplatePreview";
 import { SiteSummaryFullPreview } from "./preview-renderers/SiteSummaryFullPreview";
-import { useAvailableSites, useSampleReportData } from "@/hooks/useSampleReportData";
+import { useAvailableSites, useSampleReportData, SiteWithStats } from "@/hooks/useSampleReportData";
 import { Json } from "@/integrations/supabase/types";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 
@@ -339,6 +339,58 @@ const convertPreviewToInspectionSections = (previewSections: ReportSection[]): a
       required: false
     }))
   }));
+};
+
+// Wrapper component for Site Summary preview that fetches real sample data
+interface SiteSummaryPreviewWrapperProps {
+  template: PDFTemplate;
+  referenceSiteId: string | null;
+  availableSites: SiteWithStats[];
+}
+
+const SiteSummaryPreviewWrapper: React.FC<SiteSummaryPreviewWrapperProps> = ({
+  template,
+  referenceSiteId,
+  availableSites,
+}) => {
+  const { site, subsections, kpis, loading } = useSampleReportData('site_summary', referenceSiteId || undefined);
+  
+  const getAccentColors = (color: string) => ({
+    primary: color === 'green' ? '#16a34a' : color === 'orange' ? '#ea580c' : color === 'red' ? '#dc2626' : color === 'purple' ? '#9333ea' : '#2563eb',
+    light: color === 'green' ? '#dcfce7' : color === 'orange' ? '#ffedd5' : color === 'red' ? '#fee2e2' : color === 'purple' ? '#f3e8ff' : '#dbeafe',
+    text: color === 'green' ? '#166534' : color === 'orange' ? '#c2410c' : color === 'red' ? '#b91c1c' : color === 'purple' ? '#7e22ce' : '#1e40af',
+  });
+  
+  const colors = getAccentColors(template.customization.accentColor || 'blue');
+  const selectedSite = availableSites.find(s => s.id === referenceSiteId);
+  
+  if (loading) {
+    return (
+      <div className="border rounded-lg bg-gray-100 p-4 flex items-center justify-center" style={{ minHeight: 400 }}>
+        <div className="text-center text-muted-foreground">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+          <p>Loading preview data...</p>
+        </div>
+      </div>
+    );
+  }
+  
+  return (
+    <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
+      <SiteSummaryFullPreview
+        sections={template.sections}
+        customization={template.customization}
+        zoom={0.65}
+        colors={colors}
+        siteName={site?.name || selectedSite?.name || 'Sample Site'}
+        clientName={site?.clientName || selectedSite?.clientName || 'Sample Client'}
+        siteAddress={site?.address || '123 Sample Address, City'}
+        clientLogoUrl={site?.clientLogoUrl || null}
+        subsections={subsections}
+        kpis={kpis}
+      />
+    </div>
+  );
 };
 
 export const PDFTemplateManager = () => {
@@ -745,42 +797,11 @@ export const PDFTemplateManager = () => {
                       </div>
                     ) : type.id === 'site_summary' ? (
                       /* Site Summary uses specialized full preview matching actual PDF output */
-                      <div className="border rounded-lg overflow-auto bg-gray-100 p-4 max-h-[600px]">
-                        <SiteSummaryFullPreview
-                          sections={template.sections}
-                          customization={template.customization}
-                          zoom={0.65}
-                          colors={{
-                            primary: template.customization.accentColor === 'green' ? '#16a34a' :
-                                     template.customization.accentColor === 'orange' ? '#ea580c' :
-                                     template.customization.accentColor === 'red' ? '#dc2626' :
-                                     template.customization.accentColor === 'purple' ? '#9333ea' : '#2563eb',
-                            light: template.customization.accentColor === 'green' ? '#dcfce7' :
-                                   template.customization.accentColor === 'orange' ? '#ffedd5' :
-                                   template.customization.accentColor === 'red' ? '#fee2e2' :
-                                   template.customization.accentColor === 'purple' ? '#f3e8ff' : '#dbeafe',
-                            text: template.customization.accentColor === 'green' ? '#166534' :
-                                  template.customization.accentColor === 'orange' ? '#c2410c' :
-                                  template.customization.accentColor === 'red' ? '#b91c1c' :
-                                  template.customization.accentColor === 'purple' ? '#7e22ce' : '#1e40af',
-                          }}
-                          siteName={availableSites.find(s => s.id === referenceSiteId)?.name || 'Sample Site'}
-                          clientName={availableSites.find(s => s.id === referenceSiteId)?.clientName || 'Sample Client'}
-                          siteAddress="123 Sample Address, City"
-                          clientLogoUrl={null}
-                          subsections={[]}
-                          kpis={{
-                            totalSubsections: availableSites.find(s => s.id === referenceSiteId)?.subsectionCount || 25,
-                            cocPass: 8,
-                            cocMissing: 10,
-                            cocPending: 7,
-                            complianceRate: 32,
-                            totalAssets: 15,
-                            totalInspections: availableSites.find(s => s.id === referenceSiteId)?.inspectionCount || 5,
-                            completedInspections: 3,
-                          }}
-                        />
-                      </div>
+                      <SiteSummaryPreviewWrapper
+                        template={template}
+                        referenceSiteId={referenceSiteId}
+                        availableSites={availableSites}
+                      />
                     ) : (
                       <>
                         {/* Visual PDF Preview - Read-only for other report types */}
