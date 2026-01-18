@@ -1,13 +1,25 @@
 /**
- * Full Site Summary Preview - Matches actual SiteSummaryReport.tsx PDF output
- * This component renders a preview that mirrors the exact sections and structure
- * that will be generated in the final PDF.
+ * Full Site Summary Preview - TRUE WYSIWYG
+ * Uses shared siteSummaryRenderSpec.ts for exact matching with PDF output.
  */
 import React from "react";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 import { cn } from "@/lib/utils";
 import { QrCode, Building2 } from "lucide-react";
 import { SampleSubsection, SampleKPIs } from "@/hooks/useSampleReportData";
+import {
+  LAYOUT,
+  HEALTH_METRICS_CARDS,
+  SUMMARY_STAT_ROWS,
+  getAccentPalette,
+  getSectionTitle,
+  getEnabledSections,
+  matchesSectionId,
+  calculateMetrics,
+  SubsectionData,
+  STATUS_COLORS,
+} from "@/lib/siteSummaryRenderSpec";
+import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 
 interface SiteSummaryFullPreviewProps {
   sections: ReportSection[];
@@ -23,31 +35,25 @@ interface SiteSummaryFullPreviewProps {
   onSectionTitleChange?: (sectionId: string, title: string) => void;
 }
 
-// Placeholder indicator for sample data
-interface PlaceholderBadgeProps {
-  children: React.ReactNode;
-  className?: string;
-}
-
-function PlaceholderBadge({ children, className }: PlaceholderBadgeProps) {
-  return (
-    <span 
-      className={cn(
-        "inline-block border border-dashed border-amber-400/60 bg-amber-50/40 rounded px-1 py-px",
-        className
-      )}
-      title="Sample data - will be replaced with actual values"
-    >
-      {children}
-    </span>
-  );
-}
+// Placeholder badge for sample data
+const PlaceholderBadge: React.FC<{ 
+  children: React.ReactNode; 
+  className?: string; 
+  style?: React.CSSProperties;
+}> = ({ children, className, style }) => (
+  <span 
+    className={cn("inline-block border border-dashed border-amber-400/60 bg-amber-50/40 rounded px-1 py-px", className)}
+    style={style}
+    title="Sample data - will be replaced with actual values"
+  >
+    {children}
+  </span>
+);
 
 export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   sections,
   customization,
   zoom,
-  colors,
   siteName,
   clientName,
   siteAddress,
@@ -55,48 +61,44 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   subsections,
   kpis,
 }) => {
-  // Sort sections by order - handle undefined/null safely
-  const sortedSections = [...(sections || [])].sort((a, b) => a.order - b.order);
-  
-  // Ensure subsections is always an array
-  const safeSubsections = subsections || [];
-  
-  // Calculate metrics like the actual PDF generator - prevent NaN with safe defaults
-  const subsectionCount = Math.max(kpis?.totalSubsections || safeSubsections.length || 0, 1);
-  const cocCompliant = kpis?.cocPass || 0;
-  const cocRequired = subsectionCount;
-  const meteringInstalled = Math.round(subsectionCount * 0.9);
-  const openSnags = Math.round(subsectionCount * 0.1);
-  const overallHealth = subsectionCount > 0 ? Math.round((cocCompliant / subsectionCount) * 100) : 0;
-  const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
-  const meteringData = subsectionCount > 0 ? Math.round((meteringInstalled / subsectionCount) * 100) : 0;
-  const snagFree = subsectionCount > 0 ? 100 - Math.round((openSnags / subsectionCount) * 100) : 100;
+  const accentPalette = getAccentPalette(customization.accentColor || 'blue');
+  const colors = { primary: accentPalette.primary, light: accentPalette.light, text: accentPalette.dark };
 
-  // Page wrapper component matching A4 styling
-  const PageWrapper: React.FC<{ children: React.ReactNode; pageNum: number; title?: string }> = ({ children, pageNum }) => (
-    <div 
-      className="bg-white shadow-lg mx-auto relative"
-      style={{
-        width: 595 * zoom,
-        minHeight: 842 * zoom,
-        padding: `${40 * zoom}px ${50 * zoom}px`,
-      }}
-    >
-      {/* Header */}
-      <div className="flex justify-between items-center border-b pb-2 mb-4" style={{ fontSize: 9 * zoom, color: '#6b7280' }}>
+  // Convert sample subsections to spec format
+  const subsectionData: SubsectionData[] = (subsections || []).map(sub => ({
+    id: sub.id,
+    name: sub.name,
+    category: sub.category || 'LS',
+    cocStatus: sub.cocStatus,
+    meteringStatus: sub.cocStatus === 'Pass' ? 'Installed' : 'Unknown',
+    meterSerialNumber: sub.cocStatus === 'Pass' ? '35778057' : null,
+    ctRatio: '100/5A',
+    snagCount: sub.cocStatus === 'Pass' ? 0 : 2,
+    isCompliant: sub.cocStatus === 'Pass',
+  }));
+
+  // Calculate metrics
+  const metrics = calculateMetrics(subsectionData, kpis?.cocRequired, kpis?.snagOpen);
+  if (kpis) {
+    metrics.subsectionCount = kpis.totalSubsections || metrics.subsectionCount;
+    metrics.cocCompliant = kpis.cocPass || metrics.cocCompliant;
+    metrics.overallHealth = metrics.subsectionCount > 0 ? Math.round((metrics.cocCompliant / metrics.subsectionCount) * 100) : 0;
+  }
+
+  const enabledSections = getEnabledSections(sections || []);
+  const scale = (pt: number) => pt * zoom;
+
+  // Page wrapper
+  const PageWrapper: React.FC<{ children: React.ReactNode; pageNum: number }> = ({ children, pageNum }) => (
+    <div className="bg-white shadow-lg mx-auto relative" style={{ width: scale(LAYOUT.page.width), minHeight: scale(LAYOUT.page.height), padding: `${scale(LAYOUT.page.marginTop)}px ${scale(LAYOUT.page.marginRight)}px` }}>
+      <div className="flex justify-between items-center border-b pb-2 mb-4" style={{ fontSize: scale(LAYOUT.footer.fontSize), color: STATUS_COLORS.muted }}>
         <span>Site Summary Report</span>
-        <span>CONFIDENTIAL - For authorized use only</span>
+        <span>CONFIDENTIAL</span>
       </div>
-      
       {children}
-      
-      {/* Footer */}
       {customization.includePageNumbers && (
-        <div 
-          className="absolute bottom-4 left-0 right-0 flex justify-between px-12"
-          style={{ fontSize: 8 * zoom, color: '#9ca3af' }}
-        >
-          <span>CONFIDENTIAL - For authorized use only</span>
+        <div className="absolute bottom-4 left-0 right-0 flex justify-between px-12" style={{ fontSize: scale(LAYOUT.footer.fontSize), color: '#9ca3af' }}>
+          <span>CONFIDENTIAL</span>
           <span>Page {pageNum}</span>
           <span>{new Date().toLocaleDateString()}</span>
         </div>
@@ -104,380 +106,133 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     </div>
   );
 
-  // Render each section based on ID - matching SiteSummaryReport.tsx structure
+  // Section header
+  const SectionHeader: React.FC<{ title: string; withBorder?: boolean }> = ({ title, withBorder }) => (
+    <h2 style={{ fontSize: scale(LAYOUT.sectionHeader.fontSize), fontWeight: 'bold', color: colors.primary, marginBottom: scale(LAYOUT.sectionHeader.marginBottom), borderBottom: withBorder ? `2px solid ${colors.primary}` : undefined, paddingBottom: withBorder ? scale(4) : undefined }}>
+      {title}
+    </h2>
+  );
+
+  // KPI card
+  const KpiCard: React.FC<{ value: string; label: string; color: string }> = ({ value, label, color }) => (
+    <div className="text-center rounded" style={{ backgroundColor: `${color}10`, border: `1px solid ${color}30`, padding: scale(LAYOUT.kpiCard.padding) }}>
+      <PlaceholderBadge><span style={{ fontSize: scale(LAYOUT.kpiCard.valueSize), fontWeight: 'bold', color }}>{value}</span></PlaceholderBadge>
+      <div style={{ fontSize: scale(LAYOUT.kpiCard.labelSize), color: STATUS_COLORS.muted, marginTop: scale(2) }}>{label}</div>
+    </div>
+  );
+
+  // Render section
   const renderSection = (section: ReportSection) => {
     if (!section.enabled) return null;
+    const title = getSectionTitle(section);
 
-    switch (section.id) {
-      case "health-metrics":
-      case "compliance":
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-                borderBottom: `2px solid ${colors.primary}`,
-                paddingBottom: 4 * zoom,
-              }}
-            >
-              {section.title || 'Health Metrics'}
-            </h2>
-            <div className="grid grid-cols-4 gap-2">
-              {[
-                { value: `${overallHealth}%`, label: 'Overall Health', color: '#16a34a' },
-                { value: `${cocCompliance}%`, label: 'COC Compliance', color: '#ea580c' },
-                { value: `${meteringData}%`, label: 'Metering Data', color: '#2563eb' },
-                { value: `${snagFree}%`, label: 'Snag Free', color: '#dc2626' },
-              ].map((kpi, i) => (
-                <div
-                  key={i}
-                  className="text-center rounded p-2"
-                  style={{ 
-                    backgroundColor: `${kpi.color}10`,
-                    border: `1px solid ${kpi.color}30`,
-                  }}
-                >
-                  <PlaceholderBadge>
-                    <span style={{ fontSize: 18 * zoom, fontWeight: 'bold', color: kpi.color }}>
-                      {kpi.value}
-                    </span>
-                  </PlaceholderBadge>
-                  <div style={{ fontSize: 8 * zoom, color: '#6b7280', marginTop: 2 * zoom }}>
-                    {kpi.label}
-                  </div>
-                </div>
-              ))}
-            </div>
+    if (matchesSectionId(section, 'health-metrics')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} withBorder />
+          <div className="grid grid-cols-4 gap-2">
+            {HEALTH_METRICS_CARDS.map(card => (
+              <KpiCard key={card.id} value={card.format(card.getValue(metrics))} label={card.label} color={card.color} />
+            ))}
           </div>
-        );
-
-      case "health-by-category":
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-              }}
-            >
-              {section.title || 'Health by Category'}
-            </h2>
-            <div className="grid grid-cols-4 gap-2">
-              {['Line Shop', 'Anchor', 'ATM', 'Electrical'].map((cat, i) => (
-                <div
-                  key={cat}
-                  className="text-center rounded p-2"
-                  style={{ backgroundColor: colors.light }}
-                >
-                  <PlaceholderBadge>
-                    <span style={{ fontSize: 16 * zoom, fontWeight: 'bold', color: colors.primary }}>
-                      {[72, 85, 100, 45][i]}%
-                    </span>
-                  </PlaceholderBadge>
-                  <div style={{ fontSize: 8 * zoom, color: '#6b7280', marginTop: 2 * zoom }}>
-                    {cat}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "summary-statistics":
-      case "site-info":
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-              }}
-            >
-              {section.title || 'Site Information'}
-            </h2>
-            <div className="border rounded" style={{ fontSize: 10 * zoom }}>
-              {[
-                ['Total Subsections', subsectionCount.toString()],
-                ['COC Required', cocRequired.toString()],
-                ['COC Compliant', cocCompliant.toString()],
-                ['Metering Installed', meteringInstalled.toString()],
-                ['Open Snags', openSnags.toString()],
-                ['Overall Health Rate', `${overallHealth}%`],
-              ].map(([label, value], i) => (
-                <div 
-                  key={i}
-                  className="flex justify-between px-3 py-2 border-b last:border-b-0"
-                  style={{ backgroundColor: i % 2 === 0 ? colors.light : 'transparent' }}
-                >
-                  <span className="text-gray-600">{label}</span>
-                  <PlaceholderBadge className="font-medium">{value}</PlaceholderBadge>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "subsection-details":
-      case "subsections":
-        const displaySubs = safeSubsections.slice(0, 4);
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-                borderBottom: `2px solid ${colors.primary}`,
-                paddingBottom: 4 * zoom,
-              }}
-            >
-              {section.title || 'Subsections Overview'}
-            </h2>
-            <div className="space-y-3">
-              {displaySubs.map((sub, i) => (
-                <div 
-                  key={i}
-                  className="border rounded p-3"
-                  style={{ fontSize: 9 * zoom }}
-                >
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <PlaceholderBadge className="font-bold">
-                        <span style={{ color: colors.primary, fontSize: 11 * zoom }}>
-                          {sub.name}
-                        </span>
-                      </PlaceholderBadge>
-                      <div className="text-gray-500" style={{ fontSize: 8 * zoom }}>
-                        Category: {sub.category || 'LS'}
-                      </div>
-                    </div>
-                    <div 
-                      className="w-12 h-12 bg-gray-100 rounded flex items-center justify-center"
-                      title="QR Code"
-                    >
-                      <QrCode style={{ width: 24 * zoom, height: 24 * zoom }} className="text-gray-400" />
-                    </div>
-                  </div>
-                  <div className="grid grid-cols-2 gap-1 text-gray-600">
-                    <div>COC Status: <PlaceholderBadge>{sub.cocStatus || 'Missing'}</PlaceholderBadge></div>
-                    <div>Metering: <PlaceholderBadge>Installed</PlaceholderBadge></div>
-                    <div>Meter S/N: <PlaceholderBadge>35778057</PlaceholderBadge></div>
-                    <div>CT Ratio: <PlaceholderBadge>100/5A</PlaceholderBadge></div>
-                    <div>Snags: <PlaceholderBadge className={sub.cocStatus === 'Pass' ? 'text-green-600' : 'text-red-600'}>
-                      {sub.cocStatus === 'Pass' ? '0' : '2'}
-                    </PlaceholderBadge></div>
-                    <div>Compliance: 
-                      <PlaceholderBadge className={sub.cocStatus === 'Pass' ? 'text-green-600' : 'text-red-600'}>
-                        {sub.cocStatus === 'Pass' ? '✓ Compliant' : '✗ Non-Compliant'}
-                      </PlaceholderBadge>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {safeSubsections.length > 4 && (
-                <div className="text-center text-gray-400 italic" style={{ fontSize: 9 * zoom }}>
-                  + {safeSubsections.length - 4} more subsection cards in full report...
-                </div>
-              )}
-            </div>
-          </div>
-        );
-
-      case "coc-validations":
-      case "documents":
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-              }}
-            >
-              {section.title || 'COC Validation Summary'}
-            </h2>
-            <div className="border rounded overflow-hidden" style={{ fontSize: 9 * zoom }}>
-              <div 
-                className="grid grid-cols-4 gap-2 p-2 font-medium"
-                style={{ backgroundColor: colors.light, color: colors.text }}
-              >
-                <span>Subsection</span>
-                <span>COC Number</span>
-                <span>Status</span>
-                <span>Date</span>
-              </div>
-              {[
-                ['SHOP 001', 'COC-2026-0012', 'Pass', '12 Jan 2026'],
-                ['SHOP 002', 'COC-2026-0015', 'Fail', '10 Jan 2026'],
-                ['GENERATOR', 'COC-2025-0089', 'Pass', '05 Jan 2026'],
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-2 p-2 border-t">
-                  <PlaceholderBadge>{row[0]}</PlaceholderBadge>
-                  <PlaceholderBadge>{row[1]}</PlaceholderBadge>
-                  <PlaceholderBadge className={row[2] === 'Pass' ? 'text-green-600' : 'text-red-600'}>
-                    {row[2]}
-                  </PlaceholderBadge>
-                  <PlaceholderBadge>{row[3]}</PlaceholderBadge>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "inspections":
-        return (
-          <div key={section.id} style={{ marginBottom: 20 * zoom }}>
-            <h2 
-              style={{ 
-                fontSize: 14 * zoom, 
-                fontWeight: 'bold', 
-                color: colors.primary,
-                marginBottom: 12 * zoom,
-              }}
-            >
-              {section.title || 'Recent Inspections'}
-            </h2>
-            <div className="border rounded overflow-hidden" style={{ fontSize: 9 * zoom }}>
-              <div 
-                className="grid grid-cols-4 gap-2 p-2 font-medium"
-                style={{ backgroundColor: colors.light, color: colors.text }}
-              >
-                <span>Title</span>
-                <span>Status</span>
-                <span>Inspector</span>
-                <span>Date</span>
-              </div>
-              {[
-                ['Electrical Inspection', 'Completed', 'John Smith', '15 Jan 2026'],
-                ['Fire Safety Check', 'In Progress', 'Jane Doe', '14 Jan 2026'],
-              ].map((row, i) => (
-                <div key={i} className="grid grid-cols-4 gap-2 p-2 border-t">
-                  <PlaceholderBadge>{row[0]}</PlaceholderBadge>
-                  <PlaceholderBadge>{row[1]}</PlaceholderBadge>
-                  <PlaceholderBadge>{row[2]}</PlaceholderBadge>
-                  <PlaceholderBadge>{row[3]}</PlaceholderBadge>
-                </div>
-              ))}
-            </div>
-          </div>
-        );
-
-      case "subsection-qr-codes":
-        return (
-          <div key={section.id} className="text-center py-4 text-gray-500 italic" style={{ fontSize: 9 * zoom }}>
-            <QrCode className="w-8 h-8 mx-auto mb-2 opacity-50" />
-            QR codes are embedded within each subsection card above
-          </div>
-        );
-
-      default:
-        return null;
+        </div>
+      );
     }
+
+    if (matchesSectionId(section, 'summary-statistics')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} />
+          <div className="border rounded" style={{ fontSize: scale(LAYOUT.table.bodyFontSize) }}>
+            {SUMMARY_STAT_ROWS.map((row, i) => (
+              <div key={row.id} className="flex justify-between px-3 py-2 border-b last:border-b-0" style={{ backgroundColor: i % 2 === 0 ? colors.light : 'transparent' }}>
+                <span className="text-gray-600">{row.label}</span>
+                <PlaceholderBadge className="font-medium">{row.getValue(metrics)}</PlaceholderBadge>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    if (matchesSectionId(section, 'subsection-details')) {
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} withBorder />
+          <div className="space-y-3">
+            {subsectionData.slice(0, 4).map(sub => (
+              <div key={sub.id} className="border rounded p-3" style={{ fontSize: scale(9) }}>
+                <div className="flex justify-between items-start mb-2">
+                  <div>
+                    <PlaceholderBadge className="font-bold" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
+                    <div style={{ fontSize: scale(8), color: STATUS_COLORS.muted }}>Category: {getCategoryAbbreviation(sub.category || 'Other')}</div>
+                  </div>
+                  <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(55), height: scale(55) }}>
+                    <QrCode style={{ width: scale(24), height: scale(24) }} className="text-gray-400" />
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-1 text-gray-600">
+                  <div>COC Status: <PlaceholderBadge style={{ color: sub.isCompliant ? STATUS_COLORS.success : STATUS_COLORS.muted }}>{sub.cocStatus || 'Not Set'}</PlaceholderBadge></div>
+                  <div>Snags: <PlaceholderBadge style={{ color: sub.snagCount > 0 ? STATUS_COLORS.error : STATUS_COLORS.success }}>{sub.snagCount}</PlaceholderBadge></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    return null;
   };
 
-  const enabledSections = sortedSections.filter(s => s.enabled);
-  
   return (
     <div className="space-y-4">
       {/* Cover Page */}
-      <PageWrapper pageNum={1} title="Cover">
-        <div 
-          className="absolute top-0 left-0 right-0"
-          style={{ height: 8 * zoom, backgroundColor: colors.primary }}
-        />
-        
-        <div className="flex flex-col items-center pt-12" style={{ paddingTop: 60 * zoom }}>
-          {/* Logo */}
+      <PageWrapper pageNum={1}>
+        <div className="absolute top-0 left-0 right-0" style={{ height: scale(LAYOUT.cover.accentBarHeight), backgroundColor: colors.primary }} />
+        <div className="flex flex-col items-center" style={{ paddingTop: scale(60) }}>
           {clientLogoUrl ? (
-            <img src={clientLogoUrl} alt="Logo" style={{ height: 60 * zoom, marginBottom: 20 * zoom }} />
+            <img src={clientLogoUrl} alt="Logo" style={{ height: scale(LAYOUT.cover.logoHeight), marginBottom: scale(LAYOUT.cover.logoPadding) }} />
           ) : (
-            <div 
-              className="flex items-center justify-center rounded"
-              style={{ width: 120 * zoom, height: 60 * zoom, backgroundColor: colors.light, marginBottom: 20 * zoom }}
-            >
-              <Building2 style={{ width: 24 * zoom, height: 24 * zoom, color: colors.primary }} />
+            <div className="flex items-center justify-center rounded" style={{ width: scale(120), height: scale(LAYOUT.cover.logoHeight), backgroundColor: colors.light, marginBottom: scale(LAYOUT.cover.logoPadding) }}>
+              <Building2 style={{ width: scale(24), height: scale(24), color: colors.primary }} />
             </div>
           )}
-          
-          {/* Report badge */}
-          <div 
-            className="rounded px-4 py-1 mb-4"
-            style={{ backgroundColor: '#f3f4f6', fontSize: 10 * zoom }}
-          >
-            SITE SUMMARY REPORT
-          </div>
-          
-          {/* Title */}
-          <h1 style={{ fontSize: 24 * zoom, fontWeight: 'bold', color: colors.primary, marginBottom: 8 * zoom }}>
-            {customization.coverTitle || 'Site Summary Report'}
-          </h1>
-          <p style={{ fontSize: 14 * zoom, color: '#6b7280', marginBottom: 32 * zoom }}>
-            {customization.coverSubtitle || 'Comprehensive Site Analysis'}
-          </p>
-          
-          {/* Info box */}
-          <div 
-            className="rounded p-4"
-            style={{ 
-              backgroundColor: '#f9fafb',
-              borderLeft: `4px solid ${colors.primary}`,
-              width: '80%',
-            }}
-          >
-            <div className="flex items-center gap-2 mb-2" style={{ fontSize: 12 * zoom }}>
-              <Building2 style={{ width: 14 * zoom, height: 14 * zoom, color: colors.primary }} />
+          <div className="rounded px-4 py-1 mb-4" style={{ backgroundColor: '#f3f4f6', fontSize: scale(10) }}>SITE SUMMARY REPORT</div>
+          <h1 style={{ fontSize: scale(LAYOUT.cover.titleSize), fontWeight: 'bold', color: colors.primary, marginBottom: scale(8) }}>{customization.coverTitle || 'Site Summary Report'}</h1>
+          <p style={{ fontSize: scale(LAYOUT.cover.subtitleSize), color: '#6b7280', marginBottom: scale(32) }}>{customization.coverSubtitle || 'Comprehensive Site Analysis'}</p>
+          <div className="rounded p-4" style={{ backgroundColor: '#f9fafb', borderLeft: `4px solid ${colors.primary}`, width: '80%' }}>
+            <div className="flex items-center gap-2 mb-2" style={{ fontSize: scale(12) }}>
+              <Building2 style={{ width: scale(14), height: scale(14), color: colors.primary }} />
               <PlaceholderBadge className="font-semibold">{siteName}</PlaceholderBadge>
             </div>
-            <div className="flex items-center gap-2 mb-2" style={{ fontSize: 11 * zoom }}>
-              <span style={{ width: 14 * zoom }}>👤</span>
+            <div className="flex items-center gap-2 mb-2" style={{ fontSize: scale(11) }}>
+              <span style={{ width: scale(14) }}>👤</span>
               <PlaceholderBadge>{clientName}</PlaceholderBadge>
             </div>
             {siteAddress && (
-              <div className="flex items-center gap-2" style={{ fontSize: 10 * zoom, color: '#6b7280' }}>
-                <span style={{ width: 14 * zoom }}>📍</span>
+              <div className="flex items-center gap-2" style={{ fontSize: scale(10), color: '#6b7280' }}>
+                <span style={{ width: scale(14) }}>📍</span>
                 <PlaceholderBadge>{siteAddress}</PlaceholderBadge>
               </div>
             )}
           </div>
-          
-          {/* Footer info */}
-          <div className="mt-auto pt-16 text-center" style={{ paddingTop: 100 * zoom }}>
-            {customization.includeDate && (
-              <div style={{ fontSize: 10 * zoom, color: '#6b7280' }}>
-                <PlaceholderBadge>
-                  {new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
-                </PlaceholderBadge>
-              </div>
-            )}
-          </div>
+          {customization.includeDate && (
+            <div className="mt-auto pt-16 text-center" style={{ paddingTop: scale(100), fontSize: scale(10), color: '#6b7280' }}>
+              <PlaceholderBadge>{new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}</PlaceholderBadge>
+            </div>
+          )}
         </div>
       </PageWrapper>
-      
+
       {/* Content Pages */}
-      <PageWrapper pageNum={2} title="Overview">
-        {enabledSections.slice(0, 3).map((section) => renderSection(section))}
+      <PageWrapper pageNum={2}>
+        {enabledSections.slice(0, 3).map(section => renderSection(section))}
       </PageWrapper>
-      
-      {/* Subsection Cards Page */}
-      {enabledSections.find(s => s.id === 'subsection-details' || s.id === 'subsections') && (
-        <PageWrapper pageNum={3} title="Subsections">
-          {renderSection(enabledSections.find(s => s.id === 'subsection-details' || s.id === 'subsections')!)}
-        </PageWrapper>
-      )}
-      
-      {/* COC Validations Page */}
-      {enabledSections.find(s => s.id === 'coc-validations' || s.id === 'documents')?.enabled && (
-        <PageWrapper pageNum={4} title="COC Validations">
-          {renderSection(enabledSections.find(s => s.id === 'coc-validations' || s.id === 'documents')!)}
+
+      {enabledSections.find(s => matchesSectionId(s, 'subsection-details')) && (
+        <PageWrapper pageNum={3}>
+          {renderSection(enabledSections.find(s => matchesSectionId(s, 'subsection-details'))!)}
         </PageWrapper>
       )}
     </div>
