@@ -321,7 +321,7 @@ function createStatusBadge(
 }
 
 // ============================================================================
-// TWO-COLUMN LAYOUT RENDERER
+// FULL-WIDTH STACKED LAYOUT RENDERER
 // ============================================================================
 
 export async function renderSubsectionGrid(
@@ -329,26 +329,19 @@ export async function renderSubsectionGrid(
   accentColor: string = '#3b82f6',
   logoUrl?: string | null
 ): Promise<any> {
-  const rows: any[] = [];
+  const cards: any[] = [];
   
-  // Process subsections in pairs for two-column layout
-  for (let i = 0; i < subsections.length; i += 2) {
-    const leftCard = await renderSubsectionCardToPDF(subsections[i], accentColor, logoUrl);
-    const rightCard = subsections[i + 1] 
-      ? await renderSubsectionCardToPDF(subsections[i + 1], accentColor, logoUrl)
-      : { text: '' }; // Empty placeholder for odd count
-    
-    rows.push({
-      columns: [
-        { stack: [leftCard], width: '*' },
-        { stack: [rightCard], width: '*' },
-      ],
-      columnGap: 15,
-      margin: [0, 0, 0, 15],
+  // Stack subsections vertically, each taking full page width
+  for (const subsection of subsections) {
+    const card = await renderSubsectionCardToPDF(subsection, accentColor, logoUrl);
+    cards.push({
+      ...card,
+      margin: [0, 0, 0, 20], // Space between cards
+      pageBreak: cards.length > 0 ? undefined : undefined, // Could add pageBreak: 'before' if needed
     });
   }
 
   return {
-    stack: rows,
+    stack: cards,
   };
 }
