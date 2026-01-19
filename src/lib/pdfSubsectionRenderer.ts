@@ -136,30 +136,31 @@ function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null):
         ],
         margin: [0, 0, 0, 6],
       } : { text: '' },
-      // Metering row
-      {
-        columns: [
-          { text: 'Metering:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
-          { text: data.meteringStatus || 'N/A', fontSize: CARD_LAYOUT.valueSize, color: '#374151' },
-        ],
-        margin: [0, 0, 0, 6],
-      },
-      // Meter S/N and CT Ratio side by side
+      // Metering, Meter S/N, and CT Ratio - all on one row
       {
         columns: [
           { 
-            stack: [
-              { text: 'Meter S/N', fontSize: 8, color: '#9ca3af' },
-              { text: data.meterSerialNumber || 'N/A', fontSize: CARD_LAYOUT.valueSize, color: '#374151' },
+            columns: [
+              { text: 'Metering:', fontSize: 9, color: '#6b7280', width: 'auto' },
+              { text: data.meteringStatus || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
             ],
-            width: '*',
+            width: 'auto',
           },
           { 
-            stack: [
-              { text: 'CT Ratio', fontSize: 8, color: '#9ca3af' },
-              { text: data.ctRatio || 'N/A', fontSize: CARD_LAYOUT.valueSize, color: '#374151' },
+            columns: [
+              { text: 'Meter S/N:', fontSize: 9, color: '#6b7280', width: 'auto' },
+              { text: data.meterSerialNumber || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
             ],
-            width: '*',
+            width: 'auto',
+            margin: [20, 0, 0, 0],
+          },
+          { 
+            columns: [
+              { text: 'CT Ratio:', fontSize: 9, color: '#6b7280', width: 'auto' },
+              { text: data.ctRatio || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
+            ],
+            width: 'auto',
+            margin: [20, 0, 0, 0],
           },
         ],
         margin: [0, 0, 0, 6],
