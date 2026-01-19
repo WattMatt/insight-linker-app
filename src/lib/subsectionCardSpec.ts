@@ -26,36 +26,36 @@ export interface SubsectionCardData extends SubsectionData {
 // ============================================================================
 
 export const CARD_LAYOUT = {
-  // Card dimensions
-  cardPadding: 12,
-  cardBorderRadius: 8,
+  // Card dimensions - compact for 2 cards per page
+  cardPadding: 10,
+  cardBorderRadius: 6,
   cardBorderWidth: 1,
   
   // Header
-  headerHeight: 40,
-  titleSize: 14,
-  categoryBadgeSize: 10,
+  headerHeight: 32,
+  titleSize: 13,
+  categoryBadgeSize: 9,
   
   // QR Code
-  qrCodeSize: 80,
-  qrCodeLogoSize: 20,
+  qrCodeSize: 70,
+  qrCodeLogoSize: 18,
   
-  // Content sections
-  sectionSpacing: 8,
-  labelSize: 10,
-  valueSize: 11,
+  // Content sections - tighter spacing
+  sectionSpacing: 6,
+  labelSize: 9,
+  valueSize: 10,
   
   // Status badges
-  badgeHeight: 20,
-  badgePadding: 6,
-  badgeFontSize: 9,
+  badgeHeight: 18,
+  badgePadding: 5,
+  badgeFontSize: 8,
   
   // Snag list
-  snagItemHeight: 24,
+  snagItemHeight: 20,
   maxSnagsShown: 3,
   
   // Footer
-  footerHeight: 32,
+  footerHeight: 28,
 } as const;
 
 export const STATUS_COLORS = {
