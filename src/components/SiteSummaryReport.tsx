@@ -169,11 +169,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
   };
 
   // Transform DB subsection to SubsectionCardData (extended for cards)
-  const transformToSubsectionCardData = (sub: any, allSnags: any[]): SubsectionCardData => {
+  const transformToSubsectionCardData = (sub: any, allSnags: any[], qrBaseUrl: string): SubsectionCardData => {
     const subSnags = allSnags.filter(s => 
       s.subsection_id === sub.id && 
       !['rectified', 'Rectified'].includes(s.status || '')
     );
+    
+    // Generate QR URL if not stored - use public subsection URL
+    const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsection/${sub.id}`;
     
     return {
       id: sub.id,
@@ -186,7 +189,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       ctRatio: sub.ct_ratio,
       snagCount: subSnags.length,
       isCompliant: calculateSubsectionCompliance(sub, allSnags),
-      qrCodeUrl: sub.qr_code_url,
+      qrCodeUrl: qrUrl,
       tenantName: sub.tenant_name,
       snags: subSnags.map(s => ({
         id: s.id,
@@ -252,7 +255,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     // Transform subsections to card format with snags
     const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
-      transformToSubsectionCardData(sub, allSnags)
+      transformToSubsectionCardData(sub, allSnags, qrBaseUrl)
     );
 
     // Also create SubsectionData for metrics calculation
