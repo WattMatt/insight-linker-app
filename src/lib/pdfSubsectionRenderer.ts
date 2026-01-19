@@ -114,19 +114,23 @@ function createCardHeader(data: SubsectionCardData, accentColor: string): any {
 }
 
 function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null): any {
-  const cocStatus = data.cocStatus || 'pending';
-  const cocColors = STATUS_COLORS[cocStatus] || STATUS_COLORS.pending;
+  // Normalize COC status for color mapping
+  const cocStatusNorm = (data.cocStatus || '').toLowerCase();
+  const cocStatusKey = ['approved', 'valid', 'pass'].includes(cocStatusNorm) ? 'pass' 
+    : ['rejected', 'invalid', 'fail', 'failed'].includes(cocStatusNorm) ? 'fail' 
+    : 'pending';
+  const cocColors = STATUS_COLORS[cocStatusKey] || STATUS_COLORS.pending;
 
-  // Left column: COC Status, Metering info
+  // Left column: COC Status, Metering info (all in one row)
   const leftColumn = {
     stack: [
-      // COC Status
+      // COC Status row
       {
         columns: [
           { text: 'COC Status:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
           createStatusBadge(getCocStatusLabel(data.cocStatus), cocColors),
         ],
-        margin: [0, 0, 0, 6],
+        margin: [0, 0, 0, 8],
       },
       // COC Number if available
       data.cocNumber ? {
