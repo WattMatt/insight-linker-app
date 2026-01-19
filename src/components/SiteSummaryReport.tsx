@@ -176,7 +176,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     );
     
     // Generate QR URL if not stored - use public subsection URL
-    const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsection/${sub.id}`;
+    const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsections/${sub.id}`;
     
     return {
       id: sub.id,
