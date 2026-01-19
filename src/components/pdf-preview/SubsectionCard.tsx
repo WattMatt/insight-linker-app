@@ -35,8 +35,12 @@ export function SubsectionCard({ data, accentColor = '#3b82f6', logoUrl }: Subse
     }
   }, [data.qrCodeUrl, logoUrl]);
 
-  const cocStatus = data.cocStatus || 'pending';
-  const cocColors = STATUS_COLORS[cocStatus] || STATUS_COLORS.pending;
+  // Normalize COC status for color mapping
+  const cocStatusNorm = (data.cocStatus || '').toLowerCase();
+  const cocStatusKey = ['approved', 'valid', 'pass'].includes(cocStatusNorm) ? 'pass' 
+    : ['rejected', 'invalid', 'fail', 'failed'].includes(cocStatusNorm) ? 'fail' 
+    : 'pending';
+  const cocColors = STATUS_COLORS[cocStatusKey] || STATUS_COLORS.pending;
   const complianceColors = data.isCompliant === true 
     ? STATUS_COLORS.compliant 
     : data.isCompliant === false 
@@ -88,7 +92,7 @@ export function SubsectionCard({ data, accentColor = '#3b82f6', logoUrl }: Subse
             <StatusBadge 
               label={getCocStatusLabel(data.cocStatus)} 
               colors={cocColors}
-              icon={getStatusIcon(cocStatus)}
+              icon={getStatusIcon(cocStatusKey)}
             />
           </div>
 

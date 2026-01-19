@@ -173,13 +173,14 @@ async function embedLogoInQR(qrDataUrl: string, logoUrl: string): Promise<string
 // DATA HELPERS
 // ============================================================================
 
-export function getCocStatusLabel(status: SubsectionCardData['cocStatus']): string {
-  switch (status) {
-    case 'pass': return 'COC Valid';
-    case 'fail': return 'COC Invalid';
-    case 'pending': return 'Pending';
-    default: return 'Not Set';
-  }
+export function getCocStatusLabel(status: string | null | undefined): string {
+  if (!status) return 'Missing';
+  // Normalize the status display
+  const normalized = status.toLowerCase();
+  if (['approved', 'valid', 'pass'].includes(normalized)) return 'Valid';
+  if (['rejected', 'invalid', 'fail', 'failed'].includes(normalized)) return 'Invalid';
+  if (['pending', 'awaiting'].includes(normalized)) return 'Pending';
+  return status; // Return as-is if not matched (e.g., 'Missing')
 }
 
 export function formatMeteringInfo(data: SubsectionCardData): string {
