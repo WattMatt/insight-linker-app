@@ -140,33 +140,20 @@ function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null):
         ],
         margin: [0, 0, 0, 6],
       } : { text: '' },
-      // Metering, Meter S/N, and CT Ratio - all on one row
+      // Metering, Meter S/N, and CT Ratio - using simple table for reliable layout
       {
-        columns: [
-          { 
-            columns: [
-              { text: 'Metering:', fontSize: 9, color: '#6b7280', width: 'auto' },
-              { text: data.meteringStatus || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
-            ],
-            width: 'auto',
-          },
-          { 
-            columns: [
-              { text: 'Meter S/N:', fontSize: 9, color: '#6b7280', width: 'auto' },
-              { text: data.meterSerialNumber || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
-            ],
-            width: 'auto',
-            margin: [20, 0, 0, 0],
-          },
-          { 
-            columns: [
-              { text: 'CT Ratio:', fontSize: 9, color: '#6b7280', width: 'auto' },
-              { text: data.ctRatio || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [4, 0, 0, 0] },
-            ],
-            width: 'auto',
-            margin: [20, 0, 0, 0],
-          },
-        ],
+        table: {
+          widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+          body: [[
+            { text: 'Metering:', fontSize: 9, color: '#6b7280', margin: [0, 0, 4, 0] },
+            { text: data.meteringStatus || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [0, 0, 15, 0] },
+            { text: 'S/N:', fontSize: 9, color: '#6b7280', margin: [0, 0, 4, 0] },
+            { text: data.meterSerialNumber || 'N/A', fontSize: 10, color: '#374151', bold: true, margin: [0, 0, 15, 0] },
+            { text: 'CT:', fontSize: 9, color: '#6b7280', margin: [0, 0, 4, 0] },
+            { text: data.ctRatio || 'N/A', fontSize: 10, color: '#374151', bold: true },
+          ]],
+        },
+        layout: 'noBorders',
         margin: [0, 0, 0, 6],
       },
     ],
@@ -249,18 +236,34 @@ function createSnagsSection(snags: SnagData[]): any {
     return {
       columns: [
         {
-          text: snag.riskLevel.toUpperCase(),
-          fontSize: 7,
-          color: riskColors.text,
-          background: riskColors.bg,
-          margin: [3, 1, 3, 1],
-          width: 40,
+          // Use table with fillColor for proper badge background
+          table: {
+            widths: ['auto'],
+            body: [[{
+              text: snag.riskLevel.toUpperCase(),
+              fontSize: 7,
+              bold: true,
+              color: riskColors.text,
+              alignment: 'center',
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0,
+            vLineWidth: () => 0,
+            paddingLeft: () => 4,
+            paddingRight: () => 4,
+            paddingTop: () => 2,
+            paddingBottom: () => 2,
+            fillColor: () => riskColors.bg,
+          },
+          width: 'auto',
         },
         {
           text: snag.title,
           fontSize: CARD_LAYOUT.valueSize - 1,
           color: '#374151',
           width: '*',
+          margin: [8, 2, 0, 0],
         },
       ],
       margin: [0, 2, 0, 2],
@@ -316,12 +319,27 @@ function createStatusBadge(
   text: string, 
   colors: { bg: string; text: string; border?: string }
 ): any {
+  // Use table with fillColor for proper background rendering in pdfmake
   return {
-    text: text,
-    fontSize: CARD_LAYOUT.badgeFontSize,
-    color: colors.text,
-    background: colors.bg,
-    margin: [CARD_LAYOUT.badgePadding, 2, CARD_LAYOUT.badgePadding, 2],
+    table: {
+      widths: ['auto'],
+      body: [[{
+        text: text,
+        fontSize: CARD_LAYOUT.badgeFontSize,
+        bold: true,
+        color: colors.text,
+        alignment: 'center',
+      }]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => CARD_LAYOUT.badgePadding,
+      paddingRight: () => CARD_LAYOUT.badgePadding,
+      paddingTop: () => 3,
+      paddingBottom: () => 3,
+      fillColor: () => colors.bg,
+    },
   };
 }
 
