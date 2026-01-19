@@ -187,26 +187,6 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   }
 
   // ======================================================================
-  // REPORT TYPE BADGE - Gray pill like preview
-  // ======================================================================
-  content.push({
-    table: {
-      widths: ['auto'],
-      body: [[{
-        text: reportType.toUpperCase(),
-        fontSize: 10,
-        bold: true,
-        color: COLORS.textSecondary,
-        fillColor: '#f3f4f6',
-        margin: [16, 4, 16, 4],
-      }]],
-    },
-    layout: 'noBorders',
-    alignment: 'center',
-    margin: [0, 0, 0, 16],
-  });
-
-  // ======================================================================
   // MAIN TITLE - Uses LAYOUT.cover.titleSize for WYSIWYG
   // ======================================================================
   content.push({
