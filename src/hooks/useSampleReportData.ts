@@ -21,6 +21,15 @@ export interface SiteWithStats {
   completenessScore: number;
 }
 
+// Individual snag details for subsection cards
+export interface SampleSnag {
+  id: string;
+  title: string;
+  riskLevel: 'High' | 'Medium' | 'Low' | null;
+  status: string;
+  description?: string | null;
+}
+
 export interface SampleSubsection {
   id: string;
   name: string;
@@ -34,6 +43,10 @@ export interface SampleSubsection {
   meteringStatus: string | null;
   isCompliant: boolean | null;
   snagCount: number;
+  // Actual snag list for detail cards
+  snags?: SampleSnag[];
+  // QR code URL for the subsection
+  qrCodeUrl?: string | null;
 }
 
 export interface SampleAsset {
@@ -130,11 +143,33 @@ const SAMPLE_TENANT_NAMES = [
   'Game', 'Mr Price', 'Ackermans', 'Pep Stores', 'Jet', 'Edgars'
 ];
 
+const SAMPLE_SNAG_TITLES = [
+  'Earth leakage trip not functional',
+  'DB cover missing screws',
+  'Cable not properly secured',
+  'Circuit breaker label faded',
+  'Exposed wiring at junction box',
+  'Emergency lighting not tested'
+];
+
 function generateCompleteSampleSubsections(): SampleSubsection[] {
   return Array.from({ length: 12 }, (_, i) => {
     const cocStatus = SAMPLE_COC_STATUSES[i];
     const hasMeter = i < 8; // 8 out of 12 have meters
     const category = SAMPLE_CATEGORIES[i % 4];
+    const snagCount = i % 4 === 0 ? 2 : (i % 3 === 0 ? 1 : 0);
+    
+    // Generate actual snags for subsections that have them
+    const snags: SampleSnag[] = [];
+    for (let s = 0; s < snagCount; s++) {
+      snags.push({
+        id: `sample-snag-${i}-${s}`,
+        title: SAMPLE_SNAG_TITLES[(i + s) % SAMPLE_SNAG_TITLES.length],
+        riskLevel: s === 0 ? 'High' : 'Medium',
+        status: 'Open',
+        description: `Issue found during inspection on Shop ${String(i + 1).padStart(2, '0')}`,
+      });
+    }
     
     return {
       id: `sample-sub-${i + 1}`,
@@ -147,7 +182,9 @@ function generateCompleteSampleSubsections(): SampleSubsection[] {
       ctRatio: hasMeter && i < 6 ? '200/5' : (hasMeter ? '100/5' : null),
       meteringStatus: hasMeter ? 'Installed' : 'Missing',
       isCompliant: cocStatus === 'Pass',
-      snagCount: i % 4 === 0 ? 2 : (i % 3 === 0 ? 1 : 0), // Some have snags
+      snagCount,
+      snags: snags.length > 0 ? snags : undefined,
+      qrCodeUrl: null, // Will be generated dynamically
     };
   });
 }
@@ -412,10 +449,10 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
         let subsectionsWithCounts: SampleSubsection[] = [];
         
         if (subsectionsData && subsectionsData.length > 0) {
-          // Get document counts and snag counts for each subsection
+          // Get document counts, snag counts, and actual snag details for each subsection
           subsectionsWithCounts = await Promise.all(
             subsectionsData.map(async (sub) => {
-              const [docResult, snagResult] = await Promise.all([
+              const [docResult, snagCountResult, snagsResult, subsectionResult] = await Promise.all([
                 supabase
                   .from("subsection_documents")
                   .select("*", { count: "exact", head: true })
@@ -424,8 +461,30 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
                   .from("snags")
                   .select("*", { count: "exact", head: true })
                   .eq("subsection_id", sub.id)
+                  .not("status", "in", '("rectified","Rectified")'),
+                // Fetch actual snag details (limit to 5 for display)
+                supabase
+                  .from("snags")
+                  .select("id, title, risk_level, status, description")
+                  .eq("subsection_id", sub.id)
                   .not("status", "in", '("rectified","Rectified")')
+                  .order("created_at", { ascending: false })
+                  .limit(5),
+                // Fetch QR code URL
+                supabase
+                  .from("subsections")
+                  .select("qr_code_url")
+                  .eq("id", sub.id)
+                  .single(),
               ]);
+
+              const snags: SampleSnag[] = (snagsResult.data || []).map(snag => ({
+                id: snag.id,
+                title: snag.title,
+                riskLevel: snag.risk_level as 'High' | 'Medium' | 'Low' | null,
+                status: snag.status,
+                description: snag.description,
+              }));
 
               return {
                 id: sub.id,
@@ -438,7 +497,9 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
                 ctRatio: sub.ct_ratio,
                 meteringStatus: sub.metering_status,
                 isCompliant: sub.is_compliant,
-                snagCount: snagResult.count || 0,
+                snagCount: snagCountResult.count || 0,
+                snags: snags.length > 0 ? snags : undefined,
+                qrCodeUrl: subsectionResult.data?.qr_code_url || null,
               };
             })
           );

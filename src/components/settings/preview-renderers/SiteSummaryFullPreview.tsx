@@ -16,8 +16,9 @@
 import React from "react";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 import { cn } from "@/lib/utils";
-import { QrCode, Building2, AlertCircle } from "lucide-react";
-import { SampleSubsection, SampleKPIs, SampleInspection } from "@/hooks/useSampleReportData";
+import { QrCode, Building2, AlertCircle, AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { SampleSubsection, SampleKPIs, SampleInspection, SampleSnag } from "@/hooks/useSampleReportData";
+import QRCode from 'qrcode';
 import {
   LAYOUT,
   HEALTH_METRICS_CARDS,
@@ -35,6 +36,7 @@ import {
   SubsectionData,
   CocValidationData,
   STATUS_COLORS,
+  SnagData,
 } from "@/lib/siteSummaryRenderSpec";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 
@@ -93,6 +95,68 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   const accentPalette = getAccentPalette(customization.accentColor || 'blue');
   const colors = { primary: accentPalette.primary, light: accentPalette.light, text: accentPalette.dark };
 
+  // State for generated QR codes
+  const [qrCodeCache, setQrCodeCache] = React.useState<Record<string, string>>({});
+
+  // Generate QR code data URL for a subsection
+  const generateQRCodeDataUrl = React.useCallback(async (subsectionId: string, logoUrl?: string | null): Promise<string> => {
+    const cacheKey = `${subsectionId}-${logoUrl || 'no-logo'}`;
+    if (qrCodeCache[cacheKey]) return qrCodeCache[cacheKey];
+
+    try {
+      const qrTargetUrl = `https://example.com/public/subsections/${subsectionId}`;
+      const qrSize = 100;
+      
+      // Create canvas
+      const canvas = document.createElement('canvas');
+      canvas.width = qrSize;
+      canvas.height = qrSize;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) throw new Error('No canvas context');
+
+      // Generate QR code
+      const qrCanvas = document.createElement('canvas');
+      await QRCode.toCanvas(qrCanvas, qrTargetUrl, {
+        width: qrSize,
+        margin: 1,
+        errorCorrectionLevel: 'H',
+      });
+      ctx.drawImage(qrCanvas, 0, 0, qrSize, qrSize);
+
+      // Overlay logo if provided
+      if (logoUrl) {
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.crossOrigin = 'anonymous';
+          img.onload = () => {
+            const logoSize = qrSize * 0.2;
+            const logoX = (qrSize - logoSize) / 2;
+            const logoY = (qrSize - logoSize) / 2;
+            ctx.fillStyle = 'white';
+            ctx.fillRect(logoX - 2, logoY - 2, logoSize + 4, logoSize + 4);
+            ctx.drawImage(img, logoX, logoY, logoSize, logoSize);
+            resolve();
+          };
+          img.onerror = () => resolve();
+          img.src = logoUrl;
+        });
+      }
+
+      const dataUrl = canvas.toDataURL('image/png');
+      setQrCodeCache(prev => ({ ...prev, [cacheKey]: dataUrl }));
+      return dataUrl;
+    } catch {
+      return '';
+    }
+  }, [qrCodeCache]);
+
+  // Generate QR codes for all subsections on mount
+  React.useEffect(() => {
+    subsections.forEach(sub => {
+      generateQRCodeDataUrl(sub.id, clientLogoUrl);
+    });
+  }, [subsections, clientLogoUrl, generateQRCodeDataUrl]);
+
   // Debug logging
   console.log('[SiteSummaryFullPreview] Data received:', {
     sectionsCount: sections?.length || 0,
@@ -102,7 +166,7 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     kpis,
   });
 
-  // Convert sample subsections to spec format - use ACTUAL data from subsections
+  // Convert sample subsections to spec format - use ACTUAL data from subsections including snags
   const subsectionData: SubsectionData[] = (subsections || []).map(sub => ({
     id: sub.id,
     name: sub.name,
@@ -113,6 +177,14 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     ctRatio: sub.ctRatio || null,
     snagCount: sub.snagCount ?? 0,
     isCompliant: sub.isCompliant ?? (sub.cocStatus === 'Pass'),
+    qrCodeUrl: sub.qrCodeUrl || null,
+    snags: sub.snags?.map(s => ({
+      id: s.id,
+      title: s.title,
+      riskLevel: s.riskLevel,
+      status: s.status,
+      description: s.description,
+    })) as SnagData[] | undefined,
   }));
 
   // Use actual COC validations - fallback to generating from subsection data only if none provided
@@ -252,69 +324,254 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       );
     }
 
-    // 4. Subsection Details (cards with ALL fields)
+    // 4. Subsection Details (2-column layout with full info, snags list, and QR codes)
     if (matchesSectionId(section, 'subsection-details')) {
+      // Helper to get risk level badge color
+      const getRiskColor = (level: string | null) => {
+        switch (level) {
+          case 'High': return { bg: '#fee2e2', text: '#dc2626', border: '#fecaca' };
+          case 'Medium': return { bg: '#fef3c7', text: '#d97706', border: '#fde68a' };
+          case 'Low': return { bg: '#d1fae5', text: '#059669', border: '#a7f3d0' };
+          default: return { bg: '#f3f4f6', text: '#6b7280', border: '#e5e7eb' };
+        }
+      };
+
+      const getCocStatusColor = (status: string | null) => {
+        switch (status) {
+          case 'Pass': case 'Valid': case 'Approved': return STATUS_COLORS.success;
+          case 'Pending': return STATUS_COLORS.warning;
+          case 'Fail': case 'Missing': case 'Expired': return STATUS_COLORS.error;
+          default: return STATUS_COLORS.muted;
+        }
+      };
+
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           {showPageBreak && <PageBreakIndicator />}
           <SectionHeader title={title} withBorder />
           {subsectionData.length > 0 ? (
-            <div className="space-y-3">
-              {subsectionData.slice(0, 6).map(sub => (
-                <div key={sub.id} className="border rounded p-3" style={{ fontSize: scale(9) }}>
-                  <div className="flex justify-between items-start mb-2">
-                    <div>
-                      <PlaceholderBadge className="font-bold" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
-                      <div style={{ fontSize: scale(LAYOUT.subsectionCard.categoryFontSize), color: STATUS_COLORS.muted }}>
-                        Category: {getCategoryAbbreviation(sub.category || 'Other')}
+            <div className="grid grid-cols-2 gap-4">
+              {subsectionData.slice(0, 6).map(sub => {
+                const qrDataUrl = qrCodeCache[`${sub.id}-${clientLogoUrl || 'no-logo'}`];
+                
+                return (
+                  <div 
+                    key={sub.id} 
+                    className="border rounded-lg overflow-hidden"
+                    style={{ fontSize: scale(9), backgroundColor: '#fafafa' }}
+                  >
+                    {/* Header with name and QR code */}
+                    <div 
+                      className="flex justify-between items-start p-3" 
+                      style={{ backgroundColor: colors.light, borderBottom: `2px solid ${colors.primary}` }}
+                    >
+                      <div className="flex-1">
+                        <PlaceholderBadge className="font-bold text-sm" style={{ color: colors.primary, fontSize: scale(11) }}>
+                          {sub.name}
+                        </PlaceholderBadge>
+                        <div className="mt-1" style={{ fontSize: scale(8), color: STATUS_COLORS.muted }}>
+                          Category: {getCategoryAbbreviation(sub.category || 'Other')}
+                        </div>
+                      </div>
+                      {/* Actual QR Code with Logo */}
+                      <div 
+                        className="rounded bg-white border flex items-center justify-center overflow-hidden"
+                        style={{ 
+                          width: scale(LAYOUT.subsectionCard.qrCodeSize), 
+                          height: scale(LAYOUT.subsectionCard.qrCodeSize),
+                          borderColor: colors.primary,
+                        }}
+                      >
+                        {qrDataUrl ? (
+                          <img 
+                            src={qrDataUrl} 
+                            alt={`QR Code for ${sub.name}`}
+                            style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                          />
+                        ) : (
+                          <QrCode style={{ width: scale(30), height: scale(30), color: colors.primary }} />
+                        )}
                       </div>
                     </div>
-                    <div className="bg-gray-100 rounded flex items-center justify-center" style={{ width: scale(LAYOUT.subsectionCard.qrCodeSize), height: scale(LAYOUT.subsectionCard.qrCodeSize) }}>
-                      <QrCode style={{ width: scale(24), height: scale(24) }} className="text-gray-400" />
-                    </div>
-                  </div>
-                  {/* Render ALL card fields from spec */}
-                  <div className="grid grid-cols-3 gap-1 text-gray-600">
-                    {SUBSECTION_CARD_FIELDS
-                      .filter(field => !field.showIf || field.showIf(sub))
-                      .map(field => (
-                        <div key={field.id}>
-                          {field.label}: <PlaceholderBadge style={{ color: field.getColor?.(sub) || STATUS_COLORS.muted }}>
-                            {field.getValue(sub)}
+
+                    {/* Body with details */}
+                    <div className="p-3 space-y-2">
+                      {/* COC Status & Metering Row */}
+                      <div className="flex gap-3">
+                        <div className="flex-1">
+                          <div style={{ fontSize: scale(7), color: STATUS_COLORS.muted }}>COC Status</div>
+                          <PlaceholderBadge 
+                            className="font-medium" 
+                            style={{ color: getCocStatusColor(sub.cocStatus), fontSize: scale(9) }}
+                          >
+                            {sub.cocStatus === 'Pass' && <CheckCircle2 className="inline w-3 h-3 mr-1" />}
+                            {sub.cocStatus === 'Fail' && <XCircle className="inline w-3 h-3 mr-1" />}
+                            {sub.cocStatus || 'Not Set'}
                           </PlaceholderBadge>
                         </div>
-                      ))}
+                        <div className="flex-1">
+                          <div style={{ fontSize: scale(7), color: STATUS_COLORS.muted }}>Metering</div>
+                          <PlaceholderBadge className="font-medium" style={{ fontSize: scale(9) }}>
+                            {sub.meteringStatus || 'Unknown'}
+                          </PlaceholderBadge>
+                        </div>
+                      </div>
+
+                      {/* Meter S/N & CT Ratio Row */}
+                      {(sub.meterSerialNumber || sub.ctRatio) && (
+                        <div className="flex gap-3">
+                          {sub.meterSerialNumber && (
+                            <div className="flex-1">
+                              <div style={{ fontSize: scale(7), color: STATUS_COLORS.muted }}>Meter S/N</div>
+                              <PlaceholderBadge className="font-mono" style={{ fontSize: scale(8) }}>
+                                {sub.meterSerialNumber}
+                              </PlaceholderBadge>
+                            </div>
+                          )}
+                          {sub.ctRatio && (
+                            <div className="flex-1">
+                              <div style={{ fontSize: scale(7), color: STATUS_COLORS.muted }}>CT Ratio</div>
+                              <PlaceholderBadge className="font-mono" style={{ fontSize: scale(8) }}>
+                                {sub.ctRatio}
+                              </PlaceholderBadge>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Snags Section */}
+                      <div className="pt-1 border-t" style={{ borderColor: '#e5e7eb' }}>
+                        <div className="flex items-center gap-1 mb-1" style={{ fontSize: scale(7), color: STATUS_COLORS.muted }}>
+                          <AlertTriangle style={{ width: scale(8), height: scale(8) }} />
+                          Snags ({sub.snagCount})
+                        </div>
+                        {sub.snags && sub.snags.length > 0 ? (
+                          <div className="space-y-1">
+                            {sub.snags.slice(0, 3).map(snag => {
+                              const riskColors = getRiskColor(snag.riskLevel);
+                              return (
+                                <div 
+                                  key={snag.id}
+                                  className="flex items-center gap-1 rounded px-2 py-1"
+                                  style={{ 
+                                    backgroundColor: riskColors.bg, 
+                                    border: `1px solid ${riskColors.border}`,
+                                    fontSize: scale(7),
+                                  }}
+                                >
+                                  <span 
+                                    className="font-medium rounded px-1"
+                                    style={{ 
+                                      backgroundColor: riskColors.border, 
+                                      color: riskColors.text,
+                                      fontSize: scale(6),
+                                    }}
+                                  >
+                                    {snag.riskLevel || 'N/A'}
+                                  </span>
+                                  <PlaceholderBadge className="truncate flex-1" style={{ color: riskColors.text }}>
+                                    {snag.title}
+                                  </PlaceholderBadge>
+                                </div>
+                              );
+                            })}
+                            {sub.snags.length > 3 && (
+                              <div style={{ fontSize: scale(6), color: STATUS_COLORS.muted, fontStyle: 'italic' }}>
+                                +{sub.snags.length - 3} more snags
+                              </div>
+                            )}
+                          </div>
+                        ) : (
+                          <div 
+                            className="flex items-center gap-1 rounded px-2 py-1"
+                            style={{ 
+                              backgroundColor: '#d1fae5', 
+                              color: STATUS_COLORS.success,
+                              fontSize: scale(7),
+                            }}
+                          >
+                            <CheckCircle2 style={{ width: scale(8), height: scale(8) }} />
+                            No open snags
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Compliance Footer */}
+                      <div 
+                        className="flex items-center justify-between rounded px-2 py-1 mt-1"
+                        style={{ 
+                          backgroundColor: sub.isCompliant ? '#d1fae5' : '#fee2e2',
+                          border: `1px solid ${sub.isCompliant ? '#a7f3d0' : '#fecaca'}`,
+                        }}
+                      >
+                        <span style={{ fontSize: scale(7), fontWeight: 500 }}>Compliance</span>
+                        <PlaceholderBadge 
+                          className="font-medium"
+                          style={{ 
+                            color: sub.isCompliant ? STATUS_COLORS.success : STATUS_COLORS.error,
+                            fontSize: scale(8),
+                          }}
+                        >
+                          {sub.isCompliant ? (
+                            <><CheckCircle2 className="inline w-3 h-3 mr-1" />Compliant</>
+                          ) : (
+                            <><XCircle className="inline w-3 h-3 mr-1" />Non-Compliant</>
+                          )}
+                        </PlaceholderBadge>
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ))}
-              {subsectionData.length > 6 && (
-                <div className="text-center text-muted-foreground text-sm italic">
-                  ...and {subsectionData.length - 6} more subsections
-                </div>
-              )}
+                );
+              })}
             </div>
           ) : (
             <EmptySectionPlaceholder sectionName="Subsection Details" />
+          )}
+          {subsectionData.length > 6 && (
+            <div className="text-center text-muted-foreground text-sm italic mt-4">
+              ...and {subsectionData.length - 6} more subsections
+            </div>
           )}
         </div>
       );
     }
 
-    // 5. Subsection QR Codes (grid of QR codes)
+    // 5. Subsection QR Codes (grid of QR codes with logos)
     if (matchesSectionId(section, 'subsection-qr-codes')) {
       return (
         <div key={section.id} style={{ marginBottom: scale(20) }}>
           <SectionHeader title={title} />
           {subsectionData.length > 0 ? (
             <div className="grid grid-cols-4 gap-3">
-              {subsectionData.slice(0, 8).map(sub => (
-                <div key={sub.id} className="border rounded p-2 text-center" style={{ fontSize: scale(8) }}>
-                  <div className="bg-gray-100 rounded flex items-center justify-center mx-auto mb-1" style={{ width: scale(50), height: scale(50) }}>
-                    <QrCode style={{ width: scale(30), height: scale(30) }} className="text-gray-400" />
+              {subsectionData.slice(0, 8).map(sub => {
+                const qrDataUrl = qrCodeCache[`${sub.id}-${clientLogoUrl || 'no-logo'}`];
+                return (
+                  <div key={sub.id} className="border rounded p-2 text-center" style={{ fontSize: scale(8), backgroundColor: '#fafafa' }}>
+                    <div 
+                      className="rounded flex items-center justify-center mx-auto mb-1 overflow-hidden border"
+                      style={{ 
+                        width: scale(60), 
+                        height: scale(60), 
+                        backgroundColor: 'white',
+                        borderColor: colors.primary,
+                      }}
+                    >
+                      {qrDataUrl ? (
+                        <img 
+                          src={qrDataUrl} 
+                          alt={`QR Code for ${sub.name}`}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <QrCode style={{ width: scale(36), height: scale(36), color: colors.primary }} />
+                      )}
+                    </div>
+                    <PlaceholderBadge className="truncate block text-xs" style={{ color: colors.primary, fontSize: scale(7) }}>
+                      {sub.name}
+                    </PlaceholderBadge>
                   </div>
-                  <PlaceholderBadge className="truncate block" style={{ color: colors.primary }}>{sub.name}</PlaceholderBadge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <EmptySectionPlaceholder sectionName="QR Codes" />

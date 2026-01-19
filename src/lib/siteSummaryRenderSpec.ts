@@ -268,6 +268,15 @@ export interface SiteSummaryMetrics {
   snagFree: number;
 }
 
+// Individual snag details
+export interface SnagData {
+  id: string;
+  title: string;
+  riskLevel: 'High' | 'Medium' | 'Low' | null;
+  status: string;
+  description?: string | null;
+}
+
 export interface SubsectionData {
   id: string;
   name: string;
@@ -279,6 +288,8 @@ export interface SubsectionData {
   snagCount: number;
   isCompliant: boolean;
   qrCodeUrl?: string | null;
+  // Actual snag list for detail cards
+  snags?: SnagData[];
 }
 
 export interface CategoryHealthData {
