@@ -107,30 +107,23 @@ export function SubsectionCard({ data, accentColor = '#3b82f6', logoUrl }: Subse
             </div>
           )}
 
-          {/* Metering Status */}
-          <div className="flex items-center gap-2">
-            <span 
-              className="text-gray-500 w-20"
-              style={{ fontSize: CARD_LAYOUT.labelSize }}
-            >
-              Metering:
-            </span>
-            <span style={{ fontSize: CARD_LAYOUT.valueSize }} className="text-gray-700">
-              {data.meteringStatus || 'N/A'}
-            </span>
-          </div>
-
-          {/* Meter S/N and CT Ratio side by side */}
-          <div className="flex gap-4">
-            <div>
-              <span className="text-gray-400 text-xs block">Meter S/N</span>
-              <span style={{ fontSize: CARD_LAYOUT.valueSize }} className="text-gray-700">
+          {/* Metering, Meter S/N, and CT Ratio - all on one line */}
+          <div className="flex items-center gap-6">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">Metering:</span>
+              <span className="text-gray-700 text-sm font-medium">
+                {data.meteringStatus || 'N/A'}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">Meter S/N:</span>
+              <span className="text-gray-700 text-sm font-medium">
                 {data.meterSerialNumber || 'N/A'}
               </span>
             </div>
-            <div>
-              <span className="text-gray-400 text-xs block">CT Ratio</span>
-              <span style={{ fontSize: CARD_LAYOUT.valueSize }} className="text-gray-700">
+            <div className="flex items-center gap-2">
+              <span className="text-gray-500 text-xs">CT Ratio:</span>
+              <span className="text-gray-700 text-sm font-medium">
                 {data.ctRatio || 'N/A'}
               </span>
             </div>
