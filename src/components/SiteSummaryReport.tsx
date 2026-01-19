@@ -26,6 +26,7 @@ import {
   SUBSECTION_CARD_FIELDS,
   COC_VALIDATION_COLUMNS,
   INSPECTION_COLUMNS,
+  ASSET_VERIFICATION_CARDS,
   SECTION_SPECS,
   STATUS_COLORS,
   getAccentPalette,
@@ -34,9 +35,11 @@ import {
   findSectionSpec,
   calculateMetrics,
   calculateCategoryHealth,
+  calculateAssetMetrics,
   type SiteSummaryMetrics,
   type SubsectionData,
   type SnagData,
+  type AssetVerificationMetrics,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
@@ -222,13 +225,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const sortedSections = getEnabledSections(sections);
 
     // Fetch all necessary data
-    const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes, settingsRes] = await Promise.all([
+    const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes] = await Promise.all([
       supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*").eq("site_id", siteId),
       supabase.from("subsection_documents").select("subsection_id, file_name, category_id"),
       supabase.from("settings").select("qr_base_url").single(),
+      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, premises_id").eq("site_id", siteId),
     ]);
 
     if (siteRes.error) throw siteRes.error;
@@ -236,6 +240,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const site = siteRes.data;
     const subsections = subsectionsRes.data || [];
     const allInspections = inspectionsRes.data || [];
+    const siteAssets = assetsRes.data || [];
     const qrBaseUrl = settingsRes.data?.qr_base_url || 'https://watsonmattheus.com';
 
     // Fetch snags separately
@@ -265,6 +270,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
     const openSnags = allSnags.filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length;
     const metrics = calculateMetrics(subsectionData, cocRequired, openSnags);
+
+    // Calculate asset verification metrics
+    const assetMetrics = calculateAssetMetrics(siteAssets, subsectionData);
 
     // Build content based on template sections - USING SPEC CONSTANTS
     const content: any[] = [];
@@ -393,6 +401,27 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
         // Skip subsection-qr-codes as it's handled within subsection-details
         case "subsection-qr-codes":
+          break;
+
+        case "asset-verification":
+        case "asset-summary": // Support legacy section ID
+          if (assetMetrics.totalAssets > 0) {
+            content.push(createSectionHeader(title, 'primary'));
+            content.push(createKpiRow(
+              ASSET_VERIFICATION_CARDS.map(card => ({
+                value: card.format(card.getValue(assetMetrics)),
+                label: card.label,
+                color: card.color,
+              }))
+            ));
+            // Add verification rate text
+            content.push({ 
+              text: `Verification Rate: ${assetMetrics.verificationRate}%`, 
+              fontSize: 10, 
+              bold: true,
+              margin: [0, 8, 0, 12] 
+            });
+          }
           break;
 
         default:

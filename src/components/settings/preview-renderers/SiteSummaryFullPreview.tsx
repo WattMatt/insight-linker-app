@@ -26,17 +26,20 @@ import {
   COC_VALIDATION_COLUMNS,
   INSPECTION_COLUMNS,
   SUBSECTION_CARD_FIELDS,
+  ASSET_VERIFICATION_CARDS,
   getAccentPalette,
   getSectionTitle,
   getEnabledSections,
   matchesSectionId,
   calculateMetrics,
   calculateCategoryHealth,
+  calculateAssetMetrics,
   findSectionSpec,
   SubsectionData,
   CocValidationData,
   STATUS_COLORS,
   SnagData,
+  AssetVerificationMetrics,
 } from "@/lib/siteSummaryRenderSpec";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 
@@ -689,6 +692,37 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
       );
     }
 
+    // 8. Asset Verification Summary (KPI cards)
+    if (matchesSectionId(section, 'asset-verification')) {
+      // Generate sample asset metrics for preview
+      const sampleAssetMetrics: AssetVerificationMetrics = {
+        totalAssets: subsectionData.length > 0 ? Math.ceil(subsectionData.length * 1.5) : 12,
+        verified: subsectionData.filter(s => s.meterSerialNumber).length || 8,
+        discrepancies: Math.floor(subsectionData.length * 0.1) || 2,
+        unverified: Math.floor(subsectionData.length * 0.15) || 2,
+        verificationRate: 83,
+      };
+
+      return (
+        <div key={section.id} style={{ marginBottom: scale(20) }}>
+          <SectionHeader title={title} withBorder />
+          <div className="grid grid-cols-4 gap-2">
+            {ASSET_VERIFICATION_CARDS.map(card => (
+              <KpiCard 
+                key={card.id} 
+                value={card.format(card.getValue(sampleAssetMetrics))} 
+                label={card.label} 
+                color={card.color} 
+              />
+            ))}
+          </div>
+          <div className="mt-2 font-medium" style={{ fontSize: scale(10) }}>
+            <PlaceholderBadge>Verification Rate: {sampleAssetMetrics.verificationRate}%</PlaceholderBadge>
+          </div>
+        </div>
+      );
+    }
+
     // Unknown section - render placeholder
     console.warn(`[SiteSummaryFullPreview] Unknown section type: ${section.id}`);
     return (
@@ -716,7 +750,8 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   );
 
   const page4Sections = enabledSections.filter(s => 
-    matchesSectionId(s, 'inspections')
+    matchesSectionId(s, 'inspections') ||
+    matchesSectionId(s, 'asset-verification')
   );
 
   // Debug: Log page groupings
