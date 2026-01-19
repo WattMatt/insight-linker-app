@@ -232,7 +232,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       supabase.from("site_documents").select("*").eq("site_id", siteId),
       supabase.from("subsection_documents").select("subsection_id, file_name, category_id"),
       supabase.from("settings").select("qr_base_url").single(),
-      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
+      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
     ]);
 
     if (siteRes.error) throw siteRes.error;
@@ -271,8 +271,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const openSnags = allSnags.filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length;
     const metrics = calculateMetrics(subsectionData, cocRequired, openSnags);
 
-    // Calculate asset verification metrics
-    const assetMetrics = calculateAssetMetrics(siteAssets, subsectionData);
+    // Calculate asset verification metrics using inspection json_data
+    const assetMetrics = calculateAssetMetrics(siteAssets, allInspections);
 
     // Build content based on template sections - USING SPEC CONSTANTS
     const content: any[] = [];
