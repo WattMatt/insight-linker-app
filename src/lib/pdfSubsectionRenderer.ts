@@ -326,7 +326,7 @@ function createStatusBadge(
 }
 
 // ============================================================================
-// FULL-WIDTH STACKED LAYOUT RENDERER
+// FULL-WIDTH STACKED LAYOUT RENDERER - 2 cards per page
 // ============================================================================
 
 export async function renderSubsectionGrid(
@@ -336,17 +336,23 @@ export async function renderSubsectionGrid(
 ): Promise<any> {
   const cards: any[] = [];
   
-  // Stack subsections vertically, each taking full page width
-  for (const subsection of subsections) {
-    const card = await renderSubsectionCardToPDF(subsection, accentColor, logoUrl);
+  // Stack subsections vertically with 2 per page
+  // A4 content area is ~700pt tall, so each card should be ~320pt max with 15pt gap
+  for (let i = 0; i < subsections.length; i++) {
+    const card = await renderSubsectionCardToPDF(subsections[i], accentColor, logoUrl);
+    
+    // Page break before every pair (except first)
+    const needsPageBreak = i > 0 && i % 2 === 0;
+    
     cards.push({
       ...card,
-      margin: [0, 0, 0, 20], // Space between cards
-      pageBreak: cards.length > 0 ? undefined : undefined, // Could add pageBreak: 'before' if needed
+      margin: [0, 0, 0, 15], // Reduced gap between cards
+      pageBreak: needsPageBreak ? 'before' : undefined,
     });
   }
 
   return {
     stack: cards,
+    margin: [0, 0, 0, 0], // No extra margin around grid
   };
 }
