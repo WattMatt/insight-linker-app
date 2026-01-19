@@ -59,7 +59,7 @@ export const PAGE_CONFIG = {
     mmToPt(margins.left),      // 15mm = ~42.5pt
     mmToPt(50),                // 50pt top for header space
     mmToPt(margins.right),     // 15mm = ~42.5pt
-    mmToPt(50),                // 50pt bottom for footer space
+    mmToPt(35),                // 35mm (~100pt) bottom for footer - positioned at page bottom
   ] as [number, number, number, number],
   pageOrientation: 'portrait' as const,
 };
