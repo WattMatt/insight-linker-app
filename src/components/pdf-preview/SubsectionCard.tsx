@@ -45,29 +45,28 @@ export function SubsectionCard({ data, accentColor = '#3b82f6', logoUrl }: Subse
 
   return (
     <div 
-      className="border rounded-lg bg-white overflow-hidden"
+      className="border rounded-lg bg-white overflow-hidden shadow-sm"
       style={{ 
-        padding: CARD_LAYOUT.cardPadding,
+        padding: 20,
         borderRadius: CARD_LAYOUT.cardBorderRadius,
+        minHeight: 280,
       }}
     >
       {/* Header */}
-      <div className="flex justify-between items-start mb-3">
+      <div className="flex justify-between items-start mb-4 pb-3 border-b">
         <div>
           <h3 
-            className="font-bold text-gray-900"
-            style={{ fontSize: CARD_LAYOUT.titleSize }}
+            className="font-bold text-gray-900 text-lg"
           >
             {data.name}
           </h3>
           {data.tenantName && (
-            <p className="text-gray-500 text-sm mt-0.5">{data.tenantName}</p>
+            <p className="text-gray-500 text-sm mt-1">{data.tenantName}</p>
           )}
         </div>
         {data.category && (
           <span 
-            className="bg-gray-100 text-gray-600 px-2 py-0.5 rounded"
-            style={{ fontSize: CARD_LAYOUT.categoryBadgeSize }}
+            className="bg-gray-100 text-gray-600 px-3 py-1 rounded text-sm"
           >
             {data.category}
           </span>
@@ -166,24 +165,28 @@ export function SubsectionCard({ data, accentColor = '#3b82f6', logoUrl }: Subse
       </div>
 
       {/* Snags Section */}
-      <div className="mt-3 pt-3 border-t">
+      <div className="mt-4 pt-4 border-t">
         <SnagsSection snags={data.snags || []} />
       </div>
 
-      {/* Compliance Footer */}
-      <div className="mt-3 pt-3 border-t flex items-center gap-2">
-        <span 
-          className="text-gray-500 w-20"
-          style={{ fontSize: CARD_LAYOUT.labelSize }}
-        >
-          Compliance:
-        </span>
-        <StatusBadge 
-          label={getComplianceLabel(data.isCompliant)} 
-          colors={complianceColors}
-          icon={data.isCompliant === true ? <CheckCircle2 className="w-3 h-3" /> : 
-                data.isCompliant === false ? <XCircle className="w-3 h-3" /> : null}
-        />
+      {/* Compliance Footer - Fixed at bottom */}
+      <div className="mt-auto pt-4 border-t bg-gray-50 -mx-5 -mb-5 px-5 py-3 flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <span className="text-gray-600 font-medium text-sm">
+            Compliance Status:
+          </span>
+          <StatusBadge 
+            label={getComplianceLabel(data.isCompliant)} 
+            colors={complianceColors}
+            icon={data.isCompliant === true ? <CheckCircle2 className="w-4 h-4" /> : 
+                  data.isCompliant === false ? <XCircle className="w-4 h-4" /> : null}
+          />
+        </div>
+        {data.cocNumber && (
+          <span className="text-gray-500 text-sm">
+            COC: {data.cocNumber}
+          </span>
+        )}
       </div>
     </div>
   );
@@ -286,7 +289,7 @@ function SnagsSection({ snags }: SnagsSectionProps) {
 }
 
 // ============================================================================
-// GRID COMPONENT
+// STACKED GRID COMPONENT - Full width, one above the other
 // ============================================================================
 
 interface SubsectionGridProps {
@@ -297,7 +300,7 @@ interface SubsectionGridProps {
 
 export function SubsectionGrid({ subsections, accentColor, logoUrl }: SubsectionGridProps) {
   return (
-    <div className="grid grid-cols-2 gap-4">
+    <div className="flex flex-col gap-6">
       {subsections.map(sub => (
         <SubsectionCard 
           key={sub.id} 
