@@ -6,6 +6,9 @@
  * All PDF generators should use these functions to ensure consistent
  * branding, typography, colors, and layout across all documents.
  * 
+ * CRITICAL: Uses shared LAYOUT constants from siteSummaryRenderSpec.ts
+ * to ensure exact WYSIWYG matching between preview and PDF output.
+ * 
  * NOTE: This library completely replaces the legacy pdfUtils.ts (jsPDF).
  */
 
@@ -29,6 +32,8 @@ import {
   getKpiTableLayout,
 } from './pdfMakeConfig';
 import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from './documentDesignStandards';
+// Import shared layout constants for WYSIWYG matching
+import { LAYOUT, ACCENT_PALETTES } from './siteSummaryRenderSpec';
 
 // Re-export for convenience
 export {
@@ -62,14 +67,10 @@ type TDocumentDefinitions = any;
 // COVER PAGE BUILDERS
 // ============================================================================
 
-// Accent color palette for templates
-export const ACCENT_COLORS: Record<string, { primary: string; light: string; text: string }> = {
-  blue: { primary: '#2563eb', light: '#dbeafe', text: '#1e40af' },
-  green: { primary: '#16a34a', light: '#dcfce7', text: '#166534' },
-  orange: { primary: '#ea580c', light: '#ffedd5', text: '#c2410c' },
-  red: { primary: '#dc2626', light: '#fee2e2', text: '#b91c1c' },
-  purple: { primary: '#9333ea', light: '#f3e8ff', text: '#7e22ce' },
-};
+// Accent color palette for templates - use shared spec for WYSIWYG
+export const ACCENT_COLORS: Record<string, { primary: string; light: string; text: string }> = Object.fromEntries(
+  Object.entries(ACCENT_PALETTES).map(([key, val]) => [key, { primary: val.primary, light: val.light, text: val.dark }])
+);
 
 export interface CoverPageOptions {
   title: string;
@@ -89,6 +90,7 @@ export interface CoverPageOptions {
 
 /**
  * Create cover page content for pdfmake
+ * Uses shared LAYOUT constants from siteSummaryRenderSpec.ts for WYSIWYG matching
  */
 export function createCoverPage(options: CoverPageOptions): Content[] {
   const {
@@ -107,10 +109,27 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
     siteAddress,
   } = options;
 
-  // Get accent color values from palette
+  // Get accent color values from shared palette (WYSIWYG)
   const accentPalette = ACCENT_COLORS[accentColor] || ACCENT_COLORS.blue;
   const primaryAccent = accentPalette.primary;
   const lightAccent = accentPalette.light;
+
+  // Debug: Log template configuration being applied to PDF
+  console.log('[createCoverPage] Template Applied:', {
+    title,
+    subtitle,
+    accentColor,
+    primaryAccent,
+    hasLogo: !!logoDataUrl,
+    siteName,
+    clientName,
+    layoutConstants: {
+      accentBarHeight: LAYOUT.cover.accentBarHeight,
+      titleSize: LAYOUT.cover.titleSize,
+      subtitleSize: LAYOUT.cover.subtitleSize,
+      logoHeight: LAYOUT.cover.logoHeight,
+    },
+  });
 
   const formattedDate = reportDate.toLocaleDateString('en-GB', {
     day: 'numeric',
@@ -121,7 +140,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   const content: Content[] = [];
 
   // ======================================================================
-  // TOP ACCENT BAR - Matches preview exactly
+  // TOP ACCENT BAR - Uses LAYOUT.cover.accentBarHeight for WYSIWYG
   // ======================================================================
   content.push({
     canvas: [
@@ -130,7 +149,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         x: 0,
         y: 0,
         w: A4_WIDTH_PT,
-        h: mmToPt(8),
+        h: LAYOUT.cover.accentBarHeight,
         color: primaryAccent,
       },
     ],
@@ -138,14 +157,14 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   });
 
   // ======================================================================
-  // LOGO OR PLACEHOLDER - Centered like preview
+  // LOGO OR PLACEHOLDER - Uses LAYOUT.cover dimensions for WYSIWYG
   // ======================================================================
   if (logoDataUrl) {
     content.push({
       image: logoDataUrl,
-      width: 120,
+      height: LAYOUT.cover.logoHeight,
       alignment: 'center',
-      margin: [0, 60, 0, 20],
+      margin: [0, 60, 0, LAYOUT.cover.logoPadding],
     });
   } else {
     // Placeholder box matching preview style
@@ -158,12 +177,12 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
           color: primaryAccent,
           alignment: 'center',
           fillColor: lightAccent,
-          margin: [0, 20, 0, 20],
+          margin: [0, 18, 0, 18],
         }]],
       },
       layout: 'noBorders',
       alignment: 'center',
-      margin: [0, 60, 0, 20],
+      margin: [0, 60, 0, LAYOUT.cover.logoPadding],
     });
   }
 
@@ -179,20 +198,20 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         bold: true,
         color: COLORS.textSecondary,
         fillColor: '#f3f4f6',
-        margin: [15, 5, 15, 5],
+        margin: [16, 4, 16, 4],
       }]],
     },
     layout: 'noBorders',
     alignment: 'center',
-    margin: [0, 0, 0, 20],
+    margin: [0, 0, 0, 16],
   });
 
   // ======================================================================
-  // MAIN TITLE - Bold, accent color, like preview
+  // MAIN TITLE - Uses LAYOUT.cover.titleSize for WYSIWYG
   // ======================================================================
   content.push({
     text: title,
-    fontSize: 28,
+    fontSize: LAYOUT.cover.titleSize,
     bold: true,
     color: primaryAccent,
     alignment: 'center',
@@ -200,12 +219,12 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   });
 
   // ======================================================================
-  // SUBTITLE - Gray, lighter weight
+  // SUBTITLE - Uses LAYOUT.cover.subtitleSize for WYSIWYG
   // ======================================================================
   if (subtitle) {
     content.push({
       text: subtitle,
-      fontSize: 14,
+      fontSize: LAYOUT.cover.subtitleSize,
       color: '#6b7280',
       alignment: 'center',
       margin: [0, 0, 0, 32],
@@ -348,7 +367,7 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
   });
 
   // ======================================================================
-  // BOTTOM ACCENT BAR
+  // BOTTOM ACCENT BAR - Uses LAYOUT.cover.accentBarHeight for WYSIWYG
   // ======================================================================
   content.push({
     canvas: [
@@ -357,11 +376,11 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
         x: 0,
         y: 0,
         w: A4_WIDTH_PT,
-        h: mmToPt(8),
+        h: LAYOUT.cover.accentBarHeight,
         color: primaryAccent,
       },
     ],
-    absolutePosition: { x: 0, y: A4_HEIGHT_PT - mmToPt(8) },
+    absolutePosition: { x: 0, y: A4_HEIGHT_PT - LAYOUT.cover.accentBarHeight },
   });
 
   content.push({ text: '', pageBreak: 'after' });
