@@ -36,8 +36,11 @@ import {
   calculateCategoryHealth,
   type SiteSummaryMetrics,
   type SubsectionData,
+  type SnagData,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
+import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
+import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
 
 interface SiteSummaryReportProps {
   siteId: string;
@@ -165,24 +168,33 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     return section?.enabled ?? true;
   };
 
-  // Transform DB subsection to SubsectionData (from spec)
-  const transformToSubsectionData = (sub: any, allSnags: any[]): SubsectionData => {
-    const subSnagCount = allSnags.filter(s => 
+  // Transform DB subsection to SubsectionCardData (extended for cards)
+  const transformToSubsectionCardData = (sub: any, allSnags: any[]): SubsectionCardData => {
+    const subSnags = allSnags.filter(s => 
       s.subsection_id === sub.id && 
       !['rectified', 'Rectified'].includes(s.status || '')
-    ).length;
+    );
     
     return {
       id: sub.id,
       name: sub.name,
       category: sub.category,
       cocStatus: sub.coc_status,
+      cocNumber: sub.coc_number,
       meteringStatus: sub.metering_status,
       meterSerialNumber: sub.meter_serial_number,
       ctRatio: sub.ct_ratio,
-      snagCount: subSnagCount,
+      snagCount: subSnags.length,
       isCompliant: calculateSubsectionCompliance(sub, allSnags),
       qrCodeUrl: sub.qr_code_url,
+      tenantName: sub.tenant_name,
+      snags: subSnags.map(s => ({
+        id: s.id,
+        title: s.title || 'Untitled snag',
+        riskLevel: s.risk_level || 'Medium',
+        status: s.status,
+        description: s.description,
+      })) as SnagData[],
     };
   };
 
@@ -225,7 +237,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     // Fetch snags separately
     const subsectionIds = subsections.map(s => s.id);
-    const snagsRes = await supabase.from("snags").select("id, subsection_id, status").in("subsection_id", subsectionIds);
+    // Fetch snags with full details for card rendering
+    const snagsRes = await supabase.from("snags").select("id, subsection_id, title, status, risk_level, description").in("subsection_id", subsectionIds);
     const allSnags = snagsRes.data || [];
 
     // Get COC validations
@@ -237,10 +250,13 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     const cocValidations = cocValidationsQuery.data || [];
 
-    // Transform subsections to spec format
-    const subsectionData: SubsectionData[] = subsections.map(sub => 
-      transformToSubsectionData(sub, allSnags)
+    // Transform subsections to card format with snags
+    const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
+      transformToSubsectionCardData(sub, allSnags)
     );
+
+    // Also create SubsectionData for metrics calculation
+    const subsectionData: SubsectionData[] = subsectionCardData;
 
     // Calculate metrics using spec function
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
@@ -302,69 +318,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
           }
           content.push(createSectionHeader(title, 'primary'));
 
-          // Check if QR codes should be included in cards
-          const includeQRCodes = isSectionEnabled(sections, 'subsection-qr-codes');
-
-          for (const sub of subsectionData) {
-            // Generate QR code if enabled
-            let qrCodeBase64: string | null = null;
-            if (includeQRCodes) {
-              qrCodeBase64 = await generateQRCodeBase64(sub.id, qrBaseUrl);
-            }
-
-            // Use SUBSECTION_CARD_FIELDS from spec
-            const cardFields = SUBSECTION_CARD_FIELDS
-              .filter(field => !field.showIf || field.showIf(sub))
-              .map(field => ({
-                columns: [
-                  { width: '*', text: `${field.label}:`, fontSize: LAYOUT.subsectionCard.fieldFontSize, bold: true },
-                  { 
-                    width: 'auto', 
-                    text: field.getValue(sub), 
-                    fontSize: LAYOUT.subsectionCard.fieldFontSize, 
-                    color: field.getColor ? field.getColor(sub) : undefined 
-                  },
-                ],
-                margin: [0, 2, 0, 2],
-              }));
-
-            const cardContent: any[] = [
-              {
-                columns: [
-                  {
-                    width: '*',
-                    stack: [
-                      { text: sub.name, style: 'h3', color: COLORS.primary, margin: [0, 0, 0, 4] },
-                      { text: `Category: ${getCategoryAbbreviation(sub.category || 'Other')}`, fontSize: LAYOUT.subsectionCard.categoryFontSize, color: COLORS.textMuted },
-                    ]
-                  },
-                  qrCodeBase64 ? { 
-                    width: 70,
-                    stack: [
-                      { image: qrCodeBase64, width: LAYOUT.subsectionCard.qrCodeSize, height: LAYOUT.subsectionCard.qrCodeSize, alignment: 'right' as const },
-                    ]
-                  } : { width: 0, text: '' },
-                ],
-                margin: [0, 0, 0, 8],
-              },
-              ...cardFields,
-            ];
-
-            content.push({
-              table: {
-                widths: ['*'],
-                body: [[{ stack: cardContent, margin: [LAYOUT.subsectionCard.padding, LAYOUT.subsectionCard.padding, LAYOUT.subsectionCard.padding, LAYOUT.subsectionCard.padding] }]],
-              },
-              layout: {
-                hLineWidth: () => 1,
-                vLineWidth: () => 1,
-                hLineColor: () => '#e2e8f0',
-                vLineColor: () => '#e2e8f0',
-              },
-              margin: [0, 0, 0, LAYOUT.subsectionCard.gap],
-              unbreakable: true,
-            });
-          }
+          // Use the new 2-column subsection grid renderer with full snag details
+          const accentColor = getAccentPalette(customization.accentColor || 'blue').primary;
+          const subsectionGrid = await renderSubsectionGrid(
+            subsectionCardData,
+            accentColor,
+            null // Logo will be embedded later by pdfEngine
+          );
+          content.push(subsectionGrid);
           break;
 
         case "coc-validations":
