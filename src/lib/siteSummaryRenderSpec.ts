@@ -156,6 +156,13 @@ export const SECTION_SPECS: Record<string, SectionSpec> = {
     pageBreakBefore: true,
     renderPriority: 6,
   },
+  'asset-verification': {
+    id: 'asset-verification',
+    legacyIds: ['asset-summary'],
+    defaultTitle: 'Asset Verification Summary',
+    type: 'kpi',
+    renderPriority: 7,
+  },
 };
 
 // ============================================================================
@@ -200,6 +207,46 @@ export const INSPECTION_COLUMNS: TableColumnSpec[] = [
   { id: 'status', header: 'Status', width: 80 },
   { id: 'inspector', header: 'Inspector', width: 100 },
   { id: 'date', header: 'Date', width: 80 },
+];
+
+// Asset Verification KPI cards
+export interface AssetKpiCardSpec {
+  id: string;
+  label: string;
+  color: string;
+  getValue: (metrics: AssetVerificationMetrics) => number;
+  format: (value: number) => string;
+}
+
+export const ASSET_VERIFICATION_CARDS: AssetKpiCardSpec[] = [
+  { 
+    id: 'total-assets', 
+    label: 'Total Assets', 
+    color: STATUS_COLORS.info,
+    getValue: (m) => m.totalAssets,
+    format: (v) => v.toString(),
+  },
+  { 
+    id: 'verified', 
+    label: 'Verified', 
+    color: STATUS_COLORS.success,
+    getValue: (m) => m.verified,
+    format: (v) => v.toString(),
+  },
+  { 
+    id: 'discrepancies', 
+    label: 'Discrepancies', 
+    color: STATUS_COLORS.warning,
+    getValue: (m) => m.discrepancies,
+    format: (v) => v.toString(),
+  },
+  { 
+    id: 'unverified', 
+    label: 'Unverified', 
+    color: STATUS_COLORS.error,
+    getValue: (m) => m.unverified,
+    format: (v) => v.toString(),
+  },
 ];
 
 // ============================================================================
@@ -266,6 +313,15 @@ export interface SiteSummaryMetrics {
   cocCompliance: number;
   meteringData: number;
   snagFree: number;
+}
+
+// Asset verification metrics for site summary
+export interface AssetVerificationMetrics {
+  totalAssets: number;
+  verified: number;
+  discrepancies: number;
+  unverified: number;
+  verificationRate: number;
 }
 
 // Individual snag details
@@ -496,4 +552,47 @@ export function calculateCategoryHealth(
       compliant: data.compliant,
       percentage: Math.round((data.compliant / data.total) * 100) || 0,
     }));
+}
+
+/**
+ * Calculate asset verification metrics from assets and subsections
+ * Compares site_assets with subsection metering data
+ */
+export function calculateAssetMetrics(
+  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; premises_id: string }>,
+  subsections: SubsectionData[]
+): AssetVerificationMetrics {
+  const totalAssets = assets.length;
+  
+  if (totalAssets === 0) {
+    return { totalAssets: 0, verified: 0, discrepancies: 0, unverified: 0, verificationRate: 0 };
+  }
+
+  let verified = 0;
+  let discrepancies = 0;
+
+  assets.forEach(asset => {
+    // Find matching subsection by meter serial number
+    const matchingSubsection = subsections.find(
+      sub => sub.meterSerialNumber && asset.meter_serial_number && 
+             sub.meterSerialNumber.toLowerCase() === asset.meter_serial_number.toLowerCase()
+    );
+
+    if (matchingSubsection) {
+      // Check for discrepancies (e.g., CT ratio mismatch)
+      const ctMatch = !asset.ct_ratio || !matchingSubsection.ctRatio ||
+                      asset.ct_ratio.toLowerCase() === matchingSubsection.ctRatio.toLowerCase();
+      
+      if (ctMatch) {
+        verified++;
+      } else {
+        discrepancies++;
+      }
+    }
+  });
+
+  const unverified = totalAssets - verified - discrepancies;
+  const verificationRate = Math.round(((verified + discrepancies) / totalAssets) * 100);
+
+  return { totalAssets, verified, discrepancies, unverified, verificationRate };
 }
