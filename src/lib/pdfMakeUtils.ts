@@ -495,7 +495,8 @@ export function createPageFooter(skipFirstPage = true): (currentPage: number, pa
           width: '*',
         },
       ],
-      margin: [mmToPt(margins.left), 0, mmToPt(margins.right), 0],
+      // Position footer at actual bottom of page margin area
+      margin: [mmToPt(margins.left), 20, mmToPt(margins.right), 0],
     };
   };
 }
