@@ -740,7 +740,6 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
               <Building2 style={{ width: scale(24), height: scale(24), color: colors.primary }} />
             </div>
           )}
-          <div className="rounded px-4 py-1 mb-4" style={{ backgroundColor: '#f3f4f6', fontSize: scale(10) }}>SITE SUMMARY REPORT</div>
           <h1 style={{ fontSize: scale(LAYOUT.cover.titleSize), fontWeight: 'bold', color: colors.primary, marginBottom: scale(8) }}>{customization.coverTitle || 'Site Summary Report'}</h1>
           <p style={{ fontSize: scale(LAYOUT.cover.subtitleSize), color: '#6b7280', marginBottom: scale(32) }}>{customization.coverSubtitle || 'Comprehensive Site Analysis'}</p>
           <div className="rounded p-4" style={{ backgroundColor: '#f9fafb', borderLeft: `4px solid ${colors.primary}`, width: '80%' }}>
