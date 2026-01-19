@@ -232,7 +232,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       supabase.from("site_documents").select("*").eq("site_id", siteId),
       supabase.from("subsection_documents").select("subsection_id, file_name, category_id"),
       supabase.from("settings").select("qr_base_url").single(),
-      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, premises_id").eq("site_id", siteId),
+      supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
     ]);
 
     if (siteRes.error) throw siteRes.error;

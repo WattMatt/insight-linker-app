@@ -221,7 +221,7 @@ export interface AssetKpiCardSpec {
 export const ASSET_VERIFICATION_CARDS: AssetKpiCardSpec[] = [
   { 
     id: 'total-assets', 
-    label: 'Total Assets', 
+    label: 'Electrical Meters', 
     color: STATUS_COLORS.info,
     getValue: (m) => m.totalAssets,
     format: (v) => v.toString(),
@@ -241,9 +241,9 @@ export const ASSET_VERIFICATION_CARDS: AssetKpiCardSpec[] = [
     format: (v) => v.toString(),
   },
   { 
-    id: 'unverified', 
-    label: 'Unverified', 
-    color: STATUS_COLORS.error,
+    id: 'pending', 
+    label: 'Pending', 
+    color: STATUS_COLORS.muted,
     getValue: (m) => m.unverified,
     format: (v) => v.toString(),
   },
