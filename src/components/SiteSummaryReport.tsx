@@ -316,7 +316,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
           if (spec?.pageBreakBefore) {
             content.push({ text: '', pageBreak: 'before' });
           }
-          content.push(createSectionHeader(title, 'primary'));
+          // Section header sits directly below page header (no top margin after page break)
+          content.push(createSectionHeader(title, 'primary', { noTopMargin: true }));
 
           // Use the new 2-column subsection grid renderer with full snag details
           const accentColor = getAccentPalette(customization.accentColor || 'blue').primary;

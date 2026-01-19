@@ -397,10 +397,14 @@ export function createCoverPage(options: CoverPageOptions): Content[] {
  */
 export function createSectionHeader(
   title: string,
-  style: 'primary' | 'secondary' | 'muted' = 'secondary'
+  style: 'primary' | 'secondary' | 'muted' = 'secondary',
+  options: { noTopMargin?: boolean } = {}
 ): Content {
   const bgColor = style === 'primary' ? COLORS.primary : COLORS.bgHeader;
   const textColor = style === 'primary' ? COLORS.white : COLORS.textPrimary;
+  
+  // No top margin when header should sit directly below page header
+  const topMargin = options.noTopMargin ? 0 : 10;
 
   return {
     table: {
@@ -421,7 +425,7 @@ export function createSectionHeader(
       paddingBottom: () => 6,
       fillColor: () => bgColor,
     },
-    margin: [0, 10, 0, 8],
+    margin: [0, topMargin, 0, 8],
   };
 }
 
