@@ -555,12 +555,46 @@ export function calculateCategoryHealth(
 }
 
 /**
- * Calculate asset verification metrics from assets and subsections
- * Compares site_assets with subsection metering data
+ * Normalize meter serial for matching (same logic as AssetVerification)
+ */
+function normalizeMeterSerial(serial: string | null | undefined): string {
+  return (serial || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
+}
+
+/**
+ * Compare two values for discrepancy detection
+ */
+function compareValues(
+  assetValue: string | null | undefined,
+  inspectionValue: string | null | undefined
+): "match" | "mismatch" | "na" {
+  const normAsset = (assetValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
+  const normInspection = (inspectionValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
+
+  if ((!normAsset || normAsset === "NA" || normAsset === "TBC") && 
+      (!normInspection || normInspection === "NA" || normInspection === "TBC")) {
+    return "na";
+  }
+
+  if (!normAsset || normAsset === "NA" || normAsset === "TBC") return "na";
+  if (!normInspection || normInspection === "NA" || normInspection === "TBC") return "na";
+
+  return normAsset === normInspection ? "match" : "mismatch";
+}
+
+interface InspectionTenantData {
+  meterSerialNumber?: string;
+  ctSizeAndRatio?: string;
+  breakerSize?: string;
+}
+
+/**
+ * Calculate asset verification metrics using inspection json_data
+ * Matches the same logic as the AssetVerification component
  */
 export function calculateAssetMetrics(
-  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; premises_id: string }>,
-  subsections: SubsectionData[]
+  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; breaker_size?: string | null; premises_id: string }>,
+  inspections: Array<{ json_data?: unknown }>
 ): AssetVerificationMetrics {
   const totalAssets = assets.length;
   
@@ -568,25 +602,46 @@ export function calculateAssetMetrics(
     return { totalAssets: 0, verified: 0, discrepancies: 0, unverified: 0, verificationRate: 0 };
   }
 
+  // Build inspection meter matches map from json_data (same as AssetVerification)
+  const inspectionMeterMatches = new Map<string, InspectionTenantData>();
+  
+  inspections.forEach(inspection => {
+    const jsonData = inspection.json_data as { 
+      tenants?: Array<InspectionTenantData>
+    };
+    
+    const tenants = jsonData?.tenants || [];
+    tenants.forEach(tenant => {
+      if (!tenant.meterSerialNumber) return;
+      
+      const normalizedSerial = normalizeMeterSerial(tenant.meterSerialNumber);
+      if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
+      
+      // Keep first match
+      if (!inspectionMeterMatches.has(normalizedSerial)) {
+        inspectionMeterMatches.set(normalizedSerial, tenant);
+      }
+    });
+  });
+
   let verified = 0;
   let discrepancies = 0;
 
   assets.forEach(asset => {
-    // Find matching subsection by meter serial number
-    const matchingSubsection = subsections.find(
-      sub => sub.meterSerialNumber && asset.meter_serial_number && 
-             sub.meterSerialNumber.toLowerCase() === asset.meter_serial_number.toLowerCase()
-    );
+    const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
+    const inspectionMatch = normalizedSerial && normalizedSerial !== "NA" && normalizedSerial !== "TBC"
+      ? inspectionMeterMatches.get(normalizedSerial) || null
+      : null;
 
-    if (matchingSubsection) {
-      // Check for discrepancies (e.g., CT ratio mismatch)
-      const ctMatch = !asset.ct_ratio || !matchingSubsection.ctRatio ||
-                      asset.ct_ratio.toLowerCase() === matchingSubsection.ctRatio.toLowerCase();
+    if (inspectionMatch) {
+      const ctMatch = compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio);
+      const breakerMatch = compareValues(asset.breaker_size, inspectionMatch.breakerSize);
+      const hasDiscrepancy = ctMatch === "mismatch" || breakerMatch === "mismatch";
       
-      if (ctMatch) {
-        verified++;
-      } else {
+      if (hasDiscrepancy) {
         discrepancies++;
+      } else {
+        verified++;
       }
     }
   });
