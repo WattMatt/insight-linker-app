@@ -464,6 +464,7 @@ export function createPageHeader(title: string, skipFirstPage = true): (currentP
 
 /**
  * Create page footer function for document definition
+ * Footer is positioned at the very bottom of the page within the margin area
  */
 export function createPageFooter(skipFirstPage = true): (currentPage: number, pageCount: number) => Content {
   const formattedDate = new Date().toLocaleDateString('en-GB');
@@ -476,6 +477,8 @@ export function createPageFooter(skipFirstPage = true): (currentPage: number, pa
     const displayPage = skipFirstPage ? currentPage - 1 : currentPage;
     const displayTotal = skipFirstPage ? pageCount - 1 : pageCount;
 
+    // Footer positioned at absolute bottom - pdfmake footer area starts at pageMargins[3] from bottom
+    // We use a small top margin to push content to the very bottom of the footer area
     return {
       columns: [
         {
@@ -499,8 +502,9 @@ export function createPageFooter(skipFirstPage = true): (currentPage: number, pa
           width: '*',
         },
       ],
-      // Position footer at actual bottom of page margin area
-      margin: [mmToPt(margins.left), 20, mmToPt(margins.right), 0],
+      // Footer area is 35mm (~99pt). Push content to bottom with margin-top
+      // This positions text at the very bottom of the page
+      margin: [mmToPt(margins.left), mmToPt(25), mmToPt(margins.right), 0],
     };
   };
 }
