@@ -910,18 +910,38 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
 }
 
-// Generate COC Verification Annex Pages
+// Generate COC Verification Annex Pages - Matching standalone COC Validation Report format
 function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, generatedAt: string, startPage: number): string {
   let pageNumber = startPage;
   
-  return annexes.map((annex, index) => {
+  return annexes.map((annex) => {
     const status = annex.status || 'Unknown';
     const isPass = status.toLowerCase().includes('pass') || status.toLowerCase().includes('valid');
     const isFail = status.toLowerCase().includes('fail');
     const statusColor = isPass ? COLORS.success : isFail ? COLORS.error : COLORS.warning;
-    const statusBg = isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7';
     
-    // Parse violations if they exist
+    // Parse report data for full validation details
+    let reportData: any = {};
+    try {
+      if (annex.reportData) {
+        reportData = typeof annex.reportData === 'string' ? JSON.parse(annex.reportData) : annex.reportData;
+      }
+    } catch (e) {
+      reportData = {};
+    }
+    
+    // Extract all the detailed sections from report_data
+    const cocNumber = reportData.cocNumber || annex.cocNumber || 'N/A';
+    const cocType = reportData.cocType || annex.cocType || 'N/A';
+    const installationSummary = reportData.installationSummary || '';
+    const overallAssessment = reportData.overallAssessment || '';
+    const administrativeDetails = reportData.administrativeDetails || {};
+    const technicalEvaluation = reportData.technicalEvaluation || [];
+    const checks = reportData.checks || [];
+    const criticalFailures = reportData.criticalFailures || [];
+    const recommendations = reportData.recommendations || [];
+    
+    // Parse violations if they exist (fallback for older data)
     let violations: any[] = [];
     try {
       if (annex.violations) {
@@ -933,151 +953,222 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
       violations = [];
     }
     
-    // Parse report data for additional context
-    let recommendations: string[] = [];
-    let testResults: any = null;
-    try {
-      if (annex.reportData) {
-        const reportData = typeof annex.reportData === 'string' ? JSON.parse(annex.reportData) : annex.reportData;
-        recommendations = reportData.recommendations || [];
-        testResults = reportData.testResults;
-      }
-    } catch (e) {
-      // Ignore parse errors
-    }
+    // Use criticalFailures from report_data if available, otherwise fall back to violations
+    const failuresList = criticalFailures.length > 0 ? criticalFailures : violations;
     
     const currentPageNum = pageNumber++;
     
-    return `
-    <!-- COC Annex Page ${index + 1} -->
-    <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
-      ${generatePageHeader('COC Verification Report', accentColor)}
-      
-      <!-- Annex Header -->
-      <table style="width: 100%; border: 1px solid ${COLORS.border}; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="background: ${accentColor}; color: white; padding: 12px 15px; font-weight: 600; font-size: 14pt;">
-            ${annex.subsectionName}
-          </td>
-          <td style="background: ${statusBg}; color: ${statusColor}; padding: 12px 15px; font-weight: 600; text-align: right; width: 100px;">
-            ${status}
-          </td>
-        </tr>
-      </table>
-      
-      <!-- Subsection Details -->
-      <table style="width: 100%; border: 1px solid ${COLORS.border}; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
-        <tr style="background: ${COLORS.lightGray};">
-          <td style="padding: 8px 12px; font-weight: 600; width: 30%; border-right: 1px solid ${COLORS.border};">Field</td>
-          <td style="padding: 8px 12px; font-weight: 600;">Value</td>
-        </tr>
-        ${annex.tenantName ? `
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Tenant Name</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.tenantName}</td>
-        </tr>
-        ` : ''}
-        ${annex.category ? `
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Category</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.category}</td>
-        </tr>
-        ` : ''}
-        ${annex.cocNumber ? `
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">COC Number</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocNumber}</td>
-        </tr>
-        ` : ''}
-        ${annex.cocType ? `
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">COC Type</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocType}</td>
-        </tr>
-        ` : ''}
-        ${annex.cocIssueDate ? `
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Issue Date</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocIssueDate}</td>
-        </tr>
-        ` : ''}
-        <tr>
-          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Validated At</td>
-          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${new Date(annex.validatedAt).toLocaleString('en-ZA')}</td>
-        </tr>
-      </table>
-      
-      ${violations.length > 0 ? `
-      <!-- Violations -->
+    // Build sections HTML
+    let sectionsHtml = '';
+    
+    // ===== VALIDATION STATUS SECTION =====
+    sectionsHtml += `
       <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="background: ${COLORS.error}; color: white; padding: 10px 12px; font-weight: 600;">
-            Violations Found (${violations.length})
+          <td style="background: ${accentColor}; color: white; padding: 8px 12px; font-weight: 600; font-size: 11pt;">
+            Validation Status
           </td>
         </tr>
         <tr>
-          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
-            <table style="width: 100%;" cellpadding="0" cellspacing="0">
-              <tr style="background: ${COLORS.lightGray};">
-                <td style="padding: 8px 12px; font-weight: 600; border-right: 1px solid ${COLORS.border}; width: 30%;">Rule</td>
-                <td style="padding: 8px 12px; font-weight: 600; border-right: 1px solid ${COLORS.border};">Description</td>
-                <td style="padding: 8px 12px; font-weight: 600; width: 80px; text-align: center;">Severity</td>
-              </tr>
-              ${violations.slice(0, 10).map((v: any, i: number) => `
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 15px;">
+            <table style="width: 100%;">
               <tr>
-                <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border}; font-size: 9pt;">${v.rule || v.code || `Violation ${i + 1}`}</td>
-                <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border}; font-size: 9pt;">${v.message || v.description || 'No description'}</td>
-                <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border}; text-align: center;">
-                  <span style="background: ${v.severity === 'critical' || v.severity === 'high' ? '#fee2e2' : v.severity === 'medium' ? '#fef3c7' : '#dbeafe'}; color: ${v.severity === 'critical' || v.severity === 'high' ? COLORS.error : v.severity === 'medium' ? COLORS.warning : COLORS.info}; padding: 2px 8px; border-radius: 4px; font-size: 8pt; font-weight: 500;">
-                    ${v.severity || 'info'}
-                  </span>
+                <td style="vertical-align: top; width: 100px;">
+                  <span style="font-size: 20pt; font-weight: 700; color: ${statusColor};">${status.toUpperCase()}</span>
+                </td>
+                <td style="vertical-align: top; padding-left: 20px;">
+                  <span style="font-size: 10pt; color: ${COLORS.textMuted};">COC Type: ${cocType}</span>
                 </td>
               </tr>
-              `).join('')}
-              ${violations.length > 10 ? `
-              <tr>
-                <td colspan="3" style="padding: 8px 12px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.textMuted}; font-style: italic;">
-                  ... and ${violations.length - 10} more violations
-                </td>
-              </tr>
-              ` : ''}
             </table>
+            ${installationSummary ? `
+            <p style="margin: 12px 0 0 0; font-size: 9pt;">
+              <strong>Installation Summary:</strong> ${installationSummary}
+            </p>
+            ` : ''}
+            ${overallAssessment ? `
+            <p style="margin: 8px 0 0 0; font-size: 9pt;">
+              <strong>Assessment:</strong> ${overallAssessment}
+            </p>
+            ` : ''}
           </td>
         </tr>
       </table>
-      ` : `
-      <!-- No Violations -->
-      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+    `;
+    
+    // ===== ADMINISTRATIVE DETAILS SECTION =====
+    const adminFields = [
+      { label: 'Physical Address', value: administrativeDetails.physicalAddress },
+      { label: 'Registered Person', value: administrativeDetails.registeredPerson },
+      { label: 'Registration Number', value: administrativeDetails.registrationNumber },
+      { label: 'Type of Registration', value: administrativeDetails.registrationType },
+    ].filter(f => f.value && !f.value.toLowerCase().includes('not found') && !f.value.toLowerCase().includes('n/a'));
+    
+    if (adminFields.length > 0) {
+      sectionsHtml += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+              Administrative Details
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                ${adminFields.map(f => `
+                <tr>
+                  <td style="padding: 8px 12px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted}; font-size: 9pt;">${f.label}</td>
+                  <td style="padding: 8px 12px; border-bottom: 1px solid ${COLORS.border}; font-size: 9pt;">${f.value}</td>
+                </tr>
+                `).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    // ===== TECHNICAL EVALUATION SECTION =====
+    if (technicalEvaluation.length > 0) {
+      sectionsHtml += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+              Technical Evaluation
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr style="background: ${COLORS.lightGray};">
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 15%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Section</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 25%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Requirement</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Finding</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 60px; text-align: center; border-bottom: 1px solid ${COLORS.border};">Status</td>
+                </tr>
+                ${technicalEvaluation.slice(0, 8).map((te: any) => {
+                  const teStatusColor = te.status?.toLowerCase() === 'pass' ? COLORS.success : 
+                                        te.status?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
+                  return `
+                  <tr>
+                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.section || '-'}</td>
+                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.requirement || '-'}</td>
+                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.finding || '-'}</td>
+                    <td style="padding: 6px 10px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${teStatusColor}; font-weight: 600;">${te.status || '-'}</td>
+                  </tr>
+                  `;
+                }).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    // ===== CHECK RESULTS SECTION =====
+    if (checks.length > 0) {
+      sectionsHtml += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+              Check Results
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr style="background: ${COLORS.lightGray};">
+                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 10%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Clause</td>
+                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 25%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Description</td>
+                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Measured</td>
+                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Limit</td>
+                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 10%; text-align: center; border-bottom: 1px solid ${COLORS.border};">Result</td>
+                </tr>
+                ${checks.slice(0, 10).map((check: any) => {
+                  const checkColor = check.result?.toLowerCase() === 'pass' ? COLORS.success : 
+                                     check.result?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
+                  return `
+                  <tr>
+                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.clause || '-'}</td>
+                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.description || '-'}</td>
+                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.measuredValue || '-'}</td>
+                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.limit || '-'}</td>
+                    <td style="padding: 6px 8px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${checkColor}; font-weight: 600;">${check.result || '-'}</td>
+                  </tr>
+                  `;
+                }).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    // ===== CRITICAL FAILURES SECTION =====
+    if (failuresList.length > 0) {
+      sectionsHtml += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: #fef2f2; color: ${COLORS.error}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${COLORS.error};">
+              Critical Failures (${failuresList.length})
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #fecaca; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr style="background: #fef2f2;">
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 5%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">#</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 15%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Clause</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 35%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Description</td>
+                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; border-bottom: 1px solid #fecaca;">Reason</td>
+                </tr>
+                ${failuresList.slice(0, 8).map((f: any, i: number) => `
+                <tr>
+                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; text-align: center;">${i + 1}</td>
+                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; color: ${COLORS.error}; font-weight: 600;">${f.clause || f.code || f.rule || '-'}</td>
+                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">${f.description || f.message || '-'}</td>
+                  <td style="padding: 6px 10px; font-size: 8pt; border-bottom: 1px solid #fecaca; color: ${COLORS.textMuted};">${f.reason || f.evidence || '-'}</td>
+                </tr>
+                `).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    // ===== RECOMMENDATIONS SECTION =====
+    if (recommendations.length > 0) {
+      sectionsHtml += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+              Recommendations
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 12px;">
+              <ol style="margin: 0; padding-left: 20px; font-size: 9pt; line-height: 1.6;">
+                ${recommendations.slice(0, 8).map((rec: string) => `<li style="margin-bottom: 4px;">${rec}</li>`).join('')}
+              </ol>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    return `
+    <!-- COC Verification Annex Page -->
+    <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+      <!-- Header -->
+      <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 15px;">
         <tr>
-          <td style="background: ${COLORS.success}; color: white; padding: 10px 12px; font-weight: 600;">
-            Validation Result
-          </td>
-        </tr>
-        <tr>
-          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 15px; text-align: center; color: ${COLORS.success};">
-            ✓ No violations detected
-          </td>
+          <td style="font-size: 12pt; font-weight: 700; color: ${accentColor}; padding-bottom: 8px;">COC Validation Report</td>
+          <td style="font-size: 10pt; text-align: right; color: ${COLORS.textMuted}; padding-bottom: 8px;">REF: ${cocNumber}</td>
         </tr>
       </table>
-      `}
       
-      ${recommendations.length > 0 ? `
-      <!-- Recommendations -->
-      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="background: ${COLORS.info}; color: white; padding: 10px 12px; font-weight: 600;">
-            Recommendations
-          </td>
-        </tr>
-        <tr>
-          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 12px;">
-            <ul style="margin: 0; padding-left: 20px; color: ${COLORS.text};">
-              ${recommendations.slice(0, 8).map((rec: string) => `<li style="margin-bottom: 6px; font-size: 9pt;">${rec}</li>`).join('')}
-            </ul>
-          </td>
-        </tr>
-      </table>
-      ` : ''}
+      ${sectionsHtml}
       
       ${generatePageFooter(currentPageNum, '{{TOTAL_PAGES}}', generatedAt)}
     </div>
