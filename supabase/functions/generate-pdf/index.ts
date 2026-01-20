@@ -356,6 +356,117 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
   `;
 }
 
+function generateAssetVerification(data: AssetVerificationData, accentColor: string): string {
+  const getStatusStyle = (status: string) => {
+    if (status === 'verified') return { color: COLORS.success, text: '✓ Verified' };
+    if (status === 'discrepancy') return { color: COLORS.error, text: '✗ Discrepancy' };
+    return { color: COLORS.muted, text: '○ Pending' };
+  };
+
+  return `
+    ${generateSectionHeader('Asset Verification Schedule', accentColor)}
+    <table style="width: 100%; border-collapse: separate; border-spacing: 10px; margin-bottom: 15px;">
+      <tr>
+        <td style="width: 33%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.success};">${data.verified}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Verified</div>
+        </td>
+        <td style="width: 33%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.error};">${data.discrepancies}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Discrepancies</div>
+        </td>
+        <td style="width: 33%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.muted};">${data.pending}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Pending</div>
+        </td>
+      </tr>
+    </table>
+    ${data.schedule && data.schedule.length > 0 ? `
+      <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+        <thead>
+          <tr style="background: ${COLORS.primary};">
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 24%;">Premises</th>
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 13%;">Meter S/N</th>
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 11%;">Breaker</th>
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 11%;">CT Ratio</th>
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 13%;">Inspected S/N</th>
+            <th style="padding: 10px 10px; text-align: left; color: white; width: 11%;">Insp. Breaker</th>
+            <th style="padding: 10px 10px; text-align: center; color: white; width: 17%;">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.schedule.map(row => {
+            const style = getStatusStyle(row.status);
+            return `
+              <tr style="background: white; border-bottom: 0.5pt solid ${COLORS.border};">
+                <td style="padding: 8px 10px;">${row.premisesId || '-'}</td>
+                <td style="padding: 8px 10px;">${row.meterSerial || '-'}</td>
+                <td style="padding: 8px 10px;">${row.breakerSize || '-'}</td>
+                <td style="padding: 8px 10px;">${row.ctRatio || '-'}</td>
+                <td style="padding: 8px 10px;">${row.inspectedSerial || '-'}</td>
+                <td style="padding: 8px 10px;">${row.inspectedBreaker || '-'}</td>
+                <td style="padding: 8px 10px; text-align: center; color: ${style.color}; font-weight: 600;">${style.text}</td>
+              </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    ` : ''}
+  `;
+}
+
+function generateFortressChecklist(data: FortressChecklistData, accentColor: string): string {
+  const total = data.completed + data.pending + data.notApplicable;
+  const progressPercent = total > 0 ? Math.round((data.completed / (data.completed + data.pending)) * 100) : 0;
+
+  return `
+    ${generateSectionHeader('Fortress Checklist', accentColor)}
+    <table style="width: 100%; border-collapse: separate; border-spacing: 10px; margin-bottom: 15px;">
+      <tr>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.success};">${data.completed}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Completed</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.warning};">${data.pending}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Pending</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${COLORS.muted};">${data.notApplicable}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">N/A</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 16px; text-align: center;">
+          <div style="font-size: 22pt; font-weight: 700; color: ${accentColor};">${progressPercent}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px;">Progress</div>
+        </td>
+      </tr>
+    </table>
+    ${data.sections && data.sections.length > 0 ? `
+      <table style="width: 100%; border-collapse: collapse; font-size: 9pt;">
+        <thead>
+          <tr style="background: ${COLORS.primary};">
+            <th style="padding: 10px 15px; text-align: left; color: white;">Section</th>
+            <th style="padding: 10px 15px; text-align: right; color: white; width: 100px;">Progress</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${data.sections.map(section => `
+            <tr style="background: white; border-bottom: 0.5pt solid ${COLORS.border};">
+              <td style="padding: 8px 15px;">${section.name}</td>
+              <td style="padding: 8px 15px; text-align: right;">
+                <span style="display: inline-block; width: 60px; height: 8px; background: ${COLORS.lightGray}; border-radius: 4px; margin-right: 8px; vertical-align: middle;">
+                  <span style="display: block; width: ${section.progress}%; height: 100%; background: ${section.progress >= 100 ? COLORS.success : section.progress >= 50 ? COLORS.info : COLORS.warning}; border-radius: 4px;"></span>
+                </span>
+                <span style="font-weight: 600;">${section.progress}%</span>
+              </td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+    ` : ''}
+  `;
+}
+
 function getCocStatusStyle(status: string | undefined): { bg: string; color: string; text: string } {
   if (!status) return { bg: '#fef3c7', color: '#92400e', text: 'Missing' };
   const s = status.toLowerCase();
@@ -547,12 +658,21 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   // Calculate health metrics if not provided
   const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
   
-  // Calculate total pages: 1 cover + 2 summary pages + subsection pages
+  // Calculate total pages: 1 cover + 4 summary pages (health, docs, assets, fortress) + subsection pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
-  const totalPages = 1 + 2 + subsectionPages;
+  const hasAssetVerification = !!data.assetVerification;
+  const hasFortressChecklist = !!data.fortressChecklist;
+  const summaryPagesCount = 2 + (hasAssetVerification ? 1 : 0) + (hasFortressChecklist ? 1 : 0);
+  const totalPages = 1 + summaryPagesCount + subsectionPages;
+  
+  // Calculate page numbers for subsection pages
+  const subsectionStartPage = 1 + summaryPagesCount + 1;
   
   // Generate subsection pages (async for QR generation)
-  const subsectionPagesHtml = await generateSubsectionPages(data.subsections || [], accentColor, generatedAt, 3, qrBaseUrl);
+  const subsectionPagesHtml = await generateSubsectionPages(data.subsections || [], accentColor, generatedAt, subsectionStartPage, qrBaseUrl);
+  
+  // Track current page number for summary pages
+  let currentPage = 1;
   
   const html = `
 <!DOCTYPE html>
@@ -592,21 +712,39 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   <!-- Cover Page -->
   ${generateCoverPage(data, accentColor)}
   
-  <!-- Page 1: Health Metrics & Category Health -->
+  <!-- Page ${currentPage}: Health Metrics & Category Health -->
   <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
     ${generatePageHeader('Site Summary Report', accentColor)}
     ${generateHealthMetrics(healthMetrics, accentColor)}
     ${data.categoryHealth ? generateCategoryHealth(data.categoryHealth, accentColor) : ''}
     ${generateSummaryStatistics(data.summaryStats || { totalSubsections: 0, compliantCount: 0, nonCompliantCount: 0, pendingCount: 0, cocValidCount: 0, cocExpiredCount: 0, cocMissingCount: 0, cocRequired: 0, meteringInstalled: 0, openSnagsCount: 0, resolvedSnagsCount: 0 }, accentColor)}
-    ${generatePageFooter(1, totalPages.toString(), generatedAt)}
+    ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
   </div>
   
-  <!-- Page 2: Documents Summary -->
+  <!-- Page ${currentPage}: Documents Summary -->
   <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
     ${generatePageHeader('Site Summary Report', accentColor)}
     ${data.documentsSummary ? generateDocumentsSummary(data.documentsSummary, accentColor) : '<div style="padding: 20px; color: ' + COLORS.textMuted + '; text-align: center;">No documents available</div>'}
-    ${generatePageFooter(2, totalPages.toString(), generatedAt)}
+    ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
   </div>
+  
+  ${hasAssetVerification ? `
+  <!-- Page ${currentPage}: Asset Verification -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+    ${generatePageHeader('Site Summary Report', accentColor)}
+    ${generateAssetVerification(data.assetVerification!, accentColor)}
+    ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
+  </div>
+  ` : ''}
+  
+  ${hasFortressChecklist ? `
+  <!-- Page ${currentPage}: Fortress Checklist -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+    ${generatePageHeader('Site Summary Report', accentColor)}
+    ${generateFortressChecklist(data.fortressChecklist!, accentColor)}
+    ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
+  </div>
+  ` : ''}
   
   <!-- Subsection Pages -->
   ${subsectionPagesHtml}
