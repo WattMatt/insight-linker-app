@@ -793,6 +793,10 @@ Deno.serve(async (req) => {
 
     const body = await req.json() as ReportData;
     console.log('Generating PDF for:', body.siteName, 'Type:', body.reportType, 'Subsections:', body.subsections?.length || 0);
+    console.log('Asset Verification:', body.assetVerification ? `${body.assetVerification.totalAssets} assets, ${body.assetVerification.schedule?.length || 0} schedule rows` : 'NONE');
+    console.log('Fortress Checklist:', body.fortressChecklist ? `${body.fortressChecklist.completed} completed, ${body.fortressChecklist.sections?.length || 0} sections` : 'NONE');
+    console.log('Documents Summary:', body.documentsSummary?.length || 0, 'categories');
+    console.log('Category Health:', body.categoryHealth?.length || 0, 'categories');
 
     // Generate HTML (async for QR code generation)
     let html: string;
