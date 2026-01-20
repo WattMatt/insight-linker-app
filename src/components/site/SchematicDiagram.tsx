@@ -628,6 +628,36 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
+  // Apply current size to all blocks
+  const handleApplySizeToAll = async () => {
+    if (blocks.length === 0) return;
+
+    try {
+      // Update all blocks in database
+      const { error } = await supabase
+        .from("schematic_blocks")
+        .update({
+          width: editForm.width,
+          height: editForm.height,
+        })
+        .eq("schematic_id", schematic?.id);
+
+      if (error) throw error;
+
+      // Update local state
+      setBlocks(blocks.map(b => ({
+        ...b,
+        width: editForm.width,
+        height: editForm.height,
+      })));
+
+      toast.success(`Applied size (${editForm.width}×${editForm.height}px) to all ${blocks.length} blocks`);
+    } catch (error) {
+      console.error("Error applying size to all blocks:", error);
+      toast.error("Failed to apply size to all blocks");
+    }
+  };
+
   // Delete block
   const handleDeleteBlock = async () => {
     if (!selectedBlock) return;
@@ -1188,28 +1218,41 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               />
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="block_width">Width (px)</Label>
-                <Input
-                  id="block_width"
-                  type="number"
-                  min={40}
-                  max={500}
-                  value={editForm.width}
-                  onChange={(e) => setEditForm({ ...editForm, width: Math.max(40, Number(e.target.value)) })}
-                />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label>Block Size</Label>
+                <Button 
+                  variant="outline" 
+                  size="sm"
+                  onClick={handleApplySizeToAll}
+                  className="text-xs h-7"
+                >
+                  Apply to All ({blocks.length})
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="block_height">Height (px)</Label>
-                <Input
-                  id="block_height"
-                  type="number"
-                  min={30}
-                  max={500}
-                  value={editForm.height}
-                  onChange={(e) => setEditForm({ ...editForm, height: Math.max(30, Number(e.target.value)) })}
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="block_width" className="text-xs text-muted-foreground">Width (px)</Label>
+                  <Input
+                    id="block_width"
+                    type="number"
+                    min={40}
+                    max={500}
+                    value={editForm.width}
+                    onChange={(e) => setEditForm({ ...editForm, width: Math.max(40, Number(e.target.value)) })}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="block_height" className="text-xs text-muted-foreground">Height (px)</Label>
+                  <Input
+                    id="block_height"
+                    type="number"
+                    min={30}
+                    max={500}
+                    value={editForm.height}
+                    onChange={(e) => setEditForm({ ...editForm, height: Math.max(30, Number(e.target.value)) })}
+                  />
+                </div>
               </div>
             </div>
 
