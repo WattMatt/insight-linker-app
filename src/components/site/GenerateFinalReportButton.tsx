@@ -99,6 +99,7 @@ export function GenerateFinalReportButton({
         siteDocsRes,
         subsectionDocsRes,
         inspectionsRes,
+        cocValidationsRes,
       ] = await Promise.all([
         subsectionIds.length > 0
           ? supabase.from('snags').select('id, subsection_id, title, status, risk_level, description').in('subsection_id', subsectionIds)
@@ -111,6 +112,10 @@ export function GenerateFinalReportButton({
           ? supabase.from('subsection_documents').select('subsection_id, file_name, category_id, document_categories(name)').in('subsection_id', subsectionIds)
           : Promise.resolve({ data: [], error: null }),
         supabase.from('inspections').select('id, json_data').eq('site_id', site.id),
+        // Fetch COC validations to get latest status per subsection
+        subsectionIds.length > 0
+          ? supabase.from('coc_validations').select('id, subsection_id, status, validated_at, violations').in('subsection_id', subsectionIds).order('validated_at', { ascending: false })
+          : Promise.resolve({ data: [], error: null }),
       ]);
 
       const allSnags = snagsRes.data || [];
@@ -120,7 +125,19 @@ export function GenerateFinalReportButton({
       const siteDocs = siteDocsRes.data || [];
       const subDocs = subsectionDocsRes.data || [];
       const inspections = inspectionsRes.data || [];
+      const cocValidations = cocValidationsRes.data || [];
       const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
+
+      // Build map of LATEST validation per subsection (same logic as ComplianceDashboard)
+      const latestValidationBySubsection = new Map<string, { status: string; violations: any }>();
+      cocValidations.forEach(v => {
+        if (!latestValidationBySubsection.has(v.subsection_id)) {
+          latestValidationBySubsection.set(v.subsection_id, { 
+            status: v.status, 
+            violations: v.violations 
+          });
+        }
+      });
 
       // Transform subsections with full data
       const transformedSubsections = subs.map(sub => {
@@ -138,6 +155,10 @@ export function GenerateFinalReportButton({
                  tradeAsNorm.endsWith(` - ${subNameNorm}`);
         });
 
+        // Get latest validation status for this subsection
+        const latestValidation = latestValidationBySubsection.get(sub.id);
+        const validationStatus = latestValidation?.status || null;
+
         return {
           id: sub.id,
           name: sub.name,
@@ -152,6 +173,7 @@ export function GenerateFinalReportButton({
           breakerSize: matchingAsset?.breaker_size || null,
           isCompliant: calculateSubsectionCompliance(sub, allSnags),
           qrCodeUrl: sub.qr_code_url || `${qrBaseUrl}/public/subsections/${sub.id}`,
+          validationStatus, // Include latest validation status
           snags: openSnags.map(sn => ({
             id: sn.id,
             title: sn.title,
@@ -162,11 +184,19 @@ export function GenerateFinalReportButton({
         };
       });
 
-      // Calculate summary stats
+      // Calculate summary stats using LATEST validations (same logic as ComplianceDashboard)
       const cocRequired = subs.filter(s => s.is_coc_required).length;
-      const cocValidCount = subs.filter(s => 
-        ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '')
-      ).length;
+      
+      // Count compliant based on coc_status AND no failed latest validation
+      const cocValidCount = subs.filter(s => {
+        const latestValidation = latestValidationBySubsection.get(s.id);
+        // If latest validation failed, not compliant
+        if (latestValidation && ['Fail', 'Failed', 'Incomplete'].includes(latestValidation.status)) {
+          return false;
+        }
+        return ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '');
+      }).length;
+      
       const meteringInstalled = subs.filter(s => s.meter_serial_number).length;
       const openSnagsTotal = allSnags.filter(s => !['rectified', 'Rectified'].includes(s.status || '')).length;
       const compliantCount = transformedSubsections.filter(s => s.isCompliant === true).length;
