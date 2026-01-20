@@ -29,12 +29,14 @@ interface GenerateFinalReportButtonProps {
   site: SiteData;
   companyLogoUrl?: string;
   accentColor?: string;
+  onReportSaved?: () => void;
 }
 
 export function GenerateFinalReportButton({
   site,
   companyLogoUrl,
   accentColor = '#2563eb',
+  onReportSaved,
 }: GenerateFinalReportButtonProps) {
   const [showDialog, setShowDialog] = useState(false);
   const [loadingData, setLoadingData] = useState(false);
@@ -355,7 +357,7 @@ export function GenerateFinalReportButton({
         .single();
       const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
 
-      await generatePdf({
+      const result = await generatePdf({
         reportType: 'site-summary',
         siteId: site.id,
         siteName: site.name,
@@ -374,7 +376,13 @@ export function GenerateFinalReportButton({
         fortressChecklist: data.fortressChecklist,
         generatedAt: new Date().toLocaleDateString('en-ZA'),
       });
+      
       setShowDialog(false);
+      
+      // Trigger callback to refresh report list
+      if (result && onReportSaved) {
+        onReportSaved();
+      }
     } catch (error) {
       console.error('Error generating PDF:', error);
     }
