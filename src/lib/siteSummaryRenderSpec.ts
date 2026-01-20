@@ -586,6 +586,23 @@ interface InspectionTenantData {
   meterSerialNumber?: string;
   ctSizeAndRatio?: string;
   breakerSize?: string;
+  shopNumber?: string;
+  shopName?: string;
+}
+
+/**
+ * Asset verification schedule row for detailed table
+ */
+export interface AssetScheduleRow {
+  premisesId: string;
+  meterSerial: string;
+  breakerSize: string;
+  ctRatio: string;
+  inspectedSerial: string;
+  inspectedBreaker: string;
+  inspectedCT: string;
+  status: 'verified' | 'discrepancy' | 'pending';
+  discrepancyFields: string[];
 }
 
 /**
@@ -650,4 +667,65 @@ export function calculateAssetMetrics(
   const verificationRate = Math.round(((verified + discrepancies) / totalAssets) * 100);
 
   return { totalAssets, verified, discrepancies, unverified, verificationRate };
+}
+
+/**
+ * Generate detailed asset verification schedule for PDF table
+ */
+export function generateAssetSchedule(
+  assets: Array<{ id: string; meter_serial_number: string | null; ct_ratio: string | null; breaker_size?: string | null; premises_id: string }>,
+  inspections: Array<{ json_data?: unknown }>
+): AssetScheduleRow[] {
+  // Build inspection meter matches map from json_data
+  const inspectionMeterMatches = new Map<string, InspectionTenantData>();
+  
+  inspections.forEach(inspection => {
+    const jsonData = inspection.json_data as { 
+      tenants?: Array<InspectionTenantData>
+    };
+    
+    const tenants = jsonData?.tenants || [];
+    tenants.forEach(tenant => {
+      if (!tenant.meterSerialNumber) return;
+      
+      const normalizedSerial = normalizeMeterSerial(tenant.meterSerialNumber);
+      if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
+      
+      if (!inspectionMeterMatches.has(normalizedSerial)) {
+        inspectionMeterMatches.set(normalizedSerial, tenant);
+      }
+    });
+  });
+
+  return assets.map(asset => {
+    const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
+    const inspectionMatch = normalizedSerial && normalizedSerial !== "NA" && normalizedSerial !== "TBC"
+      ? inspectionMeterMatches.get(normalizedSerial) || null
+      : null;
+
+    const discrepancyFields: string[] = [];
+    let status: 'verified' | 'discrepancy' | 'pending' = 'pending';
+
+    if (inspectionMatch) {
+      const ctMatch = compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio);
+      const breakerMatch = compareValues(asset.breaker_size, inspectionMatch.breakerSize);
+      
+      if (ctMatch === 'mismatch') discrepancyFields.push('CT Ratio');
+      if (breakerMatch === 'mismatch') discrepancyFields.push('Breaker');
+      
+      status = discrepancyFields.length > 0 ? 'discrepancy' : 'verified';
+    }
+
+    return {
+      premisesId: asset.premises_id || 'N/A',
+      meterSerial: asset.meter_serial_number || 'N/A',
+      breakerSize: asset.breaker_size || 'N/A',
+      ctRatio: asset.ct_ratio || 'N/A',
+      inspectedSerial: inspectionMatch?.meterSerialNumber || '-',
+      inspectedBreaker: inspectionMatch?.breakerSize || '-',
+      inspectedCT: inspectionMatch?.ctSizeAndRatio || '-',
+      status,
+      discrepancyFields,
+    };
+  });
 }
