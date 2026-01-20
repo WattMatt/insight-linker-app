@@ -582,9 +582,7 @@ Deno.serve(async (req) => {
           bottom: '10mm',
           left: '10mm'
         },
-        css: '@page { size: A4; margin: 0; }',
-        wait_for: 'network',
-        sandbox: true,
+        use_print: true,
       }),
     });
 
