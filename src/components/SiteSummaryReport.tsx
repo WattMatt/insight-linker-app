@@ -37,11 +37,9 @@ import {
   calculateCategoryHealth,
   calculateAssetMetrics,
   calculateFortressMetrics,
-  type SiteSummaryMetrics,
+  calculateDocumentMetrics,
   type SubsectionData,
   type SnagData,
-  type AssetVerificationMetrics,
-  type FortressChecklistMetrics,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
@@ -323,6 +321,68 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                        cat.percentage >= 60 ? STATUS_COLORS.warning : STATUS_COLORS.error,
               }))
             ));
+          }
+          break;
+
+        case "documents-summary":
+          // Calculate document metrics from fetched documents
+          const siteDocsData = docsRes.data || [];
+          const subsectionDocsData = subsectionDocsRes.data || [];
+          const docMetrics = calculateDocumentMetrics(siteDocsData, subsectionDocsData);
+          
+          if (docMetrics.totalDocuments > 0) {
+            content.push(createSectionHeader(title));
+            
+            // Total documents KPI
+            content.push(createKpiRow([
+              { value: docMetrics.totalDocuments.toString(), label: 'Total Documents', color: STATUS_COLORS.info },
+              { value: docMetrics.categories.length.toString(), label: 'Categories', color: STATUS_COLORS.muted },
+            ]));
+            
+            // Documents by category table
+            if (docMetrics.categories.length > 0) {
+              content.push({
+                text: 'Documents by Category',
+                fontSize: 10,
+                bold: true,
+                color: '#374151',
+                margin: [0, 8, 0, 6],
+              });
+              
+              const tableBody = [
+                [
+                  { text: 'Category', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Files', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                ],
+                ...docMetrics.categories.map((cat, idx) => {
+                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
+                  return [
+                    { text: cat.categoryName, fontSize: 8, fillColor: bgColor },
+                    { text: cat.fileCount.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, bold: true },
+                  ];
+                }),
+              ];
+              
+              content.push({
+                table: {
+                  headerRows: 1,
+                  widths: ['*', 60],
+                  body: tableBody,
+                },
+                layout: {
+                  hLineWidth: () => 0.5,
+                  vLineWidth: () => 0.5,
+                  hLineColor: () => '#e5e7eb',
+                  vLineColor: () => '#e5e7eb',
+                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#374151' : null,
+                  paddingLeft: () => 6,
+                  paddingRight: () => 6,
+                  paddingTop: () => 4,
+                  paddingBottom: () => 4,
+                },
+                margin: [0, 0, 0, 12],
+              });
+            }
           }
           break;
 
