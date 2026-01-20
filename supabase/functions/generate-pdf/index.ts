@@ -130,7 +130,7 @@ const COLORS = {
 };
 
 // ============================================================================
-// HTML TEMPLATE GENERATORS
+// HTML TEMPLATE GENERATORS - TABLE BASED LAYOUT FOR PDF RELIABILITY
 // ============================================================================
 
 function generateCoverPage(data: ReportData, accentColor: string): string {
@@ -144,104 +144,143 @@ function generateCoverPage(data: ReportData, accentColor: string): string {
   } = data;
 
   return `
-    <div class="cover-page">
+    <div style="width: 210mm; height: 297mm; position: relative; background: white; page-break-after: always;">
       <!-- Top accent bar -->
-      <div class="accent-bar" style="background: ${accentColor};"></div>
+      <div style="height: 8px; width: 100%; background: ${accentColor};"></div>
       
       <!-- Header with logos -->
-      <div class="cover-header">
-        <div class="logo-left">
-          ${clientLogoUrl ? `<img src="${clientLogoUrl}" alt="Client Logo" class="cover-logo" />` : ''}
-        </div>
-        <div class="logo-right">
-          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="Company Logo" class="cover-logo" />` : ''}
-        </div>
-      </div>
+      <table style="width: 100%; padding: 40px 40px 0 40px;">
+        <tr>
+          <td style="width: 50%; vertical-align: top;">
+            ${clientLogoUrl ? `<img src="${clientLogoUrl}" style="max-height: 60px; max-width: 150px;" />` : ''}
+          </td>
+          <td style="width: 50%; text-align: right; vertical-align: top;">
+            ${companyLogoUrl ? `<img src="${companyLogoUrl}" style="max-height: 60px; max-width: 150px;" />` : ''}
+          </td>
+        </tr>
+      </table>
       
-      <!-- Main title section -->
-      <div class="cover-content">
-        <h1 class="cover-title">Site Summary Report</h1>
-        <p class="cover-subtitle">Comprehensive Site Health & Compliance Overview</p>
+      <!-- Main content centered -->
+      <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); text-align: center; width: 80%;">
+        <h1 style="font-size: 32pt; font-weight: 700; color: ${COLORS.primary}; margin: 0 0 10px 0;">Site Summary Report</h1>
+        <p style="font-size: 14pt; color: ${COLORS.textMuted}; margin: 0 0 50px 0;">Comprehensive Site Health & Compliance Overview</p>
         
         <!-- Site info box -->
-        <div class="site-info-box" style="border-color: ${accentColor};">
-          <h2 class="site-name">${siteName}</h2>
-          ${clientName ? `<p class="client-name">${clientName}</p>` : ''}
-          ${siteAddress ? `<p class="site-address">${siteAddress}</p>` : ''}
-          <p class="report-date">${generatedAt}</p>
+        <div style="border: 3px solid ${accentColor}; border-radius: 12px; padding: 40px 60px; background: ${COLORS.lightGray}; display: inline-block;">
+          <h2 style="font-size: 26pt; font-weight: 700; color: ${COLORS.primary}; margin: 0 0 10px 0;">${siteName}</h2>
+          ${clientName ? `<p style="font-size: 14pt; color: ${COLORS.textMuted}; margin: 0 0 8px 0;">${clientName}</p>` : ''}
+          ${siteAddress ? `<p style="font-size: 12pt; color: ${COLORS.textMuted}; margin: 0 0 12px 0;">${siteAddress}</p>` : ''}
+          <p style="font-size: 14pt; font-weight: 600; color: ${accentColor}; margin: 0;">${generatedAt}</p>
         </div>
       </div>
       
       <!-- Footer -->
-      <div class="cover-footer">
-        <p>CONFIDENTIAL - For authorized use only</p>
-        <p>Watson Mattheus Consulting Electrical Engineers (Pty) Ltd</p>
+      <div style="position: absolute; bottom: 30px; left: 0; right: 0; text-align: center;">
+        <p style="font-size: 9pt; color: ${COLORS.textMuted}; margin: 0 0 5px 0;">CONFIDENTIAL - For authorized use only</p>
+        <p style="font-size: 9pt; color: ${COLORS.textMuted}; margin: 0;">Watson Mattheus Consulting Electrical Engineers (Pty) Ltd</p>
       </div>
     </div>
   `;
 }
 
-function generatePageHeader(siteName: string, accentColor: string): string {
+function generatePageHeader(title: string, accentColor: string): string {
   return `
-    <div class="page-header">
-      <span class="header-title">Site Summary Report</span>
-      <span class="header-site">${siteName}</span>
-    </div>
+    <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 20px;">
+      <tr>
+        <td style="font-size: 14pt; font-weight: 700; color: ${COLORS.primary}; padding-bottom: 10px;">${title}</td>
+      </tr>
+    </table>
   `;
 }
 
 function generatePageFooter(pageNum: number, totalPages: string, generatedAt: string): string {
   return `
-    <div class="page-footer">
-      <span class="footer-confidential">CONFIDENTIAL - For authorized use only</span>
-      <span class="footer-page">Page ${pageNum} of ${totalPages}</span>
-      <span class="footer-date">${generatedAt}</span>
-    </div>
+    <table style="width: 100%; position: absolute; bottom: 15mm; left: 15mm; right: 15mm; border-top: 1px solid ${COLORS.border}; padding-top: 8px; font-size: 8pt; color: ${COLORS.textMuted};">
+      <tr>
+        <td style="width: 33%;">CONFIDENTIAL - For authorized use only</td>
+        <td style="width: 33%; text-align: center;">Page ${pageNum} of ${totalPages}</td>
+        <td style="width: 33%; text-align: right;">${generatedAt}</td>
+      </tr>
+    </table>
   `;
 }
 
 function generateSectionHeader(title: string, accentColor: string): string {
   return `
-    <div class="section-header" style="background: ${accentColor};">
-      <h2>${title}</h2>
+    <div style="background: ${accentColor}; color: white; padding: 10px 15px; border-radius: 6px; margin: 20px 0 15px 0;">
+      <span style="font-size: 13pt; font-weight: 600;">${title}</span>
     </div>
   `;
 }
 
 function generateHealthMetrics(metrics: HealthMetrics, accentColor: string): string {
-  const cards = [
-    { label: 'Overall Health', value: `${metrics.overallHealth}%`, color: COLORS.success },
-    { label: 'COC Compliance', value: `${metrics.cocCompliance}%`, color: COLORS.warning },
-    { label: 'Metering Data', value: `${metrics.meteringData}%`, color: COLORS.info },
-    { label: 'Snag Free', value: `${Math.max(0, metrics.snagFree)}%`, color: COLORS.error },
-  ];
-
+  const getColor = (value: number) => value >= 70 ? COLORS.success : value >= 40 ? COLORS.warning : COLORS.error;
+  
   return `
     ${generateSectionHeader('Health Metrics', accentColor)}
-    <div class="kpi-grid">
-      ${cards.map(card => `
-        <div class="kpi-card">
-          <div class="kpi-value" style="color: ${card.color};">${card.value}</div>
-          <div class="kpi-label">${card.label}</div>
-        </div>
-      `).join('')}
-    </div>
+    <table style="width: 100%; border-collapse: separate; border-spacing: 12px;">
+      <tr>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.overallHealth)};">${metrics.overallHealth}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Overall Health</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.cocCompliance)};">${metrics.cocCompliance}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">COC Compliance</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.meteringData)};">${metrics.meteringData}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Metering Data</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(Math.max(0, metrics.snagFree))};">${Math.max(0, metrics.snagFree)}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Snag Free</div>
+        </td>
+      </tr>
+    </table>
   `;
 }
 
 function generateCategoryHealth(categories: CategoryHealthData[], accentColor: string): string {
   if (!categories || categories.length === 0) return '';
 
+  const categoryCards = categories.map(cat => `
+    <td style="background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 15px; text-align: center;">
+      <div style="font-size: 20pt; font-weight: 700; color: ${cat.percentage >= 50 ? COLORS.success : COLORS.error};">${cat.percentage}%</div>
+      <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">${cat.abbreviation}</div>
+    </td>
+  `).join('');
+
   return `
     ${generateSectionHeader('Health by Category', accentColor)}
-    <div class="kpi-grid category-grid">
-      ${categories.map(cat => `
-        <div class="kpi-card">
-          <div class="kpi-value" style="color: ${cat.percentage >= 50 ? COLORS.success : COLORS.error};">${cat.percentage}%</div>
-          <div class="kpi-label">${cat.abbreviation}</div>
-        </div>
+    <table style="width: 100%; border-collapse: separate; border-spacing: 10px;">
+      <tr>${categoryCards}</tr>
+    </table>
+  `;
+}
+
+function generateSummaryStatistics(stats: SummaryStats, accentColor: string): string {
+  const overallHealth = Math.round((stats.compliantCount / Math.max(stats.totalSubsections, 1)) * 100);
+  
+  const rows = [
+    { label: 'Total Subsections', value: stats.totalSubsections.toString() },
+    { label: 'COC Required', value: (stats.cocRequired || stats.totalSubsections).toString() },
+    { label: 'COC Compliant', value: stats.cocValidCount.toString() },
+    { label: 'Metering Installed', value: (stats.meteringInstalled || stats.totalSubsections).toString() },
+    { label: 'Open Snags', value: stats.openSnagsCount.toString() },
+    { label: 'Overall Health Rate', value: `${overallHealth}%` },
+  ];
+
+  return `
+    ${generateSectionHeader('Summary Statistics', accentColor)}
+    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
+      ${rows.map((row, i) => `
+        <tr style="background: ${i % 2 === 0 ? COLORS.lightGray : 'white'};">
+          <td style="padding: 14px 20px; border-bottom: 1px solid ${COLORS.border}; font-size: 11pt; color: ${COLORS.textMuted};">${row.label}</td>
+          <td style="padding: 14px 20px; border-bottom: 1px solid ${COLORS.border}; text-align: right; font-size: 11pt; font-weight: 600; color: ${COLORS.primary};">${row.value}</td>
+        </tr>
       `).join('')}
-    </div>
+    </table>
   `;
 }
 
@@ -249,32 +288,33 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
   if (!docs || docs.length === 0) return '';
 
   const totalDocs = docs.reduce((sum, d) => sum + d.count, 0);
-  const totalCategories = docs.length;
 
   return `
     ${generateSectionHeader('Documents Summary', accentColor)}
-    <div class="kpi-grid docs-kpi">
-      <div class="kpi-card">
-        <div class="kpi-value" style="color: ${COLORS.info};">${totalDocs}</div>
-        <div class="kpi-label">Total Documents</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value" style="color: ${COLORS.muted};">${totalCategories}</div>
-        <div class="kpi-label">Categories</div>
-      </div>
-    </div>
-    <table class="data-table">
+    <table style="width: 100%; border-collapse: separate; border-spacing: 10px; margin-bottom: 15px;">
+      <tr>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.info};">${totalDocs}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Total Documents</div>
+        </td>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.muted};">${docs.length}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Categories</div>
+        </td>
+      </tr>
+    </table>
+    <table style="width: 100%; border-collapse: collapse;">
       <thead>
-        <tr>
-          <th>Category</th>
-          <th style="text-align: right;">Files</th>
+        <tr style="background: ${COLORS.primary};">
+          <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Category</th>
+          <th style="padding: 12px 15px; text-align: right; color: white; font-size: 10pt;">Files</th>
         </tr>
       </thead>
       <tbody>
-        ${docs.map(doc => `
-          <tr>
-            <td>${doc.category}</td>
-            <td style="text-align: right;">${doc.count}</td>
+        ${docs.map((doc, i) => `
+          <tr style="background: ${i % 2 === 0 ? 'white' : COLORS.lightGray};">
+            <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; font-size: 10pt;">${doc.category}</td>
+            <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; text-align: right; font-size: 10pt; font-weight: 600;">${doc.count}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -282,145 +322,145 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
   `;
 }
 
-function generateSummaryStatistics(stats: SummaryStats, accentColor: string): string {
-  const rows = [
-    { label: 'Total Subsections', value: stats.totalSubsections },
-    { label: 'COC Required', value: stats.cocRequired || stats.totalSubsections },
-    { label: 'COC Compliant', value: stats.cocValidCount },
-    { label: 'Metering Installed', value: stats.meteringInstalled || stats.totalSubsections },
-    { label: 'Open Snags', value: stats.openSnagsCount },
-    { label: 'Overall Health Rate', value: `${Math.round((stats.compliantCount / Math.max(stats.totalSubsections, 1)) * 100)}%` },
-  ];
+function getCocStatusStyle(status: string | undefined): { bg: string; color: string; text: string } {
+  if (!status) return { bg: '#fef3c7', color: '#92400e', text: 'Missing' };
+  const s = status.toLowerCase();
+  if (s.includes('approved') || s.includes('valid') || s.includes('pass')) {
+    return { bg: '#d1fae5', color: '#065f46', text: 'Valid' };
+  }
+  if (s.includes('failed') || s.includes('invalid') || s.includes('expired')) {
+    return { bg: '#fee2e2', color: '#991b1b', text: 'Invalid' };
+  }
+  return { bg: '#fef3c7', color: '#92400e', text: status };
+}
 
-  return `
-    ${generateSectionHeader('Summary Statistics', accentColor)}
-    <table class="summary-table">
-      <tbody>
-        ${rows.map(row => `
-          <tr>
-            <td class="stat-label">${row.label}</td>
-            <td class="stat-value">${row.value}</td>
-          </tr>
-        `).join('')}
-      </tbody>
-    </table>
-  `;
+function getRiskBadgeStyle(level: string | undefined): { bg: string; color: string } {
+  if (!level) return { bg: '#fef3c7', color: '#92400e' };
+  const l = level.toLowerCase();
+  if (l === 'high' || l === 'critical') return { bg: '#fee2e2', color: '#991b1b' };
+  if (l === 'low') return { bg: '#d1fae5', color: '#065f46' };
+  return { bg: '#fef3c7', color: '#92400e' };
 }
 
 function generateSubsectionCard(sub: SubsectionData, accentColor: string): string {
-  const complianceClass = sub.isCompliant === true ? 'compliant' : sub.isCompliant === false ? 'non-compliant' : 'pending';
+  const cocStyle = getCocStatusStyle(sub.cocStatus);
+  const complianceColor = sub.isCompliant === true ? '#d1fae5' : sub.isCompliant === false ? '#fee2e2' : '#fef3c7';
+  const complianceTextColor = sub.isCompliant === true ? '#065f46' : sub.isCompliant === false ? '#991b1b' : '#92400e';
   const complianceText = sub.isCompliant === true ? 'Compliant' : sub.isCompliant === false ? 'Non-Compliant' : 'Pending';
-  
-  const cocStatusClass = getCocStatusClass(sub.cocStatus);
-  const cocStatusText = sub.cocStatus || 'Missing';
   
   const openSnags = sub.snags?.filter(s => s.status !== 'resolved' && s.status !== 'Resolved') || [];
   
+  const snagRows = openSnags.slice(0, 3).map(snag => {
+    const riskStyle = getRiskBadgeStyle(snag.riskLevel);
+    return `
+      <tr>
+        <td style="padding: 4px 0; vertical-align: top;">
+          <span style="display: inline-block; background: ${riskStyle.bg}; color: ${riskStyle.color}; padding: 3px 8px; border-radius: 4px; font-size: 8pt; font-weight: 700; min-width: 55px; text-align: center;">${(snag.riskLevel || 'MEDIUM').toUpperCase()}</span>
+        </td>
+        <td style="padding: 4px 8px; font-size: 9pt; color: ${COLORS.text};">${snag.title}</td>
+      </tr>
+    `;
+  }).join('');
+
   return `
-    <div class="subsection-card">
-      <!-- Header -->
-      <div class="card-header" style="background: linear-gradient(135deg, ${accentColor}, ${adjustColor(accentColor, -20)});">
-        <div class="card-header-content">
-          <div class="card-title">${sub.name}</div>
-          ${sub.category ? `<div class="card-category">${sub.category}</div>` : ''}
-        </div>
-        <div class="card-qr">
-          ${sub.qrCodeUrl ? `<img src="${sub.qrCodeUrl}" alt="QR" class="qr-code" />` : '<div class="qr-placeholder">Scan for details</div>'}
-        </div>
-      </div>
-      
-      <!-- Body -->
-      <div class="card-body">
-        <div class="card-details">
-          <div class="detail-row">
-            <span class="detail-label">COC Status:</span>
-            <span class="status-badge ${cocStatusClass}">${cocStatusText}</span>
-          </div>
-          ${sub.cocNumber ? `
-            <div class="detail-row">
-              <span class="detail-label">COC #:</span>
-              <span class="detail-value">${sub.cocNumber}</span>
-            </div>
-          ` : ''}
-          ${sub.breakerSize ? `
-            <div class="detail-row">
-              <span class="detail-label">Breaker Size:</span>
-              <span class="detail-value">${sub.breakerSize}</span>
-            </div>
-          ` : ''}
-          <div class="detail-row">
-            <span class="detail-label">Metering:</span>
-            <span class="detail-value">${sub.meterSerialNumber ? 'Installed' : 'N/A'} ${sub.meterSerialNumber ? `S/N: ${sub.meterSerialNumber}` : ''} ${sub.ctRatio ? `CT: ${sub.ctRatio}` : ''}</span>
-          </div>
-        </div>
-        
-        <!-- Snags -->
-        ${openSnags.length > 0 ? `
-          <div class="snags-section">
-            <div class="snags-header">Snags:</div>
-            ${openSnags.slice(0, 3).map(snag => `
-              <div class="snag-item">
-                <span class="snag-risk ${getRiskClass(snag.riskLevel)}">${snag.riskLevel?.toUpperCase() || 'MEDIUM'}</span>
-                <span class="snag-title">${snag.title}</span>
+    <div style="border: 1px solid ${COLORS.border}; border-radius: 10px; overflow: hidden; margin-bottom: 15px; page-break-inside: avoid;">
+      <!-- Card Header -->
+      <table style="width: 100%; background: linear-gradient(135deg, ${accentColor}, ${adjustColor(accentColor, -20)}); color: white;">
+        <tr>
+          <td style="padding: 15px 18px; vertical-align: top;">
+            <div style="font-size: 15pt; font-weight: 700; margin-bottom: 4px;">${sub.name}</div>
+            ${sub.category ? `<div style="font-size: 10pt; opacity: 0.9;">${sub.category}</div>` : ''}
+            ${sub.tenantName && sub.tenantName !== sub.name ? `<div style="font-size: 9pt; opacity: 0.8; margin-top: 2px;">${sub.tenantName}</div>` : ''}
+          </td>
+          <td style="width: 70px; padding: 12px; vertical-align: top; text-align: right;">
+            ${sub.qrCodeUrl ? `
+              <div style="background: white; border-radius: 6px; padding: 5px; display: inline-block;">
+                <img src="${sub.qrCodeUrl}" style="width: 55px; height: 55px;" />
               </div>
-            `).join('')}
-            ${openSnags.length > 3 ? `<div class="snags-more">+${openSnags.length - 3} more snags</div>` : ''}
-          </div>
-        ` : '<div class="snags-section"><span class="no-snags">Snags: No open snags</span></div>'}
+            ` : `
+              <div style="background: white; border-radius: 6px; padding: 12px 8px; text-align: center;">
+                <span style="font-size: 7pt; color: ${COLORS.textMuted};">Scan for<br/>details</span>
+              </div>
+            `}
+          </td>
+        </tr>
+      </table>
+      
+      <!-- Card Body -->
+      <table style="width: 100%; padding: 15px 18px;">
+        <tr>
+          <td style="width: 120px; font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">COC Status:</td>
+          <td style="padding: 5px 0;">
+            <span style="display: inline-block; background: ${cocStyle.bg}; color: ${cocStyle.color}; padding: 4px 12px; border-radius: 12px; font-size: 9pt; font-weight: 600;">${cocStyle.text}</span>
+          </td>
+        </tr>
+        ${sub.cocNumber ? `
+          <tr>
+            <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">COC #:</td>
+            <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">${sub.cocNumber}</td>
+          </tr>
+        ` : ''}
+        ${sub.breakerSize ? `
+          <tr>
+            <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">Breaker Size:</td>
+            <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">${sub.breakerSize}</td>
+          </tr>
+        ` : ''}
+        <tr>
+          <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">Metering:</td>
+          <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">
+            ${sub.meterSerialNumber ? `Installed  <strong>S/N:</strong> ${sub.meterSerialNumber}` : 'N/A'}
+            ${sub.ctRatio ? `  <strong>CT:</strong> ${sub.ctRatio}` : ''}
+          </td>
+        </tr>
+      </table>
+      
+      <!-- Snags Section -->
+      <div style="border-top: 1px solid ${COLORS.border}; padding: 12px 18px;">
+        <div style="font-size: 10pt; font-weight: 600; margin-bottom: 8px;">Snags:</div>
+        ${openSnags.length > 0 ? `
+          <table style="width: 100%;">
+            ${snagRows}
+            ${openSnags.length > 3 ? `<tr><td colspan="2" style="font-size: 8pt; color: ${COLORS.textMuted}; padding-top: 4px;">+ ${openSnags.length - 3} more snags</td></tr>` : ''}
+          </table>
+        ` : `<span style="color: ${COLORS.success}; font-size: 10pt;">No open snags</span>`}
       </div>
       
-      <!-- Footer -->
-      <div class="card-footer ${complianceClass}">
-        <span>Compliance: ${complianceText}</span>
+      <!-- Card Footer -->
+      <div style="background: ${complianceColor}; padding: 10px 18px;">
+        <span style="font-size: 10pt; font-weight: 600; color: ${complianceTextColor};">Compliance: ${complianceText}</span>
       </div>
     </div>
   `;
 }
 
-function generateSubsectionPages(subsections: SubsectionData[], accentColor: string, generatedAt: string): string {
+function generateSubsectionPages(subsections: SubsectionData[], accentColor: string, generatedAt: string, startPage: number): string {
   if (!subsections || subsections.length === 0) return '';
   
   const pages: string[] = [];
   const cardsPerPage = 2;
+  const totalContentPages = Math.ceil(subsections.length / cardsPerPage);
+  const totalPages = startPage + totalContentPages - 1;
   
   for (let i = 0; i < subsections.length; i += cardsPerPage) {
     const pageSubsections = subsections.slice(i, i + cardsPerPage);
-    const pageNum = Math.floor(i / cardsPerPage) + 3; // Start after cover and summary pages
+    const currentPage = startPage + Math.floor(i / cardsPerPage);
     const isFirstPage = i === 0;
     
     pages.push(`
-      <div class="page ${!isFirstPage ? 'page-break' : ''}">
+      <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
         ${generatePageHeader('Site Summary Report', accentColor)}
         
-        ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : 
-          `<div class="section-header" style="background: ${accentColor};"><h2>Subsection Details (continued)</h2></div>`}
+        ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : generateSectionHeader('Subsection Details (continued)', accentColor)}
         
-        <div class="subsection-grid">
-          ${pageSubsections.map(sub => generateSubsectionCard(sub, accentColor)).join('')}
-        </div>
+        ${pageSubsections.map(sub => generateSubsectionCard(sub, accentColor)).join('')}
         
-        ${generatePageFooter(pageNum, '{{TOTAL_PAGES}}', generatedAt)}
+        ${generatePageFooter(currentPage, '{{TOTAL_PAGES}}', generatedAt)}
       </div>
     `);
   }
   
   return pages.join('');
-}
-
-function getCocStatusClass(status: string | undefined): string {
-  if (!status) return 'status-missing';
-  const s = status.toLowerCase();
-  if (s.includes('approved') || s.includes('valid') || s.includes('pass')) return 'status-valid';
-  if (s.includes('failed') || s.includes('invalid') || s.includes('expired')) return 'status-invalid';
-  return 'status-pending';
-}
-
-function getRiskClass(level: string | undefined): string {
-  if (!level) return 'risk-medium';
-  const l = level.toLowerCase();
-  if (l === 'high' || l === 'critical') return 'risk-high';
-  if (l === 'low') return 'risk-low';
-  return 'risk-medium';
 }
 
 function adjustColor(hex: string, percent: number): string {
@@ -430,466 +470,6 @@ function adjustColor(hex: string, percent: number): string {
   const G = Math.min(255, Math.max(0, (num >> 8 & 0x00FF) + amt));
   const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
   return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
-}
-
-// ============================================================================
-// CSS STYLES
-// ============================================================================
-
-function getStyles(accentColor: string): string {
-  return `
-    @page {
-      size: A4;
-      margin: 0;
-    }
-    
-    * {
-      margin: 0;
-      padding: 0;
-      box-sizing: border-box;
-    }
-    
-    body {
-      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-      font-size: 9pt;
-      color: ${COLORS.text};
-      line-height: 1.4;
-      background: white;
-    }
-    
-    /* Page structure */
-    .page {
-      width: 210mm;
-      min-height: 297mm;
-      padding: 12mm 15mm 20mm 15mm;
-      position: relative;
-      background: white;
-    }
-    
-    .page-break {
-      page-break-before: always;
-    }
-    
-    /* Cover page */
-    .cover-page {
-      width: 210mm;
-      height: 297mm;
-      position: relative;
-      background: white;
-      display: flex;
-      flex-direction: column;
-    }
-    
-    .accent-bar {
-      height: 8px;
-      width: 100%;
-    }
-    
-    .cover-header {
-      display: flex;
-      justify-content: space-between;
-      padding: 20mm 20mm 0 20mm;
-    }
-    
-    .cover-logo {
-      max-height: 60px;
-      max-width: 150px;
-      object-fit: contain;
-    }
-    
-    .cover-content {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      padding: 20mm;
-      text-align: center;
-    }
-    
-    .cover-title {
-      font-size: 28pt;
-      font-weight: 700;
-      color: ${COLORS.primary};
-      margin-bottom: 8px;
-    }
-    
-    .cover-subtitle {
-      font-size: 12pt;
-      color: ${COLORS.textMuted};
-      margin-bottom: 40px;
-    }
-    
-    .site-info-box {
-      border: 2px solid ${accentColor};
-      border-radius: 8px;
-      padding: 30px 50px;
-      background: ${COLORS.lightGray};
-    }
-    
-    .site-name {
-      font-size: 22pt;
-      font-weight: 700;
-      color: ${COLORS.primary};
-      margin-bottom: 8px;
-    }
-    
-    .client-name {
-      font-size: 12pt;
-      color: ${COLORS.textMuted};
-      margin-bottom: 4px;
-    }
-    
-    .site-address {
-      font-size: 10pt;
-      color: ${COLORS.textMuted};
-      margin-bottom: 8px;
-    }
-    
-    .report-date {
-      font-size: 11pt;
-      font-weight: 600;
-      color: ${accentColor};
-    }
-    
-    .cover-footer {
-      padding: 15mm 20mm;
-      text-align: center;
-      font-size: 8pt;
-      color: ${COLORS.textMuted};
-    }
-    
-    .cover-footer p {
-      margin-bottom: 4px;
-    }
-    
-    /* Page header and footer */
-    .page-header {
-      display: flex;
-      justify-content: space-between;
-      padding-bottom: 8px;
-      border-bottom: 2px solid ${accentColor};
-      margin-bottom: 15px;
-      font-size: 10pt;
-    }
-    
-    .header-title {
-      font-weight: 600;
-      color: ${COLORS.primary};
-    }
-    
-    .header-site {
-      color: ${COLORS.textMuted};
-    }
-    
-    .page-footer {
-      position: absolute;
-      bottom: 10mm;
-      left: 15mm;
-      right: 15mm;
-      display: flex;
-      justify-content: space-between;
-      font-size: 7pt;
-      color: ${COLORS.textMuted};
-      border-top: 1px solid ${COLORS.border};
-      padding-top: 5px;
-    }
-    
-    /* Section headers */
-    .section-header {
-      background: ${accentColor};
-      color: white;
-      padding: 8px 12px;
-      border-radius: 4px;
-      margin: 12px 0 10px 0;
-    }
-    
-    .section-header h2 {
-      font-size: 11pt;
-      font-weight: 600;
-      margin: 0;
-    }
-    
-    /* KPI Grid */
-    .kpi-grid {
-      display: grid;
-      grid-template-columns: repeat(4, 1fr);
-      gap: 10px;
-      margin-bottom: 15px;
-    }
-    
-    .category-grid {
-      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
-    }
-    
-    .docs-kpi {
-      grid-template-columns: repeat(2, 1fr);
-    }
-    
-    .kpi-card {
-      background: ${COLORS.lightGray};
-      border: 1px solid ${COLORS.border};
-      border-radius: 6px;
-      padding: 12px;
-      text-align: center;
-    }
-    
-    .kpi-value {
-      font-size: 20pt;
-      font-weight: 700;
-    }
-    
-    .kpi-label {
-      font-size: 7pt;
-      color: ${COLORS.textMuted};
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-top: 4px;
-    }
-    
-    /* Tables */
-    .data-table, .summary-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-bottom: 15px;
-    }
-    
-    .data-table th {
-      background: ${COLORS.primary};
-      color: white;
-      padding: 8px 12px;
-      text-align: left;
-      font-weight: 600;
-      font-size: 9pt;
-    }
-    
-    .data-table td {
-      padding: 8px 12px;
-      border-bottom: 1px solid ${COLORS.border};
-      font-size: 9pt;
-    }
-    
-    .data-table tr:nth-child(even) td {
-      background: ${COLORS.lightGray};
-    }
-    
-    .summary-table td {
-      padding: 10px 15px;
-      border-bottom: 1px solid ${COLORS.border};
-    }
-    
-    .summary-table .stat-label {
-      font-weight: 500;
-      color: ${COLORS.textMuted};
-    }
-    
-    .summary-table .stat-value {
-      text-align: right;
-      font-weight: 600;
-      color: ${COLORS.primary};
-    }
-    
-    /* Subsection cards */
-    .subsection-grid {
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-    
-    .subsection-card {
-      border: 1px solid ${COLORS.border};
-      border-radius: 8px;
-      overflow: hidden;
-      page-break-inside: avoid;
-    }
-    
-    .card-header {
-      color: white;
-      padding: 12px 15px;
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-    }
-    
-    .card-header-content {
-      flex: 1;
-    }
-    
-    .card-title {
-      font-size: 13pt;
-      font-weight: 700;
-    }
-    
-    .card-category {
-      font-size: 9pt;
-      opacity: 0.9;
-      margin-top: 2px;
-    }
-    
-    .card-qr {
-      width: 55px;
-      height: 55px;
-      background: white;
-      border-radius: 4px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      padding: 4px;
-    }
-    
-    .qr-code {
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
-    }
-    
-    .qr-placeholder {
-      font-size: 6pt;
-      color: ${COLORS.textMuted};
-      text-align: center;
-    }
-    
-    .card-body {
-      padding: 12px 15px;
-      display: grid;
-      grid-template-columns: 1fr auto;
-      gap: 15px;
-    }
-    
-    .card-details {
-      display: flex;
-      flex-direction: column;
-      gap: 6px;
-    }
-    
-    .detail-row {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      font-size: 9pt;
-    }
-    
-    .detail-label {
-      color: ${COLORS.textMuted};
-      min-width: 85px;
-    }
-    
-    .detail-value {
-      color: ${COLORS.text};
-    }
-    
-    /* Status badges */
-    .status-badge {
-      display: inline-block;
-      padding: 2px 8px;
-      border-radius: 10px;
-      font-size: 8pt;
-      font-weight: 600;
-    }
-    
-    .status-valid {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    
-    .status-invalid {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    
-    .status-pending, .status-missing {
-      background: #fef3c7;
-      color: #92400e;
-    }
-    
-    /* Snags */
-    .snags-section {
-      grid-column: 1 / -1;
-      border-top: 1px solid ${COLORS.border};
-      padding-top: 10px;
-      margin-top: 5px;
-    }
-    
-    .snags-header {
-      font-weight: 600;
-      font-size: 9pt;
-      margin-bottom: 6px;
-    }
-    
-    .snag-item {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 4px 0;
-      font-size: 8pt;
-    }
-    
-    .snag-risk {
-      display: inline-block;
-      padding: 2px 6px;
-      border-radius: 3px;
-      font-size: 7pt;
-      font-weight: 700;
-      min-width: 50px;
-      text-align: center;
-    }
-    
-    .risk-high {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    
-    .risk-medium {
-      background: #fef3c7;
-      color: #92400e;
-    }
-    
-    .risk-low {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    
-    .snag-title {
-      color: ${COLORS.text};
-    }
-    
-    .snags-more {
-      font-size: 7pt;
-      color: ${COLORS.textMuted};
-      margin-top: 4px;
-    }
-    
-    .no-snags {
-      color: ${COLORS.success};
-      font-size: 9pt;
-    }
-    
-    /* Card footer */
-    .card-footer {
-      padding: 8px 15px;
-      font-weight: 600;
-      font-size: 9pt;
-    }
-    
-    .card-footer.compliant {
-      background: #d1fae5;
-      color: #065f46;
-    }
-    
-    .card-footer.non-compliant {
-      background: #fee2e2;
-      color: #991b1b;
-    }
-    
-    .card-footer.pending {
-      background: #fef3c7;
-      color: #92400e;
-    }
-    
-    @media print {
-      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-    }
-  `;
 }
 
 // ============================================================================
@@ -903,10 +483,9 @@ function generateSiteSummaryHTML(data: ReportData): string {
   // Calculate health metrics if not provided
   const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
   
-  // Calculate total pages
-  const summaryPages = 2;
+  // Calculate total pages: 1 cover + 2 summary pages + subsection pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
-  const totalPages = summaryPages + subsectionPages;
+  const totalPages = 1 + 2 + subsectionPages;
   
   const html = `
 <!DOCTYPE html>
@@ -915,36 +494,55 @@ function generateSiteSummaryHTML(data: ReportData): string {
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>${data.siteName} - Site Summary Report</title>
-  <style>${getStyles(accentColor)}</style>
+  <style>
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+    
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10pt;
+      color: ${COLORS.text};
+      line-height: 1.4;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    
+    table {
+      border-collapse: collapse;
+    }
+  </style>
 </head>
 <body>
   <!-- Cover Page -->
   ${generateCoverPage(data, accentColor)}
   
-  <!-- Summary Page -->
-  <div class="page page-break">
+  <!-- Page 1: Health Metrics & Category Health -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
     ${generatePageHeader('Site Summary Report', accentColor)}
-    
     ${generateHealthMetrics(healthMetrics, accentColor)}
-    
     ${data.categoryHealth ? generateCategoryHealth(data.categoryHealth, accentColor) : ''}
-    
-    ${data.documentsSummary ? generateDocumentsSummary(data.documentsSummary, accentColor) : ''}
-    
+    ${generateSummaryStatistics(data.summaryStats || { totalSubsections: 0, compliantCount: 0, nonCompliantCount: 0, pendingCount: 0, cocValidCount: 0, cocExpiredCount: 0, cocMissingCount: 0, cocRequired: 0, meteringInstalled: 0, openSnagsCount: 0, resolvedSnagsCount: 0 }, accentColor)}
     ${generatePageFooter(1, totalPages.toString(), generatedAt)}
   </div>
   
-  <!-- Statistics Page -->
-  <div class="page page-break">
+  <!-- Page 2: Documents Summary -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
     ${generatePageHeader('Site Summary Report', accentColor)}
-    
-    ${data.summaryStats ? generateSummaryStatistics(data.summaryStats, accentColor) : ''}
-    
+    ${data.documentsSummary ? generateDocumentsSummary(data.documentsSummary, accentColor) : '<div style="padding: 20px; color: ' + COLORS.textMuted + '; text-align: center;">No documents available</div>'}
     ${generatePageFooter(2, totalPages.toString(), generatedAt)}
   </div>
   
   <!-- Subsection Pages -->
-  ${generateSubsectionPages(data.subsections || [], accentColor, generatedAt)}
+  ${generateSubsectionPages(data.subsections || [], accentColor, generatedAt, 3)}
 </body>
 </html>
   `;
