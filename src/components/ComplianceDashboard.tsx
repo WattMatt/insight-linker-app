@@ -77,20 +77,30 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       if (subsections.length === 0) return;
       
       const subsectionIds = subsections.map(s => s.id);
+      // Fetch the LATEST validation per subsection (not all historical validations)
       const { data, error } = await supabase
         .from('coc_validations')
-        .select('subsection_id, status')
-        .in('subsection_id', subsectionIds);
+        .select('subsection_id, status, validated_at')
+        .in('subsection_id', subsectionIds)
+        .order('validated_at', { ascending: false });
       
       if (error) {
         console.error("Error fetching COC validations:", error);
         return;
       }
       
-      const failedSet = new Set<string>();
+      // Only consider the MOST RECENT validation per subsection
+      const latestBySubsection = new Map<string, string>();
       data?.forEach(validation => {
-        if (validation.status === 'Fail' || validation.status === 'Failed') {
-          failedSet.add(validation.subsection_id);
+        if (!latestBySubsection.has(validation.subsection_id)) {
+          latestBySubsection.set(validation.subsection_id, validation.status);
+        }
+      });
+      
+      const failedSet = new Set<string>();
+      latestBySubsection.forEach((status, subsectionId) => {
+        if (status === 'Fail' || status === 'Failed' || status === 'Incomplete') {
+          failedSet.add(subsectionId);
         }
       });
       setFailedValidationsBySubsection(failedSet);
