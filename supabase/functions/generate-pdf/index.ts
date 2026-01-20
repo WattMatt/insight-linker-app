@@ -910,7 +910,7 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
 }
 
-// Generate COC Verification Annex Pages - Matching standalone COC Validation Report format
+// Generate COC Verification Annex Pages - Two-page layout matching standalone COC Validation Report
 function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, generatedAt: string, startPage: number): string {
   let pageNumber = startPage;
   
@@ -955,39 +955,40 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
     
     // Use criticalFailures from report_data if available, otherwise fall back to violations
     const failuresList = criticalFailures.length > 0 ? criticalFailures : violations;
+    const hasPage2Content = failuresList.length > 0 || recommendations.length > 0;
     
-    const currentPageNum = pageNumber++;
+    // ===== PAGE 1: Validation Status, Admin, Technical Evaluation, Check Results =====
+    const page1Num = pageNumber++;
     
-    // Build sections HTML
-    let sectionsHtml = '';
+    let page1Html = '';
     
-    // ===== VALIDATION STATUS SECTION =====
-    sectionsHtml += `
-      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+    // Validation Status Section
+    page1Html += `
+      <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
         <tr>
           <td style="background: ${accentColor}; color: white; padding: 8px 12px; font-weight: 600; font-size: 11pt;">
             Validation Status
           </td>
         </tr>
         <tr>
-          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 15px;">
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 12px;">
             <table style="width: 100%;">
               <tr>
                 <td style="vertical-align: top; width: 100px;">
-                  <span style="font-size: 20pt; font-weight: 700; color: ${statusColor};">${status.toUpperCase()}</span>
+                  <span style="font-size: 18pt; font-weight: 700; color: ${statusColor};">${status.toUpperCase()}</span>
                 </td>
-                <td style="vertical-align: top; padding-left: 20px;">
+                <td style="vertical-align: top; padding-left: 15px;">
                   <span style="font-size: 10pt; color: ${COLORS.textMuted};">COC Type: ${cocType}</span>
                 </td>
               </tr>
             </table>
             ${installationSummary ? `
-            <p style="margin: 12px 0 0 0; font-size: 9pt;">
+            <p style="margin: 10px 0 0 0; font-size: 9pt; line-height: 1.4;">
               <strong>Installation Summary:</strong> ${installationSummary}
             </p>
             ` : ''}
             ${overallAssessment ? `
-            <p style="margin: 8px 0 0 0; font-size: 9pt;">
+            <p style="margin: 6px 0 0 0; font-size: 9pt; line-height: 1.4;">
               <strong>Assessment:</strong> ${overallAssessment}
             </p>
             ` : ''}
@@ -996,7 +997,7 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
       </table>
     `;
     
-    // ===== ADMINISTRATIVE DETAILS SECTION =====
+    // Administrative Details Section
     const adminFields = [
       { label: 'Physical Address', value: administrativeDetails.physicalAddress },
       { label: 'Registered Person', value: administrativeDetails.registeredPerson },
@@ -1005,10 +1006,10 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
     ].filter(f => f.value && !f.value.toLowerCase().includes('not found') && !f.value.toLowerCase().includes('n/a'));
     
     if (adminFields.length > 0) {
-      sectionsHtml += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+      page1Html += `
+        <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 6px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
               Administrative Details
             </td>
           </tr>
@@ -1017,8 +1018,8 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
               <table style="width: 100%;" cellpadding="0" cellspacing="0">
                 ${adminFields.map(f => `
                 <tr>
-                  <td style="padding: 8px 12px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted}; font-size: 9pt;">${f.label}</td>
-                  <td style="padding: 8px 12px; border-bottom: 1px solid ${COLORS.border}; font-size: 9pt;">${f.value}</td>
+                  <td style="padding: 6px 12px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted}; font-size: 9pt;">${f.label}</td>
+                  <td style="padding: 6px 12px; border-bottom: 1px solid ${COLORS.border}; font-size: 9pt;">${f.value}</td>
                 </tr>
                 `).join('')}
               </table>
@@ -1028,12 +1029,12 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
       `;
     }
     
-    // ===== TECHNICAL EVALUATION SECTION =====
+    // Technical Evaluation Section
     if (technicalEvaluation.length > 0) {
-      sectionsHtml += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+      page1Html += `
+        <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 6px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
               Technical Evaluation
             </td>
           </tr>
@@ -1041,20 +1042,20 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
             <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
               <table style="width: 100%;" cellpadding="0" cellspacing="0">
                 <tr style="background: ${COLORS.lightGray};">
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 15%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Section</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 25%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Requirement</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Finding</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 60px; text-align: center; border-bottom: 1px solid ${COLORS.border};">Status</td>
+                  <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 15%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Section</td>
+                  <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 25%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Requirement</td>
+                  <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Finding</td>
+                  <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 55px; text-align: center; border-bottom: 1px solid ${COLORS.border};">Status</td>
                 </tr>
-                ${technicalEvaluation.slice(0, 8).map((te: any) => {
+                ${technicalEvaluation.slice(0, 6).map((te: any) => {
                   const teStatusColor = te.status?.toLowerCase() === 'pass' ? COLORS.success : 
                                         te.status?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
                   return `
                   <tr>
-                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.section || '-'}</td>
-                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.requirement || '-'}</td>
-                    <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.finding || '-'}</td>
-                    <td style="padding: 6px 10px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${teStatusColor}; font-weight: 600;">${te.status || '-'}</td>
+                    <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.section || '-'}</td>
+                    <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.requirement || '-'}</td>
+                    <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${te.finding || '-'}</td>
+                    <td style="padding: 5px 8px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${teStatusColor}; font-weight: 600;">${te.status || '-'}</td>
                   </tr>
                   `;
                 }).join('')}
@@ -1065,12 +1066,12 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
       `;
     }
     
-    // ===== CHECK RESULTS SECTION =====
+    // Check Results Section
     if (checks.length > 0) {
-      sectionsHtml += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+      page1Html += `
+        <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 6px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
               Check Results
             </td>
           </tr>
@@ -1078,22 +1079,22 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
             <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
               <table style="width: 100%;" cellpadding="0" cellspacing="0">
                 <tr style="background: ${COLORS.lightGray};">
-                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 10%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Clause</td>
-                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 25%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Description</td>
-                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Measured</td>
-                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Limit</td>
-                  <td style="padding: 6px 8px; font-weight: 600; font-size: 8pt; width: 10%; text-align: center; border-bottom: 1px solid ${COLORS.border};">Result</td>
+                  <td style="padding: 5px 6px; font-weight: 600; font-size: 8pt; width: 10%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Clause</td>
+                  <td style="padding: 5px 6px; font-weight: 600; font-size: 8pt; width: 28%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Description</td>
+                  <td style="padding: 5px 6px; font-weight: 600; font-size: 8pt; width: 16%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Measured</td>
+                  <td style="padding: 5px 6px; font-weight: 600; font-size: 8pt; width: 16%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Limit</td>
+                  <td style="padding: 5px 6px; font-weight: 600; font-size: 8pt; width: 10%; text-align: center; border-bottom: 1px solid ${COLORS.border};">Result</td>
                 </tr>
                 ${checks.slice(0, 10).map((check: any) => {
                   const checkColor = check.result?.toLowerCase() === 'pass' ? COLORS.success : 
                                      check.result?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
                   return `
                   <tr>
-                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.clause || '-'}</td>
-                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.description || '-'}</td>
-                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.measuredValue || '-'}</td>
-                    <td style="padding: 6px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.limit || '-'}</td>
-                    <td style="padding: 6px 8px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${checkColor}; font-weight: 600;">${check.result || '-'}</td>
+                    <td style="padding: 5px 6px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.clause || '-'}</td>
+                    <td style="padding: 5px 6px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.description || '-'}</td>
+                    <td style="padding: 5px 6px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.measuredValue || '-'}</td>
+                    <td style="padding: 5px 6px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${check.limit || '-'}</td>
+                    <td style="padding: 5px 6px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${checkColor}; font-weight: 600;">${check.result || '-'}</td>
                   </tr>
                   `;
                 }).join('')}
@@ -1104,61 +1105,87 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
       `;
     }
     
-    // ===== CRITICAL FAILURES SECTION =====
-    if (failuresList.length > 0) {
-      sectionsHtml += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+    // ===== PAGE 2: Critical Failures and Recommendations (only if content exists) =====
+    let page2Html = '';
+    if (hasPage2Content) {
+      const page2Num = pageNumber++;
+      
+      let page2Content = '';
+      
+      // Critical Failures Section
+      if (failuresList.length > 0) {
+        page2Content += `
+          <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="background: #fef2f2; color: ${COLORS.error}; padding: 10px 14px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${COLORS.error};">
+                Critical Failures (${failuresList.length})
+              </td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid #fecaca; border-top: none; padding: 0;">
+                <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                  <tr style="background: #fef2f2;">
+                    <td style="padding: 8px 12px; font-weight: 600; font-size: 9pt; width: 5%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">#</td>
+                    <td style="padding: 8px 12px; font-weight: 600; font-size: 9pt; width: 15%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Clause</td>
+                    <td style="padding: 8px 12px; font-weight: 600; font-size: 9pt; width: 30%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Description</td>
+                    <td style="padding: 8px 12px; font-weight: 600; font-size: 9pt; border-bottom: 1px solid #fecaca;">Reason</td>
+                  </tr>
+                  ${failuresList.map((f: any, i: number) => `
+                  <tr>
+                    <td style="padding: 8px 12px; font-size: 9pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; text-align: center;">${i + 1}</td>
+                    <td style="padding: 8px 12px; font-size: 9pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; color: ${COLORS.error}; font-weight: 600;">${f.clause || f.code || f.rule || '-'}</td>
+                    <td style="padding: 8px 12px; font-size: 9pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">${f.description || f.message || '-'}</td>
+                    <td style="padding: 8px 12px; font-size: 9pt; border-bottom: 1px solid #fecaca; color: ${COLORS.textMuted};">${f.reason || f.evidence || '-'}</td>
+                  </tr>
+                  `).join('')}
+                </table>
+              </td>
+            </tr>
+          </table>
+        `;
+      }
+      
+      // Recommendations Section
+      if (recommendations.length > 0) {
+        page2Content += `
+          <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 10px 14px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+                Recommendations
+              </td>
+            </tr>
+            <tr>
+              <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 16px;">
+                <ol style="margin: 0; padding-left: 20px; font-size: 10pt; line-height: 1.8;">
+                  ${recommendations.map((rec: string) => `<li style="margin-bottom: 8px;">${rec}</li>`).join('')}
+                </ol>
+              </td>
+            </tr>
+          </table>
+        `;
+      }
+      
+      page2Html = `
+      <!-- COC Verification Annex Page 2 -->
+      <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+        <!-- Header -->
+        <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 20px;">
           <tr>
-            <td style="background: #fef2f2; color: ${COLORS.error}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${COLORS.error};">
-              Critical Failures (${failuresList.length})
-            </td>
-          </tr>
-          <tr>
-            <td style="border: 1px solid #fecaca; border-top: none; padding: 0;">
-              <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                <tr style="background: #fef2f2;">
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 5%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">#</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 15%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Clause</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; width: 35%; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">Description</td>
-                  <td style="padding: 6px 10px; font-weight: 600; font-size: 8pt; border-bottom: 1px solid #fecaca;">Reason</td>
-                </tr>
-                ${failuresList.slice(0, 8).map((f: any, i: number) => `
-                <tr>
-                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; text-align: center;">${i + 1}</td>
-                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca; color: ${COLORS.error}; font-weight: 600;">${f.clause || f.code || f.rule || '-'}</td>
-                  <td style="padding: 6px 10px; font-size: 8pt; border-right: 1px solid #fecaca; border-bottom: 1px solid #fecaca;">${f.description || f.message || '-'}</td>
-                  <td style="padding: 6px 10px; font-size: 8pt; border-bottom: 1px solid #fecaca; color: ${COLORS.textMuted};">${f.reason || f.evidence || '-'}</td>
-                </tr>
-                `).join('')}
-              </table>
-            </td>
+            <td style="font-size: 12pt; font-weight: 700; color: ${accentColor}; padding-bottom: 8px;">COC Validation Report</td>
+            <td style="font-size: 10pt; text-align: right; color: ${COLORS.textMuted}; padding-bottom: 8px;">REF: ${cocNumber}</td>
           </tr>
         </table>
+        
+        ${page2Content}
+        
+        ${generatePageFooter(page2Num, '{{TOTAL_PAGES}}', generatedAt)}
+      </div>
       `;
     }
     
-    // ===== RECOMMENDATIONS SECTION =====
-    if (recommendations.length > 0) {
-      sectionsHtml += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
-              Recommendations
-            </td>
-          </tr>
-          <tr>
-            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 12px;">
-              <ol style="margin: 0; padding-left: 20px; font-size: 9pt; line-height: 1.6;">
-                ${recommendations.slice(0, 8).map((rec: string) => `<li style="margin-bottom: 4px;">${rec}</li>`).join('')}
-              </ol>
-            </td>
-          </tr>
-        </table>
-      `;
-    }
-    
+    // Combine pages
     return `
-    <!-- COC Verification Annex Page -->
+    <!-- COC Verification Annex Page 1 -->
     <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
       <!-- Header -->
       <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 15px;">
@@ -1168,10 +1195,11 @@ function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, gen
         </tr>
       </table>
       
-      ${sectionsHtml}
+      ${page1Html}
       
-      ${generatePageFooter(currentPageNum, '{{TOTAL_PAGES}}', generatedAt)}
+      ${generatePageFooter(page1Num, '{{TOTAL_PAGES}}', generatedAt)}
     </div>
+    ${page2Html}
     `;
   }).join('');
 }
