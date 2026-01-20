@@ -65,7 +65,7 @@ import { GlobalSearch } from "./components/GlobalSearch";
 const queryClient = new QueryClient();
 
 const DashboardLayout = ({ children }: { children: React.ReactNode }) => (
-  <SidebarProvider defaultOpen={false}>
+  <SidebarProvider defaultOpen={true}>
     <div className="flex min-h-screen w-full">
       <AppSidebar />
       <main className="flex-1 flex flex-col w-full max-h-screen overflow-hidden">
