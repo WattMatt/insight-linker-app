@@ -282,21 +282,32 @@ function generateSectionHeader(title: string, accentColor: string): string {
   `;
 }
 
-// Generate SVG circular progress ring
-function generateCircularProgress(percentage: number, color: string, size: number = 90): string {
+// Generate SVG circular progress ring with text inside (no rotation issues)
+function generateCircularProgress(percentage: number, color: string, size: number = 90, showText: boolean = false): string {
   const strokeWidth = 8;
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
   const strokeDashoffset = circumference - (percentage / 100) * circumference;
   const center = size / 2;
   
+  // Use stroke-dasharray rotation trick instead of CSS transform
+  // Start from the top (12 o'clock position) by adjusting the path
+  const textContent = showText ? `
+    <text x="${center}" y="${center}" text-anchor="middle" dominant-baseline="middle" 
+          font-size="${size > 70 ? '18' : '12'}" font-weight="700" fill="${color}">
+      ${percentage}<tspan font-size="${size > 70 ? '10' : '8'}">%</tspan>
+    </text>
+  ` : '';
+  
   return `
-    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="transform: rotate(-90deg);">
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <!-- Background circle -->
       <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="#e5e7eb" stroke-width="${strokeWidth}"/>
-      <!-- Progress circle -->
+      <!-- Progress circle - rotated via transform attribute to start at top -->
       <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" 
-              stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}" stroke-linecap="round"/>
+              stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}" stroke-linecap="round"
+              transform="rotate(-90 ${center} ${center})"/>
+      ${textContent}
     </svg>
   `;
 }
@@ -326,12 +337,8 @@ function generateHealthMetrics(metrics: HealthMetrics, accentColor: string): str
     const color = getColor(m.value);
     return `
       <td style="width: 25%; background: white; border: 2px solid ${COLORS.border}; border-radius: 12px; padding: 18px 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-        <div style="position: relative; display: inline-block; margin-bottom: 8px;">
-          ${generateCircularProgress(m.value, color, 85)}
-          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg);">
-            <span style="font-size: 18pt; font-weight: 700; color: ${color};">${m.value}</span>
-            <span style="font-size: 10pt; color: ${color};">%</span>
-          </div>
+        <div style="display: inline-block; margin-bottom: 8px;">
+          ${generateCircularProgress(m.value, color, 85, true)}
         </div>
         <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px;">
           ${getMetricIcon(m.icon, COLORS.textMuted)}
@@ -358,11 +365,8 @@ function generateCategoryHealth(categories: CategoryHealthData[], accentColor: s
     const color = getColor(cat.percentage);
     return `
       <td style="background: white; border: 1px solid ${COLORS.border}; border-radius: 10px; padding: 12px 8px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
-        <div style="position: relative; display: inline-block;">
-          ${generateCircularProgress(cat.percentage, color, 60)}
-          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg);">
-            <span style="font-size: 12pt; font-weight: 700; color: ${color};">${cat.percentage}</span>
-          </div>
+        <div style="display: inline-block;">
+          ${generateCircularProgress(cat.percentage, color, 60, true)}
         </div>
         <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px; font-weight: 600;">${cat.abbreviation}</div>
       </td>
