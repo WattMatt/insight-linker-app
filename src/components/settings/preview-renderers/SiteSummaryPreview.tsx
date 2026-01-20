@@ -193,7 +193,9 @@ export const SiteSummaryPreview: React.FC<SiteSummaryPreviewProps> = ({
             </div>
             <div className="grid grid-cols-2 gap-1 text-muted-foreground">
               <div>COC: <PlaceholderBadge>{sub.cocStatus || "Pass"}</PlaceholderBadge></div>
+              <div>Breaker: <PlaceholderBadge>60A</PlaceholderBadge></div>
               <div>Metering: <PlaceholderBadge>Installed</PlaceholderBadge></div>
+              <div>S/N: <PlaceholderBadge>12345678</PlaceholderBadge></div>
               <div>Snags: <PlaceholderBadge>0</PlaceholderBadge></div>
               <div>Compliant: <PlaceholderBadge className="text-green-600">✓</PlaceholderBadge></div>
             </div>
