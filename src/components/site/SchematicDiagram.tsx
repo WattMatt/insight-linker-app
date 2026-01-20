@@ -206,20 +206,27 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return isEditMode ? scale : fitScale;
   }, [containerWidth, originalPdfDimensions, isEditMode, scale]);
 
-  // Calculate the target page width - render at natural size first to get dimensions
+  // Calculate the target page width - always provide a width to prevent visibility:hidden
   const calculatedPageWidth = useMemo(() => {
-    // If we don't have dimensions yet, render at natural size (undefined width)
-    if (!dimensionsLoaded || originalPdfDimensions.width === 0) {
-      return undefined;
+    // If we have dimensions, use calculated scale
+    if (dimensionsLoaded && originalPdfDimensions.width > 0) {
+      return originalPdfDimensions.width * displayScale;
     }
-    // Once we have dimensions, apply the calculated scale
-    return originalPdfDimensions.width * displayScale;
-  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded]);
+    // Fallback: use container width minus padding for initial render
+    if (containerWidth > 0) {
+      return containerWidth - 32;
+    }
+    // Last resort: use a reasonable default
+    return 800;
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth]);
 
   // Calculate the scaled height for the PDF container
   const calculatedPageHeight = useMemo(() => {
-    if (!dimensionsLoaded || originalPdfDimensions.height === 0) return undefined;
-    return originalPdfDimensions.height * displayScale;
+    if (dimensionsLoaded && originalPdfDimensions.height > 0) {
+      return originalPdfDimensions.height * displayScale;
+    }
+    // Fallback based on container height
+    return CONTAINER_HEIGHT - 32;
   }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
   // Handle PDF page render to get original dimensions (only once)
