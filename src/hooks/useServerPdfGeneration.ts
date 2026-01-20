@@ -50,6 +50,26 @@ interface DocumentCategoryData {
   count: number;
 }
 
+interface HealthMetrics {
+  overallHealth: number;
+  cocCompliance: number;
+  meteringData: number;
+  snagFree: number;
+}
+
+interface AssetVerificationData {
+  totalAssets: number;
+  verified: number;
+  discrepancies: number;
+  pending: number;
+}
+
+interface FortressChecklistData {
+  completed: number;
+  pending: number;
+  notApplicable: number;
+}
+
 interface ReportData {
   reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
   siteId: string;
@@ -61,8 +81,11 @@ interface ReportData {
   accentColor?: string;
   subsections?: SubsectionData[];
   summaryStats?: SummaryStats;
+  healthMetrics?: HealthMetrics;
   categoryHealth?: CategoryHealthData[];
   documentsSummary?: DocumentCategoryData[];
+  assetVerification?: AssetVerificationData;
+  fortressChecklist?: FortressChecklistData;
   generatedAt?: string;
 }
 

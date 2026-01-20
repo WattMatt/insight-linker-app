@@ -209,7 +209,6 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                                 address: site.address,
                                 client: { name: site.clients.name, logo_url: site.client_logo_url }
                             }}
-                            subsections={subsections}
                         />
                         
                         {/* Report Settings */}
