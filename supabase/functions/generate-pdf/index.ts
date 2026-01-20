@@ -207,6 +207,51 @@ function generateCoverPage(data: ReportData, accentColor: string): string {
   `;
 }
 
+interface TableOfContentsEntry {
+  title: string;
+  page: number;
+  indent?: boolean;
+}
+
+function generateTableOfContents(entries: TableOfContentsEntry[], accentColor: string, generatedAt: string): string {
+  const rows = entries.map(entry => `
+    <tr style="border-bottom: 1px dotted ${COLORS.border};">
+      <td style="padding: 10px 0; font-size: ${entry.indent ? '10pt' : '11pt'}; ${entry.indent ? 'padding-left: 20px;' : ''} color: ${COLORS.text};">
+        ${entry.title}
+      </td>
+      <td style="padding: 10px 0; font-size: 11pt; text-align: right; font-weight: 600; color: ${accentColor};">
+        ${entry.page}
+      </td>
+    </tr>
+  `).join('');
+
+  return `
+    <div style="width: 210mm; min-height: 297mm; padding: 20mm 25mm 25mm 25mm; position: relative; background: white; page-break-after: always;">
+      <!-- Header -->
+      <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 30px;">
+        <tr>
+          <td style="font-size: 18pt; font-weight: 700; color: ${COLORS.primary}; padding-bottom: 12px;">Table of Contents</td>
+        </tr>
+      </table>
+      
+      <!-- TOC Entries -->
+      <table style="width: 100%;">
+        <tbody>
+          ${rows}
+        </tbody>
+      </table>
+      
+      <!-- Footer -->
+      <table style="width: calc(100% - 50mm); position: absolute; bottom: 10mm; left: 25mm; right: 25mm; border-top: 1px solid ${COLORS.border}; padding-top: 6px; font-size: 8pt; color: ${COLORS.textMuted};">
+        <tr>
+          <td style="width: 50%;">CONFIDENTIAL</td>
+          <td style="width: 50%; text-align: right;">${generatedAt}</td>
+        </tr>
+      </table>
+    </div>
+  `;
+}
+
 function generatePageHeader(title: string, accentColor: string): string {
   return `
     <table style="width: 100%; border-bottom: 3px solid ${accentColor}; margin-bottom: 20px;">
@@ -650,21 +695,38 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   // Calculate health metrics if not provided
   const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
   
-  // Calculate total pages: 1 cover + 4 summary pages (health, docs, assets, fortress) + subsection pages
+  // Calculate total pages: 1 cover + 1 TOC + summary pages + subsection pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
-  const hasAssetVerification = !!data.assetVerification;
-  const hasFortressChecklist = !!data.fortressChecklist;
+  const hasAssetVerification = !!data.assetVerification && (data.assetVerification.totalAssets > 0);
+  const hasFortressChecklist = !!data.fortressChecklist && (data.fortressChecklist.completed > 0 || data.fortressChecklist.pending > 0);
   const summaryPagesCount = 2 + (hasAssetVerification ? 1 : 0) + (hasFortressChecklist ? 1 : 0);
+  // Total: cover (unnumbered) + TOC (page 1) + summary pages + subsection pages
   const totalPages = 1 + summaryPagesCount + subsectionPages;
   
+  // Build Table of Contents entries with accurate page numbers
+  let tocPage = 2; // Start after TOC (page 1)
+  const tocEntries: TableOfContentsEntry[] = [
+    { title: 'Health Metrics & Statistics', page: tocPage++ },
+    { title: 'Documents Summary', page: tocPage++ },
+  ];
+  if (hasAssetVerification) {
+    tocEntries.push({ title: 'Asset Verification Schedule', page: tocPage++ });
+  }
+  if (hasFortressChecklist) {
+    tocEntries.push({ title: 'Fortress Checklist', page: tocPage++ });
+  }
+  if ((data.subsections?.length || 0) > 0) {
+    tocEntries.push({ title: 'Subsection Details', page: tocPage });
+  }
+  
   // Calculate page numbers for subsection pages
-  const subsectionStartPage = 1 + summaryPagesCount + 1;
+  const subsectionStartPage = tocPage;
   
   // Generate subsection pages (async for QR generation)
   const subsectionPagesHtml = await generateSubsectionPages(data.subsections || [], accentColor, generatedAt, subsectionStartPage, qrBaseUrl);
   
-  // Track current page number for summary pages
-  let currentPage = 1;
+  // Track current page number for summary pages (starting at 2 after TOC)
+  let currentPage = 2;
   
   const html = `
 <!DOCTYPE html>
@@ -701,8 +763,11 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   </style>
 </head>
 <body>
-  <!-- Cover Page -->
+  <!-- Cover Page (unnumbered) -->
   ${generateCoverPage(data, accentColor)}
+  
+  <!-- Table of Contents (Page 1) -->
+  ${generateTableOfContents(tocEntries, accentColor, generatedAt)}
   
   <!-- Page ${currentPage}: Health Metrics & Category Health -->
   <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
