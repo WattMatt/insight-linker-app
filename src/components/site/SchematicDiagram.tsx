@@ -619,6 +619,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const x = (e.clientX - rect.left) / scale;
     const y = (e.clientY - rect.top) / scale;
 
+    // Use first block's dimensions as default, or fallback to 150x100
+    const firstBlock = blocks[0];
+    const defaultWidth = firstBlock?.width || 150;
+    const defaultHeight = firstBlock?.height || 100;
+
     try {
       const blockNumber = blocks.length + 1;
       const { data, error } = await supabase
@@ -629,8 +634,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           block_name: null,
           x_position: x,
           y_position: y,
-          width: 150,
-          height: 100,
+          width: defaultWidth,
+          height: defaultHeight,
         })
         .select()
         .single();
