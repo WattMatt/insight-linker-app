@@ -172,6 +172,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const containerWidth = containerRef.current.clientWidth - 32; // padding
     const containerHeight = CONTAINER_HEIGHT - 32;
     
+    // Ensure we have valid container dimensions
+    if (containerWidth <= 0 || containerHeight <= 0) return 1;
+    
     const scaleX = containerWidth / pdfDimensions.width;
     const scaleY = containerHeight / pdfDimensions.height;
     
@@ -179,13 +182,29 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return Math.min(scaleX, scaleY);
   }, [pdfDimensions]);
 
-  // Auto-fit on PDF load - always zoom to fit
+  // Auto-fit on PDF load - with slight delay to ensure container is measured
   useEffect(() => {
     if (pdfDimensions.width > 0) {
-      const fitScale = calculateFitScale();
-      setScale(fitScale);
+      // Small delay to ensure container has rendered and has dimensions
+      const timeoutId = setTimeout(() => {
+        const fitScale = calculateFitScale();
+        setScale(fitScale);
+      }, 50);
+      return () => clearTimeout(timeoutId);
     }
   }, [pdfDimensions, calculateFitScale]);
+
+  // Recalculate on window resize
+  useEffect(() => {
+    const handleResize = () => {
+      if (pdfDimensions.width > 0 && !isEditMode) {
+        const fitScale = calculateFitScale();
+        setScale(fitScale);
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, [pdfDimensions, calculateFitScale, isEditMode]);
 
   // Handle PDF page load to get dimensions
   const handlePageLoad = (page: any) => {
