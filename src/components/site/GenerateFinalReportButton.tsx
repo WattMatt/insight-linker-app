@@ -37,6 +37,7 @@ interface SubsectionData {
 interface SiteData {
   id: string;
   name: string;
+  address?: string;
   client?: {
     name?: string;
     logo_url?: string;
@@ -103,13 +104,14 @@ export function GenerateFinalReportButton({
         reportType: 'site-summary',
         siteId: site.id,
         siteName: site.name,
+        siteAddress: site.address,
         clientName: site.client?.name,
         clientLogoUrl: site.client?.logo_url,
         companyLogoUrl,
         accentColor,
         subsections: transformedSubsections,
         summaryStats,
-        generatedAt: new Date().toLocaleDateString(),
+        generatedAt: new Date().toLocaleDateString('en-ZA'),
       });
       setShowDialog(false);
     } catch (error) {

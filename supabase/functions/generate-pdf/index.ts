@@ -5,16 +5,26 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// ============================================================================
+// TYPE DEFINITIONS
+// ============================================================================
+
 interface ReportData {
   reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
   siteId: string;
   siteName: string;
+  siteAddress?: string;
   clientName?: string;
   clientLogoUrl?: string;
   companyLogoUrl?: string;
   accentColor?: string;
   subsections?: SubsectionData[];
   summaryStats?: SummaryStats;
+  healthMetrics?: HealthMetrics;
+  categoryHealth?: CategoryHealthData[];
+  documentsSummary?: DocumentCategoryData[];
+  assetVerification?: AssetVerificationData;
+  fortressChecklist?: FortressChecklistData;
   generatedAt?: string;
 }
 
@@ -29,6 +39,7 @@ interface SubsectionData {
   cocIssueDate?: string;
   meterSerialNumber?: string;
   ctRatio?: string;
+  breakerSize?: string;
   isCompliant?: boolean;
   qrCodeUrl?: string;
   snags?: SnagData[];
@@ -50,35 +61,388 @@ interface SummaryStats {
   cocValidCount: number;
   cocExpiredCount: number;
   cocMissingCount: number;
+  cocRequired: number;
+  meteringInstalled: number;
   openSnagsCount: number;
   resolvedSnagsCount: number;
 }
 
-// Generate HTML template for Site Summary Report
-function generateSiteSummaryHTML(data: ReportData): string {
+interface HealthMetrics {
+  overallHealth: number;
+  cocCompliance: number;
+  meteringData: number;
+  snagFree: number;
+}
+
+interface CategoryHealthData {
+  category: string;
+  abbreviation: string;
+  percentage: number;
+}
+
+interface DocumentCategoryData {
+  category: string;
+  count: number;
+}
+
+interface AssetVerificationData {
+  totalAssets: number;
+  verified: number;
+  discrepancies: number;
+  pending: number;
+  schedule?: AssetScheduleRow[];
+}
+
+interface AssetScheduleRow {
+  premisesId: string;
+  meterSerial: string;
+  breakerSize: string;
+  ctRatio: string;
+  inspectedSerial: string;
+  inspectedBreaker: string;
+  status: 'verified' | 'discrepancy' | 'pending';
+}
+
+interface FortressChecklistData {
+  completed: number;
+  pending: number;
+  notApplicable: number;
+  sections?: { name: string; progress: number }[];
+}
+
+// ============================================================================
+// COLOR CONSTANTS
+// ============================================================================
+
+const COLORS = {
+  primary: '#1e3a5f',
+  accent: '#2563eb',
+  success: '#16a34a',
+  warning: '#ea580c',
+  error: '#dc2626',
+  info: '#2563eb',
+  muted: '#6b7280',
+  white: '#ffffff',
+  lightGray: '#f3f4f6',
+  border: '#e5e7eb',
+  text: '#1f2937',
+  textMuted: '#6b7280',
+};
+
+// ============================================================================
+// HTML TEMPLATE GENERATORS
+// ============================================================================
+
+function generateCoverPage(data: ReportData, accentColor: string): string {
   const {
     siteName,
+    siteAddress,
     clientName,
     clientLogoUrl,
     companyLogoUrl,
-    accentColor = '#6366f1',
-    subsections = [],
-    summaryStats,
-    generatedAt = new Date().toLocaleDateString()
+    generatedAt = new Date().toLocaleDateString('en-ZA'),
   } = data;
 
-  const complianceRate = summaryStats 
-    ? Math.round((summaryStats.compliantCount / Math.max(summaryStats.totalSubsections, 1)) * 100)
-    : 0;
+  return `
+    <div class="cover-page">
+      <!-- Top accent bar -->
+      <div class="accent-bar" style="background: ${accentColor};"></div>
+      
+      <!-- Header with logos -->
+      <div class="cover-header">
+        <div class="logo-left">
+          ${clientLogoUrl ? `<img src="${clientLogoUrl}" alt="Client Logo" class="cover-logo" />` : ''}
+        </div>
+        <div class="logo-right">
+          ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="Company Logo" class="cover-logo" />` : ''}
+        </div>
+      </div>
+      
+      <!-- Main title section -->
+      <div class="cover-content">
+        <h1 class="cover-title">Site Summary Report</h1>
+        <p class="cover-subtitle">Comprehensive Site Health & Compliance Overview</p>
+        
+        <!-- Site info box -->
+        <div class="site-info-box" style="border-color: ${accentColor};">
+          <h2 class="site-name">${siteName}</h2>
+          ${clientName ? `<p class="client-name">${clientName}</p>` : ''}
+          ${siteAddress ? `<p class="site-address">${siteAddress}</p>` : ''}
+          <p class="report-date">${generatedAt}</p>
+        </div>
+      </div>
+      
+      <!-- Footer -->
+      <div class="cover-footer">
+        <p>CONFIDENTIAL - For authorized use only</p>
+        <p>Watson Mattheus Consulting Electrical Engineers (Pty) Ltd</p>
+      </div>
+    </div>
+  `;
+}
+
+function generatePageHeader(siteName: string, accentColor: string): string {
+  return `
+    <div class="page-header">
+      <span class="header-title">Site Summary Report</span>
+      <span class="header-site">${siteName}</span>
+    </div>
+  `;
+}
+
+function generatePageFooter(pageNum: number, totalPages: string, generatedAt: string): string {
+  return `
+    <div class="page-footer">
+      <span class="footer-confidential">CONFIDENTIAL - For authorized use only</span>
+      <span class="footer-page">Page ${pageNum} of ${totalPages}</span>
+      <span class="footer-date">${generatedAt}</span>
+    </div>
+  `;
+}
+
+function generateSectionHeader(title: string, accentColor: string): string {
+  return `
+    <div class="section-header" style="background: ${accentColor};">
+      <h2>${title}</h2>
+    </div>
+  `;
+}
+
+function generateHealthMetrics(metrics: HealthMetrics, accentColor: string): string {
+  const cards = [
+    { label: 'Overall Health', value: `${metrics.overallHealth}%`, color: COLORS.success },
+    { label: 'COC Compliance', value: `${metrics.cocCompliance}%`, color: COLORS.warning },
+    { label: 'Metering Data', value: `${metrics.meteringData}%`, color: COLORS.info },
+    { label: 'Snag Free', value: `${Math.max(0, metrics.snagFree)}%`, color: COLORS.error },
+  ];
 
   return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${siteName} - Site Summary Report</title>
-  <style>
+    ${generateSectionHeader('Health Metrics', accentColor)}
+    <div class="kpi-grid">
+      ${cards.map(card => `
+        <div class="kpi-card">
+          <div class="kpi-value" style="color: ${card.color};">${card.value}</div>
+          <div class="kpi-label">${card.label}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function generateCategoryHealth(categories: CategoryHealthData[], accentColor: string): string {
+  if (!categories || categories.length === 0) return '';
+
+  return `
+    ${generateSectionHeader('Health by Category', accentColor)}
+    <div class="kpi-grid category-grid">
+      ${categories.map(cat => `
+        <div class="kpi-card">
+          <div class="kpi-value" style="color: ${cat.percentage >= 50 ? COLORS.success : COLORS.error};">${cat.percentage}%</div>
+          <div class="kpi-label">${cat.abbreviation}</div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: string): string {
+  if (!docs || docs.length === 0) return '';
+
+  const totalDocs = docs.reduce((sum, d) => sum + d.count, 0);
+  const totalCategories = docs.length;
+
+  return `
+    ${generateSectionHeader('Documents Summary', accentColor)}
+    <div class="kpi-grid docs-kpi">
+      <div class="kpi-card">
+        <div class="kpi-value" style="color: ${COLORS.info};">${totalDocs}</div>
+        <div class="kpi-label">Total Documents</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-value" style="color: ${COLORS.muted};">${totalCategories}</div>
+        <div class="kpi-label">Categories</div>
+      </div>
+    </div>
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Category</th>
+          <th style="text-align: right;">Files</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${docs.map(doc => `
+          <tr>
+            <td>${doc.category}</td>
+            <td style="text-align: right;">${doc.count}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function generateSummaryStatistics(stats: SummaryStats, accentColor: string): string {
+  const rows = [
+    { label: 'Total Subsections', value: stats.totalSubsections },
+    { label: 'COC Required', value: stats.cocRequired || stats.totalSubsections },
+    { label: 'COC Compliant', value: stats.cocValidCount },
+    { label: 'Metering Installed', value: stats.meteringInstalled || stats.totalSubsections },
+    { label: 'Open Snags', value: stats.openSnagsCount },
+    { label: 'Overall Health Rate', value: `${Math.round((stats.compliantCount / Math.max(stats.totalSubsections, 1)) * 100)}%` },
+  ];
+
+  return `
+    ${generateSectionHeader('Summary Statistics', accentColor)}
+    <table class="summary-table">
+      <tbody>
+        ${rows.map(row => `
+          <tr>
+            <td class="stat-label">${row.label}</td>
+            <td class="stat-value">${row.value}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function generateSubsectionCard(sub: SubsectionData, accentColor: string): string {
+  const complianceClass = sub.isCompliant === true ? 'compliant' : sub.isCompliant === false ? 'non-compliant' : 'pending';
+  const complianceText = sub.isCompliant === true ? 'Compliant' : sub.isCompliant === false ? 'Non-Compliant' : 'Pending';
+  
+  const cocStatusClass = getCocStatusClass(sub.cocStatus);
+  const cocStatusText = sub.cocStatus || 'Missing';
+  
+  const openSnags = sub.snags?.filter(s => s.status !== 'resolved' && s.status !== 'Resolved') || [];
+  
+  return `
+    <div class="subsection-card">
+      <!-- Header -->
+      <div class="card-header" style="background: linear-gradient(135deg, ${accentColor}, ${adjustColor(accentColor, -20)});">
+        <div class="card-header-content">
+          <div class="card-title">${sub.name}</div>
+          ${sub.category ? `<div class="card-category">${sub.category}</div>` : ''}
+        </div>
+        <div class="card-qr">
+          ${sub.qrCodeUrl ? `<img src="${sub.qrCodeUrl}" alt="QR" class="qr-code" />` : '<div class="qr-placeholder">Scan for details</div>'}
+        </div>
+      </div>
+      
+      <!-- Body -->
+      <div class="card-body">
+        <div class="card-details">
+          <div class="detail-row">
+            <span class="detail-label">COC Status:</span>
+            <span class="status-badge ${cocStatusClass}">${cocStatusText}</span>
+          </div>
+          ${sub.cocNumber ? `
+            <div class="detail-row">
+              <span class="detail-label">COC #:</span>
+              <span class="detail-value">${sub.cocNumber}</span>
+            </div>
+          ` : ''}
+          ${sub.breakerSize ? `
+            <div class="detail-row">
+              <span class="detail-label">Breaker Size:</span>
+              <span class="detail-value">${sub.breakerSize}</span>
+            </div>
+          ` : ''}
+          <div class="detail-row">
+            <span class="detail-label">Metering:</span>
+            <span class="detail-value">${sub.meterSerialNumber ? 'Installed' : 'N/A'} ${sub.meterSerialNumber ? `S/N: ${sub.meterSerialNumber}` : ''} ${sub.ctRatio ? `CT: ${sub.ctRatio}` : ''}</span>
+          </div>
+        </div>
+        
+        <!-- Snags -->
+        ${openSnags.length > 0 ? `
+          <div class="snags-section">
+            <div class="snags-header">Snags:</div>
+            ${openSnags.slice(0, 3).map(snag => `
+              <div class="snag-item">
+                <span class="snag-risk ${getRiskClass(snag.riskLevel)}">${snag.riskLevel?.toUpperCase() || 'MEDIUM'}</span>
+                <span class="snag-title">${snag.title}</span>
+              </div>
+            `).join('')}
+            ${openSnags.length > 3 ? `<div class="snags-more">+${openSnags.length - 3} more snags</div>` : ''}
+          </div>
+        ` : '<div class="snags-section"><span class="no-snags">Snags: No open snags</span></div>'}
+      </div>
+      
+      <!-- Footer -->
+      <div class="card-footer ${complianceClass}">
+        <span>Compliance: ${complianceText}</span>
+      </div>
+    </div>
+  `;
+}
+
+function generateSubsectionPages(subsections: SubsectionData[], accentColor: string, generatedAt: string): string {
+  if (!subsections || subsections.length === 0) return '';
+  
+  const pages: string[] = [];
+  const cardsPerPage = 2;
+  
+  for (let i = 0; i < subsections.length; i += cardsPerPage) {
+    const pageSubsections = subsections.slice(i, i + cardsPerPage);
+    const pageNum = Math.floor(i / cardsPerPage) + 3; // Start after cover and summary pages
+    const isFirstPage = i === 0;
+    
+    pages.push(`
+      <div class="page ${!isFirstPage ? 'page-break' : ''}">
+        ${generatePageHeader('Site Summary Report', accentColor)}
+        
+        ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : 
+          `<div class="section-header" style="background: ${accentColor};"><h2>Subsection Details (continued)</h2></div>`}
+        
+        <div class="subsection-grid">
+          ${pageSubsections.map(sub => generateSubsectionCard(sub, accentColor)).join('')}
+        </div>
+        
+        ${generatePageFooter(pageNum, '{{TOTAL_PAGES}}', generatedAt)}
+      </div>
+    `);
+  }
+  
+  return pages.join('');
+}
+
+function getCocStatusClass(status: string | undefined): string {
+  if (!status) return 'status-missing';
+  const s = status.toLowerCase();
+  if (s.includes('approved') || s.includes('valid') || s.includes('pass')) return 'status-valid';
+  if (s.includes('failed') || s.includes('invalid') || s.includes('expired')) return 'status-invalid';
+  return 'status-pending';
+}
+
+function getRiskClass(level: string | undefined): string {
+  if (!level) return 'risk-medium';
+  const l = level.toLowerCase();
+  if (l === 'high' || l === 'critical') return 'risk-high';
+  if (l === 'low') return 'risk-low';
+  return 'risk-medium';
+}
+
+function adjustColor(hex: string, percent: number): string {
+  const num = parseInt(hex.replace('#', ''), 16);
+  const amt = Math.round(2.55 * percent);
+  const R = Math.min(255, Math.max(0, (num >> 16) + amt));
+  const G = Math.min(255, Math.max(0, (num >> 8 & 0x00FF) + amt));
+  const B = Math.min(255, Math.max(0, (num & 0x0000FF) + amt));
+  return '#' + (0x1000000 + R * 0x10000 + G * 0x100 + B).toString(16).slice(1);
+}
+
+// ============================================================================
+// CSS STYLES
+// ============================================================================
+
+function getStyles(accentColor: string): string {
+  return `
+    @page {
+      size: A4;
+      margin: 0;
+    }
+    
     * {
       margin: 0;
       padding: 0;
@@ -86,18 +450,19 @@ function generateSiteSummaryHTML(data: ReportData): string {
     }
     
     body {
-      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-      font-size: 10pt;
-      color: #1f2937;
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 9pt;
+      color: ${COLORS.text};
       line-height: 1.4;
       background: white;
     }
     
+    /* Page structure */
     .page {
       width: 210mm;
       min-height: 297mm;
-      padding: 15mm 20mm;
-      margin: 0 auto;
+      padding: 12mm 15mm 20mm 15mm;
+      position: relative;
       background: white;
     }
     
@@ -105,436 +470,517 @@ function generateSiteSummaryHTML(data: ReportData): string {
       page-break-before: always;
     }
     
-    /* Header Styles */
-    .header {
+    /* Cover page */
+    .cover-page {
+      width: 210mm;
+      height: 297mm;
+      position: relative;
+      background: white;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    .accent-bar {
+      height: 8px;
+      width: 100%;
+    }
+    
+    .cover-header {
       display: flex;
       justify-content: space-between;
-      align-items: center;
-      padding-bottom: 12px;
-      border-bottom: 3px solid ${accentColor};
-      margin-bottom: 20px;
+      padding: 20mm 20mm 0 20mm;
     }
     
-    .header-left {
-      display: flex;
-      align-items: center;
-      gap: 15px;
-    }
-    
-    .logo {
-      max-height: 50px;
-      max-width: 120px;
+    .cover-logo {
+      max-height: 60px;
+      max-width: 150px;
       object-fit: contain;
     }
     
-    .header-title {
-      font-size: 18pt;
+    .cover-content {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20mm;
+      text-align: center;
+    }
+    
+    .cover-title {
+      font-size: 28pt;
       font-weight: 700;
+      color: ${COLORS.primary};
+      margin-bottom: 8px;
+    }
+    
+    .cover-subtitle {
+      font-size: 12pt;
+      color: ${COLORS.textMuted};
+      margin-bottom: 40px;
+    }
+    
+    .site-info-box {
+      border: 2px solid ${accentColor};
+      border-radius: 8px;
+      padding: 30px 50px;
+      background: ${COLORS.lightGray};
+    }
+    
+    .site-name {
+      font-size: 22pt;
+      font-weight: 700;
+      color: ${COLORS.primary};
+      margin-bottom: 8px;
+    }
+    
+    .client-name {
+      font-size: 12pt;
+      color: ${COLORS.textMuted};
+      margin-bottom: 4px;
+    }
+    
+    .site-address {
+      font-size: 10pt;
+      color: ${COLORS.textMuted};
+      margin-bottom: 8px;
+    }
+    
+    .report-date {
+      font-size: 11pt;
+      font-weight: 600;
       color: ${accentColor};
     }
     
-    .header-subtitle {
+    .cover-footer {
+      padding: 15mm 20mm;
+      text-align: center;
+      font-size: 8pt;
+      color: ${COLORS.textMuted};
+    }
+    
+    .cover-footer p {
+      margin-bottom: 4px;
+    }
+    
+    /* Page header and footer */
+    .page-header {
+      display: flex;
+      justify-content: space-between;
+      padding-bottom: 8px;
+      border-bottom: 2px solid ${accentColor};
+      margin-bottom: 15px;
       font-size: 10pt;
-      color: #6b7280;
     }
     
-    .header-right {
-      text-align: right;
+    .header-title {
+      font-weight: 600;
+      color: ${COLORS.primary};
     }
     
-    .header-date {
-      font-size: 9pt;
-      color: #6b7280;
+    .header-site {
+      color: ${COLORS.textMuted};
     }
     
-    /* Section Headers */
+    .page-footer {
+      position: absolute;
+      bottom: 10mm;
+      left: 15mm;
+      right: 15mm;
+      display: flex;
+      justify-content: space-between;
+      font-size: 7pt;
+      color: ${COLORS.textMuted};
+      border-top: 1px solid ${COLORS.border};
+      padding-top: 5px;
+    }
+    
+    /* Section headers */
     .section-header {
       background: ${accentColor};
       color: white;
       padding: 8px 12px;
-      font-size: 11pt;
-      font-weight: 600;
-      margin: 15px 0 10px 0;
       border-radius: 4px;
+      margin: 12px 0 10px 0;
     }
     
-    /* KPI Cards */
+    .section-header h2 {
+      font-size: 11pt;
+      font-weight: 600;
+      margin: 0;
+    }
+    
+    /* KPI Grid */
     .kpi-grid {
       display: grid;
       grid-template-columns: repeat(4, 1fr);
-      gap: 12px;
-      margin-bottom: 20px;
+      gap: 10px;
+      margin-bottom: 15px;
+    }
+    
+    .category-grid {
+      grid-template-columns: repeat(auto-fit, minmax(80px, 1fr));
+    }
+    
+    .docs-kpi {
+      grid-template-columns: repeat(2, 1fr);
     }
     
     .kpi-card {
-      background: #f9fafb;
-      border: 1px solid #e5e7eb;
-      border-radius: 8px;
+      background: ${COLORS.lightGray};
+      border: 1px solid ${COLORS.border};
+      border-radius: 6px;
       padding: 12px;
       text-align: center;
     }
     
     .kpi-value {
-      font-size: 24pt;
+      font-size: 20pt;
       font-weight: 700;
-      color: ${accentColor};
     }
     
-    .kpi-value.success { color: #10b981; }
-    .kpi-value.warning { color: #f59e0b; }
-    .kpi-value.danger { color: #ef4444; }
-    
     .kpi-label {
-      font-size: 8pt;
-      color: #6b7280;
+      font-size: 7pt;
+      color: ${COLORS.textMuted};
       text-transform: uppercase;
       letter-spacing: 0.5px;
       margin-top: 4px;
     }
     
-    /* Stats Table */
-    .stats-table {
+    /* Tables */
+    .data-table, .summary-table {
       width: 100%;
       border-collapse: collapse;
-      margin-bottom: 20px;
+      margin-bottom: 15px;
     }
     
-    .stats-table th,
-    .stats-table td {
+    .data-table th {
+      background: ${COLORS.primary};
+      color: white;
       padding: 8px 12px;
       text-align: left;
-      border-bottom: 1px solid #e5e7eb;
-    }
-    
-    .stats-table th {
-      background: #f3f4f6;
       font-weight: 600;
       font-size: 9pt;
-      color: #374151;
     }
     
-    .stats-table tr:nth-child(even) {
-      background: #f9fafb;
+    .data-table td {
+      padding: 8px 12px;
+      border-bottom: 1px solid ${COLORS.border};
+      font-size: 9pt;
     }
     
-    /* Subsection Cards */
+    .data-table tr:nth-child(even) td {
+      background: ${COLORS.lightGray};
+    }
+    
+    .summary-table td {
+      padding: 10px 15px;
+      border-bottom: 1px solid ${COLORS.border};
+    }
+    
+    .summary-table .stat-label {
+      font-weight: 500;
+      color: ${COLORS.textMuted};
+    }
+    
+    .summary-table .stat-value {
+      text-align: right;
+      font-weight: 600;
+      color: ${COLORS.primary};
+    }
+    
+    /* Subsection cards */
     .subsection-grid {
-      display: grid;
-      grid-template-columns: 1fr;
-      gap: 15px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
     }
     
     .subsection-card {
-      border: 1px solid #e5e7eb;
+      border: 1px solid ${COLORS.border};
       border-radius: 8px;
       overflow: hidden;
       page-break-inside: avoid;
     }
     
-    .subsection-header {
-      background: linear-gradient(135deg, ${accentColor}, ${adjustColor(accentColor, -20)});
+    .card-header {
       color: white;
-      padding: 10px 15px;
+      padding: 12px 15px;
       display: flex;
       justify-content: space-between;
-      align-items: center;
+      align-items: flex-start;
     }
     
-    .subsection-title {
-      font-size: 11pt;
-      font-weight: 600;
+    .card-header-content {
+      flex: 1;
     }
     
-    .subsection-tenant {
+    .card-title {
+      font-size: 13pt;
+      font-weight: 700;
+    }
+    
+    .card-category {
       font-size: 9pt;
       opacity: 0.9;
+      margin-top: 2px;
     }
     
-    .subsection-body {
+    .card-qr {
+      width: 55px;
+      height: 55px;
+      background: white;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 4px;
+    }
+    
+    .qr-code {
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    .qr-placeholder {
+      font-size: 6pt;
+      color: ${COLORS.textMuted};
+      text-align: center;
+    }
+    
+    .card-body {
       padding: 12px 15px;
       display: grid;
       grid-template-columns: 1fr auto;
       gap: 15px;
     }
     
-    .subsection-details {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 8px;
+    .card-details {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
     }
     
-    .detail-item {
+    .detail-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-size: 9pt;
     }
     
     .detail-label {
-      color: #6b7280;
-      font-weight: 500;
+      color: ${COLORS.textMuted};
+      min-width: 85px;
     }
     
     .detail-value {
-      color: #1f2937;
+      color: ${COLORS.text};
     }
     
-    .qr-code {
-      width: 60px;
-      height: 60px;
-      border: 1px solid #e5e7eb;
-      border-radius: 4px;
-    }
-    
-    /* Status Badges */
-    .badge {
+    /* Status badges */
+    .status-badge {
       display: inline-block;
       padding: 2px 8px;
-      border-radius: 12px;
+      border-radius: 10px;
       font-size: 8pt;
       font-weight: 600;
-      text-transform: uppercase;
     }
     
-    .badge-success {
+    .status-valid {
       background: #d1fae5;
       color: #065f46;
     }
     
-    .badge-warning {
-      background: #fef3c7;
-      color: #92400e;
-    }
-    
-    .badge-danger {
+    .status-invalid {
       background: #fee2e2;
       color: #991b1b;
     }
     
-    .badge-info {
-      background: #dbeafe;
-      color: #1e40af;
+    .status-pending, .status-missing {
+      background: #fef3c7;
+      color: #92400e;
     }
     
-    /* Snags List */
-    .snags-list {
-      margin-top: 10px;
-      border-top: 1px solid #e5e7eb;
+    /* Snags */
+    .snags-section {
+      grid-column: 1 / -1;
+      border-top: 1px solid ${COLORS.border};
       padding-top: 10px;
+      margin-top: 5px;
+    }
+    
+    .snags-header {
+      font-weight: 600;
+      font-size: 9pt;
+      margin-bottom: 6px;
     }
     
     .snag-item {
       display: flex;
-      justify-content: space-between;
       align-items: center;
-      padding: 6px 0;
-      border-bottom: 1px dashed #e5e7eb;
+      gap: 8px;
+      padding: 4px 0;
+      font-size: 8pt;
+    }
+    
+    .snag-risk {
+      display: inline-block;
+      padding: 2px 6px;
+      border-radius: 3px;
+      font-size: 7pt;
+      font-weight: 700;
+      min-width: 50px;
+      text-align: center;
+    }
+    
+    .risk-high {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    
+    .risk-medium {
+      background: #fef3c7;
+      color: #92400e;
+    }
+    
+    .risk-low {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .snag-title {
+      color: ${COLORS.text};
+    }
+    
+    .snags-more {
+      font-size: 7pt;
+      color: ${COLORS.textMuted};
+      margin-top: 4px;
+    }
+    
+    .no-snags {
+      color: ${COLORS.success};
       font-size: 9pt;
     }
     
-    .snag-item:last-child {
-      border-bottom: none;
+    /* Card footer */
+    .card-footer {
+      padding: 8px 15px;
+      font-weight: 600;
+      font-size: 9pt;
     }
     
-    /* Footer */
-    .footer {
-      margin-top: 30px;
-      padding-top: 15px;
-      border-top: 1px solid #e5e7eb;
-      display: flex;
-      justify-content: space-between;
-      font-size: 8pt;
-      color: #6b7280;
+    .card-footer.compliant {
+      background: #d1fae5;
+      color: #065f46;
+    }
+    
+    .card-footer.non-compliant {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+    
+    .card-footer.pending {
+      background: #fef3c7;
+      color: #92400e;
     }
     
     @media print {
-      .page {
-        margin: 0;
-        padding: 10mm 15mm;
-      }
-      
-      .page-break {
-        page-break-before: always;
-      }
+      body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
-  </style>
-</head>
-<body>
-  <div class="page">
-    <!-- Header -->
-    <div class="header">
-      <div class="header-left">
-        ${companyLogoUrl ? `<img src="${companyLogoUrl}" alt="Company Logo" class="logo" />` : ''}
-        <div>
-          <div class="header-title">${siteName}</div>
-          <div class="header-subtitle">Site Summary Report${clientName ? ` • ${clientName}` : ''}</div>
-        </div>
-      </div>
-      <div class="header-right">
-        ${clientLogoUrl ? `<img src="${clientLogoUrl}" alt="Client Logo" class="logo" />` : ''}
-        <div class="header-date">Generated: ${generatedAt}</div>
-      </div>
-    </div>
-    
-    <!-- Summary Statistics -->
-    <div class="section-header">Summary Statistics</div>
-    
-    <div class="kpi-grid">
-      <div class="kpi-card">
-        <div class="kpi-value">${summaryStats?.totalSubsections || 0}</div>
-        <div class="kpi-label">Total Units</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value success">${complianceRate}%</div>
-        <div class="kpi-label">Compliance Rate</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value success">${summaryStats?.cocValidCount || 0}</div>
-        <div class="kpi-label">Valid COCs</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-value danger">${summaryStats?.openSnagsCount || 0}</div>
-        <div class="kpi-label">Open Snags</div>
-      </div>
-    </div>
-    
-    <table class="stats-table">
-      <thead>
-        <tr>
-          <th>Metric</th>
-          <th>Count</th>
-          <th>Percentage</th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr>
-          <td>Compliant Units</td>
-          <td>${summaryStats?.compliantCount || 0}</td>
-          <td>${summaryStats ? Math.round((summaryStats.compliantCount / Math.max(summaryStats.totalSubsections, 1)) * 100) : 0}%</td>
-        </tr>
-        <tr>
-          <td>Non-Compliant Units</td>
-          <td>${summaryStats?.nonCompliantCount || 0}</td>
-          <td>${summaryStats ? Math.round((summaryStats.nonCompliantCount / Math.max(summaryStats.totalSubsections, 1)) * 100) : 0}%</td>
-        </tr>
-        <tr>
-          <td>Pending Review</td>
-          <td>${summaryStats?.pendingCount || 0}</td>
-          <td>${summaryStats ? Math.round((summaryStats.pendingCount / Math.max(summaryStats.totalSubsections, 1)) * 100) : 0}%</td>
-        </tr>
-        <tr>
-          <td>COC Expired/Missing</td>
-          <td>${(summaryStats?.cocExpiredCount || 0) + (summaryStats?.cocMissingCount || 0)}</td>
-          <td>-</td>
-        </tr>
-      </tbody>
-    </table>
-    
-    <!-- Subsections -->
-    <div class="section-header">Subsection Details</div>
-    
-    <div class="subsection-grid">
-      ${subsections.map((sub, index) => `
-        ${index > 0 && index % 4 === 0 ? '</div><div class="page page-break"><div class="section-header">Subsection Details (continued)</div><div class="subsection-grid">' : ''}
-        <div class="subsection-card">
-          <div class="subsection-header">
-            <div>
-              <div class="subsection-title">${sub.name}</div>
-              ${sub.tenantName ? `<div class="subsection-tenant">${sub.tenantName}</div>` : ''}
-            </div>
-            <span class="badge ${getComplianceBadgeClass(sub.isCompliant)}">
-              ${sub.isCompliant === true ? 'Compliant' : sub.isCompliant === false ? 'Non-Compliant' : 'Pending'}
-            </span>
-          </div>
-          <div class="subsection-body">
-            <div class="subsection-details">
-              <div class="detail-item">
-                <span class="detail-label">Category:</span>
-                <span class="detail-value">${sub.category || 'N/A'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">COC Status:</span>
-                <span class="badge ${getCocBadgeClass(sub.cocStatus)}">${sub.cocStatus || 'Missing'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">COC Number:</span>
-                <span class="detail-value">${sub.cocNumber || 'N/A'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Issue Date:</span>
-                <span class="detail-value">${sub.cocIssueDate || 'N/A'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">Meter:</span>
-                <span class="detail-value">${sub.meterSerialNumber || 'N/A'}</span>
-              </div>
-              <div class="detail-item">
-                <span class="detail-label">CT Ratio:</span>
-                <span class="detail-value">${sub.ctRatio || 'N/A'}</span>
-              </div>
-            </div>
-            ${sub.qrCodeUrl ? `<img src="${sub.qrCodeUrl}" alt="QR Code" class="qr-code" />` : ''}
-          </div>
-          ${sub.snags && sub.snags.length > 0 ? `
-            <div class="snags-list">
-              <div style="font-weight: 600; font-size: 9pt; margin-bottom: 5px;">Open Snags (${sub.snags.length})</div>
-              ${sub.snags.slice(0, 3).map(snag => `
-                <div class="snag-item">
-                  <span>${snag.title}</span>
-                  <span class="badge ${getRiskBadgeClass(snag.riskLevel)}">${snag.riskLevel || 'Medium'}</span>
-                </div>
-              `).join('')}
-              ${sub.snags.length > 3 ? `<div style="font-size: 8pt; color: #6b7280;">+${sub.snags.length - 3} more snags</div>` : ''}
-            </div>
-          ` : ''}
-        </div>
-      `).join('')}
-    </div>
-    
-    <!-- Footer -->
-    <div class="footer">
-      <div>Generated by WM Compliance System</div>
-      <div>Page 1</div>
-    </div>
-  </div>
-</body>
-</html>
   `;
 }
 
-function getComplianceBadgeClass(isCompliant: boolean | undefined): string {
-  if (isCompliant === true) return 'badge-success';
-  if (isCompliant === false) return 'badge-danger';
-  return 'badge-warning';
+// ============================================================================
+// MAIN HTML GENERATOR
+// ============================================================================
+
+function generateSiteSummaryHTML(data: ReportData): string {
+  const accentColor = data.accentColor || '#2563eb';
+  const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  
+  // Calculate health metrics if not provided
+  const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
+  
+  // Calculate total pages
+  const summaryPages = 2;
+  const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
+  const totalPages = summaryPages + subsectionPages;
+  
+  const html = `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${data.siteName} - Site Summary Report</title>
+  <style>${getStyles(accentColor)}</style>
+</head>
+<body>
+  <!-- Cover Page -->
+  ${generateCoverPage(data, accentColor)}
+  
+  <!-- Summary Page -->
+  <div class="page page-break">
+    ${generatePageHeader('Site Summary Report', accentColor)}
+    
+    ${generateHealthMetrics(healthMetrics, accentColor)}
+    
+    ${data.categoryHealth ? generateCategoryHealth(data.categoryHealth, accentColor) : ''}
+    
+    ${data.documentsSummary ? generateDocumentsSummary(data.documentsSummary, accentColor) : ''}
+    
+    ${generatePageFooter(1, totalPages.toString(), generatedAt)}
+  </div>
+  
+  <!-- Statistics Page -->
+  <div class="page page-break">
+    ${generatePageHeader('Site Summary Report', accentColor)}
+    
+    ${data.summaryStats ? generateSummaryStatistics(data.summaryStats, accentColor) : ''}
+    
+    ${generatePageFooter(2, totalPages.toString(), generatedAt)}
+  </div>
+  
+  <!-- Subsection Pages -->
+  ${generateSubsectionPages(data.subsections || [], accentColor, generatedAt)}
+</body>
+</html>
+  `;
+  
+  // Replace page number placeholders
+  return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
 }
 
-function getCocBadgeClass(status: string | undefined): string {
-  if (!status) return 'badge-warning';
-  const s = status.toLowerCase();
-  if (s.includes('valid') || s.includes('pass')) return 'badge-success';
-  if (s.includes('expired') || s.includes('fail')) return 'badge-danger';
-  return 'badge-warning';
+function calculateHealthMetrics(data: ReportData): HealthMetrics {
+  const subsections = data.subsections || [];
+  const total = Math.max(subsections.length, 1);
+  const stats = data.summaryStats;
+  
+  const compliant = stats?.compliantCount || subsections.filter(s => s.isCompliant === true).length;
+  const cocValid = stats?.cocValidCount || subsections.filter(s => 
+    s.cocStatus?.toLowerCase().includes('valid') || 
+    s.cocStatus?.toLowerCase().includes('approved') ||
+    s.cocStatus?.toLowerCase().includes('pass')
+  ).length;
+  const metered = subsections.filter(s => s.meterSerialNumber).length;
+  const openSnags = stats?.openSnagsCount || subsections.reduce((acc, s) => 
+    acc + (s.snags?.filter(sn => sn.status !== 'resolved' && sn.status !== 'Resolved').length || 0), 0);
+  
+  return {
+    overallHealth: Math.round((compliant / total) * 100),
+    cocCompliance: Math.round((cocValid / total) * 100),
+    meteringData: Math.round((metered / total) * 100),
+    snagFree: Math.round(((total - Math.min(openSnags, total)) / total) * 100),
+  };
 }
 
-function getRiskBadgeClass(level: string | undefined): string {
-  if (!level) return 'badge-warning';
-  const l = level.toLowerCase();
-  if (l === 'high' || l === 'critical') return 'badge-danger';
-  if (l === 'low') return 'badge-success';
-  return 'badge-warning';
-}
-
-function adjustColor(hex: string, percent: number): string {
-  // Simple color adjustment
-  const num = parseInt(hex.replace('#', ''), 16);
-  const amt = Math.round(2.55 * percent);
-  const R = (num >> 16) + amt;
-  const G = (num >> 8 & 0x00FF) + amt;
-  const B = (num & 0x0000FF) + amt;
-  return '#' + (0x1000000 + (R < 255 ? R < 1 ? 0 : R : 255) * 0x10000 +
-    (G < 255 ? G < 1 ? 0 : G : 255) * 0x100 +
-    (B < 255 ? B < 1 ? 0 : B : 255)).toString(16).slice(1);
-}
+// ============================================================================
+// MAIN HANDLER
+// ============================================================================
 
 Deno.serve(async (req) => {
-  // Handle CORS preflight
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
@@ -551,16 +997,16 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json() as ReportData;
-    console.log('Generating PDF for:', body.siteName, 'Type:', body.reportType);
+    console.log('Generating PDF for:', body.siteName, 'Type:', body.reportType, 'Subsections:', body.subsections?.length || 0);
 
-    // Generate HTML based on report type
+    // Generate HTML
     let html: string;
     switch (body.reportType) {
       case 'site-summary':
         html = generateSiteSummaryHTML(body);
         break;
       default:
-        html = generateSiteSummaryHTML(body); // Default to site summary for now
+        html = generateSiteSummaryHTML(body);
     }
 
     console.log('HTML generated, calling PDFShift API...');
@@ -577,10 +1023,10 @@ Deno.serve(async (req) => {
         landscape: false,
         format: 'A4',
         margin: {
-          top: '10mm',
-          right: '10mm',
-          bottom: '10mm',
-          left: '10mm'
+          top: '0mm',
+          right: '0mm',
+          bottom: '0mm',
+          left: '0mm'
         },
         use_print: true,
       }),
@@ -597,11 +1043,10 @@ Deno.serve(async (req) => {
 
     console.log('PDF generated successfully');
 
-    // Return the PDF as base64 - using chunked encoding to avoid stack overflow
+    // Return the PDF as base64 - chunked encoding
     const pdfBuffer = await pdfResponse.arrayBuffer();
     const uint8Array = new Uint8Array(pdfBuffer);
     
-    // Chunked base64 encoding to avoid "Maximum call stack size exceeded"
     let binary = '';
     const chunkSize = 8192;
     for (let i = 0; i < uint8Array.length; i += chunkSize) {
