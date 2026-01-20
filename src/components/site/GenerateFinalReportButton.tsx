@@ -14,6 +14,7 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
+import { ReportSection } from './ReportSettingsDialog';
 
 interface SiteData {
   id: string;
@@ -29,6 +30,7 @@ interface GenerateFinalReportButtonProps {
   site: SiteData;
   companyLogoUrl?: string;
   accentColor?: string;
+  reportSections?: ReportSection[];
   onReportSaved?: () => void;
 }
 
@@ -36,6 +38,7 @@ export function GenerateFinalReportButton({
   site,
   companyLogoUrl,
   accentColor = '#2563eb',
+  reportSections,
   onReportSaved,
 }: GenerateFinalReportButtonProps) {
   const [showDialog, setShowDialog] = useState(false);
@@ -422,6 +425,63 @@ export function GenerateFinalReportButton({
         .single();
       const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
 
+      // Build enabled sections map from reportSections
+      const enabledSections: Record<string, boolean> = {};
+      reportSections?.forEach(section => {
+        enabledSections[section.id] = section.enabled;
+      });
+
+      // If COC Annexes are enabled, fetch detailed validation data
+      let cocAnnexes: any[] = [];
+      if (enabledSections['coc-annexes']) {
+        const subsectionIds = data.subsections.map((s: any) => s.id);
+        if (subsectionIds.length > 0) {
+          const { data: validations } = await supabase
+            .from('coc_validations')
+            .select(`
+              id, 
+              subsection_id, 
+              status, 
+              validated_at, 
+              violations,
+              report_data,
+              subsections!inner (
+                id,
+                name,
+                tenant_name,
+                category,
+                coc_number,
+                coc_type,
+                coc_issue_date
+              )
+            `)
+            .in('subsection_id', subsectionIds)
+            .order('validated_at', { ascending: false });
+          
+          // Get only the latest validation per subsection
+          const latestValidations = new Map<string, any>();
+          validations?.forEach(v => {
+            if (!latestValidations.has(v.subsection_id)) {
+              latestValidations.set(v.subsection_id, v);
+            }
+          });
+          
+          cocAnnexes = Array.from(latestValidations.values()).map(v => ({
+            subsectionId: v.subsection_id,
+            subsectionName: v.subsections?.name || 'Unknown',
+            tenantName: v.subsections?.tenant_name,
+            category: v.subsections?.category,
+            cocNumber: v.subsections?.coc_number,
+            cocType: v.subsections?.coc_type,
+            cocIssueDate: v.subsections?.coc_issue_date,
+            status: v.status,
+            validatedAt: v.validated_at,
+            violations: v.violations,
+            reportData: v.report_data,
+          }));
+        }
+      }
+
       const result = await generatePdf({
         reportType: 'site-summary',
         siteId: site.id,
@@ -440,6 +500,8 @@ export function GenerateFinalReportButton({
         assetVerification: data.assetVerification,
         fortressChecklist: data.fortressChecklist,
         generatedAt: new Date().toLocaleDateString('en-ZA'),
+        enabledSections,
+        cocAnnexes: cocAnnexes.length > 0 ? cocAnnexes : undefined,
       });
       
       setShowDialog(false);

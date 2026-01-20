@@ -32,6 +32,20 @@ async function generateQRCodeSvgDataUri(url: string): Promise<string> {
 // TYPE DEFINITIONS
 // ============================================================================
 
+interface COCAnnexData {
+  subsectionId: string;
+  subsectionName: string;
+  tenantName?: string;
+  category?: string;
+  cocNumber?: string;
+  cocType?: string;
+  cocIssueDate?: string;
+  status: string;
+  validatedAt: string;
+  violations?: any;
+  reportData?: any;
+}
+
 interface ReportData {
   reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
   siteId: string;
@@ -50,6 +64,8 @@ interface ReportData {
   assetVerification?: AssetVerificationData;
   fortressChecklist?: FortressChecklistData;
   generatedAt?: string;
+  enabledSections?: Record<string, boolean>;
+  cocAnnexes?: COCAnnexData[];
 }
 
 interface SubsectionData {
@@ -756,13 +772,19 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   // Calculate health metrics if not provided
   const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
   
-  // Calculate total pages: 1 cover + 1 TOC + summary pages + subsection pages
+  // Check enabled sections (default to true if not specified)
+  const enabledSections = data.enabledSections || {};
+  const isSectionEnabled = (id: string) => enabledSections[id] !== false; // Default true if not specified
+  const hasCOCAnnexes = isSectionEnabled('coc-annexes') && data.cocAnnexes && data.cocAnnexes.length > 0;
+  
+  // Calculate total pages: 1 cover + 1 TOC + summary pages + subsection pages + annex pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
   const hasAssetVerification = !!data.assetVerification && (data.assetVerification.totalAssets > 0);
   const hasFortressChecklist = !!data.fortressChecklist && (data.fortressChecklist.completed > 0 || data.fortressChecklist.pending > 0);
+  const annexPages = hasCOCAnnexes ? data.cocAnnexes!.length : 0; // 1 page per annex
   const summaryPagesCount = 2 + (hasAssetVerification ? 1 : 0) + (hasFortressChecklist ? 1 : 0);
-  // Total: cover (unnumbered) + TOC (page 1) + summary pages + subsection pages
-  const totalPages = 1 + summaryPagesCount + subsectionPages;
+  // Total: cover (unnumbered) + TOC (page 1) + summary pages + subsection pages + annexes
+  const totalPages = 1 + summaryPagesCount + subsectionPages + annexPages;
   
   // Build Table of Contents entries with accurate page numbers
   let tocPage = 2; // Start after TOC (page 1)
@@ -778,13 +800,24 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   }
   if ((data.subsections?.length || 0) > 0) {
     tocEntries.push({ title: 'Subsection Details', page: tocPage });
+    tocPage += subsectionPages;
+  }
+  if (hasCOCAnnexes) {
+    tocEntries.push({ title: 'COC Verification Annexes', page: tocPage });
   }
   
   // Calculate page numbers for subsection pages
-  const subsectionStartPage = tocPage;
+  const subsectionStartPage = tocPage - subsectionPages - (hasCOCAnnexes ? annexPages : 0);
   
   // Generate subsection pages (async for QR generation)
   const subsectionPagesHtml = await generateSubsectionPages(data.subsections || [], accentColor, generatedAt, subsectionStartPage, qrBaseUrl);
+  
+  // Generate COC Annexes if enabled
+  let cocAnnexPagesHtml = '';
+  if (hasCOCAnnexes) {
+    const annexStartPage = subsectionStartPage + subsectionPages;
+    cocAnnexPagesHtml = generateCOCAnnexPages(data.cocAnnexes!, accentColor, generatedAt, annexStartPage);
+  }
   
   // Track current page number for summary pages (starting at 2 after TOC)
   let currentPage = 2;
@@ -866,12 +899,190 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   
   <!-- Subsection Pages -->
   ${subsectionPagesHtml}
+  
+  <!-- COC Verification Annexes -->
+  ${cocAnnexPagesHtml}
 </body>
 </html>
   `;
   
   // Replace page number placeholders
   return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
+}
+
+// Generate COC Verification Annex Pages
+function generateCOCAnnexPages(annexes: COCAnnexData[], accentColor: string, generatedAt: string, startPage: number): string {
+  let pageNumber = startPage;
+  
+  return annexes.map((annex, index) => {
+    const status = annex.status || 'Unknown';
+    const isPass = status.toLowerCase().includes('pass') || status.toLowerCase().includes('valid');
+    const isFail = status.toLowerCase().includes('fail');
+    const statusColor = isPass ? COLORS.success : isFail ? COLORS.error : COLORS.warning;
+    const statusBg = isPass ? '#dcfce7' : isFail ? '#fee2e2' : '#fef3c7';
+    
+    // Parse violations if they exist
+    let violations: any[] = [];
+    try {
+      if (annex.violations) {
+        violations = Array.isArray(annex.violations) ? annex.violations : 
+                     typeof annex.violations === 'object' && annex.violations.violations ? annex.violations.violations :
+                     [];
+      }
+    } catch (e) {
+      violations = [];
+    }
+    
+    // Parse report data for additional context
+    let recommendations: string[] = [];
+    let testResults: any = null;
+    try {
+      if (annex.reportData) {
+        const reportData = typeof annex.reportData === 'string' ? JSON.parse(annex.reportData) : annex.reportData;
+        recommendations = reportData.recommendations || [];
+        testResults = reportData.testResults;
+      }
+    } catch (e) {
+      // Ignore parse errors
+    }
+    
+    const currentPageNum = pageNumber++;
+    
+    return `
+    <!-- COC Annex Page ${index + 1} -->
+    <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+      ${generatePageHeader('COC Verification Report', accentColor)}
+      
+      <!-- Annex Header -->
+      <table style="width: 100%; border: 1px solid ${COLORS.border}; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${accentColor}; color: white; padding: 12px 15px; font-weight: 600; font-size: 14pt;">
+            ${annex.subsectionName}
+          </td>
+          <td style="background: ${statusBg}; color: ${statusColor}; padding: 12px 15px; font-weight: 600; text-align: right; width: 100px;">
+            ${status}
+          </td>
+        </tr>
+      </table>
+      
+      <!-- Subsection Details -->
+      <table style="width: 100%; border: 1px solid ${COLORS.border}; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr style="background: ${COLORS.lightGray};">
+          <td style="padding: 8px 12px; font-weight: 600; width: 30%; border-right: 1px solid ${COLORS.border};">Field</td>
+          <td style="padding: 8px 12px; font-weight: 600;">Value</td>
+        </tr>
+        ${annex.tenantName ? `
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Tenant Name</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.tenantName}</td>
+        </tr>
+        ` : ''}
+        ${annex.category ? `
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Category</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.category}</td>
+        </tr>
+        ` : ''}
+        ${annex.cocNumber ? `
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">COC Number</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocNumber}</td>
+        </tr>
+        ` : ''}
+        ${annex.cocType ? `
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">COC Type</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocType}</td>
+        </tr>
+        ` : ''}
+        ${annex.cocIssueDate ? `
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Issue Date</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${annex.cocIssueDate}</td>
+        </tr>
+        ` : ''}
+        <tr>
+          <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border};">Validated At</td>
+          <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border};">${new Date(annex.validatedAt).toLocaleString('en-ZA')}</td>
+        </tr>
+      </table>
+      
+      ${violations.length > 0 ? `
+      <!-- Violations -->
+      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.error}; color: white; padding: 10px 12px; font-weight: 600;">
+            Violations Found (${violations.length})
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="0">
+              <tr style="background: ${COLORS.lightGray};">
+                <td style="padding: 8px 12px; font-weight: 600; border-right: 1px solid ${COLORS.border}; width: 30%;">Rule</td>
+                <td style="padding: 8px 12px; font-weight: 600; border-right: 1px solid ${COLORS.border};">Description</td>
+                <td style="padding: 8px 12px; font-weight: 600; width: 80px; text-align: center;">Severity</td>
+              </tr>
+              ${violations.slice(0, 10).map((v: any, i: number) => `
+              <tr>
+                <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border}; font-size: 9pt;">${v.rule || v.code || `Violation ${i + 1}`}</td>
+                <td style="padding: 8px 12px; border-right: 1px solid ${COLORS.border}; border-top: 1px solid ${COLORS.border}; font-size: 9pt;">${v.message || v.description || 'No description'}</td>
+                <td style="padding: 8px 12px; border-top: 1px solid ${COLORS.border}; text-align: center;">
+                  <span style="background: ${v.severity === 'critical' || v.severity === 'high' ? '#fee2e2' : v.severity === 'medium' ? '#fef3c7' : '#dbeafe'}; color: ${v.severity === 'critical' || v.severity === 'high' ? COLORS.error : v.severity === 'medium' ? COLORS.warning : COLORS.info}; padding: 2px 8px; border-radius: 4px; font-size: 8pt; font-weight: 500;">
+                    ${v.severity || 'info'}
+                  </span>
+                </td>
+              </tr>
+              `).join('')}
+              ${violations.length > 10 ? `
+              <tr>
+                <td colspan="3" style="padding: 8px 12px; border-top: 1px solid ${COLORS.border}; color: ${COLORS.textMuted}; font-style: italic;">
+                  ... and ${violations.length - 10} more violations
+                </td>
+              </tr>
+              ` : ''}
+            </table>
+          </td>
+        </tr>
+      </table>
+      ` : `
+      <!-- No Violations -->
+      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.success}; color: white; padding: 10px 12px; font-weight: 600;">
+            Validation Result
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 15px; text-align: center; color: ${COLORS.success};">
+            ✓ No violations detected
+          </td>
+        </tr>
+      </table>
+      `}
+      
+      ${recommendations.length > 0 ? `
+      <!-- Recommendations -->
+      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.info}; color: white; padding: 10px 12px; font-weight: 600;">
+            Recommendations
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 12px;">
+            <ul style="margin: 0; padding-left: 20px; color: ${COLORS.text};">
+              ${recommendations.slice(0, 8).map((rec: string) => `<li style="margin-bottom: 6px; font-size: 9pt;">${rec}</li>`).join('')}
+            </ul>
+          </td>
+        </tr>
+      </table>
+      ` : ''}
+      
+      ${generatePageFooter(currentPageNum, '{{TOTAL_PAGES}}', generatedAt)}
+    </div>
+    `;
+  }).join('');
 }
 
 function calculateHealthMetrics(data: ReportData): HealthMetrics {

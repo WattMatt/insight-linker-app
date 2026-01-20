@@ -70,6 +70,20 @@ interface FortressChecklistData {
   notApplicable: number;
 }
 
+interface COCAnnexData {
+  subsectionId: string;
+  subsectionName: string;
+  tenantName?: string;
+  category?: string;
+  cocNumber?: string;
+  cocType?: string;
+  cocIssueDate?: string;
+  status: string;
+  validatedAt: string;
+  violations?: any;
+  reportData?: any;
+}
+
 interface ReportData {
   reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
   siteId: string;
@@ -88,6 +102,8 @@ interface ReportData {
   assetVerification?: AssetVerificationData;
   fortressChecklist?: FortressChecklistData;
   generatedAt?: string;
+  enabledSections?: Record<string, boolean>;
+  cocAnnexes?: COCAnnexData[];
 }
 
 export function useServerPdfGeneration() {
