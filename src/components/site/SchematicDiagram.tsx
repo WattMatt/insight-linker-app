@@ -137,6 +137,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     block_identifier: "",
     block_name: "",
     subsection_id: "",
+    width: 150,
+    height: 100,
   });
 
   // Handle mouse wheel zoom
@@ -500,8 +502,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           block_name: null,
           x_position: x,
           y_position: y,
-          width: 120,
-          height: 80,
+          width: 150,
+          height: 100,
         })
         .select()
         .single();
@@ -514,6 +516,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         block_identifier: data.block_identifier,
         block_name: "",
         subsection_id: "",
+        width: data.width,
+        height: data.height,
       });
       setEditDialogOpen(true);
       setIsAddingBlock(false);
@@ -541,6 +545,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         block_identifier: block.block_identifier,
         block_name: block.block_name || "",
         subsection_id: "",
+        width: block.width,
+        height: block.height,
       });
       setLinkDialogOpen(true);
     }
@@ -589,6 +595,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           block_name: editForm.block_name || null,
           subsection_id: matchedSubsectionId,
           is_auto_matched: isAutoMatched,
+          width: editForm.width,
+          height: editForm.height,
         })
         .eq("id", selectedBlock.id);
 
@@ -596,7 +604,15 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       setBlocks(blocks.map(b => 
         b.id === selectedBlock.id 
-          ? { ...b, block_identifier: editForm.block_identifier, block_name: editForm.block_name || null, subsection_id: matchedSubsectionId, is_auto_matched: isAutoMatched }
+          ? { 
+              ...b, 
+              block_identifier: editForm.block_identifier, 
+              block_name: editForm.block_name || null, 
+              subsection_id: matchedSubsectionId, 
+              is_auto_matched: isAutoMatched,
+              width: editForm.width,
+              height: editForm.height,
+            }
           : b
       ));
 
@@ -977,6 +993,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                                 block_identifier: block.block_identifier,
                                 block_name: block.block_name || "",
                                 subsection_id: block.subsection_id || "",
+                                width: block.width,
+                                height: block.height,
                               });
                               setEditDialogOpen(true);
                             }}>
@@ -1008,6 +1026,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                                 block_identifier: block.block_identifier,
                                 block_name: block.block_name || "",
                                 subsection_id: "",
+                                width: block.width,
+                                height: block.height,
                               });
                               setLinkDialogOpen(true);
                             }}>
@@ -1020,6 +1040,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                                 block_identifier: block.block_identifier,
                                 block_name: block.block_name || "",
                                 subsection_id: "",
+                                width: block.width,
+                                height: block.height,
                               });
                               setEditDialogOpen(true);
                             }}>
@@ -1114,6 +1136,31 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 onChange={(e) => setEditForm({ ...editForm, block_name: e.target.value })}
                 placeholder="e.g., SHOPRITE"
               />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="block_width">Width (px)</Label>
+                <Input
+                  id="block_width"
+                  type="number"
+                  min={40}
+                  max={500}
+                  value={editForm.width}
+                  onChange={(e) => setEditForm({ ...editForm, width: Math.max(40, Number(e.target.value)) })}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="block_height">Height (px)</Label>
+                <Input
+                  id="block_height"
+                  type="number"
+                  min={30}
+                  max={500}
+                  value={editForm.height}
+                  onChange={(e) => setEditForm({ ...editForm, height: Math.max(30, Number(e.target.value)) })}
+                />
+              </div>
             </div>
 
             <div className="space-y-2">
