@@ -839,46 +839,39 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   return (
     <Card className="overflow-hidden">
-      {/* Header with Edit Button */}
-      <CardHeader className="pb-3 border-b">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <CardTitle className="flex items-center gap-2 text-lg">
-              <Zap className="h-5 w-5" />
-              {schematic.file_name}
-            </CardTitle>
-            <div className="flex items-center gap-2">
-              <Badge variant="outline">{blocks.length} blocks</Badge>
-              <Badge variant="secondary" className="bg-primary/10 text-primary">
-                {linkedCount} linked
-              </Badge>
-              {unlinkedCount > 0 && (
-                <Badge variant="destructive" className="bg-destructive/10 text-destructive">
-                  {unlinkedCount} unlinked
+      {/* Header - Only visible in Edit Mode */}
+      {isEditMode && (
+        <CardHeader className="pb-3 border-b">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
+                <Zap className="h-5 w-5" />
+                {schematic.file_name}
+              </CardTitle>
+              <div className="flex items-center gap-2">
+                <Badge variant="outline">{blocks.length} blocks</Badge>
+                <Badge variant="secondary" className="bg-primary/10 text-primary">
+                  {linkedCount} linked
                 </Badge>
-              )}
+                {unlinkedCount > 0 && (
+                  <Badge variant="destructive" className="bg-destructive/10 text-destructive">
+                    {unlinkedCount} unlinked
+                  </Badge>
+                )}
+              </div>
             </div>
+            
+            <Button
+              variant="default"
+              size="sm"
+              onClick={toggleEditMode}
+            >
+              <X className="h-4 w-4 mr-1" />
+              Exit Edit
+            </Button>
           </div>
-          
-          <Button
-            variant={isEditMode ? "default" : "outline"}
-            size="sm"
-            onClick={toggleEditMode}
-          >
-            {isEditMode ? (
-              <>
-                <X className="h-4 w-4 mr-1" />
-                Exit Edit
-              </>
-            ) : (
-              <>
-                <Pencil className="h-4 w-4 mr-1" />
-                Edit
-              </>
-            )}
-          </Button>
-        </div>
-      </CardHeader>
+        </CardHeader>
+      )}
 
       {/* Edit Mode Toolbar */}
       {isEditMode && (
@@ -945,7 +938,20 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       )}
 
       {/* Schematic Viewer - Fixed Height */}
-      <CardContent className="p-0">
+      <CardContent className="p-0 relative">
+        {/* Edit Button Overlay - Visible when not editing */}
+        {!isEditMode && (
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={toggleEditMode}
+            className="absolute top-3 right-3 z-10 shadow-md"
+          >
+            <Pencil className="h-4 w-4 mr-1" />
+            Edit
+          </Button>
+        )}
+        
         <div 
           ref={containerRef}
           className={`relative overflow-auto bg-muted/30 ${
