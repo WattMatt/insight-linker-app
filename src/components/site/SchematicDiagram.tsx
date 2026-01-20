@@ -46,7 +46,11 @@ import {
   Gauge,
   Zap,
   Pencil,
-  X
+  X,
+  Maximize2,
+  Square,
+  RectangleHorizontal,
+  RectangleVertical
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 
@@ -143,6 +147,21 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     width: 150,
     height: 100,
   });
+
+  // Block size configuration dialog
+  const [sizeDialogOpen, setSizeDialogOpen] = useState(false);
+  const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
+  const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
+
+  // Size presets
+  const SIZE_PRESETS = {
+    small: { width: 80, height: 50, label: "Small", description: "80 × 50 px" },
+    medium: { width: 150, height: 100, label: "Medium", description: "150 × 100 px" },
+    large: { width: 220, height: 140, label: "Large", description: "220 × 140 px" },
+    wide: { width: 200, height: 80, label: "Wide", description: "200 × 80 px" },
+    tall: { width: 100, height: 150, label: "Tall", description: "100 × 150 px" },
+    custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
+  };
 
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -628,12 +647,47 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  // Apply current size to all blocks
+  // Apply size preset to all blocks
+  const handleApplySizePreset = async () => {
+    if (blocks.length === 0) {
+      toast.info("No blocks to resize");
+      return;
+    }
+
+    const size = selectedSizePreset === "custom" 
+      ? customSize 
+      : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS];
+
+    try {
+      const { error } = await supabase
+        .from("schematic_blocks")
+        .update({
+          width: size.width,
+          height: size.height,
+        })
+        .eq("schematic_id", schematic?.id);
+
+      if (error) throw error;
+
+      setBlocks(blocks.map(b => ({
+        ...b,
+        width: size.width,
+        height: size.height,
+      })));
+
+      setSizeDialogOpen(false);
+      toast.success(`Applied ${SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.label || 'custom'} size to all ${blocks.length} blocks`);
+    } catch (error) {
+      console.error("Error applying size to blocks:", error);
+      toast.error("Failed to apply size to blocks");
+    }
+  };
+
+  // Apply current size from edit form to all blocks (legacy support)
   const handleApplySizeToAll = async () => {
     if (blocks.length === 0) return;
 
     try {
-      // Update all blocks in database
       const { error } = await supabase
         .from("schematic_blocks")
         .update({
@@ -644,14 +698,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (error) throw error;
 
-      // Update local state
       setBlocks(blocks.map(b => ({
         ...b,
         width: editForm.width,
         height: editForm.height,
       })));
 
-      toast.success(`Applied size (${editForm.width}×${editForm.height}px) to all ${blocks.length} blocks`);
+      toast.success(`Applied size to all ${blocks.length} blocks`);
     } catch (error) {
       console.error("Error applying size to all blocks:", error);
       toast.error("Failed to apply size to all blocks");
@@ -854,6 +907,16 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   <Button
                     variant="outline"
                     size="sm"
+                    onClick={() => setSizeDialogOpen(true)}
+                    disabled={blocks.length === 0}
+                  >
+                    <Maximize2 className="h-4 w-4 mr-1" />
+                    Block Size
+                  </Button>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={handleAutoMatch}
                   >
                     <Link2 className="h-4 w-4 mr-1" />
@@ -960,7 +1023,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                     className={`absolute flex items-center justify-center border-2 rounded-sm select-none ${
                       isLinked 
                         ? 'bg-primary/10 border-primary' 
-                        : 'bg-orange-500/10 border-orange-500'
+                        : 'bg-destructive/10 border-destructive'
                     } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
                       isEditMode ? 'group' : ''
                     }`}
@@ -1174,7 +1237,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               <span>Linked to subsection</span>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded border-2 border-orange-500 bg-orange-500/20" />
+              <div className="h-4 w-4 rounded border-2 border-destructive bg-destructive/20" />
               <span>Not linked</span>
             </div>
             <div className="flex items-center gap-2">
@@ -1219,44 +1282,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             </div>
 
             <div className="space-y-2">
-              <div className="flex items-center justify-between">
-                <Label>Block Size</Label>
-                <Button 
-                  variant="outline" 
-                  size="sm"
-                  onClick={handleApplySizeToAll}
-                  className="text-xs h-7"
-                >
-                  Apply to All ({blocks.length})
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                  <Label htmlFor="block_width" className="text-xs text-muted-foreground">Width (px)</Label>
-                  <Input
-                    id="block_width"
-                    type="number"
-                    min={40}
-                    max={500}
-                    value={editForm.width}
-                    onChange={(e) => setEditForm({ ...editForm, width: Math.max(40, Number(e.target.value)) })}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="block_height" className="text-xs text-muted-foreground">Height (px)</Label>
-                  <Input
-                    id="block_height"
-                    type="number"
-                    min={30}
-                    max={500}
-                    value={editForm.height}
-                    onChange={(e) => setEditForm({ ...editForm, height: Math.max(30, Number(e.target.value)) })}
-                  />
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-2">
               <Label htmlFor="subsection">Link to Subsection</Label>
               <Select 
                 value={editForm.subsection_id} 
@@ -1274,6 +1299,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   ))}
                 </SelectContent>
               </Select>
+              <p className="text-xs text-muted-foreground">
+                Use the "Block Size" button in the toolbar to resize all blocks at once
+              </p>
             </div>
           </div>
 
@@ -1332,6 +1360,134 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             <Button onClick={handleSaveBlock} disabled={!editForm.subsection_id}>
               <Link2 className="h-4 w-4 mr-1" />
               Link
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Block Size Configuration Dialog */}
+      <Dialog open={sizeDialogOpen} onOpenChange={setSizeDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Maximize2 className="h-5 w-5" />
+              Configure Block Size
+            </DialogTitle>
+            <DialogDescription>
+              Set a uniform size for all {blocks.length} blocks on this schematic
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            {/* Visual Size Presets */}
+            <div className="grid grid-cols-3 gap-3">
+              {Object.entries(SIZE_PRESETS).filter(([key]) => key !== 'custom').map(([key, preset]) => (
+                <button
+                  key={key}
+                  onClick={() => {
+                    setSelectedSizePreset(key);
+                    setCustomSize({ width: preset.width, height: preset.height });
+                  }}
+                  className={`p-3 rounded-lg border-2 transition-all hover:border-primary/50 ${
+                    selectedSizePreset === key 
+                      ? 'border-primary bg-primary/10' 
+                      : 'border-border bg-card'
+                  }`}
+                >
+                  <div className="flex flex-col items-center gap-2">
+                    <div 
+                      className="border-2 border-current rounded flex items-center justify-center"
+                      style={{ 
+                        width: Math.min(preset.width / 4, 50), 
+                        height: Math.min(preset.height / 4, 35) 
+                      }}
+                    >
+                      {key === 'small' && <Square className="h-3 w-3 opacity-50" />}
+                      {key === 'medium' && <Square className="h-4 w-4 opacity-50" />}
+                      {key === 'large' && <Square className="h-5 w-5 opacity-50" />}
+                      {key === 'wide' && <RectangleHorizontal className="h-4 w-4 opacity-50" />}
+                      {key === 'tall' && <RectangleVertical className="h-4 w-4 opacity-50" />}
+                    </div>
+                    <div className="text-center">
+                      <p className="font-medium text-sm">{preset.label}</p>
+                      <p className="text-xs text-muted-foreground">{preset.description}</p>
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Custom Size Option */}
+            <div 
+              onClick={() => setSelectedSizePreset("custom")}
+              className={`p-4 rounded-lg border-2 transition-all cursor-pointer hover:border-primary/50 ${
+                selectedSizePreset === "custom" 
+                  ? 'border-primary bg-primary/10' 
+                  : 'border-border bg-card'
+              }`}
+            >
+              <div className="flex items-center gap-3 mb-3">
+                <Maximize2 className="h-4 w-4" />
+                <span className="font-medium">Custom Size</span>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-1">
+                  <Label htmlFor="custom_width" className="text-xs text-muted-foreground">Width (px)</Label>
+                  <Input
+                    id="custom_width"
+                    type="number"
+                    min={40}
+                    max={500}
+                    value={customSize.width}
+                    onChange={(e) => {
+                      setSelectedSizePreset("custom");
+                      setCustomSize({ ...customSize, width: Math.max(40, Math.min(500, Number(e.target.value))) });
+                    }}
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor="custom_height" className="text-xs text-muted-foreground">Height (px)</Label>
+                  <Input
+                    id="custom_height"
+                    type="number"
+                    min={30}
+                    max={500}
+                    value={customSize.height}
+                    onChange={(e) => {
+                      setSelectedSizePreset("custom");
+                      setCustomSize({ ...customSize, height: Math.max(30, Math.min(500, Number(e.target.value))) });
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Preview */}
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <p className="text-sm text-muted-foreground mb-2">Preview:</p>
+              <div className="flex items-center justify-center h-20">
+                <div 
+                  className="border-2 border-primary bg-primary/20 rounded flex items-center justify-center text-xs text-primary"
+                  style={{ 
+                    width: Math.min((selectedSizePreset === "custom" ? customSize.width : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.width || 150) / 2, 100),
+                    height: Math.min((selectedSizePreset === "custom" ? customSize.height : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.height || 100) / 2, 70)
+                  }}
+                >
+                  {selectedSizePreset === "custom" 
+                    ? `${customSize.width}×${customSize.height}` 
+                    : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.description}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setSizeDialogOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleApplySizePreset}>
+              <Maximize2 className="h-4 w-4 mr-1" />
+              Apply to All Blocks
             </Button>
           </DialogFooter>
         </DialogContent>
