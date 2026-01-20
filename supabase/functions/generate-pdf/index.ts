@@ -597,9 +597,18 @@ Deno.serve(async (req) => {
 
     console.log('PDF generated successfully');
 
-    // Return the PDF as base64
+    // Return the PDF as base64 - using chunked encoding to avoid stack overflow
     const pdfBuffer = await pdfResponse.arrayBuffer();
-    const base64Pdf = btoa(String.fromCharCode(...new Uint8Array(pdfBuffer)));
+    const uint8Array = new Uint8Array(pdfBuffer);
+    
+    // Chunked base64 encoding to avoid "Maximum call stack size exceeded"
+    let binary = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
+      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64Pdf = btoa(binary);
 
     return new Response(
       JSON.stringify({ 
