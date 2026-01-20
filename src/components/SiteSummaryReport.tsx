@@ -317,7 +317,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       switch (section.id) {
         case "health-metrics":
         case "compliance": // Support legacy section ID
-          content.push(createSectionHeader(title, 'primary'));
+          // Use noTopMargin to push content up and fit more on first page
+          content.push(createSectionHeader(title, 'primary', { noTopMargin: true }));
           // Use HEALTH_METRICS_CARDS from spec
           content.push(createKpiRow(
             HEALTH_METRICS_CARDS.map(card => ({
