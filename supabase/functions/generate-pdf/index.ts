@@ -725,6 +725,23 @@ Deno.serve(async (req) => {
     
     console.log('PDF saved to storage:', urlData.publicUrl);
 
+    // Create a record in site_documents table so it appears in the Reports list
+    const { error: dbError } = await supabase
+      .from('site_documents')
+      .insert({
+        site_id: body.siteId,
+        file_name: filename,
+        file_url: urlData.publicUrl,
+        category: 'Site Summary Reports',
+      });
+    
+    if (dbError) {
+      console.error('Database insert error:', dbError);
+      // Don't fail the request - the file is saved, just log the error
+    } else {
+      console.log('Report record created in site_documents');
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
