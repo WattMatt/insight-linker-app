@@ -282,47 +282,96 @@ function generateSectionHeader(title: string, accentColor: string): string {
   `;
 }
 
+// Generate SVG circular progress ring
+function generateCircularProgress(percentage: number, color: string, size: number = 90): string {
+  const strokeWidth = 8;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const strokeDashoffset = circumference - (percentage / 100) * circumference;
+  const center = size / 2;
+  
+  return `
+    <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" style="transform: rotate(-90deg);">
+      <!-- Background circle -->
+      <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="#e5e7eb" stroke-width="${strokeWidth}"/>
+      <!-- Progress circle -->
+      <circle cx="${center}" cy="${center}" r="${radius}" fill="none" stroke="${color}" stroke-width="${strokeWidth}" 
+              stroke-dasharray="${circumference}" stroke-dashoffset="${strokeDashoffset}" stroke-linecap="round"/>
+    </svg>
+  `;
+}
+
+// Generate an icon for the metric type
+function getMetricIcon(type: string, color: string): string {
+  const icons: Record<string, string> = {
+    health: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>`,
+    coc: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><path d="m9 15 2 2 4-4"/></svg>`,
+    meter: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>`,
+    snag: `<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="${color}" stroke-width="2"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="m9 12 2 2 4-4"/></svg>`,
+  };
+  return icons[type] || icons.health;
+}
+
 function generateHealthMetrics(metrics: HealthMetrics, accentColor: string): string {
   const getColor = (value: number) => value >= 70 ? COLORS.success : value >= 40 ? COLORS.warning : COLORS.error;
   
+  const metricCards = [
+    { label: 'Overall Health', value: metrics.overallHealth, icon: 'health' },
+    { label: 'COC Compliance', value: metrics.cocCompliance, icon: 'coc' },
+    { label: 'Metering Data', value: metrics.meteringData, icon: 'meter' },
+    { label: 'Snag Free', value: Math.max(0, metrics.snagFree), icon: 'snag' },
+  ];
+  
+  const cards = metricCards.map(m => {
+    const color = getColor(m.value);
+    return `
+      <td style="width: 25%; background: white; border: 2px solid ${COLORS.border}; border-radius: 12px; padding: 18px 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+        <div style="position: relative; display: inline-block; margin-bottom: 8px;">
+          ${generateCircularProgress(m.value, color, 85)}
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg);">
+            <span style="font-size: 18pt; font-weight: 700; color: ${color};">${m.value}</span>
+            <span style="font-size: 10pt; color: ${color};">%</span>
+          </div>
+        </div>
+        <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px;">
+          ${getMetricIcon(m.icon, COLORS.textMuted)}
+          <span style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; font-weight: 600;">${m.label}</span>
+        </div>
+      </td>
+    `;
+  }).join('');
+
   return `
     ${generateSectionHeader('Health Metrics', accentColor)}
-    <table style="width: 100%; border-collapse: separate; border-spacing: 12px;">
-      <tr>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.overallHealth)};">${metrics.overallHealth}%</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Overall Health</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.cocCompliance)};">${metrics.cocCompliance}%</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">COC Compliance</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(metrics.meteringData)};">${metrics.meteringData}%</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Metering Data</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${getColor(Math.max(0, metrics.snagFree))};">${Math.max(0, metrics.snagFree)}%</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 8px;">Snag Free</div>
-        </td>
-      </tr>
+    <table style="width: 100%; border-collapse: separate; border-spacing: 10px;">
+      <tr>${cards}</tr>
     </table>
   `;
 }
 
 function generateCategoryHealth(categories: CategoryHealthData[], accentColor: string): string {
   if (!categories || categories.length === 0) return '';
+  
+  const getColor = (value: number) => value >= 70 ? COLORS.success : value >= 40 ? COLORS.warning : COLORS.error;
 
-  const categoryCards = categories.map(cat => `
-    <td style="background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 15px; text-align: center;">
-      <div style="font-size: 20pt; font-weight: 700; color: ${cat.percentage >= 50 ? COLORS.success : COLORS.error};">${cat.percentage}%</div>
-      <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">${cat.abbreviation}</div>
-    </td>
-  `).join('');
+  const categoryCards = categories.map(cat => {
+    const color = getColor(cat.percentage);
+    return `
+      <td style="background: white; border: 1px solid ${COLORS.border}; border-radius: 10px; padding: 12px 8px; text-align: center; box-shadow: 0 1px 4px rgba(0,0,0,0.03);">
+        <div style="position: relative; display: inline-block;">
+          ${generateCircularProgress(cat.percentage, color, 60)}
+          <div style="position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) rotate(90deg);">
+            <span style="font-size: 12pt; font-weight: 700; color: ${color};">${cat.percentage}</span>
+          </div>
+        </div>
+        <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px; font-weight: 600;">${cat.abbreviation}</div>
+      </td>
+    `;
+  }).join('');
 
   return `
     ${generateSectionHeader('Health by Category', accentColor)}
-    <table style="width: 100%; border-collapse: separate; border-spacing: 10px;">
+    <table style="width: 100%; border-collapse: separate; border-spacing: 8px;">
       <tr>${categoryCards}</tr>
     </table>
   `;
@@ -331,24 +380,26 @@ function generateCategoryHealth(categories: CategoryHealthData[], accentColor: s
 function generateSummaryStatistics(stats: SummaryStats, accentColor: string): string {
   const overallHealth = Math.round((stats.compliantCount / Math.max(stats.totalSubsections, 1)) * 100);
   
-  const rows = [
-    { label: 'Total Subsections', value: stats.totalSubsections.toString() },
-    { label: 'COC Required', value: (stats.cocRequired || stats.totalSubsections).toString() },
-    { label: 'COC Compliant', value: stats.cocValidCount.toString() },
-    { label: 'Metering Installed', value: (stats.meteringInstalled || stats.totalSubsections).toString() },
-    { label: 'Open Snags', value: stats.openSnagsCount.toString() },
-    { label: 'Overall Health Rate', value: `${overallHealth}%` },
+  // Create a visual grid of stats with icons
+  const statItems = [
+    { label: 'Subsections', value: stats.totalSubsections, icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${accentColor}" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>` },
+    { label: 'COC Valid', value: stats.cocValidCount, icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${COLORS.success}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><path d="m9 15 2 2 4-4"/></svg>`, color: COLORS.success },
+    { label: 'Metering', value: stats.meteringInstalled, icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${COLORS.info}" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`, color: COLORS.info },
+    { label: 'Open Snags', value: stats.openSnagsCount, icon: `<svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="${stats.openSnagsCount > 0 ? COLORS.warning : COLORS.success}" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>`, color: stats.openSnagsCount > 0 ? COLORS.warning : COLORS.success },
   ];
+
+  const statCards = statItems.map(item => `
+    <td style="width: 25%; background: white; border: 1px solid ${COLORS.border}; border-radius: 10px; padding: 16px 10px; text-align: center;">
+      <div style="margin-bottom: 8px;">${item.icon}</div>
+      <div style="font-size: 22pt; font-weight: 700; color: ${item.color || COLORS.primary};">${item.value}</div>
+      <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px; font-weight: 600;">${item.label}</div>
+    </td>
+  `).join('');
 
   return `
     ${generateSectionHeader('Summary Statistics', accentColor)}
-    <table style="width: 100%; border-collapse: collapse; margin-bottom: 20px;">
-      ${rows.map((row, i) => `
-        <tr style="background: ${i % 2 === 0 ? COLORS.lightGray : 'white'};">
-          <td style="padding: 14px 20px; border-bottom: 1px solid ${COLORS.border}; font-size: 11pt; color: ${COLORS.textMuted};">${row.label}</td>
-          <td style="padding: 14px 20px; border-bottom: 1px solid ${COLORS.border}; text-align: right; font-size: 11pt; font-weight: 600; color: ${COLORS.primary};">${row.value}</td>
-        </tr>
-      `).join('')}
+    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; margin-bottom: 15px;">
+      <tr>${statCards}</tr>
     </table>
   `;
 }
@@ -368,32 +419,38 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
     return a.category.localeCompare(b.category);
   });
 
+  // Document icon
+  const docIcon = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${COLORS.info}" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>`;
+  const folderIcon = `<svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="${COLORS.muted}" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>`;
+
   return `
     ${generateSectionHeader('Documents Summary', accentColor)}
     <table style="width: 100%; border-collapse: separate; border-spacing: 10px; margin-bottom: 15px;">
       <tr>
-        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.info};">${totalDocs}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Total Documents</div>
+        <td style="width: 50%; background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%); border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 24px; text-align: center;">
+          <div style="margin-bottom: 8px;">${docIcon}</div>
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.info};">${totalDocs}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px; font-weight: 600;">Total Documents</div>
         </td>
-        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.muted};">${sortedDocs.length}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Categories</div>
+        <td style="width: 50%; background: linear-gradient(135deg, #f9fafb 0%, #f3f4f6 100%); border: 1px solid ${COLORS.border}; border-radius: 12px; padding: 24px; text-align: center;">
+          <div style="margin-bottom: 8px;">${folderIcon}</div>
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.muted};">${sortedDocs.length}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 4px; font-weight: 600;">Categories</div>
         </td>
       </tr>
     </table>
-    <table style="width: 100%; border-collapse: collapse;">
+    <table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden;">
       <thead>
         <tr style="background: ${COLORS.primary};">
-          <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Category</th>
-          <th style="padding: 12px 15px; text-align: right; color: white; font-size: 10pt;">Files</th>
+          <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt; font-weight: 600;">Category</th>
+          <th style="padding: 12px 15px; text-align: right; color: white; font-size: 10pt; font-weight: 600;">Files</th>
         </tr>
       </thead>
       <tbody>
         ${sortedDocs.map((doc, i) => `
-          <tr style="background: ${i % 2 === 0 ? 'white' : COLORS.lightGray};">
-            <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; font-size: 10pt;">${doc.category}</td>
-            <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; text-align: right; font-size: 10pt; font-weight: 600;">${doc.count}</td>
+          <tr style="background: white; border-bottom: 0.5pt solid ${COLORS.border};">
+            <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.text};">${doc.category}</td>
+            <td style="padding: 10px 15px; text-align: right; font-size: 10pt; font-weight: 700; color: ${COLORS.primary};">${doc.count}</td>
           </tr>
         `).join('')}
       </tbody>
