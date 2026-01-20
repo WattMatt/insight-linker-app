@@ -103,7 +103,7 @@ interface InspectionTenantMatch {
 }
 
 // Fixed container dimensions
-const CONTAINER_HEIGHT = 500;
+const CONTAINER_HEIGHT = 700;
 
 // Size presets
 const SIZE_PRESETS = {
@@ -165,7 +165,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
   const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
 
-  // Calculate fit-to-container scale
+  // Calculate fit-to-container scale - zoom extend to fill
   const calculateFitScale = useCallback(() => {
     if (!containerRef.current || pdfDimensions.width === 0) return 1;
     
@@ -175,16 +175,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const scaleX = containerWidth / pdfDimensions.width;
     const scaleY = containerHeight / pdfDimensions.height;
     
-    return Math.min(scaleX, scaleY, 1); // Cap at 100%
+    // Use the smaller scale to ensure entire PDF fits, no cap
+    return Math.min(scaleX, scaleY);
   }, [pdfDimensions]);
 
-  // Auto-fit on PDF load
+  // Auto-fit on PDF load - always zoom to fit
   useEffect(() => {
-    if (pdfDimensions.width > 0 && !isEditMode) {
+    if (pdfDimensions.width > 0) {
       const fitScale = calculateFitScale();
       setScale(fitScale);
     }
-  }, [pdfDimensions, calculateFitScale, isEditMode]);
+  }, [pdfDimensions, calculateFitScale]);
 
   // Handle PDF page load to get dimensions
   const handlePageLoad = (page: any) => {
