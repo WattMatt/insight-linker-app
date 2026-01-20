@@ -121,7 +121,7 @@ function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null):
     : 'pending';
   const cocColors = STATUS_COLORS[cocStatusKey] || STATUS_COLORS.pending;
 
-  // Left column: COC Status, Metering info (all in one row)
+  // Left column: COC Status, Breaker Size, Metering info
   const leftColumn = {
     stack: [
       // COC Status row
@@ -140,6 +140,14 @@ function createCardBody(data: SubsectionCardData, qrCodeDataUrl: string | null):
         ],
         margin: [0, 0, 0, 6],
       } : { text: '' },
+      // Circuit Breaker Size row
+      {
+        columns: [
+          { text: 'Breaker Size:', fontSize: CARD_LAYOUT.labelSize, color: '#6b7280', width: 70 },
+          { text: data.breakerSize || 'N/A', fontSize: CARD_LAYOUT.valueSize, color: '#374151', bold: true },
+        ],
+        margin: [0, 0, 0, 6],
+      },
       // Metering, Meter S/N, and CT Ratio - using simple table for reliable layout
       {
         table: {

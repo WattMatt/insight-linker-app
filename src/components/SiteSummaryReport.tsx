@@ -172,7 +172,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
   };
 
   // Transform DB subsection to SubsectionCardData (extended for cards)
-  const transformToSubsectionCardData = (sub: any, allSnags: any[], qrBaseUrl: string): SubsectionCardData => {
+  const transformToSubsectionCardData = (sub: any, allSnags: any[], qrBaseUrl: string, assets: any[]): SubsectionCardData => {
     const subSnags = allSnags.filter(s => 
       s.subsection_id === sub.id && 
       !['rectified', 'Rectified'].includes(s.status || '')
@@ -180,6 +180,11 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     
     // Generate QR URL if not stored - use public subsection URL
     const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsections/${sub.id}`;
+    
+    // Find matching asset by premises_id (subsection name)
+    const matchingAsset = assets.find(a => 
+      a.premises_id?.toLowerCase().trim() === sub.name?.toLowerCase().trim()
+    );
     
     return {
       id: sub.id,
@@ -190,6 +195,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       meteringStatus: sub.metering_status,
       meterSerialNumber: sub.meter_serial_number,
       ctRatio: sub.ct_ratio,
+      breakerSize: matchingAsset?.breaker_size || null,
       snagCount: subSnags.length,
       isCompliant: calculateSubsectionCompliance(sub, allSnags),
       qrCodeUrl: qrUrl,
@@ -258,9 +264,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     const cocValidations = cocValidationsQuery.data || [];
 
-    // Transform subsections to card format with snags
+    // Transform subsections to card format with snags and asset breaker size
     const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
-      transformToSubsectionCardData(sub, allSnags, qrBaseUrl)
+      transformToSubsectionCardData(sub, allSnags, qrBaseUrl, siteAssets)
     );
 
     // Also create SubsectionData for metrics calculation

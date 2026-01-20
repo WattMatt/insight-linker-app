@@ -19,6 +19,7 @@ export interface SubsectionCardData extends SubsectionData {
   cocNumber?: string | null;
   cocIssueDate?: string | null;
   cocType?: string | null;
+  breakerSize?: string | null;
 }
 
 // ============================================================================
