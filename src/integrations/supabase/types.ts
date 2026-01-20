@@ -1275,6 +1275,66 @@ export type Database = {
           },
         ]
       }
+      schematic_blocks: {
+        Row: {
+          block_identifier: string
+          block_name: string | null
+          created_at: string
+          height: number | null
+          id: string
+          is_auto_matched: boolean | null
+          schematic_id: string
+          subsection_id: string | null
+          updated_at: string
+          width: number | null
+          x_position: number
+          y_position: number
+        }
+        Insert: {
+          block_identifier: string
+          block_name?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          is_auto_matched?: boolean | null
+          schematic_id: string
+          subsection_id?: string | null
+          updated_at?: string
+          width?: number | null
+          x_position: number
+          y_position: number
+        }
+        Update: {
+          block_identifier?: string
+          block_name?: string | null
+          created_at?: string
+          height?: number | null
+          id?: string
+          is_auto_matched?: boolean | null
+          schematic_id?: string
+          subsection_id?: string | null
+          updated_at?: string
+          width?: number | null
+          x_position?: number
+          y_position?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "schematic_blocks_schematic_id_fkey"
+            columns: ["schematic_id"]
+            isOneToOne: false
+            referencedRelation: "site_schematics"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "schematic_blocks_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       settings: {
         Row: {
           company_logo_url: string | null
@@ -1513,6 +1573,44 @@ export type Database = {
             foreignKeyName: "site_marking_checklist_site_id_fkey"
             columns: ["site_id"]
             isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      site_schematics: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_url: string
+          id: string
+          site_id: string
+          updated_at: string
+          uploaded_by: string | null
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_url: string
+          id?: string
+          site_id: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_url?: string
+          id?: string
+          site_id?: string
+          updated_at?: string
+          uploaded_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "site_schematics_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: true
             referencedRelation: "sites"
             referencedColumns: ["id"]
           },
