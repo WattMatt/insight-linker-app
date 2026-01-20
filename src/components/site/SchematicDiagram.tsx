@@ -343,8 +343,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const handleBlockResizeMove = (e: React.MouseEvent) => {
     if (!originalBlock || !isEditMode) return;
     
-    const dx = (e.clientX - dragStart.x) / scale;
-    const dy = (e.clientY - dragStart.y) / scale;
+    const dx = (e.clientX - dragStart.x) / displayScale;
+    const dy = (e.clientY - dragStart.y) / displayScale;
 
     if (resizing) {
       const block = blocks.find(b => b.id === resizing.blockId);
@@ -352,22 +352,33 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       let newWidth = originalBlock.width;
       let newHeight = originalBlock.height;
+      // Position is center-based, so we need to adjust center when resizing from one side
       let newX = originalBlock.x;
       let newY = originalBlock.y;
 
-      if (resizing.corner.includes('e')) newWidth = Math.max(40, originalBlock.width + dx);
+      // East handle: expand width to the right, shift center right by half the change
+      if (resizing.corner.includes('e')) {
+        newWidth = Math.max(40, originalBlock.width + dx);
+        newX = originalBlock.x + dx / 2;
+      }
+      // West handle: expand width to the left, shift center left by half the change
       if (resizing.corner.includes('w')) {
         newWidth = Math.max(40, originalBlock.width - dx);
-        newX = originalBlock.x + dx;
+        newX = originalBlock.x + dx / 2;
       }
-      if (resizing.corner.includes('s')) newHeight = Math.max(30, originalBlock.height + dy);
+      // South handle: expand height downward, shift center down by half the change
+      if (resizing.corner.includes('s')) {
+        newHeight = Math.max(30, originalBlock.height + dy);
+        newY = originalBlock.y + dy / 2;
+      }
+      // North handle: expand height upward, shift center up by half the change
       if (resizing.corner.includes('n')) {
         newHeight = Math.max(30, originalBlock.height - dy);
-        newY = originalBlock.y + dy;
+        newY = originalBlock.y + dy / 2;
       }
 
       setBlocks(blocks.map(b => 
-        b.id === resizing.blockId 
+        b.id === resizing.blockId
           ? { ...b, width: newWidth, height: newHeight, x_position: newX, y_position: newY }
           : b
       ));
