@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -39,9 +39,6 @@ import {
   ZoomIn, 
   ZoomOut,
   Move,
-  Image as ImageIcon,
-  ExternalLink,
-  MoreVertical,
   Camera,
   Gauge,
   Zap,
@@ -50,7 +47,8 @@ import {
   Maximize2,
   Square,
   RectangleHorizontal,
-  RectangleVertical
+  RectangleVertical,
+  MoreVertical
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 
@@ -104,6 +102,19 @@ interface InspectionTenantMatch {
   breakerImage?: string;
 }
 
+// Fixed container dimensions
+const CONTAINER_HEIGHT = 500;
+
+// Size presets
+const SIZE_PRESETS = {
+  small: { width: 80, height: 50, label: "Small", description: "80 × 50 px" },
+  medium: { width: 150, height: 100, label: "Medium", description: "150 × 100 px" },
+  large: { width: 220, height: 140, label: "Large", description: "220 × 140 px" },
+  wide: { width: 200, height: 80, label: "Wide", description: "200 × 80 px" },
+  tall: { width: 100, height: 150, label: "Tall", description: "100 × 150 px" },
+  custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
+};
+
 export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, siteName }) => {
   const navigate = useNavigate();
   const { clientId } = useParams();
@@ -120,6 +131,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
+  const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAddingBlock, setIsAddingBlock] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<SchematicBlock | null>(null);
@@ -153,26 +165,46 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
   const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
 
-  // Size presets
-  const SIZE_PRESETS = {
-    small: { width: 80, height: 50, label: "Small", description: "80 × 50 px" },
-    medium: { width: 150, height: 100, label: "Medium", description: "150 × 100 px" },
-    large: { width: 220, height: 140, label: "Large", description: "220 × 140 px" },
-    wide: { width: 200, height: 80, label: "Wide", description: "200 × 80 px" },
-    tall: { width: 100, height: 150, label: "Tall", description: "100 × 150 px" },
-    custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
+  // Calculate fit-to-container scale
+  const calculateFitScale = useCallback(() => {
+    if (!containerRef.current || pdfDimensions.width === 0) return 1;
+    
+    const containerWidth = containerRef.current.clientWidth - 32; // padding
+    const containerHeight = CONTAINER_HEIGHT - 32;
+    
+    const scaleX = containerWidth / pdfDimensions.width;
+    const scaleY = containerHeight / pdfDimensions.height;
+    
+    return Math.min(scaleX, scaleY, 1); // Cap at 100%
+  }, [pdfDimensions]);
+
+  // Auto-fit on PDF load
+  useEffect(() => {
+    if (pdfDimensions.width > 0 && !isEditMode) {
+      const fitScale = calculateFitScale();
+      setScale(fitScale);
+    }
+  }, [pdfDimensions, calculateFitScale, isEditMode]);
+
+  // Handle PDF page load to get dimensions
+  const handlePageLoad = (page: any) => {
+    setPdfDimensions({
+      width: page.width,
+      height: page.height,
+    });
   };
 
-  // Handle mouse wheel zoom
+  // Handle mouse wheel zoom (only in edit mode)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (!isEditMode) return;
     e.preventDefault();
     const delta = e.deltaY > 0 ? -0.1 : 0.1;
     setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
   };
 
-  // Handle middle mouse button pan
+  // Handle middle mouse button pan (only in edit mode)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Middle mouse button (button === 1)
+    if (!isEditMode) return;
     if (e.button === 1) {
       e.preventDefault();
       setIsPanning(true);
@@ -187,7 +219,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning) return;
+    if (!isPanning || !isEditMode) return;
     
     e.preventDefault();
     if (containerRef.current) {
@@ -213,6 +245,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Block resize handlers
   const handleBlockResizeStart = (e: React.MouseEvent, blockId: string, corner: string) => {
+    if (!isEditMode) return;
     e.stopPropagation();
     e.preventDefault();
     const block = blocks.find(b => b.id === blockId);
@@ -224,7 +257,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   const handleBlockDragStart = (e: React.MouseEvent, blockId: string) => {
-    if (e.button !== 0) return; // Only left click
+    if (!isEditMode || e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
     const block = blocks.find(b => b.id === blockId);
@@ -236,7 +269,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   const handleBlockResizeMove = (e: React.MouseEvent) => {
-    if (!originalBlock) return;
+    if (!originalBlock || !isEditMode) return;
     
     const dx = (e.clientX - dragStart.x) / scale;
     const dy = (e.clientY - dragStart.y) / scale;
@@ -250,17 +283,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       let newX = originalBlock.x;
       let newY = originalBlock.y;
 
-      // Handle different corners
-      if (resizing.corner.includes('e')) {
-        newWidth = Math.max(40, originalBlock.width + dx);
-      }
+      if (resizing.corner.includes('e')) newWidth = Math.max(40, originalBlock.width + dx);
       if (resizing.corner.includes('w')) {
         newWidth = Math.max(40, originalBlock.width - dx);
         newX = originalBlock.x + dx;
       }
-      if (resizing.corner.includes('s')) {
-        newHeight = Math.max(30, originalBlock.height + dy);
-      }
+      if (resizing.corner.includes('s')) newHeight = Math.max(30, originalBlock.height + dy);
       if (resizing.corner.includes('n')) {
         newHeight = Math.max(30, originalBlock.height - dy);
         newY = originalBlock.y + dy;
@@ -322,7 +350,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const loadData = async () => {
     setLoading(true);
     try {
-      // Fetch schematic
       const { data: schematicData, error: schematicError } = await supabase
         .from("site_schematics")
         .select("*")
@@ -332,7 +359,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (schematicError) throw schematicError;
       setSchematic(schematicData);
 
-      // Fetch blocks if schematic exists
       if (schematicData) {
         const { data: blocksData, error: blocksError } = await supabase
           .from("schematic_blocks")
@@ -344,7 +370,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         setBlocks(blocksData || []);
       }
 
-      // Fetch subsections
       const { data: subsData, error: subsError } = await supabase
         .from("subsections")
         .select("id, name, tenant_name, meter_serial_number")
@@ -354,7 +379,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (subsError) throw subsError;
       setSubsections(subsData || []);
 
-      // Fetch inspections for asset photos
       const { data: inspData, error: inspError } = await supabase
         .from("inspections")
         .select("id, title, subsection_id, json_data")
@@ -447,7 +471,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
     setUploading(true);
     try {
-      // Upload to storage
       const fileName = `${siteId}/schematic-${Date.now()}.pdf`;
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from("documents")
@@ -459,7 +482,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         .from("documents")
         .getPublicUrl(uploadData.path);
 
-      // Create schematic record
       const { data: schematicData, error: schematicError } = await supabase
         .from("site_schematics")
         .insert({
@@ -508,7 +530,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Handle clicking on schematic to add block
   const handleSchematicClick = async (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isAddingBlock || !schematic) return;
+    if (!isAddingBlock || !schematic || !isEditMode) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
     const x = (e.clientX - rect.left) / scale;
@@ -554,23 +576,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const handleBlockClick = (block: SchematicBlock, e: React.MouseEvent) => {
     e.stopPropagation();
     
-    if (block.subsection_id) {
-      // Navigate to subsection
+    if (!isEditMode && block.subsection_id) {
       const basePath = clientId 
         ? `/clients/${clientId}/sites/${siteId}/subsections/${block.subsection_id}`
         : `/sites/${siteId}/subsections/${block.subsection_id}`;
       navigate(basePath);
-    } else {
-      // Open link dialog
-      setSelectedBlock(block);
-      setEditForm({
-        block_identifier: block.block_identifier,
-        block_name: block.block_name || "",
-        subsection_id: "",
-        width: block.width,
-        height: block.height,
-      });
-      setLinkDialogOpen(true);
     }
   };
 
@@ -594,7 +604,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     if (!selectedBlock) return;
 
     try {
-      // Handle "none" as unlink
       let matchedSubsectionId = (editForm.subsection_id && editForm.subsection_id !== "none") ? editForm.subsection_id : null;
       let isAutoMatched = false;
 
@@ -661,53 +670,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     try {
       const { error } = await supabase
         .from("schematic_blocks")
-        .update({
-          width: size.width,
-          height: size.height,
-        })
+        .update({ width: size.width, height: size.height })
         .eq("schematic_id", schematic?.id);
 
       if (error) throw error;
 
-      setBlocks(blocks.map(b => ({
-        ...b,
-        width: size.width,
-        height: size.height,
-      })));
-
+      setBlocks(blocks.map(b => ({ ...b, width: size.width, height: size.height })));
       setSizeDialogOpen(false);
       toast.success(`Applied ${SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.label || 'custom'} size to all ${blocks.length} blocks`);
     } catch (error) {
       console.error("Error applying size to blocks:", error);
       toast.error("Failed to apply size to blocks");
-    }
-  };
-
-  // Apply current size from edit form to all blocks (legacy support)
-  const handleApplySizeToAll = async () => {
-    if (blocks.length === 0) return;
-
-    try {
-      const { error } = await supabase
-        .from("schematic_blocks")
-        .update({
-          width: editForm.width,
-          height: editForm.height,
-        })
-        .eq("schematic_id", schematic?.id);
-
-      if (error) throw error;
-
-      setBlocks(blocks.map(b => ({
-        ...b,
-        width: editForm.width,
-        height: editForm.height,
-      })));
-
-      toast.success(`Applied size to all ${blocks.length} blocks`);
-    } catch (error) {
-      console.error("Error applying size to all blocks:", error);
-      toast.error("Failed to apply size to all blocks");
     }
   };
 
@@ -761,7 +734,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const updates: { id: string; subsection_id: string }[] = [];
 
     blocks.forEach(block => {
-      if (block.subsection_id) return; // Already linked
+      if (block.subsection_id) return;
 
       const identifier = block.block_identifier.toUpperCase().replace(/[^A-Z0-9-]/g, '');
       const matchedSub = subsections.find(s => {
@@ -800,11 +773,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  // Get linked subsection name
-  const getSubsectionName = (subsectionId: string | null): string => {
-    if (!subsectionId) return "";
-    const sub = subsections.find(s => s.id === subsectionId);
-    return sub?.name || "";
+  // Toggle edit mode
+  const toggleEditMode = () => {
+    if (isEditMode) {
+      // Exit edit mode - reset to fit view
+      setIsEditMode(false);
+      setIsAddingBlock(false);
+      const fitScale = calculateFitScale();
+      setScale(fitScale);
+    } else {
+      setIsEditMode(true);
+    }
   };
 
   if (loading) {
@@ -825,7 +804,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             Schematic Diagram
           </CardTitle>
           <CardDescription>
-            Upload a schematic distribution diagram to visualize the electrical layout and link blocks to subsections
+            Upload a schematic distribution diagram to visualize the electrical layout
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -833,7 +812,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-2">Upload Schematic PDF</p>
             <p className="text-sm text-muted-foreground mb-4">
-              Upload your electrical distribution diagram to link DB blocks to subsections
+              Upload your electrical distribution diagram
             </p>
             <label htmlFor="schematic-upload">
               <Button asChild disabled={uploading}>
@@ -855,314 +834,257 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     );
   }
 
+  const linkedCount = blocks.filter(b => b.subsection_id).length;
+  const unlinkedCount = blocks.length - linkedCount;
+
   return (
-    <div className="space-y-4">
-      {/* Toolbar */}
-      <Card>
-        <CardContent className="py-4">
-          <div className="flex flex-wrap items-center justify-between gap-4">
+    <Card className="overflow-hidden">
+      {/* Header with Edit Button */}
+      <CardHeader className="pb-3 border-b">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <CardTitle className="flex items-center gap-2 text-lg">
+              <Zap className="h-5 w-5" />
+              {schematic.file_name}
+            </CardTitle>
             <div className="flex items-center gap-2">
-              <h3 className="font-semibold">{schematic.file_name}</h3>
               <Badge variant="outline">{blocks.length} blocks</Badge>
-              <Badge variant="secondary">
-                {blocks.filter(b => b.subsection_id).length} linked
+              <Badge variant="secondary" className="bg-primary/10 text-primary">
+                {linkedCount} linked
               </Badge>
-            </div>
-            
-            <div className="flex items-center gap-2">
-              {/* Edit Mode Toggle */}
-              <Button
-                variant={isEditMode ? "default" : "outline"}
-                size="sm"
-                onClick={() => {
-                  setIsEditMode(!isEditMode);
-                  if (isEditMode) setIsAddingBlock(false);
-                }}
-              >
-                {isEditMode ? (
-                  <>
-                    <X className="h-4 w-4 mr-1" />
-                    Exit Edit
-                  </>
-                ) : (
-                  <>
-                    <Pencil className="h-4 w-4 mr-1" />
-                    Edit
-                  </>
-                )}
-              </Button>
-
-              {/* Edit mode controls */}
-              {isEditMode && (
-                <>
-                  <Button
-                    variant={isAddingBlock ? "secondary" : "outline"}
-                    size="sm"
-                    onClick={() => setIsAddingBlock(!isAddingBlock)}
-                  >
-                    <Plus className="h-4 w-4 mr-1" />
-                    {isAddingBlock ? "Click to place..." : "Add Block"}
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setSizeDialogOpen(true)}
-                    disabled={blocks.length === 0}
-                  >
-                    <Maximize2 className="h-4 w-4 mr-1" />
-                    Block Size
-                  </Button>
-
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleAutoMatch}
-                  >
-                    <Link2 className="h-4 w-4 mr-1" />
-                    Auto-Match
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={handleDeleteSchematic}
-                    className="text-destructive"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </Button>
-                </>
+              {unlinkedCount > 0 && (
+                <Badge variant="destructive" className="bg-destructive/10 text-destructive">
+                  {unlinkedCount} unlinked
+                </Badge>
               )}
-
-              {/* Zoom controls - always visible */}
-              <div className="border-l pl-2 ml-1 flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setScale(s => Math.min(s + 0.25, 3))}
-                >
-                  <ZoomIn className="h-4 w-4" />
-                </Button>
-
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setScale(s => Math.max(s - 0.25, 0.25))}
-                >
-                  <ZoomOut className="h-4 w-4" />
-                </Button>
-
-                <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
-              </div>
             </div>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Schematic Viewer */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4 flex-wrap">
-            <span>🖱️ Scroll to zoom</span>
-            <span>🖱️ Middle-click + drag to pan</span>
-            {isEditMode && <span className="text-primary font-medium">✏️ Edit Mode: Drag blocks to move • Drag corners/edges to resize</span>}
-            {!isEditMode && <span>👆 Click linked blocks to navigate</span>}
-          </div>
-          <div 
-            ref={containerRef}
-            className={`relative overflow-auto border rounded-lg bg-muted/50 ${
-              isAddingBlock ? 'cursor-crosshair' : 
-              isPanning ? 'cursor-grabbing' : 
-              'cursor-grab'
-            } ${isEditMode ? 'ring-2 ring-primary/30' : ''}`}
-            style={{ maxHeight: '70vh' }}
-            onWheel={handleWheel}
-            onMouseDown={handleMouseDown}
-            onMouseMove={(e) => {
-              handleMouseMove(e);
-              if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
-            }}
-            onMouseUp={(e) => {
-              handleMouseUp(e);
-              if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
-            }}
-            onMouseLeave={handleMouseLeave}
-            onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
+          
+          <Button
+            variant={isEditMode ? "default" : "outline"}
+            size="sm"
+            onClick={toggleEditMode}
           >
-            <div 
-              ref={contentRef}
-              className="relative inline-block"
-              onClick={isEditMode ? handleSchematicClick : undefined}
-              style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+            {isEditMode ? (
+              <>
+                <X className="h-4 w-4 mr-1" />
+                Exit Edit
+              </>
+            ) : (
+              <>
+                <Pencil className="h-4 w-4 mr-1" />
+                Edit
+              </>
+            )}
+          </Button>
+        </div>
+      </CardHeader>
+
+      {/* Edit Mode Toolbar */}
+      {isEditMode && (
+        <div className="px-6 py-3 bg-muted/50 border-b flex items-center justify-between gap-4 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={isAddingBlock ? "secondary" : "outline"}
+              size="sm"
+              onClick={() => setIsAddingBlock(!isAddingBlock)}
             >
-              <Document
-                file={schematic.file_url}
-                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-                loading={
-                  <div className="flex items-center justify-center h-64">
-                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                  </div>
-                }
-              >
-                <Page 
-                  pageNumber={pageNumber} 
-                  renderTextLayer={false}
-                  renderAnnotationLayer={false}
-                />
-              </Document>
+              <Plus className="h-4 w-4 mr-1" />
+              {isAddingBlock ? "Click to place..." : "Add Block"}
+            </Button>
 
-              {/* Render blocks */}
-              {blocks.map(block => {
-                const isLinked = !!block.subsection_id;
-                const photos = getAssetPhotos(block.subsection_id);
-                const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setSizeDialogOpen(true)}
+              disabled={blocks.length === 0}
+            >
+              <Maximize2 className="h-4 w-4 mr-1" />
+              Block Size
+            </Button>
 
-                return (
-                  <div
-                    key={block.id}
-                    className={`absolute flex items-center justify-center border-2 rounded-sm select-none ${
-                      isLinked 
-                        ? 'bg-primary/10 border-primary' 
-                        : 'bg-destructive/10 border-destructive'
-                    } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
-                      isEditMode ? 'group' : ''
-                    }`}
-                    style={{
-                      left: block.x_position - block.width / 2,
-                      top: block.y_position - block.height / 2,
-                      width: block.width,
-                      height: block.height,
-                      cursor: isEditMode 
-                        ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
-                        : (isLinked ? 'pointer' : 'default'),
-                    }}
-                    onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
-                    onClick={(e) => {
-                      if (!dragging && !resizing) handleBlockClick(block, e);
-                    }}
-                  >
-                    {/* Block content - only show identifier, compact */}
-                    <div className="text-center px-0.5 pointer-events-none">
-                      <p className="text-[10px] font-bold text-foreground/80">{block.block_identifier}</p>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleAutoMatch}
+            >
+              <Link2 className="h-4 w-4 mr-1" />
+              Auto-Match
+            </Button>
+
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={handleDeleteSchematic}
+              className="text-destructive hover:text-destructive"
+            >
+              <Trash2 className="h-4 w-4" />
+            </Button>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setScale(s => Math.max(s - 0.25, 0.25))}
+            >
+              <ZoomOut className="h-4 w-4" />
+            </Button>
+            <span className="text-sm text-muted-foreground w-12 text-center">{Math.round(scale * 100)}%</span>
+            <Button
+              variant="outline"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => setScale(s => Math.min(s + 0.25, 3))}
+            >
+              <ZoomIn className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Schematic Viewer - Fixed Height */}
+      <CardContent className="p-0">
+        <div 
+          ref={containerRef}
+          className={`relative overflow-auto bg-muted/30 ${
+            isEditMode 
+              ? (isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab')
+              : 'cursor-default'
+          }`}
+          style={{ height: CONTAINER_HEIGHT }}
+          onWheel={handleWheel}
+          onMouseDown={handleMouseDown}
+          onMouseMove={(e) => {
+            handleMouseMove(e);
+            if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
+          }}
+          onMouseUp={(e) => {
+            handleMouseUp(e);
+            if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
+          }}
+          onMouseLeave={handleMouseLeave}
+          onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
+        >
+          <div 
+            ref={contentRef}
+            className="relative inline-block p-4"
+            onClick={isEditMode ? handleSchematicClick : undefined}
+            style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+          >
+            <Document
+              file={schematic.file_url}
+              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+              loading={
+                <div className="flex items-center justify-center h-64">
+                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                </div>
+              }
+            >
+              <Page 
+                pageNumber={pageNumber} 
+                renderTextLayer={false}
+                renderAnnotationLayer={false}
+                onLoadSuccess={handlePageLoad}
+              />
+            </Document>
+
+            {/* Render blocks */}
+            {blocks.map(block => {
+              const isLinked = !!block.subsection_id;
+              const photos = getAssetPhotos(block.subsection_id);
+              const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
+
+              return (
+                <div
+                  key={block.id}
+                  className={`absolute flex items-center justify-center border-2 rounded-sm select-none transition-colors ${
+                    isLinked 
+                      ? 'bg-primary/10 border-primary hover:bg-primary/20' 
+                      : 'bg-destructive/10 border-destructive'
+                  } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
+                    isEditMode ? 'group' : ''
+                  }`}
+                  style={{
+                    left: block.x_position - block.width / 2,
+                    top: block.y_position - block.height / 2,
+                    width: block.width,
+                    height: block.height,
+                    cursor: isEditMode 
+                      ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
+                      : (isLinked ? 'pointer' : 'default'),
+                  }}
+                  onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
+                  onClick={(e) => {
+                    if (!dragging && !resizing) handleBlockClick(block, e);
+                  }}
+                >
+                  {/* Block identifier */}
+                  <p className="text-[10px] font-bold text-foreground/80 pointer-events-none">{block.block_identifier}</p>
+
+                  {/* Resize handles - only in edit mode */}
+                  {isEditMode && (
+                    <>
+                      <div className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')} />
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')} />
+                      <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')} />
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')} />
+                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')} />
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')} />
+                      <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')} />
+                      <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')} />
+                    </>
+                  )}
+
+                  {/* Action buttons for linked blocks with photos */}
+                  {isLinked && hasPhotos && !isEditMode && (
+                    <div className="absolute -top-3 -right-3 z-10">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <button className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 shadow-sm">
+                            <Eye className="h-3 w-3" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          {photos.meterImage && (
+                            <DropdownMenuItem onClick={() => handleViewPhoto('meter', photos)}>
+                              <Gauge className="h-4 w-4 mr-2" />
+                              Meter Photo
+                            </DropdownMenuItem>
+                          )}
+                          {photos.breakerImage && (
+                            <DropdownMenuItem onClick={() => handleViewPhoto('breaker', photos)}>
+                              <Zap className="h-4 w-4 mr-2" />
+                              Breaker Photo
+                            </DropdownMenuItem>
+                          )}
+                          {photos.ctRatioImage && (
+                            <DropdownMenuItem onClick={() => handleViewPhoto('ct', photos)}>
+                              <Camera className="h-4 w-4 mr-2" />
+                              CT Ratio Photo
+                            </DropdownMenuItem>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </div>
+                  )}
 
-                    {/* Resize handles - only in edit mode */}
-                    {isEditMode && (
-                      <>
-                        {/* Corners */}
-                        <div 
-                          className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')}
-                        />
-                        <div 
-                          className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')}
-                        />
-                        <div 
-                          className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')}
-                        />
-                        <div 
-                          className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')}
-                        />
-                        {/* Edges */}
-                        <div 
-                          className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')}
-                        />
-                        <div 
-                          className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')}
-                        />
-                        <div 
-                          className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')}
-                        />
-                        <div 
-                          className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')}
-                        />
-                      </>
-                    )}
-
-                    {/* Action buttons for linked blocks */}
-                    {isLinked && (
-                      <div className="absolute -top-3 -right-3 flex gap-0.5 z-10">
-                        {/* Photo viewer - always available */}
-                        {hasPhotos && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <button className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center hover:bg-primary/80 shadow-sm">
-                                <Eye className="h-3 w-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                              {photos.meterImage && (
-                                <DropdownMenuItem onClick={() => handleViewPhoto('meter', photos)}>
-                                  <Gauge className="h-4 w-4 mr-2" />
-                                  Meter Photo
-                                </DropdownMenuItem>
-                              )}
-                              {photos.breakerImage && (
-                                <DropdownMenuItem onClick={() => handleViewPhoto('breaker', photos)}>
-                                  <Zap className="h-4 w-4 mr-2" />
-                                  Breaker Photo
-                                </DropdownMenuItem>
-                              )}
-                              {photos.ctRatioImage && (
-                                <DropdownMenuItem onClick={() => handleViewPhoto('ct', photos)}>
-                                  <Camera className="h-4 w-4 mr-2" />
-                                  CT Ratio Photo
-                                </DropdownMenuItem>
-                              )}
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-
-                        {/* Edit menu - only in edit mode */}
-                        {isEditMode && (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                              <button className="h-5 w-5 rounded-full bg-muted text-muted-foreground flex items-center justify-center hover:bg-muted/80 shadow-sm">
-                                <MoreVertical className="h-3 w-3" />
-                              </button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                              <DropdownMenuItem onClick={() => {
-                                setSelectedBlock(block);
-                                setEditForm({
-                                  block_identifier: block.block_identifier,
-                                  block_name: block.block_name || "",
-                                  subsection_id: block.subsection_id || "",
-                                  width: block.width,
-                                  height: block.height,
-                                });
-                                setEditDialogOpen(true);
-                              }}>
-                                <Move className="h-4 w-4 mr-2" />
-                                Edit Block
-                              </DropdownMenuItem>
-                              <DropdownMenuItem onClick={() => handleUnlinkBlock(block)}>
-                                <Unlink className="h-4 w-4 mr-2" />
-                                Unlink
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </div>
-                    )}
-
-                    {/* Unlinked block - edit menu only in edit mode */}
-                    {!isLinked && isEditMode && (
-                      <div className="absolute -top-3 -right-3 z-10">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <button className="h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/80 shadow-sm">
-                              <MoreVertical className="h-3 w-3" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                  {/* Edit mode action menus */}
+                  {isEditMode && (
+                    <div className="absolute -top-3 -right-3 z-10">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                          <button className={`h-5 w-5 rounded-full flex items-center justify-center shadow-sm ${
+                            isLinked 
+                              ? 'bg-primary text-primary-foreground hover:bg-primary/80' 
+                              : 'bg-destructive text-destructive-foreground hover:bg-destructive/80'
+                          }`}>
+                            <MoreVertical className="h-3 w-3" />
+                          </button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                          {!isLinked && (
                             <DropdownMenuItem onClick={() => {
                               setSelectedBlock(block);
                               setEditForm({
@@ -1177,78 +1099,80 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                               <Link2 className="h-4 w-4 mr-2" />
                               Link to Subsection
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => {
-                              setSelectedBlock(block);
-                              setEditForm({
-                                block_identifier: block.block_identifier,
-                                block_name: block.block_name || "",
-                                subsection_id: "",
-                                width: block.width,
-                                height: block.height,
-                              });
-                              setEditDialogOpen(true);
-                            }}>
-                              <Move className="h-4 w-4 mr-2" />
-                              Edit Block
+                          )}
+                          <DropdownMenuItem onClick={() => {
+                            setSelectedBlock(block);
+                            setEditForm({
+                              block_identifier: block.block_identifier,
+                              block_name: block.block_name || "",
+                              subsection_id: block.subsection_id || "",
+                              width: block.width,
+                              height: block.height,
+                            });
+                            setEditDialogOpen(true);
+                          }}>
+                            <Move className="h-4 w-4 mr-2" />
+                            Edit Block
+                          </DropdownMenuItem>
+                          {isLinked && (
+                            <DropdownMenuItem onClick={() => handleUnlinkBlock(block)}>
+                              <Unlink className="h-4 w-4 mr-2" />
+                              Unlink
                             </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-            </div>
+                          )}
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
+        </div>
 
-          {/* Pagination */}
-          {numPages && numPages > 1 && (
-            <div className="flex items-center justify-center gap-4 mt-4">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pageNumber <= 1}
-                onClick={() => setPageNumber(p => p - 1)}
-              >
-                Previous
-              </Button>
-              <span className="text-sm">
-                Page {pageNumber} of {numPages}
-              </span>
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={pageNumber >= numPages}
-                onClick={() => setPageNumber(p => p + 1)}
-              >
-                Next
-              </Button>
+        {/* Pagination */}
+        {numPages && numPages > 1 && (
+          <div className="flex items-center justify-center gap-4 py-3 border-t">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pageNumber <= 1}
+              onClick={() => setPageNumber(p => p - 1)}
+            >
+              Previous
+            </Button>
+            <span className="text-sm">
+              Page {pageNumber} of {numPages}
+            </span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={pageNumber >= numPages}
+              onClick={() => setPageNumber(p => p + 1)}
+            >
+              Next
+            </Button>
+          </div>
+        )}
+
+        {/* Legend - compact footer */}
+        <div className="px-6 py-2 border-t bg-muted/30 flex items-center gap-6 text-xs text-muted-foreground">
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded border-2 border-primary bg-primary/20" />
+            <span>Linked</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <div className="h-3 w-3 rounded border-2 border-destructive bg-destructive/20" />
+            <span>Not linked</span>
+          </div>
+          {!isEditMode && (
+            <div className="flex items-center gap-1.5">
+              <Eye className="h-3 w-3" />
+              <span>Click block to view subsection</span>
             </div>
           )}
-        </CardContent>
-      </Card>
-
-      {/* Legend */}
-      <Card>
-        <CardContent className="py-3">
-          <div className="flex items-center gap-6 text-sm">
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded border-2 border-primary bg-primary/20" />
-              <span>Linked to subsection</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 rounded border-2 border-destructive bg-destructive/20" />
-              <span>Not linked</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <div className="h-5 w-5 rounded-full bg-primary text-primary-foreground flex items-center justify-center">
-                <Eye className="h-3 w-3" />
-              </div>
-              <span>Has asset photos</span>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+        </div>
+      </CardContent>
 
       {/* Edit Block Dialog */}
       <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
@@ -1299,9 +1223,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   ))}
                 </SelectContent>
               </Select>
-              <p className="text-xs text-muted-foreground">
-                Use the "Block Size" button in the toolbar to resize all blocks at once
-              </p>
             </div>
           </div>
 
@@ -1322,7 +1243,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         </DialogContent>
       </Dialog>
 
-      {/* Link Block Dialog (when clicking unlinked block) */}
+      {/* Link Block Dialog */}
       <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
         <DialogContent>
           <DialogHeader>
@@ -1374,12 +1295,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               Configure Block Size
             </DialogTitle>
             <DialogDescription>
-              Set a uniform size for all {blocks.length} blocks on this schematic
+              Set a uniform size for all {blocks.length} blocks
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-4 py-4">
-            {/* Visual Size Presets */}
             <div className="grid grid-cols-3 gap-3">
               {Object.entries(SIZE_PRESETS).filter(([key]) => key !== 'custom').map(([key, preset]) => (
                 <button
@@ -1417,7 +1337,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               ))}
             </div>
 
-            {/* Custom Size Option */}
             <div 
               onClick={() => setSelectedSizePreset("custom")}
               className={`p-4 rounded-lg border-2 transition-all cursor-pointer hover:border-primary/50 ${
@@ -1461,24 +1380,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 </div>
               </div>
             </div>
-
-            {/* Preview */}
-            <div className="p-4 bg-muted/50 rounded-lg">
-              <p className="text-sm text-muted-foreground mb-2">Preview:</p>
-              <div className="flex items-center justify-center h-20">
-                <div 
-                  className="border-2 border-primary bg-primary/20 rounded flex items-center justify-center text-xs text-primary"
-                  style={{ 
-                    width: Math.min((selectedSizePreset === "custom" ? customSize.width : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.width || 150) / 2, 100),
-                    height: Math.min((selectedSizePreset === "custom" ? customSize.height : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.height || 100) / 2, 70)
-                  }}
-                >
-                  {selectedSizePreset === "custom" 
-                    ? `${customSize.width}×${customSize.height}` 
-                    : SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.description}
-                </div>
-              </div>
-            </div>
           </div>
 
           <DialogFooter>
@@ -1501,6 +1402,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           alt={viewerImage.title}
         />
       )}
-    </div>
+    </Card>
   );
 };
