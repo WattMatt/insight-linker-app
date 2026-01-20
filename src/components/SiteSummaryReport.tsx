@@ -425,8 +425,73 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               text: `Verification Rate: ${assetMetrics.verificationRate}%`, 
               fontSize: 10, 
               bold: true,
-              margin: [0, 8, 0, 12] 
+              margin: [0, 8, 0, 16] 
             });
+            
+            // Add detailed asset verification schedule table
+            const { generateAssetSchedule } = await import('@/lib/siteSummaryRenderSpec');
+            const assetSchedule = generateAssetSchedule(siteAssets, allInspections);
+            
+            if (assetSchedule.length > 0) {
+              content.push({
+                text: 'Asset Verification Schedule',
+                fontSize: 11,
+                bold: true,
+                color: '#374151',
+                margin: [0, 0, 0, 8],
+              });
+              
+              // Create table with asset register vs inspected values
+              const tableBody = [
+                // Header row
+                [
+                  { text: 'Premises', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Meter S/N', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Breaker', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'CT Ratio', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Insp. Breaker', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Insp. CT', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Status', bold: true, fontSize: 8, color: '#ffffff' },
+                ],
+                // Data rows
+                ...assetSchedule.map((row, idx) => {
+                  const statusColor = row.status === 'verified' ? '#16a34a' : 
+                                      row.status === 'discrepancy' ? '#dc2626' : '#9ca3af';
+                  const statusText = row.status === 'verified' ? '✓ Verified' : 
+                                     row.status === 'discrepancy' ? '✗ Discrepancy' : '○ Pending';
+                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
+                  
+                  return [
+                    { text: row.premisesId, fontSize: 7, fillColor: bgColor },
+                    { text: row.meterSerial, fontSize: 7, fillColor: bgColor },
+                    { text: row.breakerSize, fontSize: 7, fillColor: bgColor },
+                    { text: row.ctRatio, fontSize: 7, fillColor: bgColor },
+                    { text: row.inspectedBreaker, fontSize: 7, fillColor: bgColor, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
+                    { text: row.inspectedCT, fontSize: 7, fillColor: bgColor, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
+                    { text: statusText, fontSize: 7, color: statusColor, bold: true, fillColor: bgColor },
+                  ];
+                }),
+              ];
+              
+              content.push({
+                table: {
+                  headerRows: 1,
+                  widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                  body: tableBody,
+                },
+                layout: {
+                  hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+                  vLineWidth: () => 0,
+                  hLineColor: () => '#e5e7eb',
+                  paddingLeft: () => 4,
+                  paddingRight: () => 4,
+                  paddingTop: () => 3,
+                  paddingBottom: () => 3,
+                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
+                },
+                margin: [0, 0, 0, 12],
+              });
+            }
           }
           break;
 
