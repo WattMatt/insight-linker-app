@@ -135,6 +135,71 @@ export const SiteSummaryPreview: React.FC<SiteSummaryPreviewProps> = ({
     );
   }
 
+  // ===== DOCUMENTS SUMMARY - Document counts by category =====
+  if (section.id === "documents-summary") {
+    const docCategories = [
+      { name: "01 COC", count: 33 },
+      { name: "03 Line Diagram", count: 2 },
+      { name: "04 Metering", count: 23 },
+      { name: "05 Thermal Reports", count: 21 },
+      { name: "06 Other", count: 1 },
+    ];
+    const totalDocs = docCategories.reduce((sum, c) => sum + c.count, 0);
+    
+    return (
+      <div style={{ marginTop: 8 * zoom }}>
+        {/* KPI Row */}
+        <div className="grid grid-cols-2 gap-2 mb-2">
+          <div
+            className="p-2 rounded text-center"
+            style={{ backgroundColor: colors.light }}
+          >
+            <PlaceholderBadge>
+              <div className="font-bold" style={{ fontSize: 14 * zoom, color: colors.primary }}>
+                {totalDocs}
+              </div>
+            </PlaceholderBadge>
+            <div className="text-muted-foreground" style={{ fontSize: 8 * zoom }}>
+              Total Documents
+            </div>
+          </div>
+          <div
+            className="p-2 rounded text-center"
+            style={{ backgroundColor: `${colors.primary}10` }}
+          >
+            <PlaceholderBadge>
+              <div className="font-bold" style={{ fontSize: 14 * zoom, color: colors.primary }}>
+                {docCategories.length}
+              </div>
+            </PlaceholderBadge>
+            <div className="text-muted-foreground" style={{ fontSize: 8 * zoom }}>
+              Categories
+            </div>
+          </div>
+        </div>
+        
+        {/* Category list */}
+        <div className="text-muted-foreground font-medium mb-1" style={{ fontSize: 8 * zoom }}>
+          Documents by Category
+        </div>
+        <div className="space-y-0.5">
+          {docCategories.map((cat, i) => (
+            <div 
+              key={i} 
+              className="flex justify-between py-0.5 border-b border-muted/30"
+              style={{ fontSize: 8 * zoom }}
+            >
+              <span className="text-muted-foreground">{cat.name}</span>
+              <PlaceholderBadge>
+                <span className="font-medium">{cat.count}</span>
+              </PlaceholderBadge>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
   // ===== SUMMARY STATISTICS - Info Table =====
   if (section.id === "summary-statistics" || section.id === "site-info") {
     const stats = [

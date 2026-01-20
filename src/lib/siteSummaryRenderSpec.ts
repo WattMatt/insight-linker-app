@@ -171,6 +171,13 @@ export const SECTION_SPECS: Record<string, SectionSpec> = {
     pageBreakBefore: true,
     renderPriority: 8,
   },
+  'documents-summary': {
+    id: 'documents-summary',
+    legacyIds: [],
+    defaultTitle: 'Documents Summary',
+    type: 'table',
+    renderPriority: 1.5, // After health-metrics, before summary-statistics
+  },
 };
 
 // ============================================================================
@@ -869,5 +876,54 @@ export function calculateFortressMetrics(
     pendingItems: totalItems - completedItems - notApplicableItems,
     overallProgress,
     sections,
+  };
+}
+
+// ============================================================================
+// DOCUMENTS SUMMARY METRICS
+// ============================================================================
+
+export interface DocumentCategoryMetrics {
+  categoryName: string;
+  fileCount: number;
+}
+
+export interface DocumentSummaryMetrics {
+  totalDocuments: number;
+  categories: DocumentCategoryMetrics[];
+}
+
+/**
+ * Calculate document summary metrics from site and subsection documents
+ */
+export function calculateDocumentMetrics(
+  siteDocuments: Array<{ category: string; file_name?: string }>,
+  subsectionDocuments: Array<{ category_id?: string; file_name?: string }>
+): DocumentSummaryMetrics {
+  const categoryMap = new Map<string, number>();
+  
+  // Count site documents by category
+  siteDocuments.forEach(doc => {
+    const category = doc.category || 'Uncategorized';
+    categoryMap.set(category, (categoryMap.get(category) || 0) + 1);
+  });
+  
+  // Subsection documents are already counted via category IDs
+  // We'll show the total count
+  const totalSubsectionDocs = subsectionDocuments.length;
+  if (totalSubsectionDocs > 0 && !categoryMap.has('Subsection Documents')) {
+    categoryMap.set('Subsection Documents', totalSubsectionDocs);
+  }
+  
+  // Convert to sorted array
+  const categories = Array.from(categoryMap.entries())
+    .map(([categoryName, fileCount]) => ({ categoryName, fileCount }))
+    .sort((a, b) => a.categoryName.localeCompare(b.categoryName));
+  
+  const totalDocuments = siteDocuments.length + subsectionDocuments.length;
+  
+  return {
+    totalDocuments,
+    categories,
   };
 }
