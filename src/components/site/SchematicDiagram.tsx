@@ -165,12 +165,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
   const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
 
-  // Calculate fit-to-container scale - zoom extend to fill
+  // Calculate fit-to-container scale - zoom extend to fill entire container
   const calculateFitScale = useCallback(() => {
     if (!containerRef.current || pdfDimensions.width === 0) return 1;
     
-    const containerWidth = containerRef.current.clientWidth - 32; // padding
-    const containerHeight = CONTAINER_HEIGHT - 32;
+    // Use less padding in view mode for maximum use of space
+    const padding = isEditMode ? 32 : 16;
+    const containerWidth = containerRef.current.clientWidth - padding;
+    const containerHeight = CONTAINER_HEIGHT - padding;
     
     // Ensure we have valid container dimensions
     if (containerWidth <= 0 || containerHeight <= 0) return 1;
@@ -178,9 +180,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const scaleX = containerWidth / pdfDimensions.width;
     const scaleY = containerHeight / pdfDimensions.height;
     
-    // Use the smaller scale to ensure entire PDF fits, no cap
+    // Use the smaller scale to ensure entire PDF fits within bounds
     return Math.min(scaleX, scaleY);
-  }, [pdfDimensions]);
+  }, [pdfDimensions, isEditMode]);
 
   // Auto-fit on PDF load - with slight delay to ensure container is measured
   useEffect(() => {
@@ -974,10 +976,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         
         <div 
           ref={containerRef}
-          className={`relative overflow-auto bg-muted/30 ${
+          className={`relative bg-muted/30 ${
             isEditMode 
-              ? (isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab')
-              : 'cursor-default'
+              ? `overflow-auto ${isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`
+              : 'overflow-hidden cursor-default'
           }`}
           style={{ height: CONTAINER_HEIGHT }}
           onWheel={handleWheel}
@@ -995,9 +997,15 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         >
           <div 
             ref={contentRef}
-            className="relative inline-block p-4"
+            className={`relative inline-block ${isEditMode ? 'p-4' : 'p-2'}`}
             onClick={isEditMode ? handleSchematicClick : undefined}
-            style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
+            style={{ 
+              transform: `scale(${scale})`, 
+              transformOrigin: isEditMode ? 'top left' : 'top center',
+              marginLeft: isEditMode ? 0 : 'auto',
+              marginRight: isEditMode ? 0 : 'auto',
+              display: isEditMode ? 'inline-block' : 'block'
+            }}
           >
             <Document
               file={schematic.file_url}
