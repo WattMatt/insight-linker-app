@@ -6,10 +6,11 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Generate QR code as data URI
-async function generateQRCodeDataUri(url: string): Promise<string> {
+// Generate QR code as SVG data URI (works in Deno without canvas)
+async function generateQRCodeSvgDataUri(url: string): Promise<string> {
   try {
-    const dataUri = await QRCode.toDataURL(url, {
+    const svg = await QRCode.toString(url, {
+      type: 'svg',
       width: 120,
       margin: 1,
       errorCorrectionLevel: 'M',
@@ -18,7 +19,9 @@ async function generateQRCodeDataUri(url: string): Promise<string> {
         light: '#ffffff'
       }
     });
-    return dataUri;
+    // Convert SVG to data URI
+    const base64Svg = btoa(svg);
+    return `data:image/svg+xml;base64,${base64Svg}`;
   } catch (error) {
     console.error('QR generation error:', error);
     return '';
@@ -381,9 +384,16 @@ async function generateSubsectionCard(sub: SubsectionData, accentColor: string, 
   
   const openSnags = sub.snags?.filter(s => s.status !== 'resolved' && s.status !== 'Resolved') || [];
   
-  // Generate QR code for this subsection
-  const qrTargetUrl = `${qrBaseUrl}/public/subsections/${sub.id}`;
-  const qrCodeDataUri = await generateQRCodeDataUri(qrTargetUrl);
+  // Generate QR code - use stored URL if image, otherwise generate SVG
+  let qrCodeDataUri = '';
+  if (sub.qrCodeUrl && (sub.qrCodeUrl.includes('storage') || sub.qrCodeUrl.includes('supabase'))) {
+    // Use existing image URL from storage
+    qrCodeDataUri = sub.qrCodeUrl;
+  } else {
+    // Generate QR code server-side as SVG
+    const qrTargetUrl = `${qrBaseUrl}/public/subsections/${sub.id}`;
+    qrCodeDataUri = await generateQRCodeSvgDataUri(qrTargetUrl);
+  }
   
   const snagRows = openSnags.slice(0, 3).map(snag => {
     const riskStyle = getRiskBadgeStyle(snag.riskLevel);
@@ -414,7 +424,7 @@ async function generateSubsectionCard(sub: SubsectionData, accentColor: string, 
               </div>
             ` : `
               <div style="background: white; border-radius: 6px; padding: 12px 8px; text-align: center;">
-                <span style="font-size: 7pt; color: ${COLORS.textMuted};">QR Code</span>
+                <span style="font-size: 7pt; color: ${COLORS.textMuted};">No QR</span>
               </div>
             `}
           </td>
