@@ -131,9 +131,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
-  const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const [originalPdfDimensions, setOriginalPdfDimensions] = useState({ width: 0, height: 0 });
   const [containerWidth, setContainerWidth] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false);
+  const [dimensionsLoaded, setDimensionsLoaded] = useState(false);
   const [isAddingBlock, setIsAddingBlock] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<SchematicBlock | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -188,7 +189,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Calculate the display scale for blocks and PDF
   const displayScale = useMemo(() => {
-    if (!containerWidth || pdfDimensions.width === 0 || pdfDimensions.height === 0) {
+    if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
       return 1;
     }
     
@@ -197,26 +198,31 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const availableHeight = CONTAINER_HEIGHT - padding;
     
     // Calculate scale needed to fit both dimensions
-    const scaleX = availableWidth / pdfDimensions.width;
-    const scaleY = availableHeight / pdfDimensions.height;
+    const scaleX = availableWidth / originalPdfDimensions.width;
+    const scaleY = availableHeight / originalPdfDimensions.height;
     const fitScale = Math.min(scaleX, scaleY);
     
     // In view mode, use fit scale; in edit mode, apply user scale
     return isEditMode ? scale : fitScale;
-  }, [containerWidth, pdfDimensions, isEditMode, scale]);
+  }, [containerWidth, originalPdfDimensions, isEditMode, scale]);
 
   // Calculate the target page width to fit the container
   const calculatedPageWidth = useMemo(() => {
-    if (pdfDimensions.width === 0) return undefined;
-    return pdfDimensions.width * displayScale;
-  }, [pdfDimensions.width, displayScale]);
+    // On first load, don't set width so we can get original dimensions
+    if (!dimensionsLoaded || originalPdfDimensions.width === 0) return undefined;
+    return originalPdfDimensions.width * displayScale;
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded]);
 
-  // Handle PDF page load to get original dimensions
+  // Handle PDF page load to get original dimensions (only on first load)
   const handlePageLoad = (page: any) => {
-    setPdfDimensions({
-      width: page.originalWidth || page.width,
-      height: page.originalHeight || page.height,
-    });
+    if (!dimensionsLoaded) {
+      // First load - capture original dimensions
+      setOriginalPdfDimensions({
+        width: page.width,
+        height: page.height,
+      });
+      setDimensionsLoaded(true);
+    }
   };
 
   // Handle mouse wheel zoom (only in edit mode)
