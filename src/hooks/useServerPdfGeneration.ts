@@ -79,6 +79,7 @@ interface ReportData {
   clientLogoUrl?: string;
   companyLogoUrl?: string;
   accentColor?: string;
+  qrBaseUrl?: string;
   subsections?: SubsectionData[];
   summaryStats?: SummaryStats;
   healthMetrics?: HealthMetrics;
