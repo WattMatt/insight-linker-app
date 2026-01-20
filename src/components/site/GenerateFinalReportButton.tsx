@@ -220,9 +220,17 @@ export function GenerateFinalReportButton({
 
       // Calculate asset verification with schedule
       const assetSchedule = assets.map(asset => {
-        // Find matching subsection or inspection data
+        // Normalize asset identifiers for matching
         const assetNameNorm = asset.premises_id?.toLowerCase().trim() || '';
         const tradeAsNorm = asset.trade_as?.toLowerCase().trim() || '';
+        
+        // Extract shop name/number from premises_id (e.g., "YA - SHOP 013C" -> "shop 013c", "YA - KFC" -> "kfc")
+        const extractShopIdentifier = (str: string) => {
+          const cleaned = str.replace(/^ya\s*-\s*/i, '').trim().toLowerCase();
+          return cleaned;
+        };
+        const assetShopId = extractShopIdentifier(assetNameNorm);
+        const tradeAsShopId = extractShopIdentifier(tradeAsNorm);
         
         // Check inspections for inspected values
         let inspectedSerial = '';
@@ -233,16 +241,31 @@ export function GenerateFinalReportButton({
           const jsonData = insp.json_data as any;
           if (jsonData?.tenants && Array.isArray(jsonData.tenants)) {
             jsonData.tenants.forEach((tenant: any) => {
-              const tenantName = tenant.name?.toLowerCase().trim() || '';
-              if (tenantName === assetNameNorm || tenantName === tradeAsNorm) {
-                inspectedSerial = tenant.meterSerial || tenant.meter_serial || '';
+              // Get all possible tenant identifiers from inspection data
+              const tenantShopName = (tenant.shopName || tenant.name || '').toLowerCase().trim();
+              const tenantShopNumber = (tenant.shopNumber || '').toLowerCase().trim();
+              
+              // Match using flexible criteria:
+              // 1. Direct match on shopName/shopNumber
+              // 2. Asset trade_as contains the tenant shop name (e.g., "YA - KFC" contains "kfc")
+              // 3. Asset premises_id matches shop number pattern
+              const isMatch = 
+                tenantShopName === assetShopId ||
+                tenantShopName === tradeAsShopId ||
+                tenantShopNumber === assetShopId ||
+                tradeAsShopId.includes(tenantShopName) ||
+                assetShopId.includes(tenantShopNumber) ||
+                (tenantShopNumber && assetNameNorm.includes(tenantShopNumber));
+              
+              if (isMatch) {
+                inspectedSerial = tenant.meterSerialNumber || tenant.meterSerial || tenant.meter_serial || '';
                 inspectedBreaker = tenant.breakerSize || tenant.breaker_size || '';
                 
                 // Determine verification status
                 const serialMatches = (inspectedSerial && asset.meter_serial_number && 
                   inspectedSerial.toLowerCase() === asset.meter_serial_number.toLowerCase());
                 const breakerMatches = (inspectedBreaker && asset.breaker_size && 
-                  inspectedBreaker.toLowerCase() === asset.breaker_size.toLowerCase());
+                  inspectedBreaker.replace(/\s/g, '').toLowerCase() === asset.breaker_size.replace(/\s/g, '').toLowerCase());
                 
                 if (inspectedSerial || inspectedBreaker) {
                   status = (serialMatches || breakerMatches) ? 'verified' : 'discrepancy';
