@@ -248,9 +248,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   }, [pageNumber]);
 
   // Reset scale when exiting edit mode to ensure proper "zoom to fit"
+  // Don't reset dimensionsLoaded - just reset the scale factor
   useEffect(() => {
     if (!isEditMode) {
       setScale(1);
+      // Force recalculate container width to trigger displayScale recalculation
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
+      }
     }
   }, [isEditMode]);
 
