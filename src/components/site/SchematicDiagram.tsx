@@ -102,6 +102,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const navigate = useNavigate();
   const { clientId } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
 
   // State
   const [schematic, setSchematic] = useState<Schematic | null>(null);
@@ -120,12 +121,64 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<{ url: string; title: string } | null>(null);
 
+  // Pan state
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
+  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+
   // Form state for editing block
   const [editForm, setEditForm] = useState({
     block_identifier: "",
     block_name: "",
     subsection_id: "",
   });
+
+  // Handle mouse wheel zoom
+  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (e.ctrlKey || e.metaKey) {
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
+    }
+  };
+
+  // Handle middle mouse button pan
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    // Middle mouse button (button === 1)
+    if (e.button === 1) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX, y: e.clientY });
+      if (containerRef.current) {
+        setScrollStart({ 
+          x: containerRef.current.scrollLeft, 
+          y: containerRef.current.scrollTop 
+        });
+      }
+    }
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isPanning) return;
+    
+    e.preventDefault();
+    if (containerRef.current) {
+      const dx = e.clientX - panStart.x;
+      const dy = e.clientY - panStart.y;
+      containerRef.current.scrollLeft = scrollStart.x - dx;
+      containerRef.current.scrollTop = scrollStart.y - dy;
+    }
+  };
+
+  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      setIsPanning(false);
+    }
+  };
+
+  const handleMouseLeave = () => {
+    setIsPanning(false);
+  };
 
   // Load data
   useEffect(() => {
@@ -657,12 +710,23 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       {/* Schematic Viewer */}
       <Card>
         <CardContent className="p-4">
+          <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4">
+            <span>🖱️ Ctrl+Scroll to zoom</span>
+            <span>🖱️ Middle-click + drag to pan</span>
+          </div>
           <div 
             ref={containerRef}
-            className={`relative overflow-auto border rounded-lg bg-muted/50 ${isAddingBlock ? 'cursor-crosshair' : ''}`}
+            className={`relative overflow-auto border rounded-lg bg-muted/50 ${isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
             style={{ maxHeight: '70vh' }}
+            onWheel={handleWheel}
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseLeave}
+            onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
           >
             <div 
+              ref={contentRef}
               className="relative inline-block"
               onClick={handleSchematicClick}
               style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
