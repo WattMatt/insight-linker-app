@@ -206,34 +206,46 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return isEditMode ? scale : fitScale;
   }, [containerWidth, originalPdfDimensions, isEditMode, scale]);
 
-  // Calculate the target page width to fit the container
+  // Calculate the target page width - render at natural size first to get dimensions
   const calculatedPageWidth = useMemo(() => {
-    // Always use the scaled width once we have original dimensions
-    if (originalPdfDimensions.width === 0) return undefined;
+    // If we don't have dimensions yet, render at natural size (undefined width)
+    if (!dimensionsLoaded || originalPdfDimensions.width === 0) {
+      return undefined;
+    }
+    // Once we have dimensions, apply the calculated scale
     return originalPdfDimensions.width * displayScale;
-  }, [originalPdfDimensions.width, displayScale]);
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded]);
 
   // Calculate the scaled height for the PDF container
   const calculatedPageHeight = useMemo(() => {
-    if (originalPdfDimensions.height === 0) return undefined;
+    if (!dimensionsLoaded || originalPdfDimensions.height === 0) return undefined;
     return originalPdfDimensions.height * displayScale;
-  }, [originalPdfDimensions.height, displayScale]);
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
-  // Handle PDF page load to get original dimensions
-  const handlePageLoad = (page: any) => {
-    // Always capture the original viewport dimensions (unscaled)
-    const viewport = page.getViewport({ scale: 1 });
-    const originalWidth = viewport.width;
-    const originalHeight = viewport.height;
+  // Handle PDF page render to get original dimensions (only once)
+  const handlePageRenderSuccess = useCallback((page: any) => {
+    // Only capture dimensions once - when we don't have them yet
+    if (dimensionsLoaded) return;
     
-    if (!dimensionsLoaded || originalPdfDimensions.width !== originalWidth) {
+    // Use originalWidth/originalHeight for the true PDF dimensions
+    const originalWidth = page.originalWidth || page.width;
+    const originalHeight = page.originalHeight || page.height;
+    
+    console.log('PDF original dimensions captured:', { originalWidth, originalHeight });
+    
+    if (originalWidth > 0 && originalHeight > 0) {
       setOriginalPdfDimensions({
         width: originalWidth,
         height: originalHeight,
       });
       setDimensionsLoaded(true);
     }
-  };
+  }, [dimensionsLoaded]);
+
+  // Reset dimensions when page number changes (for multi-page PDFs)
+  useEffect(() => {
+    setDimensionsLoaded(false);
+  }, [pageNumber]);
 
   // Handle mouse wheel zoom (only in edit mode)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
@@ -1041,7 +1053,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   width={calculatedPageWidth}
                   renderTextLayer={false}
                   renderAnnotationLayer={false}
-                  onLoadSuccess={handlePageLoad}
+                  onRenderSuccess={handlePageRenderSuccess}
                 />
               </Document>
 
