@@ -126,6 +126,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
 
+  // Resize/drag state
+  const [resizing, setResizing] = useState<{ blockId: string; corner: string } | null>(null);
+  const [dragging, setDragging] = useState<{ blockId: string } | null>(null);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+  const [originalBlock, setOriginalBlock] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+
   // Form state for editing block
   const [editForm, setEditForm] = useState({
     block_identifier: "",
@@ -176,6 +182,112 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   const handleMouseLeave = () => {
     setIsPanning(false);
+    if (resizing || dragging) {
+      handleBlockResizeEnd();
+    }
+  };
+
+  // Block resize handlers
+  const handleBlockResizeStart = (e: React.MouseEvent, blockId: string, corner: string) => {
+    e.stopPropagation();
+    e.preventDefault();
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    
+    setResizing({ blockId, corner });
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
+  };
+
+  const handleBlockDragStart = (e: React.MouseEvent, blockId: string) => {
+    if (e.button !== 0) return; // Only left click
+    e.stopPropagation();
+    e.preventDefault();
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+    
+    setDragging({ blockId });
+    setDragStart({ x: e.clientX, y: e.clientY });
+    setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
+  };
+
+  const handleBlockResizeMove = (e: React.MouseEvent) => {
+    if (!originalBlock) return;
+    
+    const dx = (e.clientX - dragStart.x) / scale;
+    const dy = (e.clientY - dragStart.y) / scale;
+
+    if (resizing) {
+      const block = blocks.find(b => b.id === resizing.blockId);
+      if (!block) return;
+
+      let newWidth = originalBlock.width;
+      let newHeight = originalBlock.height;
+      let newX = originalBlock.x;
+      let newY = originalBlock.y;
+
+      // Handle different corners
+      if (resizing.corner.includes('e')) {
+        newWidth = Math.max(40, originalBlock.width + dx);
+      }
+      if (resizing.corner.includes('w')) {
+        newWidth = Math.max(40, originalBlock.width - dx);
+        newX = originalBlock.x + dx;
+      }
+      if (resizing.corner.includes('s')) {
+        newHeight = Math.max(30, originalBlock.height + dy);
+      }
+      if (resizing.corner.includes('n')) {
+        newHeight = Math.max(30, originalBlock.height - dy);
+        newY = originalBlock.y + dy;
+      }
+
+      setBlocks(blocks.map(b => 
+        b.id === resizing.blockId 
+          ? { ...b, width: newWidth, height: newHeight, x_position: newX, y_position: newY }
+          : b
+      ));
+    } else if (dragging) {
+      setBlocks(blocks.map(b => 
+        b.id === dragging.blockId 
+          ? { ...b, x_position: originalBlock.x + dx, y_position: originalBlock.y + dy }
+          : b
+      ));
+    }
+  };
+
+  const handleBlockResizeEnd = async () => {
+    const blockId = resizing?.blockId || dragging?.blockId;
+    if (!blockId) {
+      setResizing(null);
+      setDragging(null);
+      setOriginalBlock(null);
+      return;
+    }
+
+    const block = blocks.find(b => b.id === blockId);
+    if (!block) return;
+
+    try {
+      const { error } = await supabase
+        .from("schematic_blocks")
+        .update({
+          x_position: block.x_position,
+          y_position: block.y_position,
+          width: block.width,
+          height: block.height,
+        })
+        .eq("id", blockId);
+
+      if (error) throw error;
+    } catch (error) {
+      console.error("Error updating block:", error);
+      toast.error("Failed to update block position");
+    }
+
+    setResizing(null);
+    setDragging(null);
+    setOriginalBlock(null);
   };
 
   // Load data
@@ -708,9 +820,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       {/* Schematic Viewer */}
       <Card>
         <CardContent className="p-4">
-          <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4">
+          <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4 flex-wrap">
             <span>🖱️ Scroll to zoom</span>
             <span>🖱️ Middle-click + drag to pan</span>
+            <span>📦 Drag blocks to move • Drag corners/edges to resize</span>
           </div>
           <div 
             ref={containerRef}
@@ -718,8 +831,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             style={{ maxHeight: '70vh' }}
             onWheel={handleWheel}
             onMouseDown={handleMouseDown}
-            onMouseMove={handleMouseMove}
-            onMouseUp={handleMouseUp}
+            onMouseMove={(e) => {
+              handleMouseMove(e);
+              if (resizing || dragging) handleBlockResizeMove(e);
+            }}
+            onMouseUp={(e) => {
+              handleMouseUp(e);
+              if (resizing || dragging) handleBlockResizeEnd();
+            }}
             onMouseLeave={handleMouseLeave}
             onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
           >
@@ -754,32 +873,67 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 return (
                   <div
                     key={block.id}
-                    className={`absolute flex items-center justify-center transition-all cursor-pointer border-2 rounded-md ${
+                    className={`absolute flex items-center justify-center border-2 rounded-sm group select-none ${
                       isLinked 
-                        ? 'bg-primary/20 border-primary hover:bg-primary/30' 
-                        : 'bg-orange-500/20 border-orange-500 hover:bg-orange-500/30'
-                    }`}
+                        ? 'bg-primary/10 border-primary' 
+                        : 'bg-orange-500/10 border-orange-500'
+                    } ${dragging?.blockId === block.id || resizing?.blockId === block.id ? 'z-50' : ''}`}
                     style={{
                       left: block.x_position - block.width / 2,
                       top: block.y_position - block.height / 2,
                       width: block.width,
                       height: block.height,
+                      cursor: dragging?.blockId === block.id ? 'grabbing' : 'grab',
                     }}
-                    onClick={(e) => handleBlockClick(block, e)}
+                    onMouseDown={(e) => handleBlockDragStart(e, block.id)}
+                    onClick={(e) => {
+                      if (!dragging && !resizing) handleBlockClick(block, e);
+                    }}
                   >
-                    <div className="text-center px-1">
-                      <p className="text-xs font-bold truncate">{block.block_identifier}</p>
-                      {block.block_name && (
-                        <p className="text-[10px] truncate text-muted-foreground">{block.block_name}</p>
-                      )}
-                      {isLinked && (
-                        <p className="text-[9px] text-primary truncate">{getSubsectionName(block.subsection_id)}</p>
-                      )}
+                    {/* Block content - only show identifier, compact */}
+                    <div className="text-center px-0.5 pointer-events-none">
+                      <p className="text-[10px] font-bold text-foreground/80">{block.block_identifier}</p>
                     </div>
+
+                    {/* Resize handles - corners */}
+                    <div 
+                      className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')}
+                    />
+                    <div 
+                      className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')}
+                    />
+
+                    {/* Resize handles - edges */}
+                    <div 
+                      className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')}
+                    />
+                    <div 
+                      className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')}
+                    />
+                    <div 
+                      className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')}
+                    />
+                    <div 
+                      className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')}
+                    />
 
                     {/* Action buttons - Eye icon for photos */}
                     {isLinked && (
-                      <div className="absolute -top-2 -right-2 flex gap-0.5">
+                      <div className="absolute -top-3 -right-3 flex gap-0.5 z-10">
                         {hasPhotos && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -832,6 +986,45 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                             <DropdownMenuItem onClick={() => handleUnlinkBlock(block)}>
                               <Unlink className="h-4 w-4 mr-2" />
                               Unlink
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
+
+                    {/* Unlinked block - show edit menu */}
+                    {!isLinked && (
+                      <div className="absolute -top-3 -right-3 z-10">
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                            <button className="h-5 w-5 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 shadow-sm">
+                              <MoreVertical className="h-3 w-3" />
+                            </button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedBlock(block);
+                              setEditForm({
+                                block_identifier: block.block_identifier,
+                                block_name: block.block_name || "",
+                                subsection_id: "",
+                              });
+                              setLinkDialogOpen(true);
+                            }}>
+                              <Link2 className="h-4 w-4 mr-2" />
+                              Link to Subsection
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => {
+                              setSelectedBlock(block);
+                              setEditForm({
+                                block_identifier: block.block_identifier,
+                                block_name: block.block_name || "",
+                                subsection_id: "",
+                              });
+                              setEditDialogOpen(true);
+                            }}>
+                              <Move className="h-4 w-4 mr-2" />
+                              Edit Block
                             </DropdownMenuItem>
                           </DropdownMenuContent>
                         </DropdownMenu>
