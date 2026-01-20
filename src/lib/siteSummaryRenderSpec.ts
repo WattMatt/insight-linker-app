@@ -163,6 +163,14 @@ export const SECTION_SPECS: Record<string, SectionSpec> = {
     type: 'kpi',
     renderPriority: 7,
   },
+  'fortress-checklist': {
+    id: 'fortress-checklist',
+    legacyIds: [],
+    defaultTitle: 'Fortress Compliance Checklist',
+    type: 'table',
+    pageBreakBefore: true,
+    renderPriority: 8,
+  },
 };
 
 // ============================================================================
@@ -728,4 +736,138 @@ export function generateAssetSchedule(
       discrepancyFields,
     };
   });
+}
+
+// ============================================================================
+// FORTRESS CHECKLIST TYPES AND HELPERS
+// ============================================================================
+
+/**
+ * Fortress checklist section progress data
+ */
+export interface FortressSectionProgress {
+  sectionName: string;
+  shortName: string;
+  totalItems: number;
+  completedItems: number;
+  notApplicableItems: number;
+  progressPercent: number;
+}
+
+/**
+ * Fortress checklist overall metrics
+ */
+export interface FortressChecklistMetrics {
+  totalItems: number;
+  completedItems: number;
+  notApplicableItems: number;
+  pendingItems: number;
+  overallProgress: number;
+  sections: FortressSectionProgress[];
+}
+
+/**
+ * Get a shortened section name for display
+ */
+function getShortenedSectionName(sectionName: string): string {
+  const shortNames: Record<string, string> = {
+    '1. RMU Compliance Inspections & Annual Maintenance': 'RMU Compliance',
+    '2. Miniature Substations Compliance Inspections & Annual Maintenance': 'Mini Substations',
+    '3. Main Distribution Boards Compliance Inspections & Annual Maintenance': 'Main DB',
+    '4. Earthing & Lightning Protection Resistance & Impedance Testing': 'Earthing & Lightning',
+    '5. Electrical Meter Installation Recording & Compliance Verification': 'Meter Installation',
+    '6. Line Shop Boards Compliance Inspections & Annual Maintenance': 'Line Shop Boards',
+    '7. General Area Lighting & Power Compliance Inspections & Annual Maintenance': 'Lighting & Power',
+    '8. Issue Resolution & Close-Out': 'Close-Out',
+  };
+  
+  return shortNames[sectionName] || sectionName.split('.').pop()?.trim().substring(0, 20) || sectionName;
+}
+
+/**
+ * Calculate Fortress checklist metrics from database data
+ */
+export function calculateFortressMetrics(
+  checklistItems: Array<{
+    section_name: string;
+    is_checked: boolean | null;
+    status: string | null;
+  }>
+): FortressChecklistMetrics {
+  if (!checklistItems || checklistItems.length === 0) {
+    return {
+      totalItems: 0,
+      completedItems: 0,
+      notApplicableItems: 0,
+      pendingItems: 0,
+      overallProgress: 0,
+      sections: [],
+    };
+  }
+
+  // Group by section
+  const sectionMap = new Map<string, { total: number; completed: number; notApplicable: number }>();
+
+  checklistItems.forEach(item => {
+    const section = item.section_name;
+    if (!sectionMap.has(section)) {
+      sectionMap.set(section, { total: 0, completed: 0, notApplicable: 0 });
+    }
+    
+    const data = sectionMap.get(section)!;
+    data.total++;
+    
+    if (item.status === 'not_applicable') {
+      data.notApplicable++;
+    } else if (item.status === 'completed' || item.is_checked) {
+      data.completed++;
+    }
+  });
+
+  // Calculate section progress
+  const sections: FortressSectionProgress[] = [];
+  let totalItems = 0;
+  let completedItems = 0;
+  let notApplicableItems = 0;
+
+  // Sort sections by their number prefix
+  const sortedSections = Array.from(sectionMap.entries()).sort((a, b) => {
+    const numA = parseInt(a[0].match(/^(\d+)/)?.[1] || '0');
+    const numB = parseInt(b[0].match(/^(\d+)/)?.[1] || '0');
+    return numA - numB;
+  });
+
+  sortedSections.forEach(([sectionName, data]) => {
+    const applicableItems = data.total - data.notApplicable;
+    const progressPercent = applicableItems > 0 
+      ? Math.round((data.completed / applicableItems) * 100) 
+      : 100;
+
+    sections.push({
+      sectionName,
+      shortName: getShortenedSectionName(sectionName),
+      totalItems: data.total,
+      completedItems: data.completed,
+      notApplicableItems: data.notApplicable,
+      progressPercent,
+    });
+
+    totalItems += data.total;
+    completedItems += data.completed;
+    notApplicableItems += data.notApplicable;
+  });
+
+  const applicableTotal = totalItems - notApplicableItems;
+  const overallProgress = applicableTotal > 0 
+    ? Math.round((completedItems / applicableTotal) * 100) 
+    : 0;
+
+  return {
+    totalItems,
+    completedItems,
+    notApplicableItems,
+    pendingItems: totalItems - completedItems - notApplicableItems,
+    overallProgress,
+    sections,
+  };
 }
