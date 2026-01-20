@@ -384,7 +384,8 @@ export function createSectionHeader(
   const textColor = style === 'primary' ? COLORS.white : COLORS.textPrimary;
   
   // No top margin when header should sit directly below page header
-  const topMargin = options.noTopMargin ? 0 : 10;
+  // Reduced default margin from 10 to 6 for tighter layout
+  const topMargin = options.noTopMargin ? 0 : 6;
 
   return {
     table: {
@@ -405,7 +406,8 @@ export function createSectionHeader(
       paddingBottom: () => 6,
       fillColor: () => bgColor,
     },
-    margin: [0, topMargin, 0, 8],
+    // Reduced bottom margin from 8 to 6 for tighter layout
+    margin: [0, topMargin, 0, 6],
   };
 }
 
@@ -577,7 +579,8 @@ export function createInfoTable(data: [string, string][]): Content {
       paddingBottom: () => 5,
       fillColor: (rowIndex: number) => rowIndex % 2 === 0 ? COLORS.bgCard : null,
     },
-    margin: [0, 0, 0, 15],
+    // Reduced bottom margin from 15 to 10 for tighter layout
+    margin: [0, 0, 0, 10],
   };
 }
 
@@ -680,7 +683,8 @@ export function createKpiRow(
       stack: [createKpiCard(kpi.value, kpi.label, kpi.color)],
       margin: [5, 0, 5, 0],
     })),
-    margin: [0, 6, 0, 10],
+    // Compact margins for tighter layout - reduced from [0, 6, 0, 10] to [0, 4, 0, 8]
+    margin: [0, 4, 0, 8],
   };
 }
 
