@@ -231,7 +231,7 @@ function generatePageFooter(pageNum: number, totalPages: string, generatedAt: st
 
 function generateSectionHeader(title: string, accentColor: string): string {
   return `
-    <div style="background: ${accentColor}; color: white; padding: 10px 15px; border-radius: 6px; margin: 20px 0 15px 0;">
+    <div style="background: ${accentColor}; color: white; padding: 10px 15px; border-radius: 6px; margin: 0 0 15px 0; display: inline-block;">
       <span style="font-size: 13pt; font-weight: 600;">${title}</span>
     </div>
   `;
@@ -499,13 +499,24 @@ async function generateSubsectionPages(subsections: SubsectionData[], accentColo
       cardsHtml.push(cardHtml);
     }
     
+    // Join cards with spacer to push second card to mid-page
+    // A4 content area is ~267mm (297-15-15). Header+section header ~50mm. Each card ~100mm. Spacer fills gap.
+    const cardsSpacer = cardsHtml.length === 2 
+      ? `<div style="height: 15mm;"></div>` 
+      : '';
+    const cardsWithSpacing = cardsHtml.length === 2 
+      ? cardsHtml[0] + cardsSpacer + cardsHtml[1]
+      : cardsHtml.join('');
+    
     pages.push(`
       <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
         ${generatePageHeader('Site Summary Report', accentColor)}
         
-        ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : generateSectionHeader('Subsection Details (continued)', accentColor)}
+        <div style="text-align: left;">
+          ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : generateSectionHeader('Subsection Details (continued)', accentColor)}
+        </div>
         
-        ${cardsHtml.join('')}
+        ${cardsWithSpacing}
         
         ${generatePageFooter(currentPage, '{{TOTAL_PAGES}}', generatedAt)}
       </div>
