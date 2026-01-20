@@ -1,9 +1,29 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import QRCode from 'https://esm.sh/qrcode@1.5.3';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
+
+// Generate QR code as data URI
+async function generateQRCodeDataUri(url: string): Promise<string> {
+  try {
+    const dataUri = await QRCode.toDataURL(url, {
+      width: 120,
+      margin: 1,
+      errorCorrectionLevel: 'M',
+      color: {
+        dark: '#000000',
+        light: '#ffffff'
+      }
+    });
+    return dataUri;
+  } catch (error) {
+    console.error('QR generation error:', error);
+    return '';
+  }
+}
 
 // ============================================================================
 // TYPE DEFINITIONS
@@ -18,6 +38,7 @@ interface ReportData {
   clientLogoUrl?: string;
   companyLogoUrl?: string;
   accentColor?: string;
+  qrBaseUrl?: string;
   subsections?: SubsectionData[];
   summaryStats?: SummaryStats;
   healthMetrics?: HealthMetrics;
@@ -342,13 +363,17 @@ function getRiskBadgeStyle(level: string | undefined): { bg: string; color: stri
   return { bg: '#fef3c7', color: '#92400e' };
 }
 
-function generateSubsectionCard(sub: SubsectionData, accentColor: string): string {
+async function generateSubsectionCard(sub: SubsectionData, accentColor: string, qrBaseUrl: string): Promise<string> {
   const cocStyle = getCocStatusStyle(sub.cocStatus);
   const complianceColor = sub.isCompliant === true ? '#d1fae5' : sub.isCompliant === false ? '#fee2e2' : '#fef3c7';
   const complianceTextColor = sub.isCompliant === true ? '#065f46' : sub.isCompliant === false ? '#991b1b' : '#92400e';
   const complianceText = sub.isCompliant === true ? 'Compliant' : sub.isCompliant === false ? 'Non-Compliant' : 'Pending';
   
   const openSnags = sub.snags?.filter(s => s.status !== 'resolved' && s.status !== 'Resolved') || [];
+  
+  // Generate QR code for this subsection
+  const qrTargetUrl = `${qrBaseUrl}/public/subsections/${sub.id}`;
+  const qrCodeDataUri = await generateQRCodeDataUri(qrTargetUrl);
   
   const snagRows = openSnags.slice(0, 3).map(snag => {
     const riskStyle = getRiskBadgeStyle(snag.riskLevel);
@@ -372,14 +397,14 @@ function generateSubsectionCard(sub: SubsectionData, accentColor: string): strin
             ${sub.category ? `<div style="font-size: 10pt; opacity: 0.9;">${sub.category}</div>` : ''}
             ${sub.tenantName && sub.tenantName !== sub.name ? `<div style="font-size: 9pt; opacity: 0.8; margin-top: 2px;">${sub.tenantName}</div>` : ''}
           </td>
-          <td style="width: 70px; padding: 12px; vertical-align: top; text-align: right;">
-            ${sub.qrCodeUrl ? `
+          <td style="width: 85px; padding: 12px; vertical-align: top; text-align: right;">
+            ${qrCodeDataUri ? `
               <div style="background: white; border-radius: 6px; padding: 5px; display: inline-block;">
-                <img src="${sub.qrCodeUrl}" style="width: 55px; height: 55px;" />
+                <img src="${qrCodeDataUri}" style="width: 65px; height: 65px;" />
               </div>
             ` : `
               <div style="background: white; border-radius: 6px; padding: 12px 8px; text-align: center;">
-                <span style="font-size: 7pt; color: ${COLORS.textMuted};">Scan for<br/>details</span>
+                <span style="font-size: 7pt; color: ${COLORS.textMuted};">QR Code</span>
               </div>
             `}
           </td>
@@ -434,7 +459,7 @@ function generateSubsectionCard(sub: SubsectionData, accentColor: string): strin
   `;
 }
 
-function generateSubsectionPages(subsections: SubsectionData[], accentColor: string, generatedAt: string, startPage: number): string {
+async function generateSubsectionPages(subsections: SubsectionData[], accentColor: string, generatedAt: string, startPage: number, qrBaseUrl: string): Promise<string> {
   if (!subsections || subsections.length === 0) return '';
   
   const pages: string[] = [];
@@ -447,13 +472,20 @@ function generateSubsectionPages(subsections: SubsectionData[], accentColor: str
     const currentPage = startPage + Math.floor(i / cardsPerPage);
     const isFirstPage = i === 0;
     
+    // Generate cards for this page (await each since QR generation is async)
+    const cardsHtml: string[] = [];
+    for (const sub of pageSubsections) {
+      const cardHtml = await generateSubsectionCard(sub, accentColor, qrBaseUrl);
+      cardsHtml.push(cardHtml);
+    }
+    
     pages.push(`
       <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
         ${generatePageHeader('Site Summary Report', accentColor)}
         
         ${isFirstPage ? generateSectionHeader('Subsection Details', accentColor) : generateSectionHeader('Subsection Details (continued)', accentColor)}
         
-        ${pageSubsections.map(sub => generateSubsectionCard(sub, accentColor)).join('')}
+        ${cardsHtml.join('')}
         
         ${generatePageFooter(currentPage, '{{TOTAL_PAGES}}', generatedAt)}
       </div>
@@ -476,9 +508,10 @@ function adjustColor(hex: string, percent: number): string {
 // MAIN HTML GENERATOR
 // ============================================================================
 
-function generateSiteSummaryHTML(data: ReportData): string {
+async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   const accentColor = data.accentColor || '#2563eb';
   const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  const qrBaseUrl = data.qrBaseUrl || 'https://watsonmattheus.com';
   
   // Calculate health metrics if not provided
   const healthMetrics = data.healthMetrics || calculateHealthMetrics(data);
@@ -486,6 +519,9 @@ function generateSiteSummaryHTML(data: ReportData): string {
   // Calculate total pages: 1 cover + 2 summary pages + subsection pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
   const totalPages = 1 + 2 + subsectionPages;
+  
+  // Generate subsection pages (async for QR generation)
+  const subsectionPagesHtml = await generateSubsectionPages(data.subsections || [], accentColor, generatedAt, 3, qrBaseUrl);
   
   const html = `
 <!DOCTYPE html>
@@ -542,7 +578,7 @@ function generateSiteSummaryHTML(data: ReportData): string {
   </div>
   
   <!-- Subsection Pages -->
-  ${generateSubsectionPages(data.subsections || [], accentColor, generatedAt, 3)}
+  ${subsectionPagesHtml}
 </body>
 </html>
   `;
@@ -597,14 +633,14 @@ Deno.serve(async (req) => {
     const body = await req.json() as ReportData;
     console.log('Generating PDF for:', body.siteName, 'Type:', body.reportType, 'Subsections:', body.subsections?.length || 0);
 
-    // Generate HTML
+    // Generate HTML (async for QR code generation)
     let html: string;
     switch (body.reportType) {
       case 'site-summary':
-        html = generateSiteSummaryHTML(body);
+        html = await generateSiteSummaryHTML(body);
         break;
       default:
-        html = generateSiteSummaryHTML(body);
+        html = await generateSiteSummaryHTML(body);
     }
 
     console.log('HTML generated, calling PDFShift API...');

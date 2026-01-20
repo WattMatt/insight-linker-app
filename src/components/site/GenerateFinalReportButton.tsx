@@ -276,6 +276,13 @@ export function GenerateFinalReportButton({
   const handleGenerate = async () => {
     try {
       const data = await fetchComprehensiveData();
+      
+      // Get QR base URL from settings
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('qr_base_url')
+        .single();
+      const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
 
       await generatePdf({
         reportType: 'site-summary',
@@ -286,6 +293,7 @@ export function GenerateFinalReportButton({
         clientLogoUrl: site.client?.logo_url,
         companyLogoUrl: data.companyLogoUrl,
         accentColor: data.accentColor,
+        qrBaseUrl,
         subsections: data.subsections,
         summaryStats: data.summaryStats,
         healthMetrics: data.healthMetrics,
