@@ -13,6 +13,7 @@ interface SubsectionData {
   cocIssueDate?: string;
   meterSerialNumber?: string;
   ctRatio?: string;
+  breakerSize?: string;
   isCompliant?: boolean;
   qrCodeUrl?: string;
   snags?: Array<{
@@ -32,20 +33,36 @@ interface SummaryStats {
   cocValidCount: number;
   cocExpiredCount: number;
   cocMissingCount: number;
+  cocRequired?: number;
+  meteringInstalled?: number;
   openSnagsCount: number;
   resolvedSnagsCount: number;
+}
+
+interface CategoryHealthData {
+  category: string;
+  abbreviation: string;
+  percentage: number;
+}
+
+interface DocumentCategoryData {
+  category: string;
+  count: number;
 }
 
 interface ReportData {
   reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
   siteId: string;
   siteName: string;
+  siteAddress?: string;
   clientName?: string;
   clientLogoUrl?: string;
   companyLogoUrl?: string;
   accentColor?: string;
   subsections?: SubsectionData[];
   summaryStats?: SummaryStats;
+  categoryHealth?: CategoryHealthData[];
+  documentsSummary?: DocumentCategoryData[];
   generatedAt?: string;
 }
 

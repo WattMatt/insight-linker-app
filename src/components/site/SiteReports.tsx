@@ -206,6 +206,7 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                             site={{
                                 id: site.id,
                                 name: site.name,
+                                address: site.address,
                                 client: { name: site.clients.name, logo_url: site.client_logo_url }
                             }}
                             subsections={subsections}
