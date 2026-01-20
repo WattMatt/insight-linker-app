@@ -132,6 +132,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
   const [pdfDimensions, setPdfDimensions] = useState({ width: 0, height: 0 });
+  const [containerWidth, setContainerWidth] = useState(0);
   const [isEditMode, setIsEditMode] = useState(false);
   const [isAddingBlock, setIsAddingBlock] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<SchematicBlock | null>(null);
@@ -165,54 +166,56 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
   const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
 
-  // Calculate fit-to-container scale - zoom extend to fill entire container
-  const calculateFitScale = useCallback(() => {
-    if (!containerRef.current || pdfDimensions.width === 0) return 1;
-    
-    // Use less padding in view mode for maximum use of space
-    const padding = isEditMode ? 32 : 16;
-    const containerWidth = containerRef.current.clientWidth - padding;
-    const containerHeight = CONTAINER_HEIGHT - padding;
-    
-    // Ensure we have valid container dimensions
-    if (containerWidth <= 0 || containerHeight <= 0) return 1;
-    
-    const scaleX = containerWidth / pdfDimensions.width;
-    const scaleY = containerHeight / pdfDimensions.height;
-    
-    // Use the smaller scale to ensure entire PDF fits within bounds
-    return Math.min(scaleX, scaleY);
-  }, [pdfDimensions, isEditMode]);
-
-  // Auto-fit on PDF load - with slight delay to ensure container is measured
+  // Measure container width on mount and resize
   useEffect(() => {
-    if (pdfDimensions.width > 0) {
-      // Small delay to ensure container has rendered and has dimensions
-      const timeoutId = setTimeout(() => {
-        const fitScale = calculateFitScale();
-        setScale(fitScale);
-      }, 50);
-      return () => clearTimeout(timeoutId);
-    }
-  }, [pdfDimensions, calculateFitScale]);
-
-  // Recalculate on window resize
-  useEffect(() => {
-    const handleResize = () => {
-      if (pdfDimensions.width > 0 && !isEditMode) {
-        const fitScale = calculateFitScale();
-        setScale(fitScale);
+    const updateContainerWidth = () => {
+      if (containerRef.current) {
+        setContainerWidth(containerRef.current.clientWidth);
       }
     };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, [pdfDimensions, calculateFitScale, isEditMode]);
+    
+    // Initial measurement with delay
+    const timeoutId = setTimeout(updateContainerWidth, 50);
+    
+    // Update on resize
+    window.addEventListener('resize', updateContainerWidth);
+    
+    return () => {
+      clearTimeout(timeoutId);
+      window.removeEventListener('resize', updateContainerWidth);
+    };
+  }, []);
 
-  // Handle PDF page load to get dimensions
+  // Calculate the display scale for blocks and PDF
+  const displayScale = useMemo(() => {
+    if (!containerWidth || pdfDimensions.width === 0 || pdfDimensions.height === 0) {
+      return 1;
+    }
+    
+    const padding = isEditMode ? 32 : 16;
+    const availableWidth = containerWidth - padding;
+    const availableHeight = CONTAINER_HEIGHT - padding;
+    
+    // Calculate scale needed to fit both dimensions
+    const scaleX = availableWidth / pdfDimensions.width;
+    const scaleY = availableHeight / pdfDimensions.height;
+    const fitScale = Math.min(scaleX, scaleY);
+    
+    // In view mode, use fit scale; in edit mode, apply user scale
+    return isEditMode ? scale : fitScale;
+  }, [containerWidth, pdfDimensions, isEditMode, scale]);
+
+  // Calculate the target page width to fit the container
+  const calculatedPageWidth = useMemo(() => {
+    if (pdfDimensions.width === 0) return undefined;
+    return pdfDimensions.width * displayScale;
+  }, [pdfDimensions.width, displayScale]);
+
+  // Handle PDF page load to get original dimensions
   const handlePageLoad = (page: any) => {
     setPdfDimensions({
-      width: page.width,
-      height: page.height,
+      width: page.originalWidth || page.width,
+      height: page.originalHeight || page.height,
     });
   };
 
@@ -798,11 +801,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Toggle edit mode
   const toggleEditMode = () => {
     if (isEditMode) {
-      // Exit edit mode - reset to fit view
+      // Exit edit mode - reset scale
       setIsEditMode(false);
       setIsAddingBlock(false);
-      const fitScale = calculateFitScale();
-      setScale(fitScale);
+      setScale(1); // Reset scale when exiting edit mode
     } else {
       setIsEditMode(true);
     }
@@ -997,63 +999,65 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         >
           <div 
             ref={contentRef}
-            className={`relative inline-block ${isEditMode ? 'p-4' : 'p-2'}`}
+            className={`relative ${isEditMode ? 'inline-block p-4' : 'flex justify-center items-start p-2'}`}
             onClick={isEditMode ? handleSchematicClick : undefined}
-            style={{ 
-              transform: `scale(${scale})`, 
-              transformOrigin: isEditMode ? 'top left' : 'top center',
-              marginLeft: isEditMode ? 0 : 'auto',
-              marginRight: isEditMode ? 0 : 'auto',
-              display: isEditMode ? 'inline-block' : 'block'
-            }}
           >
-            <Document
-              file={schematic.file_url}
-              onLoadSuccess={({ numPages }) => setNumPages(numPages)}
-              loading={
-                <div className="flex items-center justify-center h-64">
-                  <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
-                </div>
-              }
-            >
-              <Page 
-                pageNumber={pageNumber} 
-                renderTextLayer={false}
-                renderAnnotationLayer={false}
-                onLoadSuccess={handlePageLoad}
-              />
-            </Document>
+            {/* PDF and blocks wrapper - positioned relative for block overlay */}
+            <div className="relative inline-block">
+              <Document
+                file={schematic.file_url}
+                onLoadSuccess={({ numPages }) => setNumPages(numPages)}
+                loading={
+                  <div className="flex items-center justify-center h-64">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+                  </div>
+                }
+              >
+                <Page 
+                  pageNumber={pageNumber} 
+                  width={calculatedPageWidth}
+                  renderTextLayer={false}
+                  renderAnnotationLayer={false}
+                  onLoadSuccess={handlePageLoad}
+                />
+              </Document>
 
-            {/* Render blocks */}
-            {blocks.map(block => {
-              const isLinked = !!block.subsection_id;
-              const photos = getAssetPhotos(block.subsection_id);
-              const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
+              {/* Render blocks - scaled to match PDF */}
+              {blocks.map(block => {
+                const isLinked = !!block.subsection_id;
+                const photos = getAssetPhotos(block.subsection_id);
+                const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
 
-              return (
-                <div
-                  key={block.id}
-                  className={`absolute flex items-center justify-center border-2 rounded-sm select-none transition-colors ${
-                    isLinked 
-                      ? 'bg-primary/10 border-primary hover:bg-primary/20' 
-                      : 'bg-destructive/10 border-destructive'
-                  } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
-                    isEditMode ? 'group' : ''
-                  }`}
-                  style={{
-                    left: block.x_position - block.width / 2,
-                    top: block.y_position - block.height / 2,
-                    width: block.width,
-                    height: block.height,
-                    cursor: isEditMode 
-                      ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
-                      : (isLinked ? 'pointer' : 'default'),
-                  }}
-                  onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
-                  onClick={(e) => {
-                    if (!dragging && !resizing) handleBlockClick(block, e);
-                  }}
-                >
+                // Scale block positions and dimensions
+                const scaledLeft = (block.x_position - block.width / 2) * displayScale;
+                const scaledTop = (block.y_position - block.height / 2) * displayScale;
+                const scaledWidth = block.width * displayScale;
+                const scaledHeight = block.height * displayScale;
+
+                return (
+                  <div
+                    key={block.id}
+                    className={`absolute flex items-center justify-center border-2 rounded-sm select-none transition-colors ${
+                      isLinked 
+                        ? 'bg-primary/10 border-primary hover:bg-primary/20' 
+                        : 'bg-destructive/10 border-destructive'
+                    } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
+                      isEditMode ? 'group' : ''
+                    }`}
+                    style={{
+                      left: scaledLeft,
+                      top: scaledTop,
+                      width: scaledWidth,
+                      height: scaledHeight,
+                      cursor: isEditMode 
+                        ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
+                        : (isLinked ? 'pointer' : 'default'),
+                    }}
+                    onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
+                    onClick={(e) => {
+                      if (!dragging && !resizing) handleBlockClick(block, e);
+                    }}
+                  >
                   {/* Block identifier */}
                   <p className="text-[10px] font-bold text-foreground/80 pointer-events-none">{block.block_identifier}</p>
 
@@ -1161,6 +1165,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 </div>
               );
             })}
+            </div>
           </div>
         </div>
 
