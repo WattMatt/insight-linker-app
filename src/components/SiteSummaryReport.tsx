@@ -36,10 +36,12 @@ import {
   calculateMetrics,
   calculateCategoryHealth,
   calculateAssetMetrics,
+  calculateFortressMetrics,
   type SiteSummaryMetrics,
   type SubsectionData,
   type SnagData,
   type AssetVerificationMetrics,
+  type FortressChecklistMetrics,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
@@ -231,7 +233,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     const sortedSections = getEnabledSections(sections);
 
     // Fetch all necessary data
-    const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes] = await Promise.all([
+    const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes, checklistRes] = await Promise.all([
       supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
       supabase.from("inspections").select("*").eq("site_id", siteId),
@@ -239,6 +241,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       supabase.from("subsection_documents").select("subsection_id, file_name, category_id"),
       supabase.from("settings").select("qr_base_url").single(),
       supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
+      supabase.from("site_marking_checklist").select("section_name, is_checked, status").eq("site_id", siteId),
     ]);
 
     if (siteRes.error) throw siteRes.error;
@@ -279,6 +282,10 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     // Calculate asset verification metrics using inspection json_data
     const assetMetrics = calculateAssetMetrics(siteAssets, allInspections);
+
+    // Calculate Fortress checklist metrics
+    const checklistItems = checklistRes.data || [];
+    const fortressMetrics = calculateFortressMetrics(checklistItems);
 
     // Build content based on template sections - USING SPEC CONSTANTS
     const content: any[] = [];
@@ -487,6 +494,78 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                   paddingRight: () => 4,
                   paddingTop: () => 3,
                   paddingBottom: () => 3,
+                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
+                },
+                margin: [0, 0, 0, 12],
+              });
+            }
+          }
+          break;
+
+        case "fortress-checklist":
+          if (fortressMetrics.totalItems > 0) {
+            if (spec?.pageBreakBefore) {
+              content.push({ text: '', pageBreak: 'before' });
+            }
+            content.push(createSectionHeader(title, 'primary'));
+            
+            // Overall progress summary KPIs
+            content.push(createKpiRow([
+              { value: `${fortressMetrics.overallProgress}%`, label: 'Overall Progress', color: fortressMetrics.overallProgress >= 80 ? STATUS_COLORS.success : fortressMetrics.overallProgress >= 50 ? STATUS_COLORS.warning : STATUS_COLORS.error },
+              { value: fortressMetrics.completedItems.toString(), label: 'Completed', color: STATUS_COLORS.success },
+              { value: fortressMetrics.pendingItems.toString(), label: 'Pending', color: STATUS_COLORS.muted },
+              { value: fortressMetrics.notApplicableItems.toString(), label: 'N/A', color: STATUS_COLORS.info },
+            ]));
+            
+            // Section-by-section progress table
+            if (fortressMetrics.sections.length > 0) {
+              content.push({
+                text: 'Section Progress',
+                fontSize: 11,
+                bold: true,
+                color: '#374151',
+                margin: [0, 12, 0, 8],
+              });
+              
+              const tableBody = [
+                // Header row
+                [
+                  { text: 'Section', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Total', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'Done', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'N/A', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'Progress', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                ],
+                // Data rows
+                ...fortressMetrics.sections.map((section, idx) => {
+                  const progressColor = section.progressPercent >= 80 ? '#16a34a' : 
+                                       section.progressPercent >= 50 ? '#ea580c' : '#dc2626';
+                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
+                  
+                  return [
+                    { text: section.shortName, fontSize: 8, fillColor: bgColor },
+                    { text: section.totalItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor },
+                    { text: section.completedItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, color: '#16a34a' },
+                    { text: section.notApplicableItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, color: '#6b7280' },
+                    { text: `${section.progressPercent}%`, fontSize: 8, alignment: 'center' as const, bold: true, color: progressColor, fillColor: bgColor },
+                  ];
+                }),
+              ];
+              
+              content.push({
+                table: {
+                  headerRows: 1,
+                  widths: ['*', 50, 50, 50, 60],
+                  body: tableBody,
+                },
+                layout: {
+                  hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+                  vLineWidth: () => 0,
+                  hLineColor: () => '#e5e7eb',
+                  paddingLeft: () => 6,
+                  paddingRight: () => 6,
+                  paddingTop: () => 4,
+                  paddingBottom: () => 4,
                   fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
                 },
                 margin: [0, 0, 0, 12],
