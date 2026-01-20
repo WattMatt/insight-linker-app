@@ -3,7 +3,6 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
-import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { ReportSettingsDialog, getDefaultReportSections, ReportSection } from "@/components/site/ReportSettingsDialog";
 import { GenerateFinalReportButton } from "@/components/site/GenerateFinalReportButton";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
@@ -192,14 +191,6 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                 </CardHeader>
                 <CardContent>
                     <div className="flex flex-col sm:flex-row gap-3">
-                        {/* Quick Generate - existing functionality */}
-                        <div className="flex-1">
-                            <SiteSummaryReport
-                                siteId={site.id}
-                                siteName={site.name}
-                                clientName={site.clients.name}
-                            />
-                        </div>
 
                         {/* Server-side Final Report Generation */}
                         <GenerateFinalReportButton

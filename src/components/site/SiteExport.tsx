@@ -1,7 +1,6 @@
 import React, { useState, useMemo } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { PDFReportEditor, ReportCustomization, ReportSection } from "@/components/pdf-editor";
 import { Site } from "@/types/site";
 import { FileText, Sparkles, Download } from "lucide-react";
@@ -110,14 +109,6 @@ export const SiteExport: React.FC<SiteExportProps> = ({ site }) => {
                 </p>
                 
                 <div className="flex flex-col sm:flex-row gap-3">
-                    {/* Quick Generate - existing functionality */}
-                    <div className="flex-1">
-                        <SiteSummaryReport
-                            siteId={site.id}
-                            siteName={site.name}
-                            clientName={site.clients.name}
-                        />
-                    </div>
                     
                     {/* Customize & Generate */}
                     <Button
