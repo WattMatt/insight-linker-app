@@ -135,11 +135,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Handle mouse wheel zoom
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (e.ctrlKey || e.metaKey) {
-      e.preventDefault();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
-    }
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.1 : 0.1;
+    setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
   };
 
   // Handle middle mouse button pan
@@ -711,7 +709,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       <Card>
         <CardContent className="p-4">
           <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4">
-            <span>🖱️ Ctrl+Scroll to zoom</span>
+            <span>🖱️ Scroll to zoom</span>
             <span>🖱️ Middle-click + drag to pan</span>
           </div>
           <div 
