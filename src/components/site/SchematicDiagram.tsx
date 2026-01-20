@@ -247,6 +247,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setDimensionsLoaded(false);
   }, [pageNumber]);
 
+  // Reset scale when exiting edit mode to ensure proper "zoom to fit"
+  useEffect(() => {
+    if (!isEditMode) {
+      setScale(1);
+    }
+  }, [isEditMode]);
+
   // Handle mouse wheel zoom (only in edit mode)
   const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
     if (!isEditMode) return;
