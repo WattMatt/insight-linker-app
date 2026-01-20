@@ -454,8 +454,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     if (!selectedBlock) return;
 
     try {
-      // Try to auto-match subsection by identifier
-      let matchedSubsectionId = editForm.subsection_id || null;
+      // Handle "none" as unlink
+      let matchedSubsectionId = (editForm.subsection_id && editForm.subsection_id !== "none") ? editForm.subsection_id : null;
       let isAutoMatched = false;
 
       if (!matchedSubsectionId && editForm.block_identifier) {
@@ -933,8 +933,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   <SelectValue placeholder="Select a subsection..." />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="">-- No Link --</SelectItem>
-                  {subsections.map(sub => (
+                  <SelectItem value="none">-- No Link --</SelectItem>
+                  {subsections.filter(sub => sub.id).map(sub => (
                     <SelectItem key={sub.id} value={sub.id}>
                       {sub.name} {sub.tenant_name ? `(${sub.tenant_name})` : ''}
                     </SelectItem>
@@ -982,7 +982,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   <SelectValue placeholder="Select a subsection..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {subsections.map(sub => (
+                  {subsections.filter(sub => sub.id).map(sub => (
                     <SelectItem key={sub.id} value={sub.id}>
                       {sub.name} {sub.tenant_name ? `(${sub.tenant_name})` : ''}
                     </SelectItem>
