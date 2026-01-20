@@ -310,6 +310,16 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
 
   const totalDocs = docs.reduce((sum, d) => sum + d.count, 0);
 
+  // Sort documents by category name (handles numeric prefixes like "01 COC", "02 Metering")
+  const sortedDocs = [...docs].sort((a, b) => {
+    // Extract numeric prefix if exists
+    const numA = parseInt(a.category.match(/^(\d+)/)?.[1] || '999');
+    const numB = parseInt(b.category.match(/^(\d+)/)?.[1] || '999');
+    if (numA !== numB) return numA - numB;
+    // Fallback to alphabetical
+    return a.category.localeCompare(b.category);
+  });
+
   return `
     ${generateSectionHeader('Documents Summary', accentColor)}
     <table style="width: 100%; border-collapse: separate; border-spacing: 10px; margin-bottom: 15px;">
@@ -319,7 +329,7 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
           <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Total Documents</div>
         </td>
         <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.muted};">${docs.length}</div>
+          <div style="font-size: 24pt; font-weight: 700; color: ${COLORS.muted};">${sortedDocs.length}</div>
           <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-top: 6px;">Categories</div>
         </td>
       </tr>
@@ -332,7 +342,7 @@ function generateDocumentsSummary(docs: DocumentCategoryData[], accentColor: str
         </tr>
       </thead>
       <tbody>
-        ${docs.map((doc, i) => `
+        ${sortedDocs.map((doc, i) => `
           <tr style="background: ${i % 2 === 0 ? 'white' : COLORS.lightGray};">
             <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; font-size: 10pt;">${doc.category}</td>
             <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; text-align: right; font-size: 10pt; font-weight: 600;">${doc.count}</td>
