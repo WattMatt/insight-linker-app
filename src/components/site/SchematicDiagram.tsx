@@ -44,7 +44,9 @@ import {
   MoreVertical,
   Camera,
   Gauge,
-  Zap
+  Zap,
+  Pencil,
+  X
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 
@@ -114,6 +116,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [numPages, setNumPages] = useState<number | null>(null);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1);
+  const [isEditMode, setIsEditMode] = useState(false);
   const [isAddingBlock, setIsAddingBlock] = useState(false);
   const [selectedBlock, setSelectedBlock] = useState<SchematicBlock | null>(null);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
@@ -784,50 +787,80 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             </div>
             
             <div className="flex items-center gap-2">
+              {/* Edit Mode Toggle */}
               <Button
-                variant={isAddingBlock ? "default" : "outline"}
+                variant={isEditMode ? "default" : "outline"}
                 size="sm"
-                onClick={() => setIsAddingBlock(!isAddingBlock)}
+                onClick={() => {
+                  setIsEditMode(!isEditMode);
+                  if (isEditMode) setIsAddingBlock(false);
+                }}
               >
-                <Plus className="h-4 w-4 mr-1" />
-                {isAddingBlock ? "Click on diagram..." : "Add Block"}
+                {isEditMode ? (
+                  <>
+                    <X className="h-4 w-4 mr-1" />
+                    Exit Edit
+                  </>
+                ) : (
+                  <>
+                    <Pencil className="h-4 w-4 mr-1" />
+                    Edit
+                  </>
+                )}
               </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleAutoMatch}
-              >
-                <Link2 className="h-4 w-4 mr-1" />
-                Auto-Match
-              </Button>
+              {/* Edit mode controls */}
+              {isEditMode && (
+                <>
+                  <Button
+                    variant={isAddingBlock ? "secondary" : "outline"}
+                    size="sm"
+                    onClick={() => setIsAddingBlock(!isAddingBlock)}
+                  >
+                    <Plus className="h-4 w-4 mr-1" />
+                    {isAddingBlock ? "Click to place..." : "Add Block"}
+                  </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setScale(s => Math.min(s + 0.25, 2))}
-              >
-                <ZoomIn className="h-4 w-4" />
-              </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleAutoMatch}
+                  >
+                    <Link2 className="h-4 w-4 mr-1" />
+                    Auto-Match
+                  </Button>
 
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setScale(s => Math.max(s - 0.25, 0.5))}
-              >
-                <ZoomOut className="h-4 w-4" />
-              </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={handleDeleteSchematic}
+                    className="text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </>
+              )}
 
-              <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
+              {/* Zoom controls - always visible */}
+              <div className="border-l pl-2 ml-1 flex items-center gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScale(s => Math.min(s + 0.25, 3))}
+                >
+                  <ZoomIn className="h-4 w-4" />
+                </Button>
 
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={handleDeleteSchematic}
-                className="text-destructive"
-              >
-                <Trash2 className="h-4 w-4" />
-              </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setScale(s => Math.max(s - 0.25, 0.25))}
+                >
+                  <ZoomOut className="h-4 w-4" />
+                </Button>
+
+                <span className="text-sm text-muted-foreground">{Math.round(scale * 100)}%</span>
+              </div>
             </div>
           </div>
         </CardContent>
@@ -839,21 +872,26 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           <div className="text-xs text-muted-foreground mb-2 flex items-center gap-4 flex-wrap">
             <span>🖱️ Scroll to zoom</span>
             <span>🖱️ Middle-click + drag to pan</span>
-            <span>📦 Drag blocks to move • Drag corners/edges to resize</span>
+            {isEditMode && <span className="text-primary font-medium">✏️ Edit Mode: Drag blocks to move • Drag corners/edges to resize</span>}
+            {!isEditMode && <span>👆 Click linked blocks to navigate</span>}
           </div>
           <div 
             ref={containerRef}
-            className={`relative overflow-auto border rounded-lg bg-muted/50 ${isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`}
+            className={`relative overflow-auto border rounded-lg bg-muted/50 ${
+              isAddingBlock ? 'cursor-crosshair' : 
+              isPanning ? 'cursor-grabbing' : 
+              'cursor-grab'
+            } ${isEditMode ? 'ring-2 ring-primary/30' : ''}`}
             style={{ maxHeight: '70vh' }}
             onWheel={handleWheel}
             onMouseDown={handleMouseDown}
             onMouseMove={(e) => {
               handleMouseMove(e);
-              if (resizing || dragging) handleBlockResizeMove(e);
+              if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
             }}
             onMouseUp={(e) => {
               handleMouseUp(e);
-              if (resizing || dragging) handleBlockResizeEnd();
+              if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
             }}
             onMouseLeave={handleMouseLeave}
             onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
@@ -861,7 +899,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             <div 
               ref={contentRef}
               className="relative inline-block"
-              onClick={handleSchematicClick}
+              onClick={isEditMode ? handleSchematicClick : undefined}
               style={{ transform: `scale(${scale})`, transformOrigin: 'top left' }}
             >
               <Document
@@ -889,19 +927,23 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 return (
                   <div
                     key={block.id}
-                    className={`absolute flex items-center justify-center border-2 rounded-sm group select-none ${
+                    className={`absolute flex items-center justify-center border-2 rounded-sm select-none ${
                       isLinked 
                         ? 'bg-primary/10 border-primary' 
                         : 'bg-orange-500/10 border-orange-500'
-                    } ${dragging?.blockId === block.id || resizing?.blockId === block.id ? 'z-50' : ''}`}
+                    } ${(dragging?.blockId === block.id || resizing?.blockId === block.id) ? 'z-50' : ''} ${
+                      isEditMode ? 'group' : ''
+                    }`}
                     style={{
                       left: block.x_position - block.width / 2,
                       top: block.y_position - block.height / 2,
                       width: block.width,
                       height: block.height,
-                      cursor: dragging?.blockId === block.id ? 'grabbing' : 'grab',
+                      cursor: isEditMode 
+                        ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
+                        : (isLinked ? 'pointer' : 'default'),
                     }}
-                    onMouseDown={(e) => handleBlockDragStart(e, block.id)}
+                    onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
                     onClick={(e) => {
                       if (!dragging && !resizing) handleBlockClick(block, e);
                     }}
@@ -911,45 +953,50 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                       <p className="text-[10px] font-bold text-foreground/80">{block.block_identifier}</p>
                     </div>
 
-                    {/* Resize handles - corners */}
-                    <div 
-                      className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')}
-                    />
-                    <div 
-                      className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')}
-                    />
-                    <div 
-                      className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')}
-                    />
-                    <div 
-                      className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')}
-                    />
+                    {/* Resize handles - only in edit mode */}
+                    {isEditMode && (
+                      <>
+                        {/* Corners */}
+                        <div 
+                          className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')}
+                        />
+                        <div 
+                          className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')}
+                        />
+                        <div 
+                          className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')}
+                        />
+                        <div 
+                          className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')}
+                        />
+                        {/* Edges */}
+                        <div 
+                          className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')}
+                        />
+                        <div 
+                          className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')}
+                        />
+                        <div 
+                          className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')}
+                        />
+                        <div 
+                          className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity"
+                          onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')}
+                        />
+                      </>
+                    )}
 
-                    {/* Resize handles - edges */}
-                    <div 
-                      className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')}
-                    />
-                    <div 
-                      className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')}
-                    />
-                    <div 
-                      className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')}
-                    />
-                    <div 
-                      className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity"
-                      onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')}
-                    />
-
-                    {/* Action buttons - Eye icon for photos */}
+                    {/* Action buttons for linked blocks */}
                     {isLinked && (
                       <div className="absolute -top-3 -right-3 flex gap-0.5 z-10">
+                        {/* Photo viewer - always available */}
                         {hasPhotos && (
                           <DropdownMenu>
                             <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
@@ -980,42 +1027,45 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                           </DropdownMenu>
                         )}
 
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <button className="h-5 w-5 rounded-full bg-muted text-muted-foreground flex items-center justify-center hover:bg-muted/80 shadow-sm">
-                              <MoreVertical className="h-3 w-3" />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
-                            <DropdownMenuItem onClick={() => {
-                              setSelectedBlock(block);
-                              setEditForm({
-                                block_identifier: block.block_identifier,
-                                block_name: block.block_name || "",
-                                subsection_id: block.subsection_id || "",
-                                width: block.width,
-                                height: block.height,
-                              });
-                              setEditDialogOpen(true);
-                            }}>
-                              <Move className="h-4 w-4 mr-2" />
-                              Edit Block
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => handleUnlinkBlock(block)}>
-                              <Unlink className="h-4 w-4 mr-2" />
-                              Unlink
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
+                        {/* Edit menu - only in edit mode */}
+                        {isEditMode && (
+                          <DropdownMenu>
+                            <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
+                              <button className="h-5 w-5 rounded-full bg-muted text-muted-foreground flex items-center justify-center hover:bg-muted/80 shadow-sm">
+                                <MoreVertical className="h-3 w-3" />
+                              </button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end" onClick={(e) => e.stopPropagation()}>
+                              <DropdownMenuItem onClick={() => {
+                                setSelectedBlock(block);
+                                setEditForm({
+                                  block_identifier: block.block_identifier,
+                                  block_name: block.block_name || "",
+                                  subsection_id: block.subsection_id || "",
+                                  width: block.width,
+                                  height: block.height,
+                                });
+                                setEditDialogOpen(true);
+                              }}>
+                                <Move className="h-4 w-4 mr-2" />
+                                Edit Block
+                              </DropdownMenuItem>
+                              <DropdownMenuItem onClick={() => handleUnlinkBlock(block)}>
+                                <Unlink className="h-4 w-4 mr-2" />
+                                Unlink
+                              </DropdownMenuItem>
+                            </DropdownMenuContent>
+                          </DropdownMenu>
+                        )}
                       </div>
                     )}
 
-                    {/* Unlinked block - show edit menu */}
-                    {!isLinked && (
+                    {/* Unlinked block - edit menu only in edit mode */}
+                    {!isLinked && isEditMode && (
                       <div className="absolute -top-3 -right-3 z-10">
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild onClick={(e) => e.stopPropagation()}>
-                            <button className="h-5 w-5 rounded-full bg-orange-500 text-white flex items-center justify-center hover:bg-orange-600 shadow-sm">
+                            <button className="h-5 w-5 rounded-full bg-destructive text-destructive-foreground flex items-center justify-center hover:bg-destructive/80 shadow-sm">
                               <MoreVertical className="h-3 w-3" />
                             </button>
                           </DropdownMenuTrigger>
