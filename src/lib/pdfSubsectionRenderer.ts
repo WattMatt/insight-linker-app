@@ -363,22 +363,23 @@ export async function renderSubsectionGrid(
   const cards: any[] = [];
   
   // Stack subsections vertically with 2 per page
-  // A4 content area is ~700pt tall, so each card should be ~320pt max with 15pt gap
+  // A4 content area is ~700pt tall, so each card should be ~320pt max with compact gap
   for (let i = 0; i < subsections.length; i++) {
     const card = await renderSubsectionCardToPDF(subsections[i], accentColor, logoUrl);
     
     // Page break before every pair (except first)
     const needsPageBreak = i > 0 && i % 2 === 0;
     
+    // Compact margin between cards - only 10pt gap for tighter layout
     cards.push({
       ...card,
-      margin: [0, 0, 0, 15], // Reduced gap between cards
+      margin: [0, 0, 0, 10],
       pageBreak: needsPageBreak ? 'before' : undefined,
     });
   }
 
   return {
     stack: cards,
-    margin: [0, 0, 0, 0], // No extra margin around grid
+    margin: [0, 0, 0, 0],
   };
 }
