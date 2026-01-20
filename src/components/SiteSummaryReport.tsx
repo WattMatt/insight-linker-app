@@ -556,23 +556,21 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                   { text: 'Insp. CT', bold: true, fontSize: 9, color: '#ffffff' },
                   { text: 'Status', bold: true, fontSize: 9, color: '#ffffff' },
                 ],
-                // Data rows
-                ...assetSchedule.map((row, idx) => {
+                // Data rows - clean white background with horizontal lines between rows
+                ...assetSchedule.map((row) => {
                   const statusColor = row.status === 'verified' ? '#16a34a' : 
                                       row.status === 'discrepancy' ? '#dc2626' : '#9ca3af';
                   const statusText = row.status === 'verified' ? '✓ Verified' : 
                                      row.status === 'discrepancy' ? '✗ Discrepancy' : '○ Pending';
-                  // Alternating row colors for readability
-                  const bgColor = idx % 2 === 0 ? '#f9fafb' : null;
                   
                   return [
-                    { text: row.premisesId, fontSize: 8, fillColor: bgColor },
-                    { text: row.meterSerial, fontSize: 8, fillColor: bgColor },
-                    { text: row.breakerSize, fontSize: 8, fillColor: bgColor },
-                    { text: row.ctRatio, fontSize: 8, fillColor: bgColor },
-                    { text: row.inspectedBreaker, fontSize: 8, fillColor: bgColor, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
-                    { text: row.inspectedCT, fontSize: 8, fillColor: bgColor, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
-                    { text: statusText, fontSize: 8, color: statusColor, bold: true, fillColor: bgColor },
+                    { text: row.premisesId, fontSize: 9, color: '#374151' },
+                    { text: row.meterSerial, fontSize: 9, color: '#374151' },
+                    { text: row.breakerSize, fontSize: 9, color: '#374151' },
+                    { text: row.ctRatio, fontSize: 9, color: '#374151' },
+                    { text: row.inspectedBreaker, fontSize: 9, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
+                    { text: row.inspectedCT, fontSize: 9, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
+                    { text: statusText, fontSize: 9, color: statusColor, bold: true },
                   ];
                 }),
               ];
@@ -580,19 +578,21 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               content.push({
                 table: {
                   headerRows: 1,
-                  // Optimized widths: Premises widest (25%), then evenly distributed for other columns
-                  widths: ['25%', '12%', '11%', '11%', '13%', '11%', '17%'],
+                  // Optimized widths: Premises widest, then evenly distributed for other columns
+                  widths: ['24%', '13%', '11%', '11%', '13%', '11%', '17%'],
                   body: tableBody,
                 },
                 layout: {
-                  hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+                  // Horizontal lines between all rows for clean separation
+                  hLineWidth: () => 0.5,
                   vLineWidth: () => 0,
                   hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 8,
-                  paddingRight: () => 8,
-                  paddingTop: () => 6,
-                  paddingBottom: () => 6,
-                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
+                  paddingLeft: () => 10,
+                  paddingRight: () => 10,
+                  paddingTop: () => 8,
+                  paddingBottom: () => 8,
+                  // Only header row has dark background, all data rows are white
+                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : '#ffffff',
                 },
                 margin: [0, 0, 0, 12],
               });
@@ -635,19 +635,17 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                   { text: 'N/A', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
                   { text: 'Progress', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
                 ],
-                // Data rows
-                ...fortressMetrics.sections.map((section, idx) => {
+                // Data rows - clean white background with horizontal lines between rows
+                ...fortressMetrics.sections.map((section) => {
                   const progressColor = section.progressPercent >= 80 ? '#16a34a' : 
                                        section.progressPercent >= 50 ? '#ea580c' : '#dc2626';
-                  // Alternating row colors starting from first data row
-                  const bgColor = idx % 2 === 0 ? '#f9fafb' : null;
                   
                   return [
-                    { text: section.shortName, fontSize: 9, fillColor: bgColor },
-                    { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor },
-                    { text: section.completedItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor, color: '#16a34a' },
-                    { text: section.notApplicableItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor, color: '#6b7280' },
-                    { text: `${section.progressPercent}%`, fontSize: 9, alignment: 'center' as const, bold: true, color: progressColor, fillColor: bgColor },
+                    { text: section.shortName, fontSize: 9, color: '#374151' },
+                    { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#374151' },
+                    { text: section.completedItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#16a34a' },
+                    { text: section.notApplicableItems.toString(), fontSize: 9, alignment: 'center' as const, color: '#6b7280' },
+                    { text: `${section.progressPercent}%`, fontSize: 9, alignment: 'center' as const, bold: true, color: progressColor },
                   ];
                 }),
               ];
@@ -655,18 +653,20 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               content.push({
                 table: {
                   headerRows: 1,
-                  widths: ['*', 55, 55, 55, 65],
+                  widths: ['*', 60, 60, 60, 70],
                   body: tableBody,
                 },
                 layout: {
-                  hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+                  // Horizontal lines between all rows for clean separation
+                  hLineWidth: () => 0.5,
                   vLineWidth: () => 0,
                   hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 8,
-                  paddingRight: () => 8,
-                  paddingTop: () => 6,
-                  paddingBottom: () => 6,
-                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
+                  paddingLeft: () => 10,
+                  paddingRight: () => 10,
+                  paddingTop: () => 8,
+                  paddingBottom: () => 8,
+                  // Only header row has dark background, all data rows are white
+                  fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : '#ffffff',
                 },
                 margin: [0, 0, 0, 12],
               });
