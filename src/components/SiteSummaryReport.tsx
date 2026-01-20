@@ -546,15 +546,15 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               
               // Create table with asset register vs inspected values
               const tableBody = [
-                // Header row
+                // Header row with slightly larger font for readability
                 [
-                  { text: 'Premises', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Meter S/N', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Breaker', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'CT Ratio', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Insp. Breaker', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Insp. CT', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Status', bold: true, fontSize: 8, color: '#ffffff' },
+                  { text: 'Premises', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Meter S/N', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Breaker', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'CT Ratio', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Insp. Breaker', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Insp. CT', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Status', bold: true, fontSize: 9, color: '#ffffff' },
                 ],
                 // Data rows
                 ...assetSchedule.map((row, idx) => {
@@ -562,16 +562,17 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
                                       row.status === 'discrepancy' ? '#dc2626' : '#9ca3af';
                   const statusText = row.status === 'verified' ? '✓ Verified' : 
                                      row.status === 'discrepancy' ? '✗ Discrepancy' : '○ Pending';
-                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
+                  // Alternating row colors for readability
+                  const bgColor = idx % 2 === 0 ? '#f9fafb' : null;
                   
                   return [
-                    { text: row.premisesId, fontSize: 7, fillColor: bgColor },
-                    { text: row.meterSerial, fontSize: 7, fillColor: bgColor },
-                    { text: row.breakerSize, fontSize: 7, fillColor: bgColor },
-                    { text: row.ctRatio, fontSize: 7, fillColor: bgColor },
-                    { text: row.inspectedBreaker, fontSize: 7, fillColor: bgColor, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
-                    { text: row.inspectedCT, fontSize: 7, fillColor: bgColor, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
-                    { text: statusText, fontSize: 7, color: statusColor, bold: true, fillColor: bgColor },
+                    { text: row.premisesId, fontSize: 8, fillColor: bgColor },
+                    { text: row.meterSerial, fontSize: 8, fillColor: bgColor },
+                    { text: row.breakerSize, fontSize: 8, fillColor: bgColor },
+                    { text: row.ctRatio, fontSize: 8, fillColor: bgColor },
+                    { text: row.inspectedBreaker, fontSize: 8, fillColor: bgColor, color: row.discrepancyFields.includes('Breaker') ? '#dc2626' : '#374151' },
+                    { text: row.inspectedCT, fontSize: 8, fillColor: bgColor, color: row.discrepancyFields.includes('CT Ratio') ? '#dc2626' : '#374151' },
+                    { text: statusText, fontSize: 8, color: statusColor, bold: true, fillColor: bgColor },
                   ];
                 }),
               ];
@@ -579,18 +580,18 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               content.push({
                 table: {
                   headerRows: 1,
-                  // Distribute columns evenly: wider Premises, equal rest
-                  widths: ['20%', '14%', '12%', '12%', '14%', '12%', '16%'],
+                  // Optimized widths: Premises widest (25%), then evenly distributed for other columns
+                  widths: ['25%', '12%', '11%', '11%', '13%', '11%', '17%'],
                   body: tableBody,
                 },
                 layout: {
                   hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
                   vLineWidth: () => 0,
                   hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 6,
-                  paddingRight: () => 6,
-                  paddingTop: () => 4,
-                  paddingBottom: () => 4,
+                  paddingLeft: () => 8,
+                  paddingRight: () => 8,
+                  paddingTop: () => 6,
+                  paddingBottom: () => 6,
                   fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
                 },
                 margin: [0, 0, 0, 12],
@@ -626,26 +627,27 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               });
               
               const tableBody = [
-                // Header row
+                // Header row with consistent font size
                 [
-                  { text: 'Section', bold: true, fontSize: 8, color: '#ffffff' },
-                  { text: 'Total', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
-                  { text: 'Done', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
-                  { text: 'N/A', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
-                  { text: 'Progress', bold: true, fontSize: 8, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'Section', bold: true, fontSize: 9, color: '#ffffff' },
+                  { text: 'Total', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'Done', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'N/A', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
+                  { text: 'Progress', bold: true, fontSize: 9, color: '#ffffff', alignment: 'center' as const },
                 ],
                 // Data rows
                 ...fortressMetrics.sections.map((section, idx) => {
                   const progressColor = section.progressPercent >= 80 ? '#16a34a' : 
                                        section.progressPercent >= 50 ? '#ea580c' : '#dc2626';
-                  const bgColor = idx % 2 === 1 ? '#f9fafb' : null;
+                  // Alternating row colors starting from first data row
+                  const bgColor = idx % 2 === 0 ? '#f9fafb' : null;
                   
                   return [
-                    { text: section.shortName, fontSize: 8, fillColor: bgColor },
-                    { text: section.totalItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor },
-                    { text: section.completedItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, color: '#16a34a' },
-                    { text: section.notApplicableItems.toString(), fontSize: 8, alignment: 'center' as const, fillColor: bgColor, color: '#6b7280' },
-                    { text: `${section.progressPercent}%`, fontSize: 8, alignment: 'center' as const, bold: true, color: progressColor, fillColor: bgColor },
+                    { text: section.shortName, fontSize: 9, fillColor: bgColor },
+                    { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor },
+                    { text: section.completedItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor, color: '#16a34a' },
+                    { text: section.notApplicableItems.toString(), fontSize: 9, alignment: 'center' as const, fillColor: bgColor, color: '#6b7280' },
+                    { text: `${section.progressPercent}%`, fontSize: 9, alignment: 'center' as const, bold: true, color: progressColor, fillColor: bgColor },
                   ];
                 }),
               ];
@@ -653,17 +655,17 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               content.push({
                 table: {
                   headerRows: 1,
-                  widths: ['*', 50, 50, 50, 60],
+                  widths: ['*', 55, 55, 55, 65],
                   body: tableBody,
                 },
                 layout: {
                   hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
                   vLineWidth: () => 0,
                   hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 6,
-                  paddingRight: () => 6,
-                  paddingTop: () => 4,
-                  paddingBottom: () => 4,
+                  paddingLeft: () => 8,
+                  paddingRight: () => 8,
+                  paddingTop: () => 6,
+                  paddingBottom: () => 6,
                   fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
                 },
                 margin: [0, 0, 0, 12],
