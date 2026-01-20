@@ -216,7 +216,7 @@ function generatePageHeader(title: string, accentColor: string): string {
 
 function generatePageFooter(pageNum: number, totalPages: string, generatedAt: string): string {
   return `
-    <table style="width: 100%; position: absolute; bottom: 15mm; left: 15mm; right: 15mm; border-top: 1px solid ${COLORS.border}; padding-top: 8px; font-size: 8pt; color: ${COLORS.textMuted};">
+    <table style="width: calc(100% - 36mm); position: absolute; bottom: 10mm; left: 18mm; right: 18mm; border-top: 1px solid ${COLORS.border}; padding-top: 6px; font-size: 8pt; color: ${COLORS.textMuted};">
       <tr>
         <td style="width: 33%;">CONFIDENTIAL - For authorized use only</td>
         <td style="width: 33%; text-align: center;">Page ${pageNum} of ${totalPages}</td>
