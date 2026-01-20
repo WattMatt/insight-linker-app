@@ -685,25 +685,52 @@ Deno.serve(async (req) => {
       );
     }
 
-    console.log('PDF generated successfully');
+    console.log('PDF generated successfully, uploading to storage...');
 
-    // Return the PDF as base64 - chunked encoding
+    // Get PDF as buffer
     const pdfBuffer = await pdfResponse.arrayBuffer();
     const uint8Array = new Uint8Array(pdfBuffer);
     
-    let binary = '';
-    const chunkSize = 8192;
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.subarray(i, Math.min(i + chunkSize, uint8Array.length));
-      binary += String.fromCharCode.apply(null, Array.from(chunk));
+    // Create Supabase client for storage upload
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    
+    // Generate filename with timestamp
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const sanitizedSiteName = body.siteName.replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `Site_Summary_Report_${sanitizedSiteName}_${timestamp}.pdf`;
+    const storagePath = `site-reports/${body.siteId}/${filename}`;
+    
+    // Upload to Supabase Storage (documents bucket)
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from('documents')
+      .upload(storagePath, uint8Array, {
+        contentType: 'application/pdf',
+        upsert: false,
+      });
+    
+    if (uploadError) {
+      console.error('Storage upload error:', uploadError);
+      return new Response(
+        JSON.stringify({ error: 'Failed to save PDF to storage', details: uploadError.message }),
+        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
-    const base64Pdf = btoa(binary);
+    
+    // Get public URL
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(storagePath);
+    
+    console.log('PDF saved to storage:', urlData.publicUrl);
 
     return new Response(
       JSON.stringify({ 
         success: true, 
-        pdf: base64Pdf,
-        filename: `${body.siteName.replace(/[^a-zA-Z0-9]/g, '_')}_Report.pdf`
+        url: urlData.publicUrl,
+        filename,
+        storagePath,
       }),
       { 
         status: 200, 
