@@ -208,18 +208,28 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Calculate the target page width to fit the container
   const calculatedPageWidth = useMemo(() => {
-    // On first load, don't set width so we can get original dimensions
-    if (!dimensionsLoaded || originalPdfDimensions.width === 0) return undefined;
+    // Always use the scaled width once we have original dimensions
+    if (originalPdfDimensions.width === 0) return undefined;
     return originalPdfDimensions.width * displayScale;
-  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded]);
+  }, [originalPdfDimensions.width, displayScale]);
 
-  // Handle PDF page load to get original dimensions (only on first load)
+  // Calculate the scaled height for the PDF container
+  const calculatedPageHeight = useMemo(() => {
+    if (originalPdfDimensions.height === 0) return undefined;
+    return originalPdfDimensions.height * displayScale;
+  }, [originalPdfDimensions.height, displayScale]);
+
+  // Handle PDF page load to get original dimensions
   const handlePageLoad = (page: any) => {
-    if (!dimensionsLoaded) {
-      // First load - capture original dimensions
+    // Always capture the original viewport dimensions (unscaled)
+    const viewport = page.getViewport({ scale: 1 });
+    const originalWidth = viewport.width;
+    const originalHeight = viewport.height;
+    
+    if (!dimensionsLoaded || originalPdfDimensions.width !== originalWidth) {
       setOriginalPdfDimensions({
-        width: page.width,
-        height: page.height,
+        width: originalWidth,
+        height: originalHeight,
       });
       setDimensionsLoaded(true);
     }
@@ -1005,11 +1015,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         >
           <div 
             ref={contentRef}
-            className={`relative ${isEditMode ? 'inline-block p-4' : 'flex justify-center items-start p-2'}`}
+            className={`relative ${isEditMode ? 'inline-block p-4' : 'flex justify-center items-center w-full h-full'}`}
             onClick={isEditMode ? handleSchematicClick : undefined}
+            style={!isEditMode ? { minHeight: CONTAINER_HEIGHT } : undefined}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
-            <div className="relative inline-block">
+            <div 
+              className="relative"
+              style={{
+                width: calculatedPageWidth,
+                height: calculatedPageHeight,
+              }}
+            >
               <Document
                 file={schematic.file_url}
                 onLoadSuccess={({ numPages }) => setNumPages(numPages)}
