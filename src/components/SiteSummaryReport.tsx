@@ -573,17 +573,18 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
               content.push({
                 table: {
                   headerRows: 1,
-                  widths: ['auto', 'auto', 'auto', 'auto', 'auto', 'auto', 'auto'],
+                  // Distribute columns evenly: wider Premises, equal rest
+                  widths: ['20%', '14%', '12%', '12%', '14%', '12%', '16%'],
                   body: tableBody,
                 },
                 layout: {
                   hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
                   vLineWidth: () => 0,
                   hLineColor: () => '#e5e7eb',
-                  paddingLeft: () => 4,
-                  paddingRight: () => 4,
-                  paddingTop: () => 3,
-                  paddingBottom: () => 3,
+                  paddingLeft: () => 6,
+                  paddingRight: () => 6,
+                  paddingTop: () => 4,
+                  paddingBottom: () => 4,
                   fillColor: (rowIndex: number) => rowIndex === 0 ? '#1e3a5f' : null,
                 },
                 margin: [0, 0, 0, 12],
