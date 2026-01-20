@@ -181,15 +181,21 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     // Generate QR URL if not stored - use public subsection URL
     const qrUrl = sub.qr_code_url || `${qrBaseUrl}/public/subsections/${sub.id}`;
     
-    // Find matching asset by premises_id containing the subsection name
+    // Find matching asset by premises_id or trade_as containing the subsection name
     // premises_id may have format like "YA - KIOSK" while subsection name is just "KIOSK"
+    // trade_as may have format like "YA - KFC" while subsection name is just "KFC"
     const subNameNorm = sub.name?.toLowerCase().trim() || '';
     const matchingAsset = assets.find(a => {
       const premisesNorm = a.premises_id?.toLowerCase().trim() || '';
-      // Check for exact match or if premises_id ends with the subsection name
-      return premisesNorm === subNameNorm || 
+      const tradeAsNorm = a.trade_as?.toLowerCase().trim() || '';
+      // Check for exact match or if premises_id/trade_as ends with the subsection name
+      const matchesPremises = premisesNorm === subNameNorm || 
              premisesNorm.endsWith(` - ${subNameNorm}`) ||
              premisesNorm.endsWith(`-${subNameNorm}`);
+      const matchesTradeAs = tradeAsNorm === subNameNorm ||
+             tradeAsNorm.endsWith(` - ${subNameNorm}`) ||
+             tradeAsNorm.endsWith(`-${subNameNorm}`);
+      return matchesPremises || matchesTradeAs;
     });
     
     return {
