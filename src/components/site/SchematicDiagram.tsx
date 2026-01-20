@@ -1161,23 +1161,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           </div>
         )}
 
-        {/* Legend - compact footer */}
-        <div className="px-6 py-2 border-t bg-muted/30 flex items-center gap-6 text-xs text-muted-foreground">
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded border-2 border-primary bg-primary/20" />
-            <span>Linked</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <div className="h-3 w-3 rounded border-2 border-destructive bg-destructive/20" />
-            <span>Not linked</span>
-          </div>
-          {!isEditMode && (
+        {/* Legend - Only visible in Edit Mode */}
+        {isEditMode && (
+          <div className="px-6 py-2 border-t bg-muted/30 flex items-center gap-6 text-xs text-muted-foreground">
             <div className="flex items-center gap-1.5">
-              <Eye className="h-3 w-3" />
-              <span>Click block to view subsection</span>
+              <div className="h-3 w-3 rounded border-2 border-primary bg-primary/20" />
+              <span>Linked</span>
             </div>
-          )}
-        </div>
+            <div className="flex items-center gap-1.5">
+              <div className="h-3 w-3 rounded border-2 border-destructive bg-destructive/20" />
+              <span>Not linked</span>
+            </div>
+          </div>
+        )}
       </CardContent>
 
       {/* Edit Block Dialog */}
