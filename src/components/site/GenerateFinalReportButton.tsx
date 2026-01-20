@@ -216,15 +216,82 @@ export function GenerateFinalReportButton({
         count,
       }));
 
-      // Calculate asset verification
+      // Calculate asset verification with schedule
+      const assetSchedule = assets.map(asset => {
+        // Find matching subsection or inspection data
+        const assetNameNorm = asset.premises_id?.toLowerCase().trim() || '';
+        const tradeAsNorm = asset.trade_as?.toLowerCase().trim() || '';
+        
+        // Check inspections for inspected values
+        let inspectedSerial = '';
+        let inspectedBreaker = '';
+        let status: 'verified' | 'discrepancy' | 'pending' = 'pending';
+        
+        inspections.forEach(insp => {
+          const jsonData = insp.json_data as any;
+          if (jsonData?.tenants && Array.isArray(jsonData.tenants)) {
+            jsonData.tenants.forEach((tenant: any) => {
+              const tenantName = tenant.name?.toLowerCase().trim() || '';
+              if (tenantName === assetNameNorm || tenantName === tradeAsNorm) {
+                inspectedSerial = tenant.meterSerial || tenant.meter_serial || '';
+                inspectedBreaker = tenant.breakerSize || tenant.breaker_size || '';
+                
+                // Determine verification status
+                const serialMatches = (inspectedSerial && asset.meter_serial_number && 
+                  inspectedSerial.toLowerCase() === asset.meter_serial_number.toLowerCase());
+                const breakerMatches = (inspectedBreaker && asset.breaker_size && 
+                  inspectedBreaker.toLowerCase() === asset.breaker_size.toLowerCase());
+                
+                if (inspectedSerial || inspectedBreaker) {
+                  status = (serialMatches || breakerMatches) ? 'verified' : 'discrepancy';
+                }
+              }
+            });
+          }
+        });
+        
+        return {
+          premisesId: asset.premises_id || asset.trade_as || '-',
+          meterSerial: asset.meter_serial_number || '-',
+          breakerSize: asset.breaker_size || '-',
+          ctRatio: asset.ct_ratio || '-',
+          inspectedSerial: inspectedSerial || '-',
+          inspectedBreaker: inspectedBreaker || '-',
+          status: status as 'verified' | 'discrepancy' | 'pending',
+        };
+      });
+
+      // Count statuses manually to avoid TypeScript narrowing issues
+      let verifiedCount = 0;
+      let discrepancyCount = 0;
+      let pendingCount = 0;
+      assetSchedule.forEach(a => {
+        if (a.status === 'verified') verifiedCount++;
+        else if (a.status === 'discrepancy') discrepancyCount++;
+        else pendingCount++;
+      });
+
       const assetVerification = {
         totalAssets: assets.length,
-        verified: 0,
-        discrepancies: 0,
-        pending: assets.length,
+        verified: verifiedCount,
+        discrepancies: discrepancyCount,
+        pending: pendingCount,
+        schedule: assetSchedule,
       };
 
-      // Calculate fortress checklist
+      // Calculate fortress checklist with section breakdown
+      const sectionGroups: Record<string, { total: number; completed: number }> = {};
+      checklist.forEach(item => {
+        const section = item.section_name || 'General';
+        if (!sectionGroups[section]) {
+          sectionGroups[section] = { total: 0, completed: 0 };
+        }
+        sectionGroups[section].total++;
+        if (item.is_checked === true || item.status === 'completed') {
+          sectionGroups[section].completed++;
+        }
+      });
+      
       const completed = checklist.filter(c => c.is_checked === true || c.status === 'completed').length;
       const pending = checklist.filter(c => c.is_checked === false && c.status !== 'n/a').length;
       const notApplicable = checklist.filter(c => c.status === 'n/a').length;
@@ -233,6 +300,10 @@ export function GenerateFinalReportButton({
         completed,
         pending,
         notApplicable,
+        sections: Object.entries(sectionGroups).map(([name, data]) => ({
+          name,
+          progress: Math.round((data.completed / Math.max(data.total, 1)) * 100),
+        })),
       };
 
       // Calculate health metrics
