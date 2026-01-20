@@ -519,72 +519,64 @@ async function generateSubsectionCard(sub: SubsectionData, accentColor: string, 
   }).join('');
 
   return `
-    <div style="border: 1px solid ${COLORS.border}; border-radius: 10px; overflow: hidden; margin-bottom: 15px; page-break-inside: avoid;">
-      <!-- Card Header -->
-      <table style="width: 100%; background: linear-gradient(135deg, ${accentColor}, ${adjustColor(accentColor, -20)}); color: white;">
-        <tr>
-          <td style="padding: 15px 18px; vertical-align: top;">
-            <div style="font-size: 15pt; font-weight: 700; margin-bottom: 4px;">${sub.name}</div>
-            ${sub.category ? `<div style="font-size: 10pt; opacity: 0.9;">${sub.category}</div>` : ''}
-            ${sub.tenantName && sub.tenantName !== sub.name ? `<div style="font-size: 9pt; opacity: 0.8; margin-top: 2px;">${sub.tenantName}</div>` : ''}
-          </td>
-          <td style="width: 85px; padding: 12px; vertical-align: top; text-align: right;">
-            ${qrCodeDataUri ? `
-              <div style="background: white; border-radius: 6px; padding: 5px; display: inline-block;">
-                <img src="${qrCodeDataUri}" style="width: 65px; height: 65px;" />
-              </div>
-            ` : `
-              <div style="background: white; border-radius: 6px; padding: 12px 8px; text-align: center;">
-                <span style="font-size: 7pt; color: ${COLORS.textMuted};">No QR</span>
-              </div>
-            `}
-          </td>
-        </tr>
-      </table>
+    <div style="border: 1px solid ${COLORS.border}; border-radius: 8px; overflow: hidden; margin-bottom: 12px; page-break-inside: avoid; position: relative;">
+      <!-- QR Code positioned top-right -->
+      ${qrCodeDataUri ? `
+        <div style="position: absolute; top: 8px; right: 8px; background: white; border-radius: 4px; padding: 4px; box-shadow: 0 1px 3px rgba(0,0,0,0.1); z-index: 10;">
+          <img src="${qrCodeDataUri}" style="width: 55px; height: 55px; display: block;" />
+        </div>
+      ` : ''}
+      
+      <!-- Card Header - Compact -->
+      <div style="background: ${accentColor}; color: white; padding: 8px 14px; padding-right: 75px;">
+        <div style="font-size: 11pt; font-weight: 600; line-height: 1.3;">${sub.name}</div>
+        ${sub.category ? `<span style="font-size: 8pt; opacity: 0.85;">${sub.category}</span>` : ''}
+        ${sub.tenantName && sub.tenantName !== sub.name ? `<span style="font-size: 8pt; opacity: 0.75; margin-left: 8px;">${sub.tenantName}</span>` : ''}
+      </div>
       
       <!-- Card Body -->
-      <table style="width: 100%; padding: 15px 18px;">
+      <table style="width: 100%; padding: 10px 14px;">
         <tr>
-          <td style="width: 120px; font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">COC Status:</td>
-          <td style="padding: 5px 0;">
-            <span style="display: inline-block; background: ${cocStyle.bg}; color: ${cocStyle.color}; padding: 4px 12px; border-radius: 12px; font-size: 9pt; font-weight: 600;">${cocStyle.text}</span>
+          <td style="width: 90px; font-size: 9pt; color: ${COLORS.textMuted}; padding: 3px 0;">COC Status:</td>
+          <td style="padding: 3px 0;">
+            <span style="display: inline-block; background: ${cocStyle.bg}; color: ${cocStyle.color}; padding: 2px 10px; border-radius: 10px; font-size: 8pt; font-weight: 600;">${cocStyle.text}</span>
           </td>
         </tr>
         ${sub.cocNumber ? `
           <tr>
-            <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">COC #:</td>
-            <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">${sub.cocNumber}</td>
+            <td style="font-size: 9pt; color: ${COLORS.textMuted}; padding: 3px 0;">COC #:</td>
+            <td style="font-size: 9pt; color: ${COLORS.text}; padding: 3px 0;">${sub.cocNumber}</td>
           </tr>
         ` : ''}
         ${sub.breakerSize ? `
           <tr>
-            <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">Breaker Size:</td>
-            <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">${sub.breakerSize}</td>
+            <td style="font-size: 9pt; color: ${COLORS.textMuted}; padding: 3px 0;">Breaker Size:</td>
+            <td style="font-size: 9pt; color: ${COLORS.text}; padding: 3px 0;">${sub.breakerSize}</td>
           </tr>
         ` : ''}
         <tr>
-          <td style="font-size: 10pt; color: ${COLORS.textMuted}; padding: 5px 0;">Metering:</td>
-          <td style="font-size: 10pt; color: ${COLORS.text}; padding: 5px 0;">
-            ${sub.meterSerialNumber ? `Installed  <strong>S/N:</strong> ${sub.meterSerialNumber}` : 'N/A'}
-            ${sub.ctRatio ? `  <strong>CT:</strong> ${sub.ctRatio}` : ''}
+          <td style="font-size: 9pt; color: ${COLORS.textMuted}; padding: 3px 0;">Metering:</td>
+          <td style="font-size: 9pt; color: ${COLORS.text}; padding: 3px 0;">
+            ${sub.meterSerialNumber ? `S/N: ${sub.meterSerialNumber}` : 'N/A'}
+            ${sub.ctRatio ? ` | CT: ${sub.ctRatio}` : ''}
           </td>
         </tr>
       </table>
       
       <!-- Snags Section -->
-      <div style="border-top: 1px solid ${COLORS.border}; padding: 12px 18px;">
-        <div style="font-size: 10pt; font-weight: 600; margin-bottom: 8px;">Snags:</div>
+      <div style="border-top: 1px solid ${COLORS.border}; padding: 8px 14px;">
+        <div style="font-size: 9pt; font-weight: 600; margin-bottom: 5px; color: ${COLORS.text};">Snags:</div>
         ${openSnags.length > 0 ? `
           <table style="width: 100%;">
             ${snagRows}
-            ${openSnags.length > 3 ? `<tr><td colspan="2" style="font-size: 8pt; color: ${COLORS.textMuted}; padding-top: 4px;">+ ${openSnags.length - 3} more snags</td></tr>` : ''}
+            ${openSnags.length > 3 ? `<tr><td colspan="2" style="font-size: 7pt; color: ${COLORS.textMuted}; padding-top: 3px;">+ ${openSnags.length - 3} more</td></tr>` : ''}
           </table>
-        ` : `<span style="color: ${COLORS.success}; font-size: 10pt;">No open snags</span>`}
+        ` : `<span style="color: ${COLORS.success}; font-size: 9pt;">No open snags</span>`}
       </div>
       
       <!-- Card Footer -->
-      <div style="background: ${complianceColor}; padding: 10px 18px;">
-        <span style="font-size: 10pt; font-weight: 600; color: ${complianceTextColor};">Compliance: ${complianceText}</span>
+      <div style="background: ${complianceColor}; padding: 6px 14px;">
+        <span style="font-size: 9pt; font-weight: 600; color: ${complianceTextColor};">${complianceText}</span>
       </div>
     </div>
   `;
