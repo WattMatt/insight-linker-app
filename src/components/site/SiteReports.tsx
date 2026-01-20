@@ -55,6 +55,7 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
     const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
     const [deleting, setDeleting] = useState<string | null>(null);
     const [reportSections, setReportSections] = useState<ReportSection[]>(getDefaultReportSections);
+    const [subsections, setSubsections] = useState<any[]>([]);
 
     const fetchReports = async () => {
         try {
@@ -80,7 +81,42 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
 
     useEffect(() => {
         fetchReports();
+        fetchSubsections();
     }, [site.id]);
+
+    const fetchSubsections = async () => {
+        try {
+            const { data, error } = await supabase
+                .from('subsections')
+                .select(`
+                    id,
+                    name,
+                    tenant_name,
+                    category,
+                    coc_status,
+                    coc_number,
+                    coc_type,
+                    coc_issue_date,
+                    meter_serial_number,
+                    ct_ratio,
+                    is_compliant,
+                    qr_code_url,
+                    snags (
+                        id,
+                        title,
+                        status,
+                        risk_level,
+                        description
+                    )
+                `)
+                .eq('site_id', site.id);
+
+            if (error) throw error;
+            setSubsections(data || []);
+        } catch (error) {
+            console.error("Error fetching subsections:", error);
+        }
+    };
 
     const handleSectionToggle = (sectionId: string, enabled: boolean) => {
         setReportSections(prev => 
@@ -170,9 +206,9 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                             site={{
                                 id: site.id,
                                 name: site.name,
-                                client: { name: site.clients.name }
+                                client: { name: site.clients.name, logo_url: site.client_logo_url }
                             }}
-                            subsections={[]}
+                            subsections={subsections}
                         />
                         
                         {/* Report Settings */}
