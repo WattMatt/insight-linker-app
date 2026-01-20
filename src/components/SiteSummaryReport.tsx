@@ -230,30 +230,38 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     // Sort sections using spec function
     const sortedSections = getEnabledSections(sections);
 
-    // Fetch all necessary data
-    const [siteRes, subsectionsRes, inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes, checklistRes] = await Promise.all([
+    // Fetch site and subsection data first to get subsection IDs
+    const [siteRes, subsectionsRes] = await Promise.all([
       supabase.from("sites").select("*, clients(name, logo_url)").eq("id", siteId).single(),
       supabase.from("subsections").select("*").eq("site_id", siteId).order("category", { ascending: true }),
+    ]);
+
+    if (siteRes.error) throw siteRes.error;
+    const site = siteRes.data;
+    const subsections = subsectionsRes.data || [];
+    const subsectionIds = subsections.map(s => s.id);
+
+    // Fetch remaining data with proper filtering
+    const [inspectionsRes, docsRes, subsectionDocsRes, settingsRes, assetsRes, checklistRes] = await Promise.all([
       supabase.from("inspections").select("*").eq("site_id", siteId),
       supabase.from("site_documents").select("*, site_document_categories(name)").eq("site_id", siteId),
-      supabase.from("subsection_documents").select("subsection_id, file_name, category_id, document_categories(name)"),
+      // CRITICAL FIX: Filter subsection documents by subsection IDs belonging to this site
+      subsectionIds.length > 0 
+        ? supabase.from("subsection_documents").select("subsection_id, file_name, category_id, document_categories(name)").in("subsection_id", subsectionIds)
+        : Promise.resolve({ data: [], error: null }),
       supabase.from("settings").select("qr_base_url").single(),
       supabase.from("site_assets").select("id, meter_serial_number, ct_ratio, breaker_size, premises_id, asset_category").eq("site_id", siteId).eq("asset_category", "electrical_meter"),
       supabase.from("site_marking_checklist").select("section_name, is_checked, status").eq("site_id", siteId),
     ]);
 
-    if (siteRes.error) throw siteRes.error;
-
-    const site = siteRes.data;
-    const subsections = subsectionsRes.data || [];
     const allInspections = inspectionsRes.data || [];
     const siteAssets = assetsRes.data || [];
     const qrBaseUrl = settingsRes.data?.qr_base_url || 'https://watsonmattheus.com';
 
-    // Fetch snags separately
-    const subsectionIds = subsections.map(s => s.id);
     // Fetch snags with full details for card rendering
-    const snagsRes = await supabase.from("snags").select("id, subsection_id, title, status, risk_level, description").in("subsection_id", subsectionIds);
+    const snagsRes = subsectionIds.length > 0 
+      ? await supabase.from("snags").select("id, subsection_id, title, status, risk_level, description").in("subsection_id", subsectionIds)
+      : { data: [], error: null };
     const allSnags = snagsRes.data || [];
 
     // Get COC validations
@@ -288,10 +296,23 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     // Build content based on template sections - USING SPEC CONSTANTS
     const content: any[] = [];
 
+    // Debug: Log data availability for conditional sections
+    console.log('[SiteSummaryReport] Section Data Availability:', {
+      subsections: subsections.length,
+      siteAssets: siteAssets.length,
+      assetMetrics,
+      fortressChecklistItems: checklistItems.length,
+      fortressMetrics,
+      siteDocuments: docsRes.data?.length || 0,
+      subsectionDocuments: subsectionDocsRes.data?.length || 0,
+    });
+
     // Process each section in order, only if enabled
     for (const section of sortedSections) {
       const spec = findSectionSpec(section.id);
       const title = getSectionTitle(section);
+      
+      console.log(`[SiteSummaryReport] Processing section: ${section.id} (order: ${section.order})`);
 
       switch (section.id) {
         case "health-metrics":
@@ -329,6 +350,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
           const siteDocsData = docsRes.data || [];
           const subsectionDocsData = subsectionDocsRes.data || [];
           const docMetrics = calculateDocumentMetrics(siteDocsData, subsectionDocsData);
+          console.log(`[SiteSummaryReport] documents-summary: ${docMetrics.totalDocuments} docs, ${docMetrics.categories.length} categories`);
           
           if (docMetrics.totalDocuments > 0) {
             content.push(createSectionHeader(title));
@@ -478,6 +500,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
         case "asset-verification":
         case "asset-summary": // Support legacy section ID
+          console.log(`[SiteSummaryReport] asset-verification: ${assetMetrics.totalAssets} assets, verified=${assetMetrics.verified}, discrepancies=${assetMetrics.discrepancies}`);
           if (assetMetrics.totalAssets > 0) {
             content.push(createSectionHeader(title, 'primary'));
             content.push(createKpiRow(
@@ -563,6 +586,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
           break;
 
         case "fortress-checklist":
+          console.log(`[SiteSummaryReport] fortress-checklist: ${fortressMetrics.totalItems} items, progress=${fortressMetrics.overallProgress}%`);
           if (fortressMetrics.totalItems > 0) {
             if (spec?.pageBreakBefore) {
               content.push({ text: '', pageBreak: 'before' });
