@@ -680,7 +680,7 @@ export function createKpiRow(
       stack: [createKpiCard(kpi.value, kpi.label, kpi.color)],
       margin: [5, 0, 5, 0],
     })),
-    margin: [0, 10, 0, 15],
+    margin: [0, 6, 0, 10],
   };
 }
 
