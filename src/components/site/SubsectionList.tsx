@@ -256,12 +256,15 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                     const primaryStatus = sub.coc_status;
                                     const isPrimaryApproved = primaryStatus === "Approved" || primaryStatus === "Valid" || primaryStatus === "Pass";
                                     
-                                    // If any validation failed (including supplementary), show as failed
+                                    // If any validation failed (including supplementary), show prominent warning
                                     if (hasFailedValidation) {
                                         return (
-                                            <Badge variant="destructive" title="One or more COC validations failed">
-                                                Non-Compliant
-                                            </Badge>
+                                            <div className="flex items-center gap-1.5">
+                                                <AlertTriangle className="h-4 w-4 text-destructive animate-pulse" />
+                                                <Badge variant="destructive" className="font-medium" title="COC validation failed - requires attention">
+                                                    Validation Failed
+                                                </Badge>
+                                            </div>
                                         );
                                     }
                                     
@@ -374,8 +377,9 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                     
                                     if (hasFailedValidation) {
                                         return (
-                                            <Badge variant="destructive" className="text-xs" title="One or more COC validations failed">
-                                                COC: Non-Compliant
+                                            <Badge variant="destructive" className="text-xs flex items-center gap-1 font-medium" title="COC validation failed - requires attention">
+                                                <AlertTriangle className="h-3 w-3 animate-pulse" />
+                                                Validation Failed
                                             </Badge>
                                         );
                                     }
