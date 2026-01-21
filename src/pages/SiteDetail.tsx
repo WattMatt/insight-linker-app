@@ -579,40 +579,40 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
-          <TabsTrigger value="schematic" className="gap-2">
-            <Workflow className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Schematic Overview</span>
-          </TabsTrigger>
-          <TabsTrigger value="overview" className="gap-2">
+        <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1 overflow-visible">
+          <TabsTrigger value="overview" className="gap-2 shrink-0">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Dashboard</span>
           </TabsTrigger>
-          <TabsTrigger value="asset-verification" className="gap-2">
+          <TabsTrigger value="schematic" className="gap-2 shrink-0">
+            <Workflow className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Schematic Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="asset-verification" className="gap-2 shrink-0">
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Asset Verification</span>
           </TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-2">
+          <TabsTrigger value="compliance" className="gap-2 shrink-0">
             <Shield className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Compliance</span>
           </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-2">
+          <TabsTrigger value="documents" className="gap-2 shrink-0">
             <FileText className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Documents</span>
           </TabsTrigger>
-          <TabsTrigger value="subsections" className="gap-2">
+          <TabsTrigger value="subsections" className="gap-2 shrink-0">
             <Layers className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Subsections</span>
           </TabsTrigger>
-          <TabsTrigger value="qr-analytics" className="gap-2">
+          <TabsTrigger value="qr-analytics" className="gap-2 shrink-0">
             <QrCode className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">QR Codes</span>
           </TabsTrigger>
-          <TabsTrigger value="fortress-checklist" className="gap-2">
+          <TabsTrigger value="fortress-checklist" className="gap-2 shrink-0">
             <ClipboardCheck className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Fortress Checklist</span>
           </TabsTrigger>
-          <TabsTrigger value="reports" className="gap-2">
+          <TabsTrigger value="reports" className="gap-2 shrink-0">
             <FileBarChart className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Reports</span>
           </TabsTrigger>
