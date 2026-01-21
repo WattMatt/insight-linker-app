@@ -54,6 +54,20 @@ const clauseKeywords: Record<string, string[]> = {
   '5.2': ['registered person', 'registration certificate', 'accredited'],
 };
 
+// Visual highlight box positions for each clause on the PDF page (percentage-based for responsiveness)
+// Format: { top: %, left: %, width: %, height: % } relative to page dimensions
+const clauseHighlightBoxes: Record<string, { page: number; top: number; left: number; width: number; height: number }> = {
+  '8.6': { page: 2, top: 55, left: 5, width: 90, height: 8 }, // Insulation Resistance section
+  '8.5': { page: 2, top: 35, left: 5, width: 90, height: 15 }, // Earth Loop Impedance section
+  '8.4': { page: 2, top: 25, left: 5, width: 90, height: 8 }, // Earth Continuity section
+  '8.7': { page: 2, top: 70, left: 5, width: 90, height: 12 }, // RCD Testing section
+  '6.1': { page: 1, top: 25, left: 5, width: 90, height: 15 }, // Installation Details
+  '6.2': { page: 1, top: 45, left: 5, width: 90, height: 10 }, // Circuit Schedule
+  '7.1': { page: 1, top: 10, left: 5, width: 90, height: 12 }, // Inspection Checks
+  '5.1': { page: 1, top: 5, left: 5, width: 45, height: 5 }, // Certificate Details
+  '5.2': { page: 1, top: 85, left: 5, width: 90, height: 10 }, // Installer Registration
+};
+
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
@@ -124,27 +138,35 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
   }, []);
 
-  // Handle clause click - navigate to relevant page and scroll PDF into view
+  // Handle clause click - navigate to relevant page and scroll PDF into view with visual highlight
   const handleClauseClick = useCallback((clause: string, section?: string) => {
-    setHighlightedClause(prev => {
-      const newHighlight = prev === clause ? null : clause;
-      if (newHighlight) {
-        const { page } = getClauseLocation(clause, section);
-        if (page <= numPages && page > 0) {
-          setPageNumber(page);
-          // Scroll PDF container to top after page change
-          setTimeout(() => {
-            if (containerRef.current) {
-              const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
-              if (scrollContainer) {
-                scrollContainer.scrollTop = 0;
-              }
+    // Always set the highlight (even if clicking the same clause again)
+    setHighlightedClause(clause);
+    
+    // Get target page - prefer the box definition, then section, then fallback
+    const boxInfo = clauseHighlightBoxes[clause];
+    const targetPage = boxInfo?.page || getClauseLocation(clause, section).page;
+    
+    if (targetPage <= numPages && targetPage > 0) {
+      setPageNumber(targetPage);
+      
+      // Scroll PDF container to show the highlighted area after page loads
+      setTimeout(() => {
+        if (containerRef.current) {
+          const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
+          if (scrollContainer && boxInfo) {
+            // Calculate scroll position to center the highlight box
+            const containerHeight = scrollContainer.clientHeight;
+            const pageElement = containerRef.current.querySelector('.react-pdf__Page');
+            if (pageElement) {
+              const pageHeight = pageElement.clientHeight;
+              const targetScrollTop = (pageHeight * boxInfo.top / 100) - (containerHeight / 3);
+              scrollContainer.scrollTop = Math.max(0, targetScrollTop);
             }
-          }, 100);
+          }
         }
-      }
-      return newHighlight;
-    });
+      }, 150);
+    }
   }, [getClauseLocation, numPages]);
 
   // Handle mouse wheel zoom (Ctrl+scroll or pinch to zoom, normal scroll to pan)
@@ -239,6 +261,21 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
             50% { 
               background-color: #ff6b6b;
               box-shadow: 0 0 30px 12px rgba(255, 0, 0, 0.8), 0 0 60px 25px rgba(255, 255, 0, 0.6);
+            }
+          }
+          .coc-highlight-box .animate-pulse-highlight {
+            animation: box-pulse 1.2s ease-in-out infinite;
+          }
+          @keyframes box-pulse {
+            0%, 100% { 
+              border-color: #ef4444;
+              background-color: rgba(239, 68, 68, 0.15);
+              box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), inset 0 0 20px rgba(239, 68, 68, 0.3);
+            }
+            50% { 
+              border-color: #dc2626;
+              background-color: rgba(239, 68, 68, 0.3);
+              box-shadow: 0 0 30px 10px rgba(239, 68, 68, 0.5), inset 0 0 30px rgba(239, 68, 68, 0.4);
             }
           }
           .react-pdf__Page__textContent {
@@ -367,20 +404,40 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     }
                     className="flex justify-center"
                   >
-                    <Page
-                      key={`page-${pageNumber}-${highlightedClause}`}
-                      pageNumber={pageNumber}
-                      scale={scale}
-                      renderTextLayer={true}
-                      renderAnnotationLayer={true}
-                      customTextRenderer={customTextRenderer}
-                      className="shadow-lg rounded overflow-hidden"
-                      loading={
-                        <div className="flex items-center justify-center h-64">
-                          <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                    <div className="relative">
+                      <Page
+                        key={`page-${pageNumber}-${highlightedClause}`}
+                        pageNumber={pageNumber}
+                        scale={scale}
+                        renderTextLayer={true}
+                        renderAnnotationLayer={true}
+                        customTextRenderer={customTextRenderer}
+                        className="shadow-lg rounded overflow-hidden"
+                        loading={
+                          <div className="flex items-center justify-center h-64">
+                            <Loader2 className="h-6 w-6 animate-spin text-primary" />
+                          </div>
+                        }
+                      />
+                      {/* Visual highlight overlay box */}
+                      {highlightedClause && clauseHighlightBoxes[highlightedClause] && 
+                       clauseHighlightBoxes[highlightedClause].page === pageNumber && (
+                        <div 
+                          className="absolute pointer-events-none coc-highlight-box"
+                          style={{
+                            top: `${clauseHighlightBoxes[highlightedClause].top}%`,
+                            left: `${clauseHighlightBoxes[highlightedClause].left}%`,
+                            width: `${clauseHighlightBoxes[highlightedClause].width}%`,
+                            height: `${clauseHighlightBoxes[highlightedClause].height}%`,
+                          }}
+                        >
+                          <div className="w-full h-full border-4 border-red-500 bg-red-500/20 rounded-lg animate-pulse-highlight" />
+                          <div className="absolute -top-8 left-0 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
+                            ⚠️ Clause {highlightedClause} - Issue Area
+                          </div>
                         </div>
-                      }
-                    />
+                      )}
+                    </div>
                   </Document>
                 ) : isImage ? (
                   <img
