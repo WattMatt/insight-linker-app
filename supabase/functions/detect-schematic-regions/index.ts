@@ -206,23 +206,23 @@ If no 7-row distribution table is near the click: {"found": false}`;
           );
         }
         
-        // Use dimensions exactly as AI returned - these tables are small
-        // Typical size: 3-8% width, 8-15% height
+        // Return percentages directly - client will use CSS % positioning
+        // This ensures consistent alignment regardless of scale/zoom
         let width = parsed.width;
         let height = parsed.height;
         
-        console.log(`[detect-schematic-regions] AI returned dimensions: width=${width}%, height=${height}%`);
+        console.log(`[detect-schematic-regions] AI returned: x=${parsed.x}%, y=${parsed.y}%, width=${width}%, height=${height}%`);
         
-        // Convert percentage-based coordinates to pixel coordinates
+        // Return raw percentages - no conversion to pixels
         result = {
-          x: (parsed.x / 100) * pageWidth,
-          y: (parsed.y / 100) * pageHeight,
-          width: (width / 100) * pageWidth,
-          height: (height / 100) * pageHeight,
+          x: parsed.x,        // top-left X as percentage (0-100)
+          y: parsed.y,        // top-left Y as percentage (0-100)
+          width: width,       // width as percentage (0-100)
+          height: height,     // height as percentage (0-100)
           label: parsed.label || null,
         };
         
-        console.log('[detect-schematic-regions] Final region (pixels):', result);
+        console.log('[detect-schematic-regions] Returning percentages:', result);
       } else {
         console.log('[detect-schematic-regions] No JSON match found in response');
         return new Response(
