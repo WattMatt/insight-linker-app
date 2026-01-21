@@ -580,13 +580,13 @@ const SiteDetail = () => {
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
+          <TabsTrigger value="schematic" className="gap-2">
+            <Workflow className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Overview</span>
+          </TabsTrigger>
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Dashboard</span>
-          </TabsTrigger>
-          <TabsTrigger value="schematic" className="gap-2">
-            <Workflow className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Schematic</span>
           </TabsTrigger>
           <TabsTrigger value="asset-verification" className="gap-2">
             <ShieldCheck className="h-4 w-4 shrink-0" />
