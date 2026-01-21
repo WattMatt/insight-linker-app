@@ -847,14 +847,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (response.data?.found && response.data?.region) {
         const region = response.data.region;
-        // AI returns center coordinates - convert to top-left for block positioning
+        // AI now returns top-left coordinates directly
         finalWidth = region.width;
         finalHeight = region.height;
-        finalX = region.x - (finalWidth / 2);
-        finalY = region.y - (finalHeight / 2);
+        finalX = region.x;
+        finalY = region.y;
         detectedLabel = region.label;
         console.log('[SchematicDiagram] Snapped to detected region:', { 
-          center: { x: region.x, y: region.y },
           topLeft: { x: finalX, y: finalY },
           size: { width: finalWidth, height: finalHeight },
           label: detectedLabel 
