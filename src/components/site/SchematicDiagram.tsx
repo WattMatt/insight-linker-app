@@ -842,28 +842,34 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         },
       });
 
-      let finalX = clickXPercent - (defaultWidthPercent / 2);
-      let finalY = clickYPercent - (defaultHeightPercent / 2);
+      // Always place block centered on where user clicked - this is the reliable behavior
       let finalWidth = defaultWidthPercent;
       let finalHeight = defaultHeightPercent;
       let detectedLabel: string | null = null;
 
+      // If AI found a nearby rectangle, use its SIZE (but not position) for the block
       if (response.data?.found && response.data?.region) {
         const region = response.data.region;
-        // AI returns percentages with top-left coordinates
-        finalX = region.x;
-        finalY = region.y;
-        finalWidth = region.width;
-        finalHeight = region.height;
+        // Only use the detected width/height - position stays at click location
+        finalWidth = region.width || defaultWidthPercent;
+        finalHeight = region.height || defaultHeightPercent;
         detectedLabel = region.label;
-        console.log('[SchematicDiagram] Snapped to detected region (percentages):', { 
-          x: finalX, y: finalY, width: finalWidth, height: finalHeight, label: detectedLabel 
+        console.log('[SchematicDiagram] Using detected size (percentages):', { 
+          width: finalWidth, height: finalHeight, label: detectedLabel 
         });
-        toast.success(`Snapped to: ${detectedLabel || 'detected rectangle'}`);
+        toast.success(`Block sized to: ${detectedLabel || 'detected rectangle'}`);
       } else {
-        console.log('[SchematicDiagram] No region found, placing at click position', response.data);
-        toast.info('No rectangle detected - placed at click position');
+        console.log('[SchematicDiagram] No region found, using default size', response.data);
+        toast.info('Using default block size');
       }
+
+      // Position is ALWAYS centered on click - this is deterministic and reliable
+      let finalX = clickXPercent - (finalWidth / 2);
+      let finalY = clickYPercent - (finalHeight / 2);
+      
+      // Clamp to page bounds
+      finalX = Math.max(0, Math.min(100 - finalWidth, finalX));
+      finalY = Math.max(0, Math.min(100 - finalHeight, finalY));
 
       const blockNumber = blocks.length + 1;
       const blockIdentifier = detectedLabel || `DB-${String(blockNumber).padStart(3, '0')}`;
