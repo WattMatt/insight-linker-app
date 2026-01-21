@@ -29,12 +29,14 @@ Deno.serve(async (req) => {
 
     console.log('[detect-schematic-regions] Smart snap request at:', { clickX, clickY, pageWidth, pageHeight });
 
+    // Try Lovable AI Gateway first (Gemini), fall back to Anthropic
+    const lovableApiKey = Deno.env.get('LOVABLE_API_KEY');
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
-    if (!anthropicApiKey) {
-      console.error('[detect-schematic-regions] ANTHROPIC_API_KEY not configured');
+    if (!lovableApiKey && !anthropicApiKey) {
+      console.error('[detect-schematic-regions] No API keys configured');
       return new Response(
-        JSON.stringify({ error: 'ANTHROPIC_API_KEY not configured' }),
+        JSON.stringify({ error: 'No API keys configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -56,85 +58,132 @@ Deno.serve(async (req) => {
 
     console.log('[detect-schematic-regions] Image data length:', pageImageBase64.length);
 
-    // Use image-based vision API (more reliable than PDF documents)
-    const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
-        max_tokens: 1024,
-        messages: [
-          {
-            role: 'user',
-            content: [
+    const prompt = `Analyze this electrical distribution schematic diagram.
+
+The user clicked at ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
+
+This schematic shows electrical distribution with DATA TABLES containing tenant/equipment info. Each DATA TABLE has:
+- Rows labeled: NO, NAME, AREA, RATING, CABLE, SERIAL, CT
+- Values in each row (like "DB-13C", "KFC", "311m²", etc.)
+- Black border lines forming a rectangular table
+
+Find the DATA TABLE closest to the click position. Return its COMPLETE outer boundary.
+
+DATA TABLES are typically:
+- 6-12% of page width
+- 12-22% of page height
+- Have 7 rows of data
+
+Return ONLY valid JSON:
+{"x": <center X as % 0-100>, "y": <center Y as % 0-100>, "width": <width as %>, "height": <height as %>, "label": "<value from NAME or NO row>"}
+
+If no data table found: {"found": false}`;
+
+    let textContent = '';
+
+    // Try Lovable AI Gateway (Gemini) first
+    if (lovableApiKey) {
+      try {
+        console.log('[detect-schematic-regions] Using Lovable AI Gateway (Gemini)');
+        
+        const lovableResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${lovableApiKey}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash',
+            messages: [
               {
-                type: 'image',
-                source: {
-                  type: 'base64',
-                  media_type: 'image/png',
-                  data: pageImageBase64,
-                },
-              },
-              {
-                type: 'text',
-                text: `You are analyzing an electrical distribution schematic diagram.
-
-The user clicked at approximately ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
-
-This schematic contains RECTANGULAR TABLE BLOCKS representing electrical distribution boards. Each block is a TABLE with:
-- A visible BLACK BORDER forming a RECTANGLE around the entire table
-- Multiple rows including: NO (DB identifier), NAME (tenant name), AREA, RATING, CABLE, SERIAL, CT
-- The ENTIRE TABLE including ALL rows is the block you need to detect
-
-IMPORTANT: You must find the COMPLETE OUTER BOUNDARY of the nearest table block - from the top-left corner of the table border to the bottom-right corner. Do NOT just detect the label text - detect the FULL TABLE RECTANGLE.
-
-The tables are typically about 8-15% of the page width and 15-25% of the page height.
-
-Return the EXACT OUTER boundaries of the nearest complete table block as percentages of the image dimensions.
-
-CRITICAL: Return ONLY a JSON object:
-{
-  "x": <CENTER X position of the FULL table as percentage 0-100>,
-  "y": <CENTER Y position of the FULL table as percentage 0-100>,
-  "width": <FULL WIDTH of the table as percentage of page>,
-  "height": <FULL HEIGHT of the table as percentage of page>,
-  "label": "<the DB number from NO: field OR the NAME field value>"
-}
-
-If no table block is found near the click point, return:
-{"found": false}
-
-Only return valid JSON.`,
+                role: 'user',
+                content: [
+                  {
+                    type: 'image_url',
+                    image_url: {
+                      url: `data:image/png;base64,${pageImageBase64}`,
+                    },
+                  },
+                  {
+                    type: 'text',
+                    text: prompt,
+                  },
+                ],
               },
             ],
-          },
-        ],
-      }),
-    });
+          }),
+        });
 
-    if (!anthropicResponse.ok) {
-      const errorText = await anthropicResponse.text();
-      console.error('[detect-schematic-regions] Anthropic API error:', anthropicResponse.status, errorText);
-      return new Response(
-        JSON.stringify({ error: 'Failed to analyze image', details: errorText, found: false }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
+        if (lovableResponse.ok) {
+          const lovableData = await lovableResponse.json();
+          textContent = lovableData.choices?.[0]?.message?.content || '{}';
+          console.log('[detect-schematic-regions] Gemini response:', textContent);
+        } else {
+          const errorText = await lovableResponse.text();
+          console.warn('[detect-schematic-regions] Lovable AI error:', lovableResponse.status, errorText);
+        }
+      } catch (lovableError) {
+        console.warn('[detect-schematic-regions] Lovable AI failed:', lovableError);
+      }
     }
 
-    const anthropicData = await anthropicResponse.json();
-    console.log('[detect-schematic-regions] API response received');
-    
-    const textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '{}';
-    console.log('[detect-schematic-regions] AI text response:', textContent);
+    // Fall back to Anthropic if Lovable AI didn't work
+    if (!textContent && anthropicApiKey) {
+      console.log('[detect-schematic-regions] Falling back to Anthropic');
+      
+      const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': anthropicApiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 1024,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                {
+                  type: 'image',
+                  source: {
+                    type: 'base64',
+                    media_type: 'image/png',
+                    data: pageImageBase64,
+                  },
+                },
+                {
+                  type: 'text',
+                  text: prompt,
+                },
+              ],
+            },
+          ],
+        }),
+      });
+
+      if (anthropicResponse.ok) {
+        const anthropicData = await anthropicResponse.json();
+        textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '{}';
+        console.log('[detect-schematic-regions] Anthropic response:', textContent);
+      } else {
+        const errorText = await anthropicResponse.text();
+        console.error('[detect-schematic-regions] Anthropic API error:', anthropicResponse.status, errorText);
+      }
+    }
+
+    if (!textContent) {
+      return new Response(
+        JSON.stringify({ found: false, reason: 'AI analysis failed' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Parse the JSON response
     let result: DetectedRegion | { found: false };
     try {
-      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
+      const jsonMatch = textContent.match(/\{[\s\S]*?\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
         console.log('[detect-schematic-regions] Parsed JSON:', parsed);
@@ -154,6 +203,15 @@ Only return valid JSON.`,
             JSON.stringify({ found: false }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+        
+        // Sanity check: if dimensions are too small, likely detected wrong element
+        const minWidthPercent = 5;
+        const minHeightPercent = 10;
+        if (parsed.width < minWidthPercent || parsed.height < minHeightPercent) {
+          console.log('[detect-schematic-regions] Detected region too small, adjusting to minimum');
+          parsed.width = Math.max(parsed.width, 8);
+          parsed.height = Math.max(parsed.height, 15);
         }
         
         // Convert percentage-based coordinates to pixel coordinates
