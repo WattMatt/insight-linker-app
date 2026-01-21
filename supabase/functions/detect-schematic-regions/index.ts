@@ -59,44 +59,41 @@ Deno.serve(async (req) => {
     console.log('[detect-schematic-regions] Image data length:', pageImageBase64.length);
 
     // Very specific prompt describing the exact table format
-    const prompt = `Look at this electrical schematic diagram.
+    const prompt = `Look at this electrical schematic diagram. I need PRECISE measurements.
 
 The user clicked at position: ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
 
-I need you to find the DISTRIBUTION BOARD TABLE nearest to where the user clicked.
+TASK: Find the DISTRIBUTION BOARD TABLE closest to where the user clicked and return its EXACT bounding box.
 
-These tables look EXACTLY like this - they are rectangular boxes with 7 ROWS:
-┌─────────┬──────────────────────┐
-│ NO:     │ DB-13C               │
-├─────────┼──────────────────────┤
-│ NAME:   │ KFC                  │
-├─────────┼──────────────────────┤
-│ AREA:   │ 311m²                │
-├─────────┼──────────────────────┤
-│ RATING: │ 315A TP              │
-├─────────┼──────────────────────┤
-│ CABLE:  │ 2 x 4C x 95mm² ALU   │
-├─────────┼──────────────────────┤
-│ SERIAL: │ 35753488             │
-├─────────┼──────────────────────┤
-│ CT:     │ 300/5A               │
-└─────────┴──────────────────────┘
+These tables are rectangular boxes with 7 ROWS of text, structured like this:
+┌─────────────┬────────────────────────────┐
+│ NO:         │ DB-13C                     │
+├─────────────┼────────────────────────────┤
+│ NAME:       │ KFC                        │
+├─────────────┼────────────────────────────┤
+│ AREA:       │ 311m²                      │
+├─────────────┼────────────────────────────┤
+│ RATING:     │ 315A TP                    │
+├─────────────┼────────────────────────────┤
+│ CABLE:      │ 2 x 4C x 95mm² ALU CABLE   │
+├─────────────┼────────────────────────────┤
+│ SERIAL:     │ 35753488                   │
+├─────────────┼────────────────────────────┤
+│ CT:         │ 300/5A                     │
+└─────────────┴────────────────────────────┘
 
-Key features:
-- ALWAYS has exactly 7 rows with labels: NO:, NAME:, AREA:, RATING:, CABLE:, SERIAL:, CT:
-- Has a BLACK RECTANGULAR BORDER around the entire table
-- Two columns: left column has labels, right column has values
-- The table is taller than it is wide (portrait orientation)
+IMPORTANT: These tables are LARGE - typically:
+- Width: 10-20% of page width (they have long text values in the right column)
+- Height: 20-35% of page height (7 rows of text makes them tall)
 
-Find the COMPLETE OUTER BOUNDARY of the table closest to the click point.
+Measure the table from the OUTER EDGE of its black border - include the full rectangle.
 
-Respond with ONLY this JSON (no other text):
-{"x": CENTER_X_PERCENT, "y": CENTER_Y_PERCENT, "width": WIDTH_PERCENT, "height": HEIGHT_PERCENT, "label": "VALUE_FROM_NAME_ROW"}
+Return ONLY this JSON:
+{"x": <center X as percentage 0-100>, "y": <center Y as percentage 0-100>, "width": <full width as percentage 0-100>, "height": <full height as percentage 0-100>, "label": "<value from NAME row>"}
 
-Where all values are percentages of the page (0-100).
-Expected dimensions: width ~6-10%, height ~15-25%
+CRITICAL: Measure the ACTUAL dimensions carefully. Do NOT underestimate. The width should capture the entire table including the right column with long cable specifications.
 
-If no such table exists near the click: {"found": false}`;
+If no distribution board table exists near the click: {"found": false}`;
 
     let textContent = '';
 
@@ -224,20 +221,23 @@ If no such table exists near the click: {"found": false}`;
           );
         }
         
-        // Enforce minimum dimensions for 7-row tables
-        // These tables should be at least 6% wide and 15% tall
-        const minWidthPercent = 6;
-        const minHeightPercent = 15;
+        // Enforce minimum dimensions for 7-row distribution board tables
+        // These tables are substantial - at least 10% wide and 20% tall
+        const minWidthPercent = 10;
+        const minHeightPercent = 20;
         
         let width = parsed.width;
         let height = parsed.height;
         
+        // Log the raw AI-returned dimensions
+        console.log(`[detect-schematic-regions] AI returned: width=${parsed.width}%, height=${parsed.height}%`);
+        
         if (width < minWidthPercent) {
-          console.log(`[detect-schematic-regions] Width too small (${width}%), setting to ${minWidthPercent}%`);
+          console.log(`[detect-schematic-regions] Width too small (${width}%), enforcing minimum ${minWidthPercent}%`);
           width = minWidthPercent;
         }
         if (height < minHeightPercent) {
-          console.log(`[detect-schematic-regions] Height too small (${height}%), setting to ${minHeightPercent}%`);
+          console.log(`[detect-schematic-regions] Height too small (${height}%), enforcing minimum ${minHeightPercent}%`);
           height = minHeightPercent;
         }
         
