@@ -1,3 +1,4 @@
+// SchematicDiagram Component - Last updated: 2026-01-21
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
