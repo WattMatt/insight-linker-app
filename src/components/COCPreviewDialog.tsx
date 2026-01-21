@@ -36,38 +36,6 @@ interface COCPreviewDialogProps {
   } | null;
 }
 
-// Keywords to search for each clause type - matching actual COC form labels
-const clauseKeywords: Record<string, string[]> = {
-  // Clause 8.6 - Insulation Resistance (Row 9 in Section 4)
-  '8.6': ['insulation resistance', '9. insulation resistance', '9.insulation', 'mω', 'mohm', 'megohm'],
-  // Clause 8.5 - Earth Loop Impedance (Rows 5, 6, 7 in Section 4) 
-  '8.5': ['earth loop impedance', 'loop impedance test', '5. earth loop', '6. earth loop', '7. prospective', 'pscc', 'zs of'],
-  // Clause 8.4 - Earth Continuity (Row 4 in Section 4)
-  '8.4': ['continuity of earth', 'earth continuity', '4. continuity', 'protective conductor'],
-  // Clause 8.7 - RCD Testing (Rows 12, 13 in Section 4)
-  '8.7': ['earth leakage', 'operation of earth leakage', '12. operation', '13. polarity'],
-  // Other clauses
-  '6.1': ['description of installation', 'section 3', 'premises'],
-  '6.2': ['number of circuits', 'circuits or points', 'lighting', 'socket'],
-  '7.1': ['section 1', 'installation data', 'type of supply'],
-  '5.1': ['certificate number', 'coc number', 'eca m'],
-  '5.2': ['registered person', 'registration certificate', 'accredited'],
-};
-
-// Visual highlight box positions for each clause on the PDF page (percentage-based for responsiveness)
-// Format: { top: %, left: %, width: %, height: % } relative to page dimensions
-const clauseHighlightBoxes: Record<string, { page: number; top: number; left: number; width: number; height: number }> = {
-  '8.6': { page: 2, top: 55, left: 5, width: 90, height: 8 }, // Insulation Resistance section
-  '8.5': { page: 2, top: 35, left: 5, width: 90, height: 15 }, // Earth Loop Impedance section
-  '8.4': { page: 2, top: 25, left: 5, width: 90, height: 8 }, // Earth Continuity section
-  '8.7': { page: 2, top: 70, left: 5, width: 90, height: 12 }, // RCD Testing section
-  '6.1': { page: 1, top: 25, left: 5, width: 90, height: 15 }, // Installation Details
-  '6.2': { page: 1, top: 45, left: 5, width: 90, height: 10 }, // Circuit Schedule
-  '7.1': { page: 1, top: 10, left: 5, width: 90, height: 12 }, // Inspection Checks
-  '5.1': { page: 1, top: 5, left: 5, width: 45, height: 5 }, // Certificate Details
-  '5.2': { page: 1, top: 85, left: 5, width: 90, height: 10 }, // Installer Registration
-};
-
 // Extract page number from section string (e.g., "Section 4 (Page 2)" -> 2)
 function extractPageFromSection(section?: string): number | null {
   if (!section) return null;
@@ -77,32 +45,33 @@ function extractPageFromSection(section?: string): number | null {
 
 // Normalize clause ID to match our lookup (e.g., "Clause 8.6" -> "8.6", "8.6.1" -> "8.6")
 function normalizeClauseId(clause: string): string {
-  // Extract just the numeric part like "8.6" from various formats
   const match = clause.match(/(\d+\.\d+)/);
   return match ? match[1] : clause;
 }
+
+// Default page mapping for common SANS 10142-1 clause categories
+const defaultClausePages: Record<string, number> = {
+  // Test results typically on page 2
+  '8.4': 2, '8.5': 2, '8.6': 2, '8.7': 2, '8.8': 2,
+  // Installation details on page 1
+  '6.1': 1, '6.2': 1, '6.3': 1,
+  // Annexure references
+  'annexure': 1,
+};
 
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
   const [scale, setScale] = useState(1.0);
   const [highlightedClause, setHighlightedClause] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [highlightedSection, setHighlightedSection] = useState<string | null>(null);
+  const [, setLoading] = useState(true);
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+  const [showPageIndicator, setShowPageIndicator] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  
-  // Track the current highlight info for the overlay
-  const [currentHighlightInfo, setCurrentHighlightInfo] = useState<{
-    page: number;
-    top: number;
-    left: number;
-    width: number;
-    height: number;
-    clause: string;
-  } | null>(null);
   
   const isPdf = document?.file_name?.toLowerCase().endsWith('.pdf') ?? false;
   const isImage = document?.file_name ? /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name) : false;
@@ -162,73 +131,54 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
   }, []);
 
-  // Handle clause click - navigate to relevant page and show visual highlight
+  // Handle clause click - navigate to relevant page and show indicator
   const handleClauseClick = useCallback((clause: string, section?: string) => {
     console.log('[COC Navigation] Clicked clause:', clause, 'section:', section);
     
-    // Normalize the clause ID for lookup
     const normalizedClause = normalizeClauseId(clause);
-    console.log('[COC Navigation] Normalized clause:', normalizedClause);
     
-    // Always set the highlight
+    // Set highlight states
     setHighlightedClause(clause);
+    setHighlightedSection(section || null);
+    setShowPageIndicator(true);
     
-    // Determine target page - priority: section string > predefined box > fallback to 1
+    // Determine target page - priority: section string > default mapping > fallback to 1
     let targetPage = 1;
-    let highlightBox: { page: number; top: number; left: number; width: number; height: number } | null = null;
     
     // First try to extract page from section string (most accurate - comes from AI)
     const sectionPage = extractPageFromSection(section);
-    if (sectionPage) {
+    if (sectionPage && sectionPage <= numPages) {
       targetPage = sectionPage;
       console.log('[COC Navigation] Using page from section:', targetPage);
+    } else if (defaultClausePages[normalizedClause]) {
+      // Use default mapping for common clauses
+      targetPage = Math.min(defaultClausePages[normalizedClause], numPages || 1);
+      console.log('[COC Navigation] Using default page for clause:', targetPage);
+    } else if (section?.toLowerCase().includes('annexure')) {
+      // Annexure typically on page 1
+      targetPage = 1;
     }
     
-    // Check if we have a predefined highlight box
-    if (clauseHighlightBoxes[normalizedClause]) {
-      highlightBox = clauseHighlightBoxes[normalizedClause];
-      // If section didn't specify page, use box's page
-      if (!sectionPage) {
-        targetPage = highlightBox.page;
-      }
-      console.log('[COC Navigation] Found predefined box for clause:', normalizedClause);
-    } else {
-      // Create a default highlight box for unknown clauses (full-width banner at top)
-      highlightBox = { page: targetPage, top: 10, left: 5, width: 90, height: 15 };
-      console.log('[COC Navigation] Using default highlight box');
-    }
-    
-    // Update the current highlight info with correct page
-    highlightBox = { ...highlightBox, page: targetPage };
-    setCurrentHighlightInfo({ ...highlightBox, clause });
-    
-    console.log('[COC Navigation] Target page:', targetPage, 'numPages:', numPages);
+    console.log('[COC Navigation] Target page:', targetPage, 'of', numPages);
     
     // Navigate to the target page
-    if (targetPage <= numPages && targetPage > 0) {
-      setPageNumber(targetPage);
-      console.log('[COC Navigation] Set page number to:', targetPage);
-      
-      // Scroll to show the highlighted area after page renders
-      setTimeout(() => {
-        if (containerRef.current) {
-          const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
-          const pageElement = containerRef.current.querySelector('.react-pdf__Page');
-          
-          if (scrollContainer && pageElement && highlightBox) {
-            const pageHeight = pageElement.clientHeight;
-            const containerHeight = scrollContainer.clientHeight;
-            const targetScrollTop = (pageHeight * highlightBox.top / 100) - (containerHeight / 4);
-            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
-            console.log('[COC Navigation] Scrolled to:', targetScrollTop);
-          }
+    setPageNumber(targetPage);
+    
+    // Scroll to top of page after navigation
+    setTimeout(() => {
+      if (containerRef.current) {
+        const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
+        if (scrollContainer) {
+          scrollContainer.scrollTop = 0;
+          console.log('[COC Navigation] Scrolled to top');
         }
-      }, 200);
-    } else if (numPages === 0) {
-      // PDF not loaded yet, just set the page number and it will navigate when loaded
-      setPageNumber(targetPage);
-      console.log('[COC Navigation] PDF not loaded yet, queued page:', targetPage);
-    }
+      }
+    }, 150);
+    
+    // Auto-hide page indicator after 5 seconds
+    setTimeout(() => {
+      setShowPageIndicator(false);
+    }, 5000);
   }, [numPages]);
 
   // Handle mouse wheel zoom (Ctrl+scroll or pinch to zoom, normal scroll to pan)
@@ -276,24 +226,10 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     setIsPanning(false);
   }, []);
 
-  // Custom text renderer to highlight matching text
+  // Simple text renderer - no keyword highlighting (unreliable)
   const customTextRenderer = useCallback(
-    (textItem: { str: string }) => {
-      if (!highlightedClause) return textItem.str;
-
-      const keywords = clauseKeywords[highlightedClause] || [];
-      const text = textItem.str.toLowerCase();
-      
-      // Check if any keyword matches
-      const hasMatch = keywords.some(keyword => text.includes(keyword.toLowerCase()));
-      
-      if (hasMatch) {
-        return `<mark class="coc-highlight">${textItem.str}</mark>`;
-      }
-      
-      return textItem.str;
-    },
-    [highlightedClause]
+    (textItem: { str: string }) => textItem.str,
+    []
   );
 
   // Early return after all hooks
@@ -302,53 +238,13 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
   return (
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent className="max-w-7xl w-[95vw] h-[90vh] p-0 flex flex-col">
-        {/* Custom styles for highlighting */}
+        {/* Minimal styles for PDF text layer */}
         <style>{`
-          .coc-highlight {
-            background-color: #ffff00 !important;
-            border: 3px solid #ff0000 !important;
-            border-radius: 4px;
-            padding: 4px 2px;
-            margin: -2px;
-            box-shadow: 0 0 20px 8px rgba(255, 0, 0, 0.6), 0 0 40px 15px rgba(255, 255, 0, 0.4) !important;
-            animation: pulse-highlight 0.8s ease-in-out infinite;
-            position: relative;
-            z-index: 1000;
-          }
-          @keyframes pulse-highlight {
-            0%, 100% { 
-              background-color: #ffff00;
-              box-shadow: 0 0 20px 8px rgba(255, 0, 0, 0.6), 0 0 40px 15px rgba(255, 255, 0, 0.4);
-            }
-            50% { 
-              background-color: #ff6b6b;
-              box-shadow: 0 0 30px 12px rgba(255, 0, 0, 0.8), 0 0 60px 25px rgba(255, 255, 0, 0.6);
-            }
-          }
-          .coc-highlight-box .animate-pulse-highlight {
-            animation: box-pulse 1.2s ease-in-out infinite;
-          }
-          @keyframes box-pulse {
-            0%, 100% { 
-              border-color: #ef4444;
-              background-color: rgba(239, 68, 68, 0.15);
-              box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7), inset 0 0 20px rgba(239, 68, 68, 0.3);
-            }
-            50% { 
-              border-color: #dc2626;
-              background-color: rgba(239, 68, 68, 0.3);
-              box-shadow: 0 0 30px 10px rgba(239, 68, 68, 0.5), inset 0 0 30px rgba(239, 68, 68, 0.4);
-            }
-          }
           .react-pdf__Page__textContent {
             pointer-events: none;
           }
           .react-pdf__Page__textContent span {
             color: transparent !important;
-          }
-          .react-pdf__Page__textContent .coc-highlight {
-            color: #000 !important;
-            font-weight: bold !important;
           }
         `}</style>
 
@@ -467,6 +363,27 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     className="flex justify-center"
                   >
                     <div className="relative">
+                      {/* Page indicator banner - shows when navigating to a clause */}
+                      {showPageIndicator && highlightedClause && (
+                        <div className="absolute top-0 left-0 right-0 z-10 pointer-events-none">
+                          <div className="mx-2 mt-2 bg-destructive text-destructive-foreground px-4 py-3 rounded-lg shadow-lg animate-pulse flex items-center gap-3">
+                            <AlertTriangle className="h-5 w-5 shrink-0" />
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-sm">
+                                Clause {highlightedClause} Issue
+                              </p>
+                              {highlightedSection && (
+                                <p className="text-xs opacity-90 truncate">
+                                  📍 {highlightedSection}
+                                </p>
+                              )}
+                            </div>
+                            <Badge variant="outline" className="bg-destructive-foreground/10 border-destructive-foreground/30 text-destructive-foreground shrink-0">
+                              Page {pageNumber}
+                            </Badge>
+                          </div>
+                        </div>
+                      )}
                       <Page
                         key={`page-${pageNumber}-${highlightedClause}`}
                         pageNumber={pageNumber}
@@ -481,23 +398,6 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                           </div>
                         }
                       />
-                      {/* Visual highlight overlay box - uses currentHighlightInfo for dynamic positioning */}
-                      {currentHighlightInfo && currentHighlightInfo.page === pageNumber && (
-                        <div 
-                          className="absolute pointer-events-none coc-highlight-box"
-                          style={{
-                            top: `${currentHighlightInfo.top}%`,
-                            left: `${currentHighlightInfo.left}%`,
-                            width: `${currentHighlightInfo.width}%`,
-                            height: `${currentHighlightInfo.height}%`,
-                          }}
-                        >
-                          <div className="w-full h-full border-4 border-destructive bg-destructive/20 rounded-lg animate-pulse-highlight" />
-                          <div className="absolute -top-8 left-0 bg-destructive text-destructive-foreground text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
-                            ⚠️ Clause {currentHighlightInfo.clause} - Issue Area
-                          </div>
-                        </div>
-                      )}
                     </div>
                   </Document>
                 ) : isImage ? (
@@ -549,8 +449,8 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                   </div>
                 ) : validation.status === 'Pass' ? (
                   <div className="text-center py-8">
-                    <CheckCircle className="h-12 w-12 mx-auto mb-3 text-green-600" />
-                    <h4 className="font-semibold text-lg text-green-700">COC Validated</h4>
+                    <CheckCircle className="h-12 w-12 mx-auto mb-3 text-primary" />
+                    <h4 className="font-semibold text-lg text-primary">COC Validated</h4>
                     <p className="text-sm text-muted-foreground mt-2">
                       This certificate meets SANS 10142-1 requirements
                     </p>
@@ -632,7 +532,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                             </div>
                             
                             {v.immediateAction && (
-                              <div className="text-sm bg-orange-50 dark:bg-orange-950/30 text-orange-700 dark:text-orange-400 p-2 rounded mt-2">
+                              <div className="text-sm bg-accent/50 dark:bg-accent/30 text-accent-foreground p-2 rounded mt-2">
                                 <strong>Action:</strong> {v.immediateAction}
                               </div>
                             )}
