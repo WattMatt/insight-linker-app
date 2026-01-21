@@ -579,7 +579,7 @@ const SiteDetail = () => {
       </div>
 
       <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="grid w-full grid-cols-9">
+        <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1">
           <TabsTrigger value="overview" className="gap-2">
             <LayoutGrid className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Dashboard</span>
