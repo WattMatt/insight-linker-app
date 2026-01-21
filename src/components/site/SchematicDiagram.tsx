@@ -1108,8 +1108,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                       if (!dragging && !resizing) handleBlockClick(block, e);
                     }}
                   >
-                  {/* Block identifier */}
-                  <p className="text-[10px] font-bold text-foreground/80 pointer-events-none">{block.block_identifier}</p>
+                  {/* Block label - show subsection name if linked, otherwise block identifier */}
+                  <p className="text-[10px] font-bold text-foreground/80 pointer-events-none text-center px-1 truncate w-full">
+                    {block.subsection_id 
+                      ? subsections.find(s => s.id === block.subsection_id)?.name || block.block_identifier
+                      : block.block_identifier}
+                  </p>
 
                   {/* Resize handles - only in edit mode */}
                   {isEditMode && (
