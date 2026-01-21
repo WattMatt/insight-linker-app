@@ -83,30 +83,32 @@ Deno.serve(async (req) => {
                 type: 'text',
                 text: `You are analyzing an electrical distribution schematic diagram.
 
-The user clicked at position: ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
+The user clicked at approximately ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
 
-This schematic contains rectangular table-style blocks representing electrical distribution boards. Each block typically has:
-- A header row with "NO:" showing a DB identifier (like "DB-13C")  
-- Rows for NAME, AREA, RATING, CABLE, SERIAL, CT values
-- Black border lines forming a rectangular table structure
+This schematic contains RECTANGULAR TABLE BLOCKS representing electrical distribution boards. Each block is a TABLE with:
+- A visible BLACK BORDER forming a RECTANGLE around the entire table
+- Multiple rows including: NO (DB identifier), NAME (tenant name), AREA, RATING, CABLE, SERIAL, CT
+- The ENTIRE TABLE including ALL rows is the block you need to detect
 
-Find the NEAREST rectangular table/block to this click point.
+IMPORTANT: You must find the COMPLETE OUTER BOUNDARY of the nearest table block - from the top-left corner of the table border to the bottom-right corner. Do NOT just detect the label text - detect the FULL TABLE RECTANGLE.
 
-Return the EXACT boundaries of the nearest rectangle as percentages of the image dimensions.
+The tables are typically about 8-15% of the page width and 15-25% of the page height.
 
-CRITICAL: Return ONLY a JSON object, nothing else:
+Return the EXACT OUTER boundaries of the nearest complete table block as percentages of the image dimensions.
+
+CRITICAL: Return ONLY a JSON object:
 {
-  "x": <center X position as percentage 0-100>,
-  "y": <center Y position as percentage 0-100>,
-  "width": <width as percentage of page>,
-  "height": <height as percentage of page>,
-  "label": "<the DB number/identifier from the NO: field, or the NAME field value if visible>"
+  "x": <CENTER X position of the FULL table as percentage 0-100>,
+  "y": <CENTER Y position of the FULL table as percentage 0-100>,
+  "width": <FULL WIDTH of the table as percentage of page>,
+  "height": <FULL HEIGHT of the table as percentage of page>,
+  "label": "<the DB number from NO: field OR the NAME field value>"
 }
 
-If no clear rectangular table block is found near the click point, return:
+If no table block is found near the click point, return:
 {"found": false}
 
-Only return valid JSON, no explanations.`,
+Only return valid JSON.`,
               },
             ],
           },
