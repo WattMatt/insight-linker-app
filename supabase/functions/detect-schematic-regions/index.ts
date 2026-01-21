@@ -1,5 +1,3 @@
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -20,17 +18,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { pdfUrl, clickX, clickY, pageWidth, pageHeight } = await req.json();
+    const { pdfUrl, clickX, clickY, pageWidth, pageHeight, pageImageBase64 } = await req.json();
     
-    if (!pdfUrl || clickX === undefined || clickY === undefined) {
+    if (clickX === undefined || clickY === undefined) {
       return new Response(
-        JSON.stringify({ error: 'pdfUrl, clickX, and clickY are required' }),
+        JSON.stringify({ error: 'clickX and clickY are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     console.log('[detect-schematic-regions] Smart snap request at:', { clickX, clickY, pageWidth, pageHeight });
-    console.log('[detect-schematic-regions] PDF URL:', pdfUrl);
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
@@ -48,13 +45,24 @@ Deno.serve(async (req) => {
 
     console.log('[detect-schematic-regions] Click position:', { clickXPercent: clickXPercent.toFixed(1), clickYPercent: clickYPercent.toFixed(1) });
 
-    // Use PDF document support with the correct API version
+    // Check if we have a base64 image from the client
+    if (!pageImageBase64) {
+      console.log('[detect-schematic-regions] No page image provided, cannot analyze');
+      return new Response(
+        JSON.stringify({ found: false, reason: 'No page image provided' }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log('[detect-schematic-regions] Image data length:', pageImageBase64.length);
+
+    // Use image-based vision API (more reliable than PDF documents)
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': anthropicApiKey,
-        'anthropic-version': '2025-01-01', // Required for PDF document support
+        'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -64,25 +72,27 @@ Deno.serve(async (req) => {
             role: 'user',
             content: [
               {
-                type: 'document',
+                type: 'image',
                 source: {
-                  type: 'url',
-                  url: pdfUrl,
+                  type: 'base64',
+                  media_type: 'image/png',
+                  data: pageImageBase64,
                 },
               },
               {
                 type: 'text',
-                text: `You are analyzing an electrical distribution schematic diagram PDF.
+                text: `You are analyzing an electrical distribution schematic diagram.
 
 The user clicked at position: ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
 
-Find the NEAREST rectangular box/block to this click point. Look for:
-- Distribution boards (DB boxes)
-- Tenant/shop electrical connection boxes
-- Main switchboards
-- Any labeled rectangular section
+This schematic contains rectangular table-style blocks representing electrical distribution boards. Each block typically has:
+- A header row with "NO:" showing a DB identifier (like "DB-13C")  
+- Rows for NAME, AREA, RATING, CABLE, SERIAL, CT values
+- Black border lines forming a rectangular table structure
 
-Return the EXACT boundaries of the nearest rectangle as percentages of the page dimensions.
+Find the NEAREST rectangular table/block to this click point.
+
+Return the EXACT boundaries of the nearest rectangle as percentages of the image dimensions.
 
 CRITICAL: Return ONLY a JSON object, nothing else:
 {
@@ -90,10 +100,10 @@ CRITICAL: Return ONLY a JSON object, nothing else:
   "y": <center Y position as percentage 0-100>,
   "width": <width as percentage of page>,
   "height": <height as percentage of page>,
-  "label": "<any text visible in or near this rectangle, or null>"
+  "label": "<the DB number/identifier from the NO: field, or the NAME field value if visible>"
 }
 
-If no clear rectangle is found near the click point, return:
+If no clear rectangular table block is found near the click point, return:
 {"found": false}
 
 Only return valid JSON, no explanations.`,
@@ -108,13 +118,13 @@ Only return valid JSON, no explanations.`,
       const errorText = await anthropicResponse.text();
       console.error('[detect-schematic-regions] Anthropic API error:', anthropicResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'Failed to analyze PDF', details: errorText, found: false }),
+        JSON.stringify({ error: 'Failed to analyze image', details: errorText, found: false }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const anthropicData = await anthropicResponse.json();
-    console.log('[detect-schematic-regions] Full AI response:', JSON.stringify(anthropicData).substring(0, 500));
+    console.log('[detect-schematic-regions] API response received');
     
     const textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '{}';
     console.log('[detect-schematic-regions] AI text response:', textContent);
@@ -128,6 +138,16 @@ Only return valid JSON, no explanations.`,
         console.log('[detect-schematic-regions] Parsed JSON:', parsed);
         
         if (parsed.found === false) {
+          return new Response(
+            JSON.stringify({ found: false }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        
+        // Validate we have required fields
+        if (parsed.x === undefined || parsed.y === undefined || 
+            parsed.width === undefined || parsed.height === undefined) {
+          console.log('[detect-schematic-regions] Missing required fields in response');
           return new Response(
             JSON.stringify({ found: false }),
             { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
