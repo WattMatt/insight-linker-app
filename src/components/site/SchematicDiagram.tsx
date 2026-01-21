@@ -235,7 +235,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Native wheel event listener for zoom (like FloorPlanViewer)
+  // Native wheel event listener for zoom-to-cursor (like FloorPlanViewer)
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !schematic) return;
@@ -248,12 +248,25 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       e.preventDefault();
       
       const delta = -e.deltaY;
-      const zoomSpeed = 0.001;
+      const zoomSpeed = 0.002;
       const zoomChange = delta * zoomSpeed;
       
-      setScale((prev) => {
-        const newScale = prev + zoomChange;
-        return Math.max(0.5, Math.min(10, newScale));
+      // Get mouse position relative to container
+      const rect = container.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      
+      setScale((prevScale) => {
+        const newScale = Math.max(0.5, Math.min(10, prevScale + zoomChange));
+        const scaleRatio = newScale / prevScale;
+        
+        // Adjust pan to zoom toward cursor position
+        setPanOffset((prevPan) => ({
+          x: mouseX - scaleRatio * (mouseX - prevPan.x),
+          y: mouseY - scaleRatio * (mouseY - prevPan.y),
+        }));
+        
+        return newScale;
       });
     };
 
