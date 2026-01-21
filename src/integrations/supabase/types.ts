@@ -1580,36 +1580,45 @@ export type Database = {
       }
       site_schematics: {
         Row: {
+          calibrated_height: number | null
+          calibrated_width: number | null
           created_at: string
           detected_regions: Json | null
           detection_status: string | null
           file_name: string
           file_url: string
           id: string
+          is_calibrated: boolean | null
           regions_detected_at: string | null
           site_id: string
           updated_at: string
           uploaded_by: string | null
         }
         Insert: {
+          calibrated_height?: number | null
+          calibrated_width?: number | null
           created_at?: string
           detected_regions?: Json | null
           detection_status?: string | null
           file_name: string
           file_url: string
           id?: string
+          is_calibrated?: boolean | null
           regions_detected_at?: string | null
           site_id: string
           updated_at?: string
           uploaded_by?: string | null
         }
         Update: {
+          calibrated_height?: number | null
+          calibrated_width?: number | null
           created_at?: string
           detected_regions?: Json | null
           detection_status?: string | null
           file_name?: string
           file_url?: string
           id?: string
+          is_calibrated?: boolean | null
           regions_detected_at?: string | null
           site_id?: string
           updated_at?: string

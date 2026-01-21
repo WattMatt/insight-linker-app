@@ -90,6 +90,10 @@ interface Schematic {
   detected_regions?: DetectedRegion[];
   detection_status?: string;
   regions_detected_at?: string;
+  // Calibration fields
+  calibrated_width?: number | null;
+  calibrated_height?: number | null;
+  is_calibrated?: boolean;
 }
 
 interface DetectedRegion {
@@ -157,8 +161,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [imageViewerOpen, setImageViewerOpen] = useState(false);
   const [viewerImage, setViewerImage] = useState<{ url: string; title: string } | null>(null);
   
-  // Detection state
-  const [isDetecting, setIsDetecting] = useState(false);
+  // Calibration state
+  const [isCalibrating, setIsCalibrating] = useState(false);
+  const [calibrationStart, setCalibrationStart] = useState<{ x: number; y: number } | null>(null);
+  const [calibrationRect, setCalibrationRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
+  
 
   // Pan state
   const [isPanning, setIsPanning] = useState(false);
@@ -613,6 +620,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           detected_regions: Array.isArray(schematicData.detected_regions) 
             ? (schematicData.detected_regions as unknown as DetectedRegion[]) 
             : [],
+          calibrated_width: schematicData.calibrated_width,
+          calibrated_height: schematicData.calibrated_height,
+          is_calibrated: schematicData.is_calibrated,
         });
       } else {
         setSchematic(null);
@@ -805,81 +815,32 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const clickXPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const clickYPercent = ((e.clientY - rect.top) / rect.height) * 100;
 
-    // Default dimensions as percentages (approximately 150x100 pixels on a typical PDF)
-    const defaultWidthPercent = 8;  // ~8% of page width
-    const defaultHeightPercent = 12; // ~12% of page height
+    // Use calibrated size if available, otherwise use defaults
+    const defaultWidthPercent = schematic.calibrated_width ?? 8;
+    const defaultHeightPercent = schematic.calibrated_height ?? 12;
 
-    // Show loading state
-    setIsDetecting(true);
+    // Skip AI detection entirely - just use calibrated or default size
+    let finalWidth = defaultWidthPercent;
+    let finalHeight = defaultHeightPercent;
 
+    // Position is ALWAYS centered on click - this is deterministic and reliable
+    let finalX = clickXPercent - (finalWidth / 2);
+    let finalY = clickYPercent - (finalHeight / 2);
+    
+    // Clamp to page bounds
+    finalX = Math.max(0, Math.min(100 - finalWidth, finalX));
+    finalY = Math.max(0, Math.min(100 - finalHeight, finalY));
+
+    const blockNumber = blocks.length + 1;
+    const blockIdentifier = `DB-${String(blockNumber).padStart(3, '0')}`;
+    
     try {
-      // Capture the PDF canvas as a base64 image for AI analysis
-      let pageImageBase64: string | null = null;
-      
-      if (pdfCanvasRef.current) {
-        try {
-          const dataUrl = pdfCanvasRef.current.toDataURL('image/png');
-          pageImageBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
-          console.log('[SchematicDiagram] Canvas captured, base64 length:', pageImageBase64.length);
-        } catch (canvasError) {
-          console.warn('[SchematicDiagram] Could not capture canvas:', canvasError);
-        }
-      } else {
-        console.warn('[SchematicDiagram] No PDF canvas reference available');
-      }
-
-      console.log('[SchematicDiagram] Smart snap at:', { clickXPercent, clickYPercent, hasImage: !!pageImageBase64 });
-      
-      // Call AI - it now returns percentages directly
-      const response = await supabase.functions.invoke('detect-schematic-regions', {
-        body: {
-          pdfUrl: schematic.file_url,
-          clickX: clickXPercent,
-          clickY: clickYPercent,
-          pageWidth: 100,  // Using percentage system
-          pageHeight: 100, // Using percentage system
-          pageImageBase64,
-        },
-      });
-
-      // Always place block centered on where user clicked - this is the reliable behavior
-      let finalWidth = defaultWidthPercent;
-      let finalHeight = defaultHeightPercent;
-      let detectedLabel: string | null = null;
-
-      // If AI found a nearby rectangle, use its SIZE (but not position) for the block
-      if (response.data?.found && response.data?.region) {
-        const region = response.data.region;
-        // Only use the detected width/height - position stays at click location
-        finalWidth = region.width || defaultWidthPercent;
-        finalHeight = region.height || defaultHeightPercent;
-        detectedLabel = region.label;
-        console.log('[SchematicDiagram] Using detected size (percentages):', { 
-          width: finalWidth, height: finalHeight, label: detectedLabel 
-        });
-        toast.success(`Block sized to: ${detectedLabel || 'detected rectangle'}`);
-      } else {
-        console.log('[SchematicDiagram] No region found, using default size', response.data);
-        toast.info('Using default block size');
-      }
-
-      // Position is ALWAYS centered on click - this is deterministic and reliable
-      let finalX = clickXPercent - (finalWidth / 2);
-      let finalY = clickYPercent - (finalHeight / 2);
-      
-      // Clamp to page bounds
-      finalX = Math.max(0, Math.min(100 - finalWidth, finalX));
-      finalY = Math.max(0, Math.min(100 - finalHeight, finalY));
-
-      const blockNumber = blocks.length + 1;
-      const blockIdentifier = detectedLabel || `DB-${String(blockNumber).padStart(3, '0')}`;
-      
       const { data, error } = await supabase
         .from("schematic_blocks")
         .insert({
           schematic_id: schematic.id,
           block_identifier: blockIdentifier,
-          block_name: detectedLabel,
+          block_name: null,
           x_position: finalX,
           y_position: finalY,
           width: finalWidth,
@@ -901,11 +862,15 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       });
       setEditDialogOpen(true);
       setIsAddingBlock(false);
+      
+      if (schematic.is_calibrated) {
+        toast.success("Block placed with calibrated size");
+      } else {
+        toast.info("Block placed - consider calibrating for accurate sizing");
+      }
     } catch (error) {
       console.error("Error adding block:", error);
       toast.error("Failed to add block");
-    } finally {
-      setIsDetecting(false);
     }
   };
 
@@ -1115,9 +1080,117 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     if (isEditMode) {
       setIsEditMode(false);
       setIsAddingBlock(false);
+      setIsCalibrating(false);
+      setCalibrationStart(null);
+      setCalibrationRect(null);
       setScale(1);
     } else {
       setIsEditMode(true);
+    }
+  };
+
+  // Calibration handlers
+  const startCalibration = () => {
+    setIsCalibrating(true);
+    setIsAddingBlock(false);
+    setCalibrationStart(null);
+    setCalibrationRect(null);
+    toast.info("Draw a rectangle over one distribution board table to calibrate block size");
+  };
+
+  const handleCalibrationMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isCalibrating || !contentRef.current) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    setCalibrationStart({ x: xPercent, y: yPercent });
+    setCalibrationRect({ x: xPercent, y: yPercent, width: 0, height: 0 });
+  };
+
+  const handleCalibrationMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isCalibrating || !calibrationStart || !contentRef.current) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
+    
+    const width = Math.abs(xPercent - calibrationStart.x);
+    const height = Math.abs(yPercent - calibrationStart.y);
+    const x = Math.min(xPercent, calibrationStart.x);
+    const y = Math.min(yPercent, calibrationStart.y);
+    
+    setCalibrationRect({ x, y, width, height });
+  };
+
+  const handleCalibrationMouseUp = async () => {
+    if (!isCalibrating || !calibrationRect || !schematic) return;
+    
+    // Minimum size check (at least 1% in each direction)
+    if (calibrationRect.width < 1 || calibrationRect.height < 1) {
+      toast.error("Rectangle too small - please draw a larger area");
+      setCalibrationStart(null);
+      setCalibrationRect(null);
+      return;
+    }
+    
+    try {
+      const { error } = await supabase
+        .from("site_schematics")
+        .update({
+          calibrated_width: calibrationRect.width,
+          calibrated_height: calibrationRect.height,
+          is_calibrated: true,
+        })
+        .eq("id", schematic.id);
+
+      if (error) throw error;
+
+      setSchematic({
+        ...schematic,
+        calibrated_width: calibrationRect.width,
+        calibrated_height: calibrationRect.height,
+        is_calibrated: true,
+      });
+
+      toast.success(`Calibrated! Block size: ${calibrationRect.width.toFixed(1)}% × ${calibrationRect.height.toFixed(1)}%`);
+    } catch (error) {
+      console.error("Error saving calibration:", error);
+      toast.error("Failed to save calibration");
+    }
+    
+    setIsCalibrating(false);
+    setCalibrationStart(null);
+    setCalibrationRect(null);
+  };
+
+  const clearCalibration = async () => {
+    if (!schematic) return;
+    
+    try {
+      const { error } = await supabase
+        .from("site_schematics")
+        .update({
+          calibrated_width: null,
+          calibrated_height: null,
+          is_calibrated: false,
+        })
+        .eq("id", schematic.id);
+
+      if (error) throw error;
+
+      setSchematic({
+        ...schematic,
+        calibrated_width: null,
+        calibrated_height: null,
+        is_calibrated: false,
+      });
+
+      toast.success("Calibration cleared");
+    } catch (error) {
+      console.error("Error clearing calibration:", error);
+      toast.error("Failed to clear calibration");
     }
   };
 
@@ -1212,48 +1285,73 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       {isEditMode && (
         <div className="px-6 py-3 bg-muted/50 border-b flex items-center justify-between gap-4 flex-wrap">
           <div className="flex items-center gap-2">
-            <Button
-              variant={isAddingBlock ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setIsAddingBlock(!isAddingBlock)}
-            >
-              <Plus className="h-4 w-4 mr-1" />
-              {isAddingBlock ? "Click to place..." : "Add Block"}
-            </Button>
+            {/* Calibration button - prominently shown if not calibrated */}
+            {!schematic.is_calibrated ? (
+              <Button
+                variant={isCalibrating ? "secondary" : "default"}
+                size="sm"
+                onClick={isCalibrating ? () => setIsCalibrating(false) : startCalibration}
+                className={!isCalibrating ? "animate-pulse" : ""}
+              >
+                <ScanSearch className="h-4 w-4 mr-1" />
+                {isCalibrating ? "Cancel Calibration" : "Calibrate Block Size"}
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant={isAddingBlock ? "secondary" : "outline"}
+                  size="sm"
+                  onClick={() => { setIsAddingBlock(!isAddingBlock); setIsCalibrating(false); }}
+                >
+                  <Plus className="h-4 w-4 mr-1" />
+                  {isAddingBlock ? "Click to place..." : "Add Block"}
+                </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setSizeDialogOpen(true)}
-              disabled={blocks.length === 0}
-            >
-              <Maximize2 className="h-4 w-4 mr-1" />
-              Block Size
-            </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setSizeDialogOpen(true)}
+                  disabled={blocks.length === 0}
+                >
+                  <Maximize2 className="h-4 w-4 mr-1" />
+                  Block Size
+                </Button>
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleAutoMatch}
-            >
-              <Link2 className="h-4 w-4 mr-1" />
-              Auto-Match
-            </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleAutoMatch}
+                >
+                  <Link2 className="h-4 w-4 mr-1" />
+                  Auto-Match
+                </Button>
+              </>
+            )}
 
             <div className="h-4 w-px bg-border mx-1" />
 
-            {/* Smart Snap indicator */}
-            {isDetecting && (
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <Loader2 className="h-4 w-4 animate-spin" />
-                <span>Detecting rectangle...</span>
+            {/* Calibration status indicator */}
+            {schematic.is_calibrated ? (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Badge variant="outline" className="bg-primary/10 text-primary border-primary/20">
+                  ✓ Calibrated: {schematic.calibrated_width?.toFixed(1)}% × {schematic.calibrated_height?.toFixed(1)}%
+                </Badge>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={startCalibration}
+                  className="h-6 px-2 text-xs"
+                >
+                  Recalibrate
+                </Button>
               </div>
-            )}
-
-            {!isDetecting && (
+            ) : isCalibrating ? (
+              <div className="flex items-center gap-1.5 text-xs text-amber-600">
+                <span>Draw a rectangle over a distribution board table</span>
+              </div>
+            ) : (
               <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                <ScanSearch className="h-3.5 w-3.5" />
-                <span>Smart Snap enabled</span>
+                <span>⚠️ Not calibrated - block sizes may be inaccurate</span>
               </div>
             )}
 
@@ -1328,19 +1426,33 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           ref={containerRef}
           className={`relative bg-muted/30 ${
             isEditMode 
-              ? `overflow-auto ${isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`
+              ? `overflow-auto ${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`
               : 'overflow-hidden cursor-default'
           }`}
           style={{ height: CONTAINER_HEIGHT }}
-          onMouseDown={handleMouseDown}
+          onMouseDown={(e) => {
+            if (isCalibrating) {
+              handleCalibrationMouseDown(e);
+            } else {
+              handleMouseDown(e);
+            }
+          }}
           onAuxClick={handleAuxClick}
           onMouseMove={(e) => {
-            handleMouseMove(e);
-            if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
+            if (isCalibrating && calibrationStart) {
+              handleCalibrationMouseMove(e);
+            } else {
+              handleMouseMove(e);
+              if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
+            }
           }}
           onMouseUp={(e) => {
-            handleMouseUp(e);
-            if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
+            if (isCalibrating && calibrationStart) {
+              handleCalibrationMouseUp();
+            } else {
+              handleMouseUp(e);
+              if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
+            }
           }}
           onMouseLeave={handleMouseLeave}
           onContextMenu={(e) => { if (isPanning || isEditMode) e.preventDefault(); }}
@@ -1348,7 +1460,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           <div 
             ref={contentRef}
             className={`relative ${isEditMode ? 'inline-block p-4' : 'flex justify-center items-center w-full h-full'}`}
-            onClick={isEditMode ? handleSchematicClick : undefined}
+            onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={!isEditMode ? { minHeight: CONTAINER_HEIGHT } : undefined}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
@@ -1523,6 +1635,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             })}
 
               {/* Snap guide lines - using percentage positioning */}
+              {/* Snap lines for block alignment */}
               {isEditMode && dragging && (
                 <>
                   {snapLines.x !== null && (
@@ -1538,6 +1651,23 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                     />
                   )}
                 </>
+              )}
+
+              {/* Calibration rectangle overlay */}
+              {isCalibrating && calibrationRect && calibrationRect.width > 0 && (
+                <div 
+                  className="absolute border-2 border-dashed border-amber-500 bg-amber-500/20 pointer-events-none z-50"
+                  style={{
+                    left: `${calibrationRect.x}%`,
+                    top: `${calibrationRect.y}%`,
+                    width: `${calibrationRect.width}%`,
+                    height: `${calibrationRect.height}%`,
+                  }}
+                >
+                  <div className="absolute -top-6 left-0 bg-amber-500 text-white text-xs px-2 py-0.5 rounded whitespace-nowrap">
+                    {calibrationRect.width.toFixed(1)}% × {calibrationRect.height.toFixed(1)}%
+                  </div>
+                </div>
               )}
             </div>
           </div>
@@ -1580,8 +1710,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               <span>Not linked</span>
             </div>
             <div className="flex items-center gap-1.5 ml-auto">
-              <ScanSearch className="h-3 w-3" />
-              <span>Blocks auto-snap to PDF rectangles on placement</span>
+              {schematic.is_calibrated ? (
+                <span>Calibrated block size: {schematic.calibrated_width?.toFixed(1)}% × {schematic.calibrated_height?.toFixed(1)}%</span>
+              ) : (
+                <span className="text-amber-600">⚠️ Click "Calibrate Block Size" to set accurate block dimensions</span>
+              )}
             </div>
           </div>
         )}
