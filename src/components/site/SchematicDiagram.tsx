@@ -48,7 +48,9 @@ import {
   Square,
   RectangleHorizontal,
   RectangleVertical,
-  MoreVertical
+  MoreVertical,
+  RefreshCw,
+  Replace
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
 
@@ -1139,17 +1141,55 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       {/* Schematic Viewer - Fixed Height */}
       <CardContent className="p-0 relative">
-        {/* Edit Button Overlay - Visible when not editing */}
+        {/* Controls Overlay - Visible when not editing */}
         {!isEditMode && (
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={toggleEditMode}
-            className="absolute top-3 right-3 z-10 shadow-md"
-          >
-            <Pencil className="h-4 w-4 mr-1" />
-            Edit
-          </Button>
+          <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={toggleEditMode}
+              className="shadow-md"
+            >
+              <Pencil className="h-4 w-4 mr-1" />
+              Edit
+            </Button>
+            
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="secondary" size="sm" className="shadow-md px-2">
+                  <MoreVertical className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={loadData}>
+                  <RefreshCw className="h-4 w-4 mr-2" />
+                  Reload Schematic
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                  <label htmlFor="schematic-replace" className="flex items-center cursor-pointer">
+                    <Replace className="h-4 w-4 mr-2" />
+                    Replace PDF
+                  </label>
+                </DropdownMenuItem>
+                <DropdownMenuItem 
+                  onClick={handleDeleteSchematic}
+                  className="text-destructive focus:text-destructive"
+                >
+                  <Trash2 className="h-4 w-4 mr-2" />
+                  Delete Schematic
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            
+            {/* Hidden file input for replace */}
+            <input
+              id="schematic-replace"
+              type="file"
+              accept=".pdf"
+              className="hidden"
+              onChange={handleFileUpload}
+            />
+          </div>
         )}
         
         <div 
