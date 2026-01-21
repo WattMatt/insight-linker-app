@@ -187,6 +187,25 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
+  // Native wheel event listener for zoom (needs passive: false to preventDefault)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    const handleNativeWheel = (e: WheelEvent) => {
+      if (!isEditMode) return;
+      e.preventDefault();
+      const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
+    };
+
+    container.addEventListener('wheel', handleNativeWheel, { passive: false });
+    
+    return () => {
+      container.removeEventListener('wheel', handleNativeWheel);
+    };
+  }, [isEditMode]);
+
   // Calculate the display scale for blocks and PDF
   const displayScale = useMemo(() => {
     if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
@@ -265,14 +284,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       }
     }
   }, [isEditMode]);
-
-  // Handle mouse wheel zoom (only in edit mode)
-  const handleWheel = (e: React.WheelEvent<HTMLDivElement>) => {
-    if (!isEditMode) return;
-    e.preventDefault();
-    const delta = e.deltaY > 0 ? -0.1 : 0.1;
-    setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
-  };
 
   // Handle middle mouse button pan (only in edit mode)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1027,7 +1038,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               : 'overflow-hidden cursor-default'
           }`}
           style={{ height: CONTAINER_HEIGHT }}
-          onWheel={handleWheel}
           onMouseDown={handleMouseDown}
           onMouseMove={(e) => {
             handleMouseMove(e);
