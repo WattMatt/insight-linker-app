@@ -27,6 +27,11 @@ import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist"
 import { AssetVerification } from "@/components/site/AssetVerification";
 import { BulkCOCValidation } from "@/components/site/BulkCOCValidation";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
+import { 
+  fetchFailedValidationsBySubsection, 
+  calculateCocComplianceStats,
+  hasValidCocStatus 
+} from "@/lib/complianceCalculations";
 
 interface SiteDocument {
   category: string;
@@ -478,15 +483,18 @@ const SiteDetail = () => {
       setSnags(snagsRes || []);
       setInspections(inspectionsRes || []);
 
-      // Calculate Stats - using same logic as ComplianceDashboard for consistency
+      // Calculate Stats using shared compliance utility for consistency
       const totalSubsections = subs.length;
+      
+      // Use shared utility for COC compliance calculation
+      const complianceStats = calculateCocComplianceStats(subs, failedValidationsBySubsection);
+      
+      // Calculate overall compliant count (includes snags check which is site-specific)
       let compliantCount = 0;
-
       subs.forEach(sub => {
-        // Check if any COC validation has failed (same as ComplianceDashboard)
+        // Check if any COC validation has failed (using shared utility logic)
         if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) return;
-        
-        if (sub.is_coc_required && sub.coc_status !== 'Approved' && sub.coc_status !== 'Valid' && sub.coc_status !== 'Pass') return;
+        if (sub.is_coc_required && !hasValidCocStatus(sub.coc_status)) return;
         if (sub.is_coc_required && sub.metering_status === 'Missing' && !sub.meter_serial_number) return;
         const subsectionSnags = (snagsRes || []).filter(snag =>
           snag.subsection_id === sub.id &&
@@ -497,19 +505,12 @@ const SiteDetail = () => {
         compliantCount++;
       });
 
-      // COC Approved Count - must have approved status AND no failed validations
-      const cocApprovedCount = subs.filter(s => {
-        if (!s.is_coc_required) return false;
-        if (failedValidationsBySubsection.has(s.id)) return false;
-        return ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '');
-      }).length;
-
       setStats({
         totalSubsections,
         compliantCount,
-        cocRequiredCount: subs.filter(s => s.is_coc_required).length,
-        cocApprovedCount,
-        meteringInstalledCount: subs.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length,
+        cocRequiredCount: complianceStats.cocRequiredCount,
+        cocApprovedCount: complianceStats.cocApprovedCount,
+        meteringInstalledCount: complianceStats.meteringInstalledCount,
         openSnags: (snagsRes || []).filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length,
       });
     } catch (error) {

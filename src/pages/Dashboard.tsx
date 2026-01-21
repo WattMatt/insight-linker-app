@@ -9,6 +9,10 @@ import { useNavigate } from "react-router-dom";
 import { VerificationDashboardWidget } from "@/components/VerificationDashboardWidget";
 import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
 import { Progress } from "@/components/ui/progress";
+import { 
+  fetchFailedValidationsBySubsection, 
+  calculateCocComplianceStats 
+} from "@/lib/complianceCalculations";
 
 interface DashboardStats {
   totalClients: number;
@@ -158,15 +162,11 @@ const Dashboard = () => {
       const subsectionsData = supabaseSubsectionsRes.data || [];
       const cocValidations = cocValidationsRes.data || [];
       
-      // Build a set of subsection IDs that have at least one failed validation
-      const subsectionsWithFailedValidations = new Set<string>();
-      cocValidations.forEach(v => {
-        if (v.status === 'Fail' || v.status === 'Failed') {
-          subsectionsWithFailedValidations.add(v.subsection_id);
-        }
-      });
+      // Use shared utility for consistent compliance calculation
+      const subsectionIds = subsectionsData.map(s => s.id);
+      const subsectionsWithFailedValidations = await fetchFailedValidationsBySubsection(subsectionIds);
       
-      // Calculate COC validation stats
+      // Calculate COC validation stats (for display purposes)
       const totalCocValidations = cocValidations.length;
       const passedValidations = cocValidations.filter(v => 
         v.status === 'Pass' || v.status === 'Passed' || v.status === 'Valid' || v.status === 'Approved'
@@ -178,13 +178,8 @@ const Dashboard = () => {
         v.status === 'Pending' || v.status === 'In Review' || !v.status
       ).length;
       
-      const cocRequiredCount = subsectionsData.filter(s => s.is_coc_required).length;
-      // A subsection is only compliant if primary status is valid AND no failed validations
-      const cocCompliantCount = subsectionsData.filter(s => {
-        if (!s.is_coc_required) return false;
-        if (subsectionsWithFailedValidations.has(s.id)) return false;
-        return s.coc_status === 'Valid' || s.coc_status === 'Approved' || s.coc_status === 'Pass';
-      }).length;
+      // Use shared utility for COC compliance calculation
+      const complianceStats = calculateCocComplianceStats(subsectionsData, subsectionsWithFailedValidations);
 
       setStats({
         totalClients,
@@ -196,8 +191,8 @@ const Dashboard = () => {
         totalSnags,
         openSnags,
         closedSnags,
-        cocCompliantCount,
-        cocRequiredCount,
+        cocCompliantCount: complianceStats.cocApprovedCount,
+        cocRequiredCount: complianceStats.cocRequiredCount,
         totalCocValidations,
         passedValidations,
         failedValidations,
