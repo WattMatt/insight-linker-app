@@ -30,6 +30,7 @@ Deno.serve(async (req) => {
     }
 
     console.log('[detect-schematic-regions] Smart snap request at:', { clickX, clickY, pageWidth, pageHeight });
+    console.log('[detect-schematic-regions] PDF URL:', pdfUrl);
 
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
@@ -45,12 +46,15 @@ Deno.serve(async (req) => {
     const clickXPercent = (clickX / pageWidth) * 100;
     const clickYPercent = (clickY / pageHeight) * 100;
 
+    console.log('[detect-schematic-regions] Click position:', { clickXPercent: clickXPercent.toFixed(1), clickYPercent: clickYPercent.toFixed(1) });
+
+    // Use PDF document support with the correct API version
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         'x-api-key': anthropicApiKey,
-        'anthropic-version': '2023-06-01',
+        'anthropic-version': '2025-01-01', // Required for PDF document support
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
@@ -68,7 +72,7 @@ Deno.serve(async (req) => {
               },
               {
                 type: 'text',
-                text: `You are analyzing an electrical distribution schematic diagram.
+                text: `You are analyzing an electrical distribution schematic diagram PDF.
 
 The user clicked at position: ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
 
@@ -102,16 +106,18 @@ Only return valid JSON, no explanations.`,
 
     if (!anthropicResponse.ok) {
       const errorText = await anthropicResponse.text();
-      console.error('[detect-schematic-regions] Anthropic API error:', errorText);
+      console.error('[detect-schematic-regions] Anthropic API error:', anthropicResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'Failed to analyze PDF', found: false }),
+        JSON.stringify({ error: 'Failed to analyze PDF', details: errorText, found: false }),
         { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const anthropicData = await anthropicResponse.json();
+    console.log('[detect-schematic-regions] Full AI response:', JSON.stringify(anthropicData).substring(0, 500));
+    
     const textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '{}';
-    console.log('[detect-schematic-regions] AI response:', textContent.substring(0, 300));
+    console.log('[detect-schematic-regions] AI text response:', textContent);
 
     // Parse the JSON response
     let result: DetectedRegion | { found: false };
@@ -119,6 +125,7 @@ Only return valid JSON, no explanations.`,
       const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
         const parsed = JSON.parse(jsonMatch[0]);
+        console.log('[detect-schematic-regions] Parsed JSON:', parsed);
         
         if (parsed.found === false) {
           return new Response(
@@ -136,6 +143,7 @@ Only return valid JSON, no explanations.`,
           label: parsed.label || null,
         };
       } else {
+        console.log('[detect-schematic-regions] No JSON match found in response');
         return new Response(
           JSON.stringify({ found: false }),
           { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
