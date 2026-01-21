@@ -292,8 +292,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Handle middle mouse button pan (only in edit mode)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isEditMode) return;
+    // Middle mouse button
     if (e.button === 1) {
       e.preventDefault();
+      e.stopPropagation();
       setIsPanning(true);
       setPanStart({ x: e.clientX, y: e.clientY });
       if (containerRef.current) {
@@ -302,6 +304,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           y: containerRef.current.scrollTop 
         });
       }
+    }
+  };
+
+  // Prevent middle-click auto-scroll (auxclick event)
+  const handleAuxClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button === 1) {
+      e.preventDefault();
+      e.stopPropagation();
     }
   };
 
@@ -319,6 +329,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
     if (e.button === 1) {
+      e.preventDefault();
       setIsPanning(false);
     }
   };
@@ -1143,6 +1154,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           }`}
           style={{ height: CONTAINER_HEIGHT }}
           onMouseDown={handleMouseDown}
+          onAuxClick={handleAuxClick}
           onMouseMove={(e) => {
             handleMouseMove(e);
             if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
@@ -1152,7 +1164,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
           }}
           onMouseLeave={handleMouseLeave}
-          onContextMenu={(e) => { if (isPanning) e.preventDefault(); }}
+          onContextMenu={(e) => { if (isPanning || isEditMode) e.preventDefault(); }}
         >
           <div 
             ref={contentRef}
