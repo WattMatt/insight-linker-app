@@ -58,26 +58,45 @@ Deno.serve(async (req) => {
 
     console.log('[detect-schematic-regions] Image data length:', pageImageBase64.length);
 
-    const prompt = `Analyze this electrical distribution schematic diagram.
+    // Very specific prompt describing the exact table format
+    const prompt = `Look at this electrical schematic diagram.
 
-The user clicked at ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
+The user clicked at position: ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
 
-This schematic shows electrical distribution with DATA TABLES containing tenant/equipment info. Each DATA TABLE has:
-- Rows labeled: NO, NAME, AREA, RATING, CABLE, SERIAL, CT
-- Values in each row (like "DB-13C", "KFC", "311m²", etc.)
-- Black border lines forming a rectangular table
+I need you to find the DISTRIBUTION BOARD TABLE nearest to where the user clicked.
 
-Find the DATA TABLE closest to the click position. Return its COMPLETE outer boundary.
+These tables look EXACTLY like this - they are rectangular boxes with 7 ROWS:
+┌─────────┬──────────────────────┐
+│ NO:     │ DB-13C               │
+├─────────┼──────────────────────┤
+│ NAME:   │ KFC                  │
+├─────────┼──────────────────────┤
+│ AREA:   │ 311m²                │
+├─────────┼──────────────────────┤
+│ RATING: │ 315A TP              │
+├─────────┼──────────────────────┤
+│ CABLE:  │ 2 x 4C x 95mm² ALU   │
+├─────────┼──────────────────────┤
+│ SERIAL: │ 35753488             │
+├─────────┼──────────────────────┤
+│ CT:     │ 300/5A               │
+└─────────┴──────────────────────┘
 
-DATA TABLES are typically:
-- 6-12% of page width
-- 12-22% of page height
-- Have 7 rows of data
+Key features:
+- ALWAYS has exactly 7 rows with labels: NO:, NAME:, AREA:, RATING:, CABLE:, SERIAL:, CT:
+- Has a BLACK RECTANGULAR BORDER around the entire table
+- Two columns: left column has labels, right column has values
+- The table is taller than it is wide (portrait orientation)
 
-Return ONLY valid JSON:
-{"x": <center X as % 0-100>, "y": <center Y as % 0-100>, "width": <width as %>, "height": <height as %>, "label": "<value from NAME or NO row>"}
+Find the COMPLETE OUTER BOUNDARY of the table closest to the click point.
 
-If no data table found: {"found": false}`;
+Respond with ONLY this JSON (no other text):
+{"x": CENTER_X_PERCENT, "y": CENTER_Y_PERCENT, "width": WIDTH_PERCENT, "height": HEIGHT_PERCENT, "label": "VALUE_FROM_NAME_ROW"}
+
+Where all values are percentages of the page (0-100).
+Expected dimensions: width ~6-10%, height ~15-25%
+
+If no such table exists near the click: {"found": false}`;
 
     let textContent = '';
 
@@ -117,7 +136,7 @@ If no data table found: {"found": false}`;
         if (lovableResponse.ok) {
           const lovableData = await lovableResponse.json();
           textContent = lovableData.choices?.[0]?.message?.content || '{}';
-          console.log('[detect-schematic-regions] Gemini response:', textContent);
+          console.log('[detect-schematic-regions] AI response:', textContent);
         } else {
           const errorText = await lovableResponse.text();
           console.warn('[detect-schematic-regions] Lovable AI error:', lovableResponse.status, errorText);
@@ -205,23 +224,33 @@ If no data table found: {"found": false}`;
           );
         }
         
-        // Sanity check: if dimensions are too small, likely detected wrong element
-        const minWidthPercent = 5;
-        const minHeightPercent = 10;
-        if (parsed.width < minWidthPercent || parsed.height < minHeightPercent) {
-          console.log('[detect-schematic-regions] Detected region too small, adjusting to minimum');
-          parsed.width = Math.max(parsed.width, 8);
-          parsed.height = Math.max(parsed.height, 15);
+        // Enforce minimum dimensions for 7-row tables
+        // These tables should be at least 6% wide and 15% tall
+        const minWidthPercent = 6;
+        const minHeightPercent = 15;
+        
+        let width = parsed.width;
+        let height = parsed.height;
+        
+        if (width < minWidthPercent) {
+          console.log(`[detect-schematic-regions] Width too small (${width}%), setting to ${minWidthPercent}%`);
+          width = minWidthPercent;
+        }
+        if (height < minHeightPercent) {
+          console.log(`[detect-schematic-regions] Height too small (${height}%), setting to ${minHeightPercent}%`);
+          height = minHeightPercent;
         }
         
         // Convert percentage-based coordinates to pixel coordinates
         result = {
           x: (parsed.x / 100) * pageWidth,
           y: (parsed.y / 100) * pageHeight,
-          width: (parsed.width / 100) * pageWidth,
-          height: (parsed.height / 100) * pageHeight,
+          width: (width / 100) * pageWidth,
+          height: (height / 100) * pageHeight,
           label: parsed.label || null,
         };
+        
+        console.log('[detect-schematic-regions] Final region (pixels):', result);
       } else {
         console.log('[detect-schematic-regions] No JSON match found in response');
         return new Response(
