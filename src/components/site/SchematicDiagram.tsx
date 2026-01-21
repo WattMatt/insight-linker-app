@@ -147,6 +147,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
 
+  // Snap state
+  const [snapLines, setSnapLines] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
+  const SNAP_THRESHOLD = 8; // pixels to snap within
+
   // Resize/drag state
   const [resizing, setResizing] = useState<{ blockId: string; corner: string } | null>(null);
   const [dragging, setDragging] = useState<{ blockId: string } | null>(null);
@@ -351,6 +355,88 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
   };
 
+  // Helper to find snap points from other blocks
+  const findSnapPoints = (currentBlockId: string, newX: number, newY: number, width: number, height: number) => {
+    const otherBlocks = blocks.filter(b => b.id !== currentBlockId);
+    let snapX: number | null = null;
+    let snapY: number | null = null;
+    let snappedX = newX;
+    let snappedY = newY;
+
+    // Calculate edges of current block
+    const currentLeft = newX - width / 2;
+    const currentRight = newX + width / 2;
+    const currentTop = newY - height / 2;
+    const currentBottom = newY + height / 2;
+    const currentCenterX = newX;
+    const currentCenterY = newY;
+
+    for (const other of otherBlocks) {
+      const otherLeft = other.x_position - other.width / 2;
+      const otherRight = other.x_position + other.width / 2;
+      const otherTop = other.y_position - other.height / 2;
+      const otherBottom = other.y_position + other.height / 2;
+      const otherCenterX = other.x_position;
+      const otherCenterY = other.y_position;
+
+      // Horizontal snapping (X axis)
+      // Left edge to left edge
+      if (Math.abs(currentLeft - otherLeft) < SNAP_THRESHOLD) {
+        snappedX = otherLeft + width / 2;
+        snapX = otherLeft;
+      }
+      // Right edge to right edge
+      else if (Math.abs(currentRight - otherRight) < SNAP_THRESHOLD) {
+        snappedX = otherRight - width / 2;
+        snapX = otherRight;
+      }
+      // Left edge to right edge
+      else if (Math.abs(currentLeft - otherRight) < SNAP_THRESHOLD) {
+        snappedX = otherRight + width / 2;
+        snapX = otherRight;
+      }
+      // Right edge to left edge
+      else if (Math.abs(currentRight - otherLeft) < SNAP_THRESHOLD) {
+        snappedX = otherLeft - width / 2;
+        snapX = otherLeft;
+      }
+      // Center to center (X)
+      else if (Math.abs(currentCenterX - otherCenterX) < SNAP_THRESHOLD) {
+        snappedX = otherCenterX;
+        snapX = otherCenterX;
+      }
+
+      // Vertical snapping (Y axis)
+      // Top edge to top edge
+      if (Math.abs(currentTop - otherTop) < SNAP_THRESHOLD) {
+        snappedY = otherTop + height / 2;
+        snapY = otherTop;
+      }
+      // Bottom edge to bottom edge
+      else if (Math.abs(currentBottom - otherBottom) < SNAP_THRESHOLD) {
+        snappedY = otherBottom - height / 2;
+        snapY = otherBottom;
+      }
+      // Top edge to bottom edge
+      else if (Math.abs(currentTop - otherBottom) < SNAP_THRESHOLD) {
+        snappedY = otherBottom + height / 2;
+        snapY = otherBottom;
+      }
+      // Bottom edge to top edge
+      else if (Math.abs(currentBottom - otherTop) < SNAP_THRESHOLD) {
+        snappedY = otherTop - height / 2;
+        snapY = otherTop;
+      }
+      // Center to center (Y)
+      else if (Math.abs(currentCenterY - otherCenterY) < SNAP_THRESHOLD) {
+        snappedY = otherCenterY;
+        snapY = otherCenterY;
+      }
+    }
+
+    return { snappedX, snappedY, snapX, snapY };
+  };
+
   const handleBlockResizeMove = (e: React.MouseEvent) => {
     if (!originalBlock || !isEditMode) return;
     
@@ -393,12 +479,29 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           ? { ...b, width: newWidth, height: newHeight, x_position: newX, y_position: newY }
           : b
       ));
+      setSnapLines({ x: null, y: null });
     } else if (dragging) {
+      const block = blocks.find(b => b.id === dragging.blockId);
+      if (!block) return;
+
+      const rawX = originalBlock.x + dx;
+      const rawY = originalBlock.y + dy;
+      
+      // Find snap points
+      const { snappedX, snappedY, snapX, snapY } = findSnapPoints(
+        dragging.blockId, 
+        rawX, 
+        rawY, 
+        block.width, 
+        block.height
+      );
+
       setBlocks(blocks.map(b => 
         b.id === dragging.blockId 
-          ? { ...b, x_position: originalBlock.x + dx, y_position: originalBlock.y + dy }
+          ? { ...b, x_position: snappedX, y_position: snappedY }
           : b
       ));
+      setSnapLines({ x: snapX, y: snapY });
     }
   };
 
@@ -434,6 +537,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setResizing(null);
     setDragging(null);
     setOriginalBlock(null);
+    setSnapLines({ x: null, y: null });
   };
 
   // Load data
@@ -1229,6 +1333,24 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 </div>
               );
             })}
+
+              {/* Snap guide lines */}
+              {isEditMode && dragging && (
+                <>
+                  {snapLines.x !== null && (
+                    <div 
+                      className="absolute top-0 bottom-0 w-px bg-primary pointer-events-none z-40"
+                      style={{ left: snapLines.x * displayScale }}
+                    />
+                  )}
+                  {snapLines.y !== null && (
+                    <div 
+                      className="absolute left-0 right-0 h-px bg-primary pointer-events-none z-40"
+                      style={{ top: snapLines.y * displayScale }}
+                    />
+                  )}
+                </>
+              )}
             </div>
           </div>
         </div>
