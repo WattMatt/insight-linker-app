@@ -34,11 +34,8 @@ import {
   Plus, 
   Trash2, 
   Eye, 
-  EyeOff,
   Link2, 
   Unlink, 
-  ZoomIn, 
-  ZoomOut,
   Move,
   Camera,
   Gauge,
@@ -53,7 +50,6 @@ import {
   RefreshCw,
   Replace,
   ScanSearch,
-  Sparkles,
   Loader2
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
@@ -162,7 +158,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   
   // Detection state
   const [isDetecting, setIsDetecting] = useState(false);
-  const [showHints, setShowHints] = useState(true); // Toggle overlay hints visibility
 
   // Pan state
   const [isPanning, setIsPanning] = useState(false);
@@ -758,76 +753,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setUploading(false);
     }
   };
-
-  // Trigger AI detection of regions in the schematic
-  const handleDetectRegions = async (schematicToDetect?: Schematic) => {
-    const targetSchematic = schematicToDetect || schematic;
-    if (!targetSchematic) return;
-
-    setIsDetecting(true);
-    try {
-      console.log('[SchematicDiagram] Starting region detection for:', targetSchematic.id);
-      
-      const response = await supabase.functions.invoke('detect-schematic-regions', {
-        body: {
-          schematicId: targetSchematic.id,
-          pdfUrl: targetSchematic.file_url,
-          pageWidth: originalPdfDimensions.width || 1000,
-          pageHeight: originalPdfDimensions.height || 700,
-        },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message || 'Detection failed');
-      }
-
-      const { regions, count } = response.data;
-      console.log('[SchematicDiagram] Detected', count, 'regions');
-
-      // Update local state with detected regions
-      setSchematic(prev => prev ? {
-        ...prev,
-        detected_regions: regions,
-        detection_status: 'completed',
-      } : null);
-
-      toast.success(`Detected ${count} regions in schematic`);
-    } catch (error: any) {
-      console.error('[SchematicDiagram] Detection error:', error);
-      toast.error(error.message || 'Failed to detect regions');
-    } finally {
-      setIsDetecting(false);
-    }
-  };
-
-  // Create a block from a detected region hint
-  const handleCreateBlockFromHint = async (region: DetectedRegion) => {
-    if (!schematic || !isEditMode) return;
-
-    try {
-      const blockNumber = blocks.length + 1;
-      const { data, error } = await supabase
-        .from("schematic_blocks")
-        .insert({
-          schematic_id: schematic.id,
-          block_identifier: region.label || `DB-${String(blockNumber).padStart(3, '0')}`,
-          block_name: region.label || null,
-          x_position: region.x,
-          y_position: region.y,
-          width: region.width,
-          height: region.height,
-        })
-        .select()
-        .single();
-
-      if (error) throw error;
-
-      setBlocks([...blocks, data]);
-      toast.success(`Block "${region.label || data.block_identifier}" created`);
-    } catch (error) {
-      console.error("Error creating block from hint:", error);
-      toast.error("Failed to create block");
-    }
   };
 
   // Handle deleting schematic
@@ -854,31 +779,69 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  // Handle clicking on schematic to add block
+  // Handle clicking on schematic to add block with smart snap
   const handleSchematicClick = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isAddingBlock || !schematic || !isEditMode) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const x = (e.clientX - rect.left) / scale;
-    const y = (e.clientY - rect.top) / scale;
+    const clickX = (e.clientX - rect.left) / displayScale;
+    const clickY = (e.clientY - rect.top) / displayScale;
 
     // Use first block's dimensions as default, or fallback to 150x100
     const firstBlock = blocks[0];
     const defaultWidth = firstBlock?.width || 150;
     const defaultHeight = firstBlock?.height || 100;
 
+    // Show loading state
+    setIsDetecting(true);
+
     try {
+      // Call AI to find the nearest rectangle at this click location
+      console.log('[SchematicDiagram] Smart snap at:', { clickX, clickY });
+      
+      const response = await supabase.functions.invoke('detect-schematic-regions', {
+        body: {
+          pdfUrl: schematic.file_url,
+          clickX,
+          clickY,
+          pageWidth: originalPdfDimensions.width,
+          pageHeight: originalPdfDimensions.height,
+        },
+      });
+
+      let finalX = clickX;
+      let finalY = clickY;
+      let finalWidth = defaultWidth;
+      let finalHeight = defaultHeight;
+      let detectedLabel: string | null = null;
+
+      if (response.data?.found && response.data?.region) {
+        const region = response.data.region;
+        finalX = region.x;
+        finalY = region.y;
+        finalWidth = region.width;
+        finalHeight = region.height;
+        detectedLabel = region.label;
+        console.log('[SchematicDiagram] Snapped to detected region:', region);
+        toast.success(`Snapped to: ${detectedLabel || 'detected rectangle'}`);
+      } else {
+        console.log('[SchematicDiagram] No region found, using click position');
+        toast.info('No rectangle detected - placed at click position');
+      }
+
       const blockNumber = blocks.length + 1;
+      const blockIdentifier = detectedLabel || `DB-${String(blockNumber).padStart(3, '0')}`;
+      
       const { data, error } = await supabase
         .from("schematic_blocks")
         .insert({
           schematic_id: schematic.id,
-          block_identifier: `DB-${String(blockNumber).padStart(3, '0')}`,
-          block_name: null,
-          x_position: x,
-          y_position: y,
-          width: defaultWidth,
-          height: defaultHeight,
+          block_identifier: blockIdentifier,
+          block_name: detectedLabel,
+          x_position: finalX,
+          y_position: finalY,
+          width: finalWidth,
+          height: finalHeight,
         })
         .select()
         .single();
@@ -889,17 +852,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setSelectedBlock(data);
       setEditForm({
         block_identifier: data.block_identifier,
-        block_name: "",
+        block_name: data.block_name || "",
         subsection_id: "",
         width: data.width,
         height: data.height,
       });
       setEditDialogOpen(true);
       setIsAddingBlock(false);
-      toast.success("Block added - now configure it");
     } catch (error) {
       console.error("Error adding block:", error);
       toast.error("Failed to add block");
+    } finally {
+      setIsDetecting(false);
     }
   };
 
@@ -1237,33 +1201,22 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
             <div className="h-4 w-px bg-border mx-1" />
 
-            {/* Detection Controls */}
-            <Button
-              variant={showHints ? "secondary" : "outline"}
-              size="sm"
-              onClick={() => setShowHints(!showHints)}
-              disabled={!schematic?.detected_regions?.length}
-              title={schematic?.detected_regions?.length ? `${schematic.detected_regions.length} hints available` : 'No hints detected'}
-            >
-              {showHints ? <Eye className="h-4 w-4 mr-1" /> : <EyeOff className="h-4 w-4 mr-1" />}
-              Hints {schematic?.detected_regions?.length ? `(${schematic.detected_regions.length})` : ''}
-            </Button>
+            {/* Smart Snap indicator */}
+            {isDetecting && (
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                <span>Detecting rectangle...</span>
+              </div>
+            )}
 
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => handleDetectRegions()}
-              disabled={isDetecting}
-            >
-              {isDetecting ? (
-                <Loader2 className="h-4 w-4 mr-1 animate-spin" />
-              ) : (
-                <ScanSearch className="h-4 w-4 mr-1" />
-              )}
-              {isDetecting ? 'Detecting...' : 'Detect Blocks'}
-            </Button>
+            {!isDetecting && (
+              <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                <ScanSearch className="h-3.5 w-3.5" />
+                <span>Smart Snap enabled</span>
+              </div>
+            )}
 
-            <div className="h-4 w-px bg-border mx-1" />
+            <div className="flex-1" />
 
             <Button
               variant="ghost"
@@ -1531,50 +1484,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               );
             })}
 
-              {/* Detected Region Hints - Semi-transparent overlay */}
-              {isEditMode && showHints && schematic?.detected_regions?.map((region, index) => {
-                // Check if a block already exists at this approximate location
-                const existingBlock = blocks.find(b => 
-                  Math.abs(b.x_position - region.x) < 20 && 
-                  Math.abs(b.y_position - region.y) < 20
-                );
-                if (existingBlock) return null; // Don't show hint if block already exists there
-
-                const scaledLeft = (region.x - region.width / 2) * displayScale;
-                const scaledTop = (region.y - region.height / 2) * displayScale;
-                const scaledWidth = region.width * displayScale;
-                const scaledHeight = region.height * displayScale;
-
-                return (
-                  <div
-                    key={`hint-${index}`}
-                    className="absolute flex items-center justify-center border-2 border-dashed rounded-sm cursor-pointer transition-all hover:bg-accent/30 hover:border-accent group/hint"
-                    style={{
-                      left: scaledLeft,
-                      top: scaledTop,
-                      width: scaledWidth,
-                      height: scaledHeight,
-                      borderColor: 'hsl(var(--accent))',
-                      backgroundColor: 'hsl(var(--accent) / 0.1)',
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      handleCreateBlockFromHint(region);
-                    }}
-                    title={`Click to create block: ${region.label || 'Detected Region'}`}
-                  >
-                    <div className="flex flex-col items-center gap-1 opacity-60 group-hover/hint:opacity-100 transition-opacity">
-                      <Sparkles className="h-4 w-4 text-accent" />
-                      {region.label && (
-                        <span className="text-[10px] font-medium text-accent px-1 bg-background/80 rounded">
-                          {region.label}
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-
               {/* Snap guide lines */}
               {isEditMode && dragging && (
                 <>
@@ -1632,12 +1541,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               <div className="h-3 w-3 rounded border-2 border-destructive bg-destructive/20" />
               <span>Not linked</span>
             </div>
-            {showHints && schematic?.detected_regions?.length ? (
-              <div className="flex items-center gap-1.5">
-                <div className="h-3 w-3 rounded border-2 border-dashed border-accent bg-accent/20" />
-                <span>AI-detected hint (click to create block)</span>
-              </div>
-            ) : null}
+            <div className="flex items-center gap-1.5 ml-auto">
+              <ScanSearch className="h-3 w-3" />
+              <span>Blocks auto-snap to PDF rectangles on placement</span>
+            </div>
           </div>
         )}
       </CardContent>

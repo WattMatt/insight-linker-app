@@ -11,7 +11,6 @@ interface DetectedRegion {
   width: number;
   height: number;
   label?: string;
-  confidence?: number;
 }
 
 Deno.serve(async (req) => {
@@ -21,21 +20,17 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { schematicId, pdfUrl, pageWidth, pageHeight } = await req.json();
+    const { pdfUrl, clickX, clickY, pageWidth, pageHeight } = await req.json();
     
-    if (!schematicId || !pdfUrl) {
+    if (!pdfUrl || clickX === undefined || clickY === undefined) {
       return new Response(
-        JSON.stringify({ error: 'schematicId and pdfUrl are required' }),
+        JSON.stringify({ error: 'pdfUrl, clickX, and clickY are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[detect-schematic-regions] Starting detection for:', schematicId);
-    console.log('[detect-schematic-regions] PDF URL:', pdfUrl);
-    console.log('[detect-schematic-regions] Dimensions:', { pageWidth, pageHeight });
+    console.log('[detect-schematic-regions] Smart snap request at:', { clickX, clickY, pageWidth, pageHeight });
 
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
 
     if (!anthropicApiKey) {
@@ -46,16 +41,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    // Convert click coordinates to percentages for the AI prompt
+    const clickXPercent = (clickX / pageWidth) * 100;
+    const clickYPercent = (clickY / pageHeight) * 100;
 
-    // Update status to processing
-    await supabase
-      .from('site_schematics')
-      .update({ detection_status: 'processing' })
-      .eq('id', schematicId);
-
-    // For PDFs, we need to convert to image first. Let's use the existing public URL
-    // and ask Claude to analyze the electrical schematic
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: {
@@ -65,7 +54,7 @@ Deno.serve(async (req) => {
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 4096,
+        max_tokens: 1024,
         messages: [
           {
             role: 'user',
@@ -79,33 +68,31 @@ Deno.serve(async (req) => {
               },
               {
                 type: 'text',
-                text: `Analyze this electrical distribution schematic diagram. 
+                text: `You are analyzing an electrical distribution schematic diagram.
 
-Your task is to detect ALL rectangular boxes/blocks in the diagram that represent:
-- Distribution boards (DB)
-- Tenant/shop electrical connections
+The user clicked at position: ${clickXPercent.toFixed(1)}% from the left edge, ${clickYPercent.toFixed(1)}% from the top edge.
+
+Find the NEAREST rectangular box/block to this click point. Look for:
+- Distribution boards (DB boxes)
+- Tenant/shop electrical connection boxes
 - Main switchboards
-- Sub-distribution panels
-- Any labeled rectangular sections
+- Any labeled rectangular section
 
-For each detected rectangle, provide its position and dimensions as a percentage of the total page dimensions.
+Return the EXACT boundaries of the nearest rectangle as percentages of the page dimensions.
 
-IMPORTANT: Return ONLY a valid JSON array, no other text. Each object should have:
-- x: horizontal center position as percentage (0-100) from left edge
-- y: vertical center position as percentage (0-100) from top edge  
-- width: width as percentage of page width (0-100)
-- height: height as percentage of page height (0-100)
-- label: any text label visible in or near the rectangle (e.g., "DB-001", "Shop 1", etc.)
+CRITICAL: Return ONLY a JSON object, nothing else:
+{
+  "x": <center X position as percentage 0-100>,
+  "y": <center Y position as percentage 0-100>,
+  "width": <width as percentage of page>,
+  "height": <height as percentage of page>,
+  "label": "<any text visible in or near this rectangle, or null>"
+}
 
-Example response format:
-[
-  {"x": 25.5, "y": 30.2, "width": 8.5, "height": 5.2, "label": "DB-001"},
-  {"x": 50.0, "y": 45.0, "width": 10.0, "height": 6.0, "label": "Main DB"}
-]
+If no clear rectangle is found near the click point, return:
+{"found": false}
 
-If no rectangles are found, return an empty array: []
-
-Only return the JSON array, nothing else.`,
+Only return valid JSON, no explanations.`,
               },
             ],
           },
@@ -116,75 +103,58 @@ Only return the JSON array, nothing else.`,
     if (!anthropicResponse.ok) {
       const errorText = await anthropicResponse.text();
       console.error('[detect-schematic-regions] Anthropic API error:', errorText);
-      
-      await supabase
-        .from('site_schematics')
-        .update({ detection_status: 'failed' })
-        .eq('id', schematicId);
-        
       return new Response(
-        JSON.stringify({ error: 'Failed to analyze PDF', details: errorText }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Failed to analyze PDF', found: false }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
     const anthropicData = await anthropicResponse.json();
-    console.log('[detect-schematic-regions] Anthropic response received');
-
-    // Extract the text content from Claude's response
-    const textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '[]';
-    console.log('[detect-schematic-regions] Raw response:', textContent.substring(0, 500));
+    const textContent = anthropicData.content?.find((c: any) => c.type === 'text')?.text || '{}';
+    console.log('[detect-schematic-regions] AI response:', textContent.substring(0, 300));
 
     // Parse the JSON response
-    let detectedRegions: DetectedRegion[] = [];
+    let result: DetectedRegion | { found: false };
     try {
-      // Try to extract JSON from the response (in case there's extra text)
-      const jsonMatch = textContent.match(/\[[\s\S]*\]/);
+      const jsonMatch = textContent.match(/\{[\s\S]*\}/);
       if (jsonMatch) {
-        const parsedRegions = JSON.parse(jsonMatch[0]);
+        const parsed = JSON.parse(jsonMatch[0]);
+        
+        if (parsed.found === false) {
+          return new Response(
+            JSON.stringify({ found: false }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
         
         // Convert percentage-based coordinates to pixel coordinates
-        detectedRegions = parsedRegions.map((region: any) => ({
-          x: (region.x / 100) * (pageWidth || 1000),
-          y: (region.y / 100) * (pageHeight || 700),
-          width: (region.width / 100) * (pageWidth || 1000),
-          height: (region.height / 100) * (pageHeight || 700),
-          label: region.label || null,
-          confidence: region.confidence || 0.8,
-        }));
+        result = {
+          x: (parsed.x / 100) * pageWidth,
+          y: (parsed.y / 100) * pageHeight,
+          width: (parsed.width / 100) * pageWidth,
+          height: (parsed.height / 100) * pageHeight,
+          label: parsed.label || null,
+        };
+      } else {
+        return new Response(
+          JSON.stringify({ found: false }),
+          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     } catch (parseError) {
-      console.error('[detect-schematic-regions] Failed to parse regions:', parseError);
-      console.error('[detect-schematic-regions] Raw text was:', textContent);
-    }
-
-    console.log('[detect-schematic-regions] Detected regions:', detectedRegions.length);
-
-    // Store the detected regions
-    const { error: updateError } = await supabase
-      .from('site_schematics')
-      .update({
-        detected_regions: detectedRegions,
-        regions_detected_at: new Date().toISOString(),
-        detection_status: 'completed',
-      })
-      .eq('id', schematicId);
-
-    if (updateError) {
-      console.error('[detect-schematic-regions] Failed to save regions:', updateError);
+      console.error('[detect-schematic-regions] Failed to parse:', parseError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save detected regions' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ found: false }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[detect-schematic-regions] Successfully saved', detectedRegions.length, 'regions');
+    console.log('[detect-schematic-regions] Detected region:', result);
 
     return new Response(
       JSON.stringify({ 
-        success: true, 
-        regions: detectedRegions,
-        count: detectedRegions.length 
+        found: true, 
+        region: result
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
@@ -193,7 +163,7 @@ Only return the JSON array, nothing else.`,
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
     console.error('[detect-schematic-regions] Error:', errorMessage);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: errorMessage, found: false }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
