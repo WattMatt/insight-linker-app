@@ -194,21 +194,32 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Native wheel event listener for zoom (needs passive: false to preventDefault)
   useEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
+    if (!container || !schematic) {
+      console.log('[Schematic] Wheel listener: container or schematic not ready', { container: !!container, schematic: !!schematic });
+      return;
+    }
+
+    console.log('[Schematic] Attaching wheel listener, isEditMode:', isEditMode);
 
     const handleNativeWheel = (e: WheelEvent) => {
-      if (!isEditMode) return;
+      if (!isEditMode) {
+        console.log('[Schematic] Wheel ignored - not in edit mode');
+        return;
+      }
       e.preventDefault();
+      e.stopPropagation();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
+      console.log('[Schematic] Wheel zoom, delta:', delta);
       setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
     };
 
     container.addEventListener('wheel', handleNativeWheel, { passive: false });
     
     return () => {
+      console.log('[Schematic] Removing wheel listener');
       container.removeEventListener('wheel', handleNativeWheel);
     };
-  }, [isEditMode]);
+  }, [isEditMode, schematic]);
 
   // Calculate the display scale for blocks and PDF
   const displayScale = useMemo(() => {
@@ -361,6 +372,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const block = blocks.find(b => b.id === blockId);
     if (!block) return;
     
+    console.log('[Schematic] Block drag start:', blockId);
     setDragging({ blockId });
     setDragStart({ x: e.clientX, y: e.clientY });
     setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
