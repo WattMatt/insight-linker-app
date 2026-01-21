@@ -402,6 +402,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   // Helper to find snap points from other blocks
+  // Find snap points - coordinates are TOP-LEFT based
   const findSnapPoints = (currentBlockId: string, newX: number, newY: number, width: number, height: number) => {
     const otherBlocks = blocks.filter(b => b.id !== currentBlockId);
     let snapX: number | null = null;
@@ -409,73 +410,74 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     let snappedX = newX;
     let snappedY = newY;
 
-    // Calculate edges of current block
-    const currentLeft = newX - width / 2;
-    const currentRight = newX + width / 2;
-    const currentTop = newY - height / 2;
-    const currentBottom = newY + height / 2;
-    const currentCenterX = newX;
-    const currentCenterY = newY;
+    // Calculate edges of current block (x,y is top-left)
+    const currentLeft = newX;
+    const currentRight = newX + width;
+    const currentTop = newY;
+    const currentBottom = newY + height;
+    const currentCenterX = newX + width / 2;
+    const currentCenterY = newY + height / 2;
 
     for (const other of otherBlocks) {
-      const otherLeft = other.x_position - other.width / 2;
-      const otherRight = other.x_position + other.width / 2;
-      const otherTop = other.y_position - other.height / 2;
-      const otherBottom = other.y_position + other.height / 2;
-      const otherCenterX = other.x_position;
-      const otherCenterY = other.y_position;
+      // Other block edges (x_position, y_position is top-left)
+      const otherLeft = other.x_position;
+      const otherRight = other.x_position + other.width;
+      const otherTop = other.y_position;
+      const otherBottom = other.y_position + other.height;
+      const otherCenterX = other.x_position + other.width / 2;
+      const otherCenterY = other.y_position + other.height / 2;
 
       // Horizontal snapping (X axis)
       // Left edge to left edge
       if (Math.abs(currentLeft - otherLeft) < SNAP_THRESHOLD) {
-        snappedX = otherLeft + width / 2;
+        snappedX = otherLeft;
         snapX = otherLeft;
       }
       // Right edge to right edge
       else if (Math.abs(currentRight - otherRight) < SNAP_THRESHOLD) {
-        snappedX = otherRight - width / 2;
+        snappedX = otherRight - width;
         snapX = otherRight;
       }
       // Left edge to right edge
       else if (Math.abs(currentLeft - otherRight) < SNAP_THRESHOLD) {
-        snappedX = otherRight + width / 2;
+        snappedX = otherRight;
         snapX = otherRight;
       }
       // Right edge to left edge
       else if (Math.abs(currentRight - otherLeft) < SNAP_THRESHOLD) {
-        snappedX = otherLeft - width / 2;
+        snappedX = otherLeft - width;
         snapX = otherLeft;
       }
       // Center to center (X)
       else if (Math.abs(currentCenterX - otherCenterX) < SNAP_THRESHOLD) {
-        snappedX = otherCenterX;
+        snappedX = otherCenterX - width / 2;
         snapX = otherCenterX;
       }
 
       // Vertical snapping (Y axis)
       // Top edge to top edge
       if (Math.abs(currentTop - otherTop) < SNAP_THRESHOLD) {
-        snappedY = otherTop + height / 2;
+        snappedY = otherTop;
         snapY = otherTop;
       }
       // Bottom edge to bottom edge
       else if (Math.abs(currentBottom - otherBottom) < SNAP_THRESHOLD) {
-        snappedY = otherBottom - height / 2;
+        snappedY = otherBottom - height;
         snapY = otherBottom;
       }
       // Top edge to bottom edge
       else if (Math.abs(currentTop - otherBottom) < SNAP_THRESHOLD) {
-        snappedY = otherBottom + height / 2;
+        snappedY = otherBottom;
         snapY = otherBottom;
       }
       // Bottom edge to top edge
       else if (Math.abs(currentBottom - otherTop) < SNAP_THRESHOLD) {
-        snappedY = otherTop - height / 2;
+        snappedY = otherTop - height;
         snapY = otherTop;
       }
       // Center to center (Y)
       else if (Math.abs(currentCenterY - otherCenterY) < SNAP_THRESHOLD) {
-        snappedY = otherCenterY;
+        snappedY = otherCenterY - height / 2;
         snapY = otherCenterY;
       }
     }
@@ -483,6 +485,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return { snappedX, snappedY, snapX, snapY };
   };
 
+  // Handle resize and drag - coordinates are TOP-LEFT based
   const handleBlockResizeMove = (e: React.MouseEvent) => {
     if (!originalBlock || !isEditMode) return;
     
@@ -495,29 +498,29 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       let newWidth = originalBlock.width;
       let newHeight = originalBlock.height;
-      // Position is center-based, so we need to adjust center when resizing from one side
+      // Position is top-left based
       let newX = originalBlock.x;
       let newY = originalBlock.y;
 
-      // East handle: expand width to the right, shift center right by half the change
+      // East handle: expand width to the right (top-left stays fixed)
       if (resizing.corner.includes('e')) {
         newWidth = Math.max(40, originalBlock.width + dx);
-        newX = originalBlock.x + dx / 2;
+        // x stays the same for east resize
       }
-      // West handle: expand width to the left, shift center left by half the change
+      // West handle: expand width to the left (right edge stays fixed)
       if (resizing.corner.includes('w')) {
         newWidth = Math.max(40, originalBlock.width - dx);
-        newX = originalBlock.x + dx / 2;
+        newX = originalBlock.x + dx; // Move left edge
       }
-      // South handle: expand height downward, shift center down by half the change
+      // South handle: expand height downward (top stays fixed)
       if (resizing.corner.includes('s')) {
         newHeight = Math.max(30, originalBlock.height + dy);
-        newY = originalBlock.y + dy / 2;
+        // y stays the same for south resize
       }
-      // North handle: expand height upward, shift center up by half the change
+      // North handle: expand height upward (bottom stays fixed)
       if (resizing.corner.includes('n')) {
         newHeight = Math.max(30, originalBlock.height - dy);
-        newY = originalBlock.y + dy / 2;
+        newY = originalBlock.y + dy; // Move top edge
       }
 
       setBlocks(blocks.map(b => 
@@ -1377,9 +1380,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 const photos = getAssetPhotos(block.subsection_id);
                 const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
 
-                // Scale block positions and dimensions
-                const scaledLeft = (block.x_position - block.width / 2) * displayScale;
-                const scaledTop = (block.y_position - block.height / 2) * displayScale;
+                // Scale block positions and dimensions (positions are top-left corner)
+                const scaledLeft = block.x_position * displayScale;
+                const scaledTop = block.y_position * displayScale;
                 const scaledWidth = block.width * displayScale;
                 const scaledHeight = block.height * displayScale;
 
