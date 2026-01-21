@@ -29,6 +29,12 @@ import {
   Clock
 } from "lucide-react";
 import { format, subDays, startOfDay } from "date-fns";
+import { 
+  fetchFailedValidationsBySubsection, 
+  calculateCocComplianceStats,
+  hasValidCocStatus,
+  VALID_COC_STATUSES
+} from "@/lib/complianceCalculations";
 
 interface ComplianceDashboardProps {
   siteId: string;
@@ -71,61 +77,33 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [loading, setLoading] = useState(true);
   const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
 
-  // Fetch COC validations to check for any failed supplementary validations
+  // Fetch COC validations to check for any failed supplementary validations using shared utility
   useEffect(() => {
     const fetchCocValidations = async () => {
       if (subsections.length === 0) return;
       
       const subsectionIds = subsections.map(s => s.id);
-      // Fetch the LATEST validation per subsection (not all historical validations)
-      const { data, error } = await supabase
-        .from('coc_validations')
-        .select('subsection_id, status, validated_at')
-        .in('subsection_id', subsectionIds)
-        .order('validated_at', { ascending: false });
-      
-      if (error) {
-        console.error("Error fetching COC validations:", error);
-        return;
-      }
-      
-      // Only consider the MOST RECENT validation per subsection
-      const latestBySubsection = new Map<string, string>();
-      data?.forEach(validation => {
-        if (!latestBySubsection.has(validation.subsection_id)) {
-          latestBySubsection.set(validation.subsection_id, validation.status);
-        }
-      });
-      
-      const failedSet = new Set<string>();
-      latestBySubsection.forEach((status, subsectionId) => {
-        if (status === 'Fail' || status === 'Failed' || status === 'Incomplete') {
-          failedSet.add(subsectionId);
-        }
-      });
+      const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
       setFailedValidationsBySubsection(failedSet);
     };
     
     fetchCocValidations();
   }, [subsections]);
 
-  // Calculate overall compliance score
+  // Calculate overall compliance score using shared utility
   const calculateOverallScore = () => {
     if (subsections.length === 0) return 0;
     
     let compliantCount = 0;
     
     subsections.forEach(sub => {
-      // Check if any COC validation has failed (including supplementary)
+      // Check if any COC validation has failed (using shared utility)
       if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) {
         return;
       }
       
-      // COC Check
-      if (sub.is_coc_required && 
-          sub.coc_status !== 'Approved' && 
-          sub.coc_status !== 'Valid' && 
-          sub.coc_status !== 'Pass') {
+      // COC Check using shared utility
+      if (sub.is_coc_required && !hasValidCocStatus(sub.coc_status)) {
         return;
       }
       
@@ -156,7 +134,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     return Math.round((compliantCount / subsections.length) * 100);
   };
 
-  // Calculate category-specific scores
+  // Calculate category-specific scores using shared utility
   const calculateCategoryScores = (): CategoryScore[] => {
     const categories: CategoryScore[] = [
       { name: 'COC Compliance', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-1))' },
@@ -164,18 +142,11 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       { name: 'Snag Resolution', score: 0, total: 0, compliant: 0, color: 'hsl(var(--chart-3))' },
     ];
     
-    // COC Compliance - must have approved primary status AND no failed validations
-    const cocRequired = subsections.filter(s => s.is_coc_required);
-    const cocCompliant = cocRequired.filter(s => {
-      // If any validation failed, not compliant
-      if (failedValidationsBySubsection.has(s.id)) return false;
-      return s.coc_status === 'Approved' || s.coc_status === 'Valid' || s.coc_status === 'Pass';
-    });
-    categories[0].total = cocRequired.length;
-    categories[0].compliant = cocCompliant.length;
-    categories[0].score = cocRequired.length > 0 
-      ? Math.round((cocCompliant.length / cocRequired.length) * 100) 
-      : 100;
+    // COC Compliance - using shared utility calculation
+    const complianceStats = calculateCocComplianceStats(subsections, failedValidationsBySubsection);
+    categories[0].total = complianceStats.cocRequiredCount;
+    categories[0].compliant = complianceStats.cocApprovedCount;
+    categories[0].score = complianceStats.cocComplianceRate;
     
     // Metering Status
     const meteringRequired = subsections.filter(s => s.is_coc_required);
