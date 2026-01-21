@@ -165,9 +165,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
 
-  // Snap state
+  // Snap state - values are percentages now
   const [snapLines, setSnapLines] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
-  const SNAP_THRESHOLD = 8; // pixels to snap within
+  const SNAP_THRESHOLD = 1; // percentage threshold for snapping (~1% of page)
 
   // Resize/drag state
   const [resizing, setResizing] = useState<{ blockId: string; corner: string } | null>(null);
@@ -485,12 +485,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return { snappedX, snappedY, snapX, snapY };
   };
 
-  // Handle resize and drag - coordinates are TOP-LEFT based
+  // Handle resize and drag - coordinates are PERCENTAGES (0-100)
   const handleBlockResizeMove = (e: React.MouseEvent) => {
-    if (!originalBlock || !isEditMode) return;
+    if (!originalBlock || !isEditMode || !contentRef.current) return;
     
-    const dx = (e.clientX - dragStart.x) / displayScale;
-    const dy = (e.clientY - dragStart.y) / displayScale;
+    // Get container dimensions to convert pixels to percentages
+    const containerRect = contentRef.current.getBoundingClientRect();
+    const containerWidth = containerRect.width;
+    const containerHeight = containerRect.height;
+    
+    // Convert pixel delta to percentage delta
+    const dxPercent = ((e.clientX - dragStart.x) / containerWidth) * 100;
+    const dyPercent = ((e.clientY - dragStart.y) / containerHeight) * 100;
 
     if (resizing) {
       const block = blocks.find(b => b.id === resizing.blockId);
@@ -498,29 +504,26 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       let newWidth = originalBlock.width;
       let newHeight = originalBlock.height;
-      // Position is top-left based
       let newX = originalBlock.x;
       let newY = originalBlock.y;
 
-      // East handle: expand width to the right (top-left stays fixed)
+      // East handle: expand width to the right
       if (resizing.corner.includes('e')) {
-        newWidth = Math.max(40, originalBlock.width + dx);
-        // x stays the same for east resize
+        newWidth = Math.max(2, originalBlock.width + dxPercent);
       }
-      // West handle: expand width to the left (right edge stays fixed)
+      // West handle: expand width to the left
       if (resizing.corner.includes('w')) {
-        newWidth = Math.max(40, originalBlock.width - dx);
-        newX = originalBlock.x + dx; // Move left edge
+        newWidth = Math.max(2, originalBlock.width - dxPercent);
+        newX = originalBlock.x + dxPercent;
       }
-      // South handle: expand height downward (top stays fixed)
+      // South handle: expand height downward
       if (resizing.corner.includes('s')) {
-        newHeight = Math.max(30, originalBlock.height + dy);
-        // y stays the same for south resize
+        newHeight = Math.max(2, originalBlock.height + dyPercent);
       }
-      // North handle: expand height upward (bottom stays fixed)
+      // North handle: expand height upward
       if (resizing.corner.includes('n')) {
-        newHeight = Math.max(30, originalBlock.height - dy);
-        newY = originalBlock.y + dy; // Move top edge
+        newHeight = Math.max(2, originalBlock.height - dyPercent);
+        newY = originalBlock.y + dyPercent;
       }
 
       setBlocks(blocks.map(b => 
@@ -533,10 +536,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       const block = blocks.find(b => b.id === dragging.blockId);
       if (!block) return;
 
-      const rawX = originalBlock.x + dx;
-      const rawY = originalBlock.y + dy;
+      const rawX = originalBlock.x + dxPercent;
+      const rawY = originalBlock.y + dyPercent;
       
-      // Find snap points
+      // Find snap points (now using percentages)
       const { snappedX, snappedY, snapX, snapY } = findSnapPoints(
         dragging.blockId, 
         rawX, 
@@ -793,17 +796,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   // Handle clicking on schematic to add block with smart snap
+  // All coordinates are stored as PERCENTAGES (0-100) for consistent alignment
   const handleSchematicClick = async (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isAddingBlock || !schematic || !isEditMode) return;
 
     const rect = e.currentTarget.getBoundingClientRect();
-    const clickX = (e.clientX - rect.left) / displayScale;
-    const clickY = (e.clientY - rect.top) / displayScale;
+    // Convert click to percentage of container
+    const clickXPercent = ((e.clientX - rect.left) / rect.width) * 100;
+    const clickYPercent = ((e.clientY - rect.top) / rect.height) * 100;
 
-    // Use first block's dimensions as default, or fallback to 150x100
-    const firstBlock = blocks[0];
-    const defaultWidth = firstBlock?.width || 150;
-    const defaultHeight = firstBlock?.height || 100;
+    // Default dimensions as percentages (approximately 150x100 pixels on a typical PDF)
+    const defaultWidthPercent = 8;  // ~8% of page width
+    const defaultHeightPercent = 12; // ~12% of page height
 
     // Show loading state
     setIsDetecting(true);
@@ -815,7 +819,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (pdfCanvasRef.current) {
         try {
           const dataUrl = pdfCanvasRef.current.toDataURL('image/png');
-          // Remove the data:image/png;base64, prefix
           pageImageBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
           console.log('[SchematicDiagram] Canvas captured, base64 length:', pageImageBase64.length);
         } catch (canvasError) {
@@ -825,45 +828,40 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         console.warn('[SchematicDiagram] No PDF canvas reference available');
       }
 
-      // Call AI to find the nearest rectangle at this click location
-      console.log('[SchematicDiagram] Smart snap at:', { clickX, clickY, hasImage: !!pageImageBase64 });
+      console.log('[SchematicDiagram] Smart snap at:', { clickXPercent, clickYPercent, hasImage: !!pageImageBase64 });
       
+      // Call AI - it now returns percentages directly
       const response = await supabase.functions.invoke('detect-schematic-regions', {
         body: {
           pdfUrl: schematic.file_url,
-          clickX,
-          clickY,
-          pageWidth: originalPdfDimensions.width,
-          pageHeight: originalPdfDimensions.height,
+          clickX: clickXPercent,
+          clickY: clickYPercent,
+          pageWidth: 100,  // Using percentage system
+          pageHeight: 100, // Using percentage system
           pageImageBase64,
         },
       });
 
-      let finalX = clickX;
-      let finalY = clickY;
-      let finalWidth = defaultWidth;
-      let finalHeight = defaultHeight;
+      let finalX = clickXPercent - (defaultWidthPercent / 2);
+      let finalY = clickYPercent - (defaultHeightPercent / 2);
+      let finalWidth = defaultWidthPercent;
+      let finalHeight = defaultHeightPercent;
       let detectedLabel: string | null = null;
 
       if (response.data?.found && response.data?.region) {
         const region = response.data.region;
-        // AI now returns top-left coordinates directly
-        finalWidth = region.width;
-        finalHeight = region.height;
+        // AI returns percentages with top-left coordinates
         finalX = region.x;
         finalY = region.y;
+        finalWidth = region.width;
+        finalHeight = region.height;
         detectedLabel = region.label;
-        console.log('[SchematicDiagram] Snapped to detected region:', { 
-          topLeft: { x: finalX, y: finalY },
-          size: { width: finalWidth, height: finalHeight },
-          label: detectedLabel 
+        console.log('[SchematicDiagram] Snapped to detected region (percentages):', { 
+          x: finalX, y: finalY, width: finalWidth, height: finalHeight, label: detectedLabel 
         });
         toast.success(`Snapped to: ${detectedLabel || 'detected rectangle'}`);
       } else {
-        // For manual placement, center the block on click position
-        finalX = clickX - (finalWidth / 2);
-        finalY = clickY - (finalHeight / 2);
-        console.log('[SchematicDiagram] No region found, using click position', response.data);
+        console.log('[SchematicDiagram] No region found, placing at click position', response.data);
         toast.info('No rectangle detected - placed at click position');
       }
 
@@ -1373,17 +1371,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 />
               </Document>
 
-              {/* Render blocks - scaled to match PDF */}
+              {/* Render blocks - using percentage-based positioning for consistent alignment */}
               {blocks.map(block => {
                 const isLinked = !!block.subsection_id;
                 const photos = getAssetPhotos(block.subsection_id);
                 const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
 
-                // Scale block positions and dimensions (positions are top-left corner)
-                const scaledLeft = block.x_position * displayScale;
-                const scaledTop = block.y_position * displayScale;
-                const scaledWidth = block.width * displayScale;
-                const scaledHeight = block.height * displayScale;
+                // Block positions are stored as percentages (0-100)
+                // Use CSS % positioning for resolution-independent alignment
 
                 return (
                   <div
@@ -1396,10 +1391,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                       isEditMode ? 'group' : ''
                     }`}
                     style={{
-                      left: scaledLeft,
-                      top: scaledTop,
-                      width: scaledWidth,
-                      height: scaledHeight,
+                      left: `${block.x_position}%`,
+                      top: `${block.y_position}%`,
+                      width: `${block.width}%`,
+                      height: `${block.height}%`,
                       cursor: isEditMode 
                         ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
                         : (isLinked ? 'pointer' : 'default'),
@@ -1521,19 +1516,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               );
             })}
 
-              {/* Snap guide lines */}
+              {/* Snap guide lines - using percentage positioning */}
               {isEditMode && dragging && (
                 <>
                   {snapLines.x !== null && (
                     <div 
                       className="absolute top-0 bottom-0 w-px bg-primary pointer-events-none z-40"
-                      style={{ left: snapLines.x * displayScale }}
+                      style={{ left: `${snapLines.x}%` }}
                     />
                   )}
                   {snapLines.y !== null && (
                     <div 
                       className="absolute left-0 right-0 h-px bg-primary pointer-events-none z-40"
-                      style={{ top: snapLines.y * displayScale }}
+                      style={{ top: `${snapLines.y}%` }}
                     />
                   )}
                 </>
