@@ -58,42 +58,27 @@ Deno.serve(async (req) => {
 
     console.log('[detect-schematic-regions] Image data length:', pageImageBase64.length);
 
-    // Very specific prompt describing the exact table format
-    const prompt = `Look at this electrical schematic diagram. I need PRECISE measurements.
+    // Very specific prompt for small 7-row distribution board tables
+    const prompt = `Analyze this electrical schematic PDF. User clicked at ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
 
-The user clicked at position: ${clickXPercent.toFixed(1)}% from left, ${clickYPercent.toFixed(1)}% from top.
+FIND THE NEAREST SMALL DISTRIBUTION BOARD TABLE - these are COMPACT information tables with this EXACT structure:
+- 7 rows with labels: NO:, NAME:, AREA:, RATING:, CABLE:, SERIAL:, CT:
+- Two columns: left has labels, right has values
+- Black rectangular border around the whole table
+- They are SMALL boxes (about 3-8% of page width, 8-15% of page height)
+- They look like small data cards/info boxes, NOT large enclosures
 
-TASK: Find the DISTRIBUTION BOARD TABLE closest to where the user clicked and return its EXACT bounding box.
+DO NOT select:
+- Large rectangular enclosures labeled "MAIN BOARD 1", "KIOSK", etc.
+- The overall schematic boundary boxes
+- Generator symbols or other equipment
 
-These tables are rectangular boxes with 7 ROWS of text, structured like this:
-┌─────────────┬────────────────────────────┐
-│ NO:         │ DB-13C                     │
-├─────────────┼────────────────────────────┤
-│ NAME:       │ KFC                        │
-├─────────────┼────────────────────────────┤
-│ AREA:       │ 311m²                      │
-├─────────────┼────────────────────────────┤
-│ RATING:     │ 315A TP                    │
-├─────────────┼────────────────────────────┤
-│ CABLE:      │ 2 x 4C x 95mm² ALU CABLE   │
-├─────────────┼────────────────────────────┤
-│ SERIAL:     │ 35753488                   │
-├─────────────┼────────────────────────────┤
-│ CT:         │ 300/5A                     │
-└─────────────┴────────────────────────────┘
+These info tables appear multiple times on the schematic. Find the one NEAREST to the click point.
 
-IMPORTANT: These tables are LARGE - typically:
-- Width: 10-20% of page width (they have long text values in the right column)
-- Height: 20-35% of page height (7 rows of text makes them tall)
+Return coordinates as TOP-LEFT corner (not center):
+{"x": <TOP-LEFT X as percentage 0-100>, "y": <TOP-LEFT Y as percentage 0-100>, "width": <percentage 0-100>, "height": <percentage 0-100>, "label": "<NAME value>"}
 
-Measure the table from the OUTER EDGE of its black border - include the full rectangle.
-
-Return ONLY this JSON:
-{"x": <center X as percentage 0-100>, "y": <center Y as percentage 0-100>, "width": <full width as percentage 0-100>, "height": <full height as percentage 0-100>, "label": "<value from NAME row>"}
-
-CRITICAL: Measure the ACTUAL dimensions carefully. Do NOT underestimate. The width should capture the entire table including the right column with long cable specifications.
-
-If no distribution board table exists near the click: {"found": false}`;
+If no 7-row distribution table is near the click: {"found": false}`;
 
     let textContent = '';
 
@@ -221,25 +206,12 @@ If no distribution board table exists near the click: {"found": false}`;
           );
         }
         
-        // Enforce minimum dimensions for 7-row distribution board tables
-        // These tables are substantial - at least 10% wide and 20% tall
-        const minWidthPercent = 10;
-        const minHeightPercent = 20;
-        
+        // Use dimensions exactly as AI returned - these tables are small
+        // Typical size: 3-8% width, 8-15% height
         let width = parsed.width;
         let height = parsed.height;
         
-        // Log the raw AI-returned dimensions
-        console.log(`[detect-schematic-regions] AI returned: width=${parsed.width}%, height=${parsed.height}%`);
-        
-        if (width < minWidthPercent) {
-          console.log(`[detect-schematic-regions] Width too small (${width}%), enforcing minimum ${minWidthPercent}%`);
-          width = minWidthPercent;
-        }
-        if (height < minHeightPercent) {
-          console.log(`[detect-schematic-regions] Height too small (${height}%), enforcing minimum ${minHeightPercent}%`);
-          height = minHeightPercent;
-        }
+        console.log(`[detect-schematic-regions] AI returned dimensions: width=${width}%, height=${height}%`);
         
         // Convert percentage-based coordinates to pixel coordinates
         result = {
