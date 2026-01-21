@@ -193,31 +193,26 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Native wheel event listener for zoom (needs passive: false to preventDefault)
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !schematic) {
-      console.log('[Schematic] Wheel listener: container or schematic not ready', { container: !!container, schematic: !!schematic });
+    const content = contentRef.current;
+    if (!content || !schematic) {
       return;
     }
 
-    console.log('[Schematic] Attaching wheel listener, isEditMode:', isEditMode);
+    if (!isEditMode) {
+      return;
+    }
 
     const handleNativeWheel = (e: WheelEvent) => {
-      if (!isEditMode) {
-        console.log('[Schematic] Wheel ignored - not in edit mode');
-        return;
-      }
       e.preventDefault();
       e.stopPropagation();
       const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      console.log('[Schematic] Wheel zoom, delta:', delta);
       setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
     };
 
-    container.addEventListener('wheel', handleNativeWheel, { passive: false });
+    content.addEventListener('wheel', handleNativeWheel, { passive: false, capture: true });
     
     return () => {
-      console.log('[Schematic] Removing wheel listener');
-      container.removeEventListener('wheel', handleNativeWheel);
+      content.removeEventListener('wheel', handleNativeWheel, { capture: true } as EventListenerOptions);
     };
   }, [isEditMode, schematic]);
 
