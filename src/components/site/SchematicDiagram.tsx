@@ -134,6 +134,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const { clientId } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
+  const pdfCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
   // State
   const [schematic, setSchematic] = useState<Schematic | null>(null);
@@ -275,8 +276,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return CONTAINER_HEIGHT - 32;
   }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
-  // Handle PDF page render to get original dimensions (only once)
+  // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
+    // Capture the canvas element for smart snap functionality
+    // react-pdf renders to a canvas inside the Page component
+    setTimeout(() => {
+      const canvas = contentRef.current?.querySelector('canvas');
+      if (canvas) {
+        pdfCanvasRef.current = canvas;
+        console.log('[SchematicDiagram] PDF canvas captured for smart snap');
+      }
+    }, 100);
+    
     // Only capture dimensions once - when we don't have them yet
     if (dimensionsLoaded) return;
     
@@ -795,8 +806,24 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setIsDetecting(true);
 
     try {
+      // Capture the PDF canvas as a base64 image for AI analysis
+      let pageImageBase64: string | null = null;
+      
+      if (pdfCanvasRef.current) {
+        try {
+          const dataUrl = pdfCanvasRef.current.toDataURL('image/png');
+          // Remove the data:image/png;base64, prefix
+          pageImageBase64 = dataUrl.replace(/^data:image\/\w+;base64,/, '');
+          console.log('[SchematicDiagram] Canvas captured, base64 length:', pageImageBase64.length);
+        } catch (canvasError) {
+          console.warn('[SchematicDiagram] Could not capture canvas:', canvasError);
+        }
+      } else {
+        console.warn('[SchematicDiagram] No PDF canvas reference available');
+      }
+
       // Call AI to find the nearest rectangle at this click location
-      console.log('[SchematicDiagram] Smart snap at:', { clickX, clickY });
+      console.log('[SchematicDiagram] Smart snap at:', { clickX, clickY, hasImage: !!pageImageBase64 });
       
       const response = await supabase.functions.invoke('detect-schematic-regions', {
         body: {
@@ -805,6 +832,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           clickY,
           pageWidth: originalPdfDimensions.width,
           pageHeight: originalPdfDimensions.height,
+          pageImageBase64,
         },
       });
 
@@ -824,7 +852,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         console.log('[SchematicDiagram] Snapped to detected region:', region);
         toast.success(`Snapped to: ${detectedLabel || 'detected rectangle'}`);
       } else {
-        console.log('[SchematicDiagram] No region found, using click position');
+        console.log('[SchematicDiagram] No region found, using click position', response.data);
         toast.info('No rectangle detected - placed at click position');
       }
 
