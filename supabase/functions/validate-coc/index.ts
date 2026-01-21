@@ -566,33 +566,129 @@ When analyzing a PDF or image:
 - Verify all pages are present
 - Note any alterations or corrections
 
-## 🚫 ANTI-HALLUCINATION RULES (CRITICAL - MUST FOLLOW)
-**YOU MUST NOT fabricate, invent, or assume information that is NOT visible in the document.**
+## 🚫🚫🚫 ANTI-HALLUCINATION RULES (CRITICAL - ZERO TOLERANCE) 🚫🚫🚫
 
-1. **ONLY report what you can SEE:**
-   - If a value, text, or annotation is not visible → say "Not visible" or "Not provided"
-   - Do NOT invent specific measurements, cable sizes, or technical details
-   - Do NOT create quotes like "Annexure states..." unless you can read exact text
+**VIOLATION OF THESE RULES RENDERS THE ENTIRE VALIDATION INVALID.**
 
-2. **For failure descriptions:**
-   - Base descriptions ONLY on visible evidence
-   - Use language like "Document shows..." or "Visible test value is..."
-   - If you cannot read a value clearly → say "Value unclear/unreadable"
+### RULE 1: ABSOLUTE TRUTH REQUIREMENT
+You MUST NOT fabricate, invent, assume, or infer ANY information that is NOT directly visible and readable in the document.
 
-3. **Evidence requirement:**
-   - Every failure MUST cite specific visible evidence from the document
-   - Evidence field should reference exact location: "Page X, Section Y shows..."
-   - If you cannot cite specific visible evidence → do NOT report the failure
+**FORBIDDEN BEHAVIORS:**
+❌ Inventing quotes: "Annexure 1 states..." "The document indicates..." "Section X shows..."
+❌ Fabricating measurements: "Cable size is 50mm²" when no such value is visible
+❌ Creating technical details: "neutral wire reduced to 16mm²" without visible evidence
+❌ Inferring conditions: "compromised current carrying capacity" without stated evidence
+❌ Assuming content exists: Describing content from sections you cannot see
+❌ Making up annexure content: Annexures often don't exist or contain different information
 
-4. **When uncertain:**
-   - Use "extractionNotes" to flag unclear areas
-   - Set confidence score appropriately low
-   - Do NOT fill in blanks with assumptions
+### RULE 2: EVIDENCE-FIRST FAILURES
+Every failure MUST be supported by DIRECT, VISIBLE evidence:
 
-**SELF-CHECK:** Before reporting any failure, ask:
-- "Can I point to the exact text/value in the document?"
-- "Am I inventing details I cannot actually see?"
-- If the answer is no to the first or yes to the second → DO NOT REPORT IT
+**REQUIRED FORMAT for criticalFailures:**
+\`\`\`json
+{
+  "description": "MUST describe only what IS visible, not what should be",
+  "reason": "MUST quote or reference EXACT visible text/values from document",
+  "evidence": "Page X, Row Y shows: '[exact quoted text or value]'"
+}
+\`\`\`
+
+**FORBIDDEN in failure descriptions:**
+❌ "Document states..." → Only if you can quote the EXACT text
+❌ "Annexure indicates..." → Only if Annexure is visible AND you quote it
+❌ "Testing shows..." → Only if test values are visible AND you cite them
+❌ Narrative descriptions of technical issues not directly stated
+
+**ALLOWED in failure descriptions:**
+✅ "Test result field shows '0.15 MΩ' which is below 0.25 MΩ minimum"
+✅ "Registration number field is blank/empty"
+✅ "Date field shows '2026-05-15' which is a future date"
+✅ "No visible signature in signature block area"
+✅ "Value unclear/unreadable in this field"
+
+### RULE 3: VISIBILITY VERIFICATION
+Before including ANY information in your response, verify:
+
+1. **CAN I SEE IT?**
+   - Can I point to the exact pixel/area where this appears? → YES = Include
+   - Am I inferring from context or assumptions? → YES = DO NOT Include
+   
+2. **CAN I QUOTE IT?**
+   - Can I provide the EXACT text/value I'm reading? → YES = Include
+   - Am I paraphrasing or summarizing unseen content? → YES = DO NOT Include
+
+3. **IS IT REAL?**
+   - Is this value actually printed/written on the document? → YES = Include
+   - Am I generating content that "should be" or "typically is" there? → YES = DO NOT Include
+
+### RULE 4: HANDLING MISSING/UNCLEAR INFORMATION
+When information is missing or unclear:
+
+**DO:**
+✅ Set value to null in JSON
+✅ Add note to extractionNotes: "Field X not visible/readable"
+✅ Mark relevant check as "Not Tested" with reason "Value not visible in document"
+✅ Report the ABSENCE of required information (not fabricated presence)
+
+**DO NOT:**
+❌ Guess what the value might be
+❌ Use typical/expected values
+❌ Describe what the content "should" contain
+❌ Generate plausible-sounding technical descriptions
+
+### RULE 5: ANNEXURE AND SUPPLEMENTARY PAGE RULES
+**SPECIAL WARNING:** Annexures are the #1 source of AI hallucination.
+
+1. If you CANNOT see an Annexure → DO NOT reference its content
+2. If an Annexure IS visible → Quote ONLY text you can directly read
+3. NEVER generate statements like:
+   - "Annexure 1 states: '[made-up content]'"
+   - "According to the attached Annexure..."
+   - "The installation notes indicate..."
+4. If Annexure exists but is unclear → say "Annexure visible but content unreadable"
+
+### RULE 6: FAILURE GENERATION RESTRICTIONS
+You may ONLY generate failures for:
+
+1. **Missing required fields** (field is blank/empty - VISIBLE absence)
+2. **Out-of-range values** (VISIBLE value compared to stated threshold)
+3. **Invalid dates** (VISIBLE date is in future or formatted incorrectly)
+4. **Checkbox status** (VISIBLE checkbox is unmarked when required)
+5. **Missing signatures** (signature area is VISIBLY empty)
+
+You may NOT generate failures for:
+❌ Technical issues you "detected" but cannot directly quote
+❌ Cable sizing issues without visible cable size AND protection rating
+❌ Installation quality issues not stated in visible test results
+❌ Any issue requiring you to infer or assume information
+
+### RULE 7: SELF-VERIFICATION CHECKLIST
+Before submitting your response, verify EACH criticalFailure:
+
+□ Can I screenshot the exact evidence? (If NO → DELETE THIS FAILURE)
+□ Is my description factual without narrative embellishment? (If NO → REWRITE)
+□ Did I quote actual visible text/values? (If NO → ADD QUOTES OR DELETE)
+□ Am I describing what IS rather than what SHOULD BE? (If NO → REWRITE)
+□ Would another person looking at this document reach the same conclusion from visible evidence? (If NO → DELETE)
+
+### RULE 8: CONFIDENCE SCORE CORRELATION
+Your confidence score MUST reflect evidence quality:
+
+- **90-100:** Every failure has direct visible evidence with exact quotes
+- **70-89:** Most evidence is visible, some fields unclear
+- **50-69:** Significant portions unclear, limited direct evidence
+- **<50:** Document quality prevents reliable extraction
+
+**If you generate failures with low confidence → YOU ARE LIKELY HALLUCINATING**
+
+### RULE 9: WHEN IN DOUBT, LEAVE IT OUT
+If you are uncertain whether something is visible or accurate:
+- DO NOT include it as a failure
+- DO add it to extractionNotes with uncertainty flag
+- DO reduce confidence score
+- DO NOT try to be helpful by guessing
+
+**REMEMBER: A validation with fewer accurate findings is infinitely more valuable than one with fabricated issues that waste everyone's time and undermine trust.**
 
 Now analyze the provided COC document with strict SANS 10142-1:2020 compliance:`;
 
@@ -830,9 +926,15 @@ serve(async (req) => {
           content: [
             {
               type: 'text',
-              text: `Please analyze this COC document image/PDF and validate it against SANS 10142-1:2020 standards. Extract ALL visible information including handwritten test values, stamps, and signatures. 
+              text: `Analyze this COC document against SANS 10142-1:2020. Extract ALL visible information.
 
-CRITICAL: Do NOT fabricate or invent any information. Only report what you can actually SEE in the document. If you cannot read a value, say "unclear" or "not visible". Do NOT create quotes or descriptions of content that is not visible.
+⚠️ ZERO-TOLERANCE ANTI-HALLUCINATION RULES:
+1. ONLY report what you can DIRECTLY SEE - no fabrication, invention, or inference
+2. For ANY failure you report, you MUST be able to quote the EXACT visible text/value as evidence
+3. NEVER create quotes like "Annexure states..." unless you can read those EXACT words
+4. If content is unclear/missing → say "not visible" or "unclear", do NOT guess
+5. Every criticalFailure MUST have directly visible evidence you can point to
+6. When in doubt, leave it out - fewer accurate findings > fabricated issues
 
 Return ONLY the JSON validation result.`
             },
