@@ -844,14 +844,23 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (response.data?.found && response.data?.region) {
         const region = response.data.region;
-        finalX = region.x;
-        finalY = region.y;
+        // AI returns center coordinates - convert to top-left for block positioning
         finalWidth = region.width;
         finalHeight = region.height;
+        finalX = region.x - (finalWidth / 2);
+        finalY = region.y - (finalHeight / 2);
         detectedLabel = region.label;
-        console.log('[SchematicDiagram] Snapped to detected region:', region);
+        console.log('[SchematicDiagram] Snapped to detected region:', { 
+          center: { x: region.x, y: region.y },
+          topLeft: { x: finalX, y: finalY },
+          size: { width: finalWidth, height: finalHeight },
+          label: detectedLabel 
+        });
         toast.success(`Snapped to: ${detectedLabel || 'detected rectangle'}`);
       } else {
+        // For manual placement, center the block on click position
+        finalX = clickX - (finalWidth / 2);
+        finalY = clickY - (finalHeight / 2);
         console.log('[SchematicDiagram] No region found, using click position', response.data);
         toast.info('No rectangle detected - placed at click position');
       }
