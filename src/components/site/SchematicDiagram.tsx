@@ -53,8 +53,7 @@ import {
   Loader2
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
-
-// Set up PDF.js worker
+// Configure PDF.js worker for document rendering
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface SchematicDiagramProps {
@@ -1071,10 +1070,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Toggle edit mode
   const toggleEditMode = () => {
     if (isEditMode) {
-      // Exit edit mode - reset scale
       setIsEditMode(false);
       setIsAddingBlock(false);
-      setScale(1); // Reset scale when exiting edit mode
+      setScale(1);
     } else {
       setIsEditMode(true);
     }
@@ -1782,3 +1780,4 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 };
 
 export default SchematicDiagram;
+
