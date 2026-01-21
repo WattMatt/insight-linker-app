@@ -566,6 +566,34 @@ When analyzing a PDF or image:
 - Verify all pages are present
 - Note any alterations or corrections
 
+## 🚫 ANTI-HALLUCINATION RULES (CRITICAL - MUST FOLLOW)
+**YOU MUST NOT fabricate, invent, or assume information that is NOT visible in the document.**
+
+1. **ONLY report what you can SEE:**
+   - If a value, text, or annotation is not visible → say "Not visible" or "Not provided"
+   - Do NOT invent specific measurements, cable sizes, or technical details
+   - Do NOT create quotes like "Annexure states..." unless you can read exact text
+
+2. **For failure descriptions:**
+   - Base descriptions ONLY on visible evidence
+   - Use language like "Document shows..." or "Visible test value is..."
+   - If you cannot read a value clearly → say "Value unclear/unreadable"
+
+3. **Evidence requirement:**
+   - Every failure MUST cite specific visible evidence from the document
+   - Evidence field should reference exact location: "Page X, Section Y shows..."
+   - If you cannot cite specific visible evidence → do NOT report the failure
+
+4. **When uncertain:**
+   - Use "extractionNotes" to flag unclear areas
+   - Set confidence score appropriately low
+   - Do NOT fill in blanks with assumptions
+
+**SELF-CHECK:** Before reporting any failure, ask:
+- "Can I point to the exact text/value in the document?"
+- "Am I inventing details I cannot actually see?"
+- If the answer is no to the first or yes to the second → DO NOT REPORT IT
+
 Now analyze the provided COC document with strict SANS 10142-1:2020 compliance:`;
 
 // Interface for validation settings from database
@@ -802,7 +830,11 @@ serve(async (req) => {
           content: [
             {
               type: 'text',
-              text: `Please analyze this COC document image/PDF and validate it against SANS 10142-1:2020 standards. Extract ALL visible information including handwritten test values, stamps, and signatures. Return ONLY the JSON validation result.`
+              text: `Please analyze this COC document image/PDF and validate it against SANS 10142-1:2020 standards. Extract ALL visible information including handwritten test values, stamps, and signatures. 
+
+CRITICAL: Do NOT fabricate or invent any information. Only report what you can actually SEE in the document. If you cannot read a value, say "unclear" or "not visible". Do NOT create quotes or descriptions of content that is not visible.
+
+Return ONLY the JSON validation result.`
             },
             {
               type: 'image_url',
