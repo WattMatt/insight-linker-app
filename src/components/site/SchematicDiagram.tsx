@@ -167,10 +167,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [calibrationRect, setCalibrationRect] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
   
 
-  // Pan state
+  // Pan state - transform-based (like FloorPlanViewer)
+  const [panOffset, setPanOffset] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
-  const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
+  const [isShiftPressed, setIsShiftPressed] = useState(false);
 
   // Snap state - values are percentages now
   const [snapLines, setSnapLines] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
@@ -216,42 +217,59 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Native wheel event listener for zoom (needs passive: false to preventDefault)
-  // Attach to container (the scrollable element) for consistent event handling
+  // Shift key tracking for pan mode (like FloorPlanViewer)
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container || !schematic) {
-      return;
-    }
-
-    if (!isEditMode) {
-      return;
-    }
-
-    const handleNativeWheel = (e: WheelEvent) => {
-      // Only zoom if Ctrl/Cmd is pressed, otherwise allow normal scroll
-      if (e.ctrlKey || e.metaKey) {
-        e.preventDefault();
-        e.stopPropagation();
-        const delta = e.deltaY > 0 ? -0.1 : 0.1;
-        setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
-      }
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftPressed(true);
     };
-
-    container.addEventListener('wheel', handleNativeWheel, { passive: false });
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (e.key === 'Shift') setIsShiftPressed(false);
+    };
+    
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
     
     return () => {
-      container.removeEventListener('wheel', handleNativeWheel);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
+  }, []);
+
+  // Native wheel event listener for zoom (like FloorPlanViewer)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container || !schematic) return;
+    if (!isEditMode) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Browser's native zoom with Ctrl/Cmd - don't interfere
+      if (e.ctrlKey || e.metaKey) return;
+      
+      e.preventDefault();
+      
+      const delta = -e.deltaY;
+      const zoomSpeed = 0.001;
+      const zoomChange = delta * zoomSpeed;
+      
+      setScale((prev) => {
+        const newScale = prev + zoomChange;
+        return Math.max(0.5, Math.min(3, newScale));
+      });
+    };
+
+    container.addEventListener('wheel', handleWheel, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheel);
   }, [isEditMode, schematic]);
 
   // Calculate the display scale for blocks and PDF
+  // In edit mode, we use a fixed base scale (fit to container) and CSS transform handles user zoom
+  // In view mode, we calculate fit scale
   const displayScale = useMemo(() => {
     if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
       return 1;
     }
     
-    const padding = isEditMode ? 32 : 16;
+    const padding = isEditMode ? 48 : 16; // Extra padding in edit mode for transform margin
     const availableWidth = containerWidth - padding;
     const availableHeight = CONTAINER_HEIGHT - padding;
     
@@ -260,9 +278,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const scaleY = availableHeight / originalPdfDimensions.height;
     const fitScale = Math.min(scaleX, scaleY);
     
-    // In view mode, use fit scale; in edit mode, apply user scale
-    return isEditMode ? scale : fitScale;
-  }, [containerWidth, originalPdfDimensions, isEditMode, scale]);
+    // Always use fit scale for the base PDF rendering
+    // CSS transform handles the user's zoom in edit mode
+    return fitScale;
+  }, [containerWidth, originalPdfDimensions, isEditMode]);
 
   // Calculate the target page width - always provide a width to prevent visibility:hidden
   const calculatedPageWidth = useMemo(() => {
@@ -322,39 +341,32 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setDimensionsLoaded(false);
   }, [pageNumber]);
 
-  // Reset scale when exiting edit mode to ensure proper "zoom to fit"
-  // Don't reset dimensionsLoaded - just reset the scale factor
+  // Reset pan/zoom when exiting edit mode
   useEffect(() => {
     if (!isEditMode) {
       setScale(1);
-      // Force recalculate container width to trigger displayScale recalculation
+      setPanOffset({ x: 0, y: 0 });
       if (containerRef.current) {
         setContainerWidth(containerRef.current.clientWidth);
       }
     }
   }, [isEditMode]);
 
-  // Handle middle mouse button pan (only in edit mode)
+  // Pan handlers (like FloorPlanViewer - shift+click or right-click)
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isEditMode) return;
-    // Middle mouse button
-    if (e.button === 1) {
+    
+    // Shift + left click OR right click for panning
+    if (isShiftPressed || e.button === 2) {
       e.preventDefault();
-      e.stopPropagation();
       setIsPanning(true);
-      setPanStart({ x: e.clientX, y: e.clientY });
-      if (containerRef.current) {
-        setScrollStart({ 
-          x: containerRef.current.scrollLeft, 
-          y: containerRef.current.scrollTop 
-        });
-      }
+      setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
     }
   };
 
-  // Prevent middle-click auto-scroll (auxclick event)
+  // Prevent middle-click auto-scroll and context menu
   const handleAuxClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button === 1) {
+    if (e.button === 1 || e.button === 2) {
       e.preventDefault();
       e.stopPropagation();
     }
@@ -363,17 +375,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isPanning || !isEditMode) return;
     
-    e.preventDefault();
-    if (containerRef.current) {
-      const dx = e.clientX - panStart.x;
-      const dy = e.clientY - panStart.y;
-      containerRef.current.scrollLeft = scrollStart.x - dx;
-      containerRef.current.scrollTop = scrollStart.y - dy;
-    }
+    setPanOffset({
+      x: e.clientX - panStart.x,
+      y: e.clientY - panStart.y,
+    });
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (e.button === 1) {
+    if (isPanning) {
       e.preventDefault();
       setIsPanning(false);
     }
@@ -1103,18 +1112,20 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   // Get the PDF wrapper element (the div with calculatedPageWidth/Height)
+  // This accounts for the CSS transform applied in edit mode
   const getPdfWrapperRect = () => {
-    const wrapper = contentRef.current?.querySelector('.relative') as HTMLElement;
+    // Find the innermost wrapper with explicit width/height
+    const wrapper = contentRef.current?.querySelector('div.relative') as HTMLElement;
     return wrapper?.getBoundingClientRect();
   };
 
   const handleCalibrationMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!isCalibrating) return;
     
-    // Get the PDF wrapper rect (not the container or content ref)
     const rect = getPdfWrapperRect();
     if (!rect) return;
     
+    // The rect already accounts for CSS transform scale, so just use it directly
     const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
     
@@ -1131,6 +1142,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const rect = getPdfWrapperRect();
     if (!rect) return;
     
+    // The rect already accounts for CSS transform scale
     const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
     
@@ -1379,6 +1391,23 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
             <div className="flex-1" />
 
+            {/* Zoom controls */}
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>Zoom: {Math.round(scale * 100)}%</span>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 px-2"
+                onClick={() => setScale(1)}
+                disabled={scale === 1}
+              >
+                Reset
+              </Button>
+              <span className="hidden md:inline text-muted-foreground/70">
+                Scroll to zoom • Shift+drag or right-click to pan
+              </span>
+            </div>
+
             <Button
               variant="ghost"
               size="sm"
@@ -1446,10 +1475,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         
         <div 
           ref={containerRef}
-          className={`relative bg-muted/30 ${
+          className={`relative bg-muted/30 overflow-hidden ${
             isEditMode 
-              ? `overflow-auto ${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : 'cursor-grab'}`
-              : 'overflow-hidden cursor-default'
+              ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isShiftPressed || isPanning ? 'cursor-grabbing' : 'cursor-default'}`
+              : 'cursor-default'
           }`}
           style={{ height: CONTAINER_HEIGHT }}
           onMouseDown={(e) => {
@@ -1477,13 +1506,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             }
           }}
           onMouseLeave={handleMouseLeave}
-          onContextMenu={(e) => { if (isPanning || isEditMode) e.preventDefault(); }}
+          onContextMenu={(e) => { if (isEditMode) e.preventDefault(); }}
         >
           <div 
             ref={contentRef}
-            className={`relative ${isEditMode ? 'inline-block p-4' : 'flex justify-center items-center w-full h-full'}`}
+            className={`relative ${isEditMode ? '' : 'flex justify-center items-center w-full h-full'}`}
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
-            style={!isEditMode ? { minHeight: CONTAINER_HEIGHT } : undefined}
+            style={isEditMode ? {
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
+              transformOrigin: 'top left',
+              width: 'fit-content',
+              margin: '24px',
+              position: 'relative',
+            } : { minHeight: CONTAINER_HEIGHT }}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
             <div 
