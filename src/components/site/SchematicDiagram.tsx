@@ -53,7 +53,8 @@ import {
   Loader2
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
-// Configure PDF.js worker for document rendering
+
+// Initialize PDF.js worker for rendering PDF documents
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
 
 interface SchematicDiagramProps {
@@ -1767,7 +1768,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         </DialogContent>
       </Dialog>
 
-      {/* Image Viewer */}
       {imageViewerOpen && viewerImage && (
         <FullscreenImageViewer
           src={viewerImage.url}
@@ -1780,4 +1780,3 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 };
 
 export default SchematicDiagram;
-
