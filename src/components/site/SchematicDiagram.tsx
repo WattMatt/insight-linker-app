@@ -253,7 +253,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       
       setScale((prev) => {
         const newScale = prev + zoomChange;
-        return Math.max(0.5, Math.min(3, newScale));
+        return Math.max(0.5, Math.min(10, newScale));
       });
     };
 
