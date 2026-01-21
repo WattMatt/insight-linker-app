@@ -235,7 +235,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Native wheel event listener for zoom-to-cursor (like FloorPlanViewer)
+  // Native wheel event listener for zoom-to-cursor
+  // Since PDF is rendered at actual zoom resolution, we adjust pan to keep content under cursor
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !schematic) return;
@@ -260,10 +261,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         const newScale = Math.max(0.5, Math.min(10, prevScale + zoomChange));
         const scaleRatio = newScale / prevScale;
         
-        // Adjust pan to zoom toward cursor position
+        // Calculate how far the mouse is from the content origin (accounting for current pan and margin)
+        const margin = 24;
+        const contentX = mouseX - panOffset.x - margin;
+        const contentY = mouseY - panOffset.y - margin;
+        
+        // After zoom, content at mouse position will move by (scaleRatio - 1) * contentPosition
+        // We need to pan in the opposite direction to keep it under the cursor
+        const panAdjustX = contentX * (1 - scaleRatio);
+        const panAdjustY = contentY * (1 - scaleRatio);
+        
         setPanOffset((prevPan) => ({
-          x: mouseX - scaleRatio * (mouseX - prevPan.x),
-          y: mouseY - scaleRatio * (mouseY - prevPan.y),
+          x: prevPan.x + panAdjustX,
+          y: prevPan.y + panAdjustY,
         }));
         
         return newScale;
@@ -272,7 +282,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [isEditMode, schematic]);
+  }, [isEditMode, schematic, panOffset]);
 
   // Calculate the display scale for blocks and PDF
   // In edit mode, we use a fixed base scale (fit to container) and CSS transform handles user zoom
@@ -296,11 +306,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return fitScale;
   }, [containerWidth, originalPdfDimensions, isEditMode]);
 
-  // Calculate the target page width - always provide a width to prevent visibility:hidden
+  // Calculate the target page width - include zoom scale for crisp rendering
   const calculatedPageWidth = useMemo(() => {
-    // If we have dimensions, use calculated scale
+    // If we have dimensions, use calculated scale multiplied by zoom for crisp rendering
     if (dimensionsLoaded && originalPdfDimensions.width > 0) {
-      return originalPdfDimensions.width * displayScale;
+      const baseWidth = originalPdfDimensions.width * displayScale;
+      // In edit mode, render at zoomed resolution for crisp text
+      return isEditMode ? baseWidth * scale : baseWidth;
     }
     // Fallback: use container width minus padding for initial render
     if (containerWidth > 0) {
@@ -308,16 +320,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
     // Last resort: use a reasonable default
     return 800;
-  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth]);
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, isEditMode, scale]);
 
   // Calculate the scaled height for the PDF container
   const calculatedPageHeight = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.height > 0) {
-      return originalPdfDimensions.height * displayScale;
+      const baseHeight = originalPdfDimensions.height * displayScale;
+      // In edit mode, render at zoomed resolution for crisp text
+      return isEditMode ? baseHeight * scale : baseHeight;
     }
     // Fallback based on container height
     return CONTAINER_HEIGHT - 32;
-  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, isEditMode, scale]);
 
   // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
@@ -1526,7 +1540,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             className={`relative ${isEditMode ? '' : 'flex justify-center items-center w-full h-full'}`}
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={isEditMode ? {
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
+              // Only use translate for panning - PDF is rendered at full zoom resolution for crisp text
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
               transformOrigin: 'top left',
               width: 'fit-content',
               margin: '24px',
