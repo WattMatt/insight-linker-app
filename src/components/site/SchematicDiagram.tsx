@@ -1780,3 +1780,5 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     </Card>
   );
 };
+
+export default SchematicDiagram;
