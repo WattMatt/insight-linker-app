@@ -68,6 +68,20 @@ const clauseHighlightBoxes: Record<string, { page: number; top: number; left: nu
   '5.2': { page: 1, top: 85, left: 5, width: 90, height: 10 }, // Installer Registration
 };
 
+// Extract page number from section string (e.g., "Section 4 (Page 2)" -> 2)
+function extractPageFromSection(section?: string): number | null {
+  if (!section) return null;
+  const pageMatch = section.match(/\(?page\s*(\d+)\)?/i);
+  return pageMatch ? parseInt(pageMatch[1], 10) : null;
+}
+
+// Normalize clause ID to match our lookup (e.g., "Clause 8.6" -> "8.6", "8.6.1" -> "8.6")
+function normalizeClauseId(clause: string): string {
+  // Extract just the numeric part like "8.6" from various formats
+  const match = clause.match(/(\d+\.\d+)/);
+  return match ? match[1] : clause;
+}
+
 export function COCPreviewDialog({ open, onClose, document, validation }: COCPreviewDialogProps) {
   const [numPages, setNumPages] = useState<number>(0);
   const [pageNumber, setPageNumber] = useState(1);
@@ -79,7 +93,17 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
   const [scrollStart, setScrollStart] = useState({ x: 0, y: 0 });
   const scrollRef = useRef<HTMLDivElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-
+  
+  // Track the current highlight info for the overlay
+  const [currentHighlightInfo, setCurrentHighlightInfo] = useState<{
+    page: number;
+    top: number;
+    left: number;
+    width: number;
+    height: number;
+    clause: string;
+  } | null>(null);
+  
   const isPdf = document?.file_name?.toLowerCase().endsWith('.pdf') ?? false;
   const isImage = document?.file_name ? /\.(jpg|jpeg|png|gif|webp)$/i.test(document.file_name) : false;
 
@@ -138,36 +162,74 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
   }, []);
 
-  // Handle clause click - navigate to relevant page and scroll PDF into view with visual highlight
+  // Handle clause click - navigate to relevant page and show visual highlight
   const handleClauseClick = useCallback((clause: string, section?: string) => {
-    // Always set the highlight (even if clicking the same clause again)
+    console.log('[COC Navigation] Clicked clause:', clause, 'section:', section);
+    
+    // Normalize the clause ID for lookup
+    const normalizedClause = normalizeClauseId(clause);
+    console.log('[COC Navigation] Normalized clause:', normalizedClause);
+    
+    // Always set the highlight
     setHighlightedClause(clause);
     
-    // Get target page - prefer the box definition, then section, then fallback
-    const boxInfo = clauseHighlightBoxes[clause];
-    const targetPage = boxInfo?.page || getClauseLocation(clause, section).page;
+    // Determine target page - priority: section string > predefined box > fallback to 1
+    let targetPage = 1;
+    let highlightBox: { page: number; top: number; left: number; width: number; height: number } | null = null;
     
+    // First try to extract page from section string (most accurate - comes from AI)
+    const sectionPage = extractPageFromSection(section);
+    if (sectionPage) {
+      targetPage = sectionPage;
+      console.log('[COC Navigation] Using page from section:', targetPage);
+    }
+    
+    // Check if we have a predefined highlight box
+    if (clauseHighlightBoxes[normalizedClause]) {
+      highlightBox = clauseHighlightBoxes[normalizedClause];
+      // If section didn't specify page, use box's page
+      if (!sectionPage) {
+        targetPage = highlightBox.page;
+      }
+      console.log('[COC Navigation] Found predefined box for clause:', normalizedClause);
+    } else {
+      // Create a default highlight box for unknown clauses (full-width banner at top)
+      highlightBox = { page: targetPage, top: 10, left: 5, width: 90, height: 15 };
+      console.log('[COC Navigation] Using default highlight box');
+    }
+    
+    // Update the current highlight info with correct page
+    highlightBox = { ...highlightBox, page: targetPage };
+    setCurrentHighlightInfo({ ...highlightBox, clause });
+    
+    console.log('[COC Navigation] Target page:', targetPage, 'numPages:', numPages);
+    
+    // Navigate to the target page
     if (targetPage <= numPages && targetPage > 0) {
       setPageNumber(targetPage);
+      console.log('[COC Navigation] Set page number to:', targetPage);
       
-      // Scroll PDF container to show the highlighted area after page loads
+      // Scroll to show the highlighted area after page renders
       setTimeout(() => {
         if (containerRef.current) {
           const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
-          if (scrollContainer && boxInfo) {
-            // Calculate scroll position to center the highlight box
+          const pageElement = containerRef.current.querySelector('.react-pdf__Page');
+          
+          if (scrollContainer && pageElement && highlightBox) {
+            const pageHeight = pageElement.clientHeight;
             const containerHeight = scrollContainer.clientHeight;
-            const pageElement = containerRef.current.querySelector('.react-pdf__Page');
-            if (pageElement) {
-              const pageHeight = pageElement.clientHeight;
-              const targetScrollTop = (pageHeight * boxInfo.top / 100) - (containerHeight / 3);
-              scrollContainer.scrollTop = Math.max(0, targetScrollTop);
-            }
+            const targetScrollTop = (pageHeight * highlightBox.top / 100) - (containerHeight / 4);
+            scrollContainer.scrollTop = Math.max(0, targetScrollTop);
+            console.log('[COC Navigation] Scrolled to:', targetScrollTop);
           }
         }
-      }, 150);
+      }, 200);
+    } else if (numPages === 0) {
+      // PDF not loaded yet, just set the page number and it will navigate when loaded
+      setPageNumber(targetPage);
+      console.log('[COC Navigation] PDF not loaded yet, queued page:', targetPage);
     }
-  }, [getClauseLocation, numPages]);
+  }, [numPages]);
 
   // Handle mouse wheel zoom (Ctrl+scroll or pinch to zoom, normal scroll to pan)
   const handleWheel = useCallback((e: React.WheelEvent) => {
@@ -419,21 +481,20 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                           </div>
                         }
                       />
-                      {/* Visual highlight overlay box */}
-                      {highlightedClause && clauseHighlightBoxes[highlightedClause] && 
-                       clauseHighlightBoxes[highlightedClause].page === pageNumber && (
+                      {/* Visual highlight overlay box - uses currentHighlightInfo for dynamic positioning */}
+                      {currentHighlightInfo && currentHighlightInfo.page === pageNumber && (
                         <div 
                           className="absolute pointer-events-none coc-highlight-box"
                           style={{
-                            top: `${clauseHighlightBoxes[highlightedClause].top}%`,
-                            left: `${clauseHighlightBoxes[highlightedClause].left}%`,
-                            width: `${clauseHighlightBoxes[highlightedClause].width}%`,
-                            height: `${clauseHighlightBoxes[highlightedClause].height}%`,
+                            top: `${currentHighlightInfo.top}%`,
+                            left: `${currentHighlightInfo.left}%`,
+                            width: `${currentHighlightInfo.width}%`,
+                            height: `${currentHighlightInfo.height}%`,
                           }}
                         >
-                          <div className="w-full h-full border-4 border-red-500 bg-red-500/20 rounded-lg animate-pulse-highlight" />
-                          <div className="absolute -top-8 left-0 bg-red-500 text-white text-xs font-bold px-2 py-1 rounded shadow-lg">
-                            ⚠️ Clause {highlightedClause} - Issue Area
+                          <div className="w-full h-full border-4 border-destructive bg-destructive/20 rounded-lg animate-pulse-highlight" />
+                          <div className="absolute -top-8 left-0 bg-destructive text-destructive-foreground text-xs font-bold px-2 py-1 rounded shadow-lg whitespace-nowrap">
+                            ⚠️ Clause {currentHighlightInfo.clause} - Issue Area
                           </div>
                         </div>
                       )}
