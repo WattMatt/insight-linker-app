@@ -1,4 +1,3 @@
-// SchematicDiagram Component - Last updated: 2026-01-21
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -753,7 +752,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     } finally {
       setUploading(false);
     }
-  };
   };
 
   // Handle deleting schematic
@@ -1769,6 +1767,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         </DialogContent>
       </Dialog>
 
+      {/* Fullscreen Image Viewer Modal */}
       {imageViewerOpen && viewerImage && (
         <FullscreenImageViewer
           src={viewerImage.url}
