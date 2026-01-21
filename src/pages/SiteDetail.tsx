@@ -408,12 +408,38 @@ const SiteDetail = () => {
 
       if (inspError) throw inspError;
 
+      const subsectionIds = subsectionsRes?.map(s => s.id) || [];
+      
       const { data: snagsRes, error: snagsError } = await supabase
         .from("snags")
         .select("id, subsection_id, status, title")
-        .in("subsection_id", subsectionsRes?.map(s => s.id) || []);
+        .in("subsection_id", subsectionIds);
 
       if (snagsError) throw snagsError;
+
+      // Fetch COC validations to check for failed validations (same logic as ComplianceDashboard)
+      let failedValidationsBySubsection = new Set<string>();
+      if (subsectionIds.length > 0) {
+        const { data: validations } = await supabase
+          .from('coc_validations')
+          .select('subsection_id, status, validated_at')
+          .in('subsection_id', subsectionIds)
+          .order('validated_at', { ascending: false });
+        
+        // Only consider the MOST RECENT validation per subsection
+        const latestBySubsection = new Map<string, string>();
+        validations?.forEach(validation => {
+          if (!latestBySubsection.has(validation.subsection_id)) {
+            latestBySubsection.set(validation.subsection_id, validation.status);
+          }
+        });
+        
+        latestBySubsection.forEach((status, subsectionId) => {
+          if (status === 'Fail' || status === 'Failed' || status === 'Incomplete') {
+            failedValidationsBySubsection.add(subsectionId);
+          }
+        });
+      }
 
       let siteData = siteRes;
       if (siteData?.site_image_url) {
@@ -452,11 +478,14 @@ const SiteDetail = () => {
       setSnags(snagsRes || []);
       setInspections(inspectionsRes || []);
 
-      // Calculate Stats
+      // Calculate Stats - using same logic as ComplianceDashboard for consistency
       const totalSubsections = subs.length;
       let compliantCount = 0;
 
       subs.forEach(sub => {
+        // Check if any COC validation has failed (same as ComplianceDashboard)
+        if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) return;
+        
         if (sub.is_coc_required && sub.coc_status !== 'Approved' && sub.coc_status !== 'Valid' && sub.coc_status !== 'Pass') return;
         if (sub.is_coc_required && sub.metering_status === 'Missing' && !sub.meter_serial_number) return;
         const subsectionSnags = (snagsRes || []).filter(snag =>
@@ -468,11 +497,18 @@ const SiteDetail = () => {
         compliantCount++;
       });
 
+      // COC Approved Count - must have approved status AND no failed validations
+      const cocApprovedCount = subs.filter(s => {
+        if (!s.is_coc_required) return false;
+        if (failedValidationsBySubsection.has(s.id)) return false;
+        return ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '');
+      }).length;
+
       setStats({
         totalSubsections,
         compliantCount,
         cocRequiredCount: subs.filter(s => s.is_coc_required).length,
-        cocApprovedCount: subs.filter(s => s.is_coc_required && ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '')).length,
+        cocApprovedCount,
         meteringInstalledCount: subs.filter(s => s.metering_status === 'Installed' || s.meter_serial_number).length,
         openSnags: (snagsRes || []).filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length,
       });
