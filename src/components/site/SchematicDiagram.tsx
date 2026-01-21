@@ -217,9 +217,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   }, []);
 
   // Native wheel event listener for zoom (needs passive: false to preventDefault)
+  // Attach to container (the scrollable element) for consistent event handling
   useEffect(() => {
-    const content = contentRef.current;
-    if (!content || !schematic) {
+    const container = containerRef.current;
+    if (!container || !schematic) {
       return;
     }
 
@@ -228,16 +229,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
 
     const handleNativeWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-      const delta = e.deltaY > 0 ? -0.1 : 0.1;
-      setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
+      // Only zoom if Ctrl/Cmd is pressed, otherwise allow normal scroll
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        e.stopPropagation();
+        const delta = e.deltaY > 0 ? -0.1 : 0.1;
+        setScale(s => Math.min(Math.max(s + delta, 0.25), 3));
+      }
     };
 
-    content.addEventListener('wheel', handleNativeWheel, { passive: false, capture: true });
+    container.addEventListener('wheel', handleNativeWheel, { passive: false });
     
     return () => {
-      content.removeEventListener('wheel', handleNativeWheel, { capture: true } as EventListenerOptions);
+      container.removeEventListener('wheel', handleNativeWheel);
     };
   }, [isEditMode, schematic]);
 
@@ -1098,28 +1102,46 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     toast.info("Draw a rectangle over one distribution board table to calibrate block size");
   };
 
+  // Get the PDF wrapper element (the div with calculatedPageWidth/Height)
+  const getPdfWrapperRect = () => {
+    const wrapper = contentRef.current?.querySelector('.relative') as HTMLElement;
+    return wrapper?.getBoundingClientRect();
+  };
+
   const handleCalibrationMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isCalibrating || !contentRef.current) return;
+    if (!isCalibrating) return;
     
-    const rect = e.currentTarget.getBoundingClientRect();
+    // Get the PDF wrapper rect (not the container or content ref)
+    const rect = getPdfWrapperRect();
+    if (!rect) return;
+    
     const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
     
-    setCalibrationStart({ x: xPercent, y: yPercent });
-    setCalibrationRect({ x: xPercent, y: yPercent, width: 0, height: 0 });
+    // Only start if click is within PDF bounds
+    if (xPercent >= 0 && xPercent <= 100 && yPercent >= 0 && yPercent <= 100) {
+      setCalibrationStart({ x: xPercent, y: yPercent });
+      setCalibrationRect({ x: xPercent, y: yPercent, width: 0, height: 0 });
+    }
   };
 
   const handleCalibrationMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isCalibrating || !calibrationStart || !contentRef.current) return;
+    if (!isCalibrating || !calibrationStart) return;
     
-    const rect = e.currentTarget.getBoundingClientRect();
+    const rect = getPdfWrapperRect();
+    if (!rect) return;
+    
     const xPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const yPercent = ((e.clientY - rect.top) / rect.height) * 100;
     
-    const width = Math.abs(xPercent - calibrationStart.x);
-    const height = Math.abs(yPercent - calibrationStart.y);
-    const x = Math.min(xPercent, calibrationStart.x);
-    const y = Math.min(yPercent, calibrationStart.y);
+    // Clamp to PDF bounds
+    const clampedX = Math.max(0, Math.min(100, xPercent));
+    const clampedY = Math.max(0, Math.min(100, yPercent));
+    
+    const width = Math.abs(clampedX - calibrationStart.x);
+    const height = Math.abs(clampedY - calibrationStart.y);
+    const x = Math.min(clampedX, calibrationStart.x);
+    const y = Math.min(clampedY, calibrationStart.y);
     
     setCalibrationRect({ x, y, width, height });
   };
