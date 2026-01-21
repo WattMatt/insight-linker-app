@@ -1581,27 +1581,36 @@ export type Database = {
       site_schematics: {
         Row: {
           created_at: string
+          detected_regions: Json | null
+          detection_status: string | null
           file_name: string
           file_url: string
           id: string
+          regions_detected_at: string | null
           site_id: string
           updated_at: string
           uploaded_by: string | null
         }
         Insert: {
           created_at?: string
+          detected_regions?: Json | null
+          detection_status?: string | null
           file_name: string
           file_url: string
           id?: string
+          regions_detected_at?: string | null
           site_id: string
           updated_at?: string
           uploaded_by?: string | null
         }
         Update: {
           created_at?: string
+          detected_regions?: Json | null
+          detection_status?: string | null
           file_name?: string
           file_url?: string
           id?: string
+          regions_detected_at?: string | null
           site_id?: string
           updated_at?: string
           uploaded_by?: string | null
