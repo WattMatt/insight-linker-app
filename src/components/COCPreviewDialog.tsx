@@ -99,8 +99,17 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     }
   }, [document]);
 
-  // Get clause location and page info
-  const getClauseLocation = useCallback((clause: string): { location: string; page: number } => {
+  // Get clause location and page info - can accept override from violation data
+  const getClauseLocation = useCallback((clause: string, section?: string): { location: string; page: number } => {
+    // If section contains page info like "(Page 1)", extract it
+    if (section) {
+      const pageMatch = section.match(/\(Page\s*(\d+)\)/i);
+      const extractedPage = pageMatch ? parseInt(pageMatch[1], 10) : 1;
+      // Remove page reference from location display
+      const cleanLocation = section.replace(/\s*\(Page\s*\d+\)/i, '').trim();
+      return { location: cleanLocation || `SANS 10142-1 Clause ${clause}`, page: extractedPage };
+    }
+    
     const clauseLocations: Record<string, { location: string; page: number }> = {
       '8.6': { location: 'Test Results - Insulation Resistance', page: 2 },
       '8.5': { location: 'Test Results - Earth Loop Impedance', page: 2 },
@@ -115,14 +124,23 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     return clauseLocations[clause] || { location: `SANS 10142-1 Clause ${clause}`, page: 1 };
   }, []);
 
-  // Handle clause click - navigate to relevant page
-  const handleClauseClick = useCallback((clause: string) => {
+  // Handle clause click - navigate to relevant page and scroll PDF into view
+  const handleClauseClick = useCallback((clause: string, section?: string) => {
     setHighlightedClause(prev => {
       const newHighlight = prev === clause ? null : clause;
       if (newHighlight) {
-        const { page } = getClauseLocation(clause);
-        if (page <= numPages) {
+        const { page } = getClauseLocation(clause, section);
+        if (page <= numPages && page > 0) {
           setPageNumber(page);
+          // Scroll PDF container to top after page change
+          setTimeout(() => {
+            if (containerRef.current) {
+              const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
+              if (scrollContainer) {
+                scrollContainer.scrollTop = 0;
+              }
+            }
+          }, 100);
         }
       }
       return newHighlight;
@@ -433,7 +451,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
 
                     <div className="space-y-3">
                       {validation.violations?.map((v, i) => {
-                        const clauseInfo = getClauseLocation(v.clause);
+                        const clauseInfo = getClauseLocation(v.clause, v.section);
                         return (
                           <div 
                             key={i} 
@@ -442,7 +460,7 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                                 ? 'ring-2 ring-primary border-primary bg-primary/5' 
                                 : 'hover:bg-muted/50 hover:border-muted-foreground/30'
                             }`}
-                            onClick={() => handleClauseClick(v.clause)}
+                            onClick={() => handleClauseClick(v.clause, v.section)}
                           >
                             <div className="flex items-start justify-between gap-2 mb-2">
                               <div className="flex items-center gap-2 flex-wrap">
@@ -462,7 +480,11 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                                 size="sm" 
                                 variant={highlightedClause === v.clause ? 'default' : 'ghost'}
                                 className="h-6 w-6 p-0 shrink-0"
-                                title="Highlight on document"
+                                title="Go to location in document"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleClauseClick(v.clause, v.section);
+                                }}
                               >
                                 <Target className="h-3 w-3" />
                               </Button>
@@ -478,13 +500,17 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                               </p>
                             )}
 
-                            {/* Document Location Reference */}
-                            <div className={`text-xs p-2 rounded mt-2 border ${
-                              highlightedClause === v.clause 
-                                ? 'bg-primary/10 text-primary border-primary/20' 
-                                : 'bg-muted/50 text-muted-foreground border-transparent'
-                            }`}>
-                              <strong>📍 Location:</strong> {clauseInfo.location} (Page {clauseInfo.page})
+                            {/* Document Location Reference - Clickable */}
+                            <div 
+                              className={`text-xs p-2 rounded mt-2 border flex items-center gap-2 group/loc ${
+                                highlightedClause === v.clause 
+                                  ? 'bg-primary/10 text-primary border-primary/20' 
+                                  : 'bg-muted/50 text-muted-foreground border-transparent hover:bg-muted hover:border-muted-foreground/20'
+                              }`}
+                              title="Click to navigate to this location"
+                            >
+                              <Target className={`h-3 w-3 shrink-0 ${highlightedClause === v.clause ? 'text-primary' : 'text-muted-foreground group-hover/loc:text-foreground'}`} />
+                              <span><strong>📍 Location:</strong> {clauseInfo.location} (Page {clauseInfo.page})</span>
                             </div>
                             
                             {v.immediateAction && (
