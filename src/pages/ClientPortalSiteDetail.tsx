@@ -4,8 +4,8 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
-  Building2, FileText, MapPin, Download, Eye, Info, Search, 
-  BarChart3, CheckCircle2, AlertCircle, Clock, LayoutGrid,
+  Building2, FileText, MapPin, Eye, Info, Search, 
+  BarChart3, CheckCircle2, AlertCircle, LayoutGrid,
   Shield, Workflow, ShieldCheck, FileBarChart, Layers
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -22,6 +22,7 @@ import { AssetVerification } from "@/components/site/AssetVerification";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { downloadFile } from "@/lib/fileDownload";
 import { Site, Subsection } from "@/types/site";
 
@@ -31,7 +32,6 @@ const ClientPortalSiteDetail = () => {
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   const [subsectionSearch, setSubsectionSearch] = useState("");
-  const [documentSearch, setDocumentSearch] = useState("");
   const [activeTab, setActiveTab] = useState("overview");
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
   const isMobile = useIsMobile();
@@ -86,7 +86,7 @@ const ClientPortalSiteDetail = () => {
     },
   });
 
-  const { data: documents = [], isLoading: docsLoading } = useQuery({
+  const { data: siteDocuments = [], isLoading: docsLoading } = useQuery({
     queryKey: ["client-site-documents", siteId],
     enabled: !!siteId,
     queryFn: async () => {
@@ -98,6 +98,42 @@ const ClientPortalSiteDetail = () => {
 
       if (error) throw error;
       return data;
+    },
+  });
+
+  const { data: siteDocCategories = [] } = useQuery({
+    queryKey: ["client-site-doc-categories", siteId],
+    enabled: !!siteId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("site_document_categories")
+        .select("id, name")
+        .eq("site_id", siteId!)
+        .order("order_index");
+
+      if (error) throw error;
+      return data;
+    },
+  });
+
+  const { data: subsectionDocuments = [] } = useQuery({
+    queryKey: ["client-subsection-documents", siteId],
+    enabled: !!siteId && subsections.length > 0,
+    queryFn: async () => {
+      const subsectionIds = subsections.map(s => s.id);
+      const { data, error } = await supabase
+        .from("subsection_documents")
+        .select(`
+          id, file_name, file_url, subsection_id,
+          document_categories(name)
+        `)
+        .in("subsection_id", subsectionIds);
+
+      if (error) throw error;
+      return (data || []).map(doc => ({
+        ...doc,
+        category_name: (doc.document_categories as any)?.name || "Uncategorized"
+      }));
     },
   });
 
@@ -164,14 +200,6 @@ const ClientPortalSiteDetail = () => {
     );
   });
 
-  const filteredDocuments = documents.filter(doc => {
-    const searchLower = documentSearch.toLowerCase();
-    return (
-      doc.file_name?.toLowerCase().includes(searchLower) ||
-      doc.category?.toLowerCase().includes(searchLower)
-    );
-  });
-
   // Calculate KPIs
   const totalSubsections = subsections.length;
   const compliantSubsections = subsections.filter(s => {
@@ -180,7 +208,7 @@ const ClientPortalSiteDetail = () => {
   }).length;
   const missingCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "missing").length;
   const expiredCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "expired").length;
-  const totalDocuments = documents.length;
+  const totalDocuments = siteDocuments.length + subsectionDocuments.length;
   const totalInspections = inspections.length;
   const completedInspections = inspections.filter(i => i.status?.toLowerCase() === "completed").length;
 
@@ -398,69 +426,22 @@ const ClientPortalSiteDetail = () => {
 
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
-          <div className="relative">
-            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Search documents..."
-              value={documentSearch}
-              onChange={(e) => setDocumentSearch(e.target.value)}
-              className="pl-9"
+          {docsLoading ? (
+            <div className="space-y-2">
+              {[1, 2, 3].map((i) => (
+                <Skeleton key={i} className="h-12 w-full" />
+              ))}
+            </div>
+          ) : (
+            <ClientPortalDocuments
+              siteDocuments={siteDocuments}
+              siteCategories={siteDocCategories}
+              subsectionDocuments={subsectionDocuments}
+              subsections={subsections.map(s => ({ id: s.id, name: s.name }))}
+              onPreview={(url, name) => setPreviewDocument({ url, name })}
+              onDownload={handleDownload}
             />
-          </div>
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Site Documents</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {docsLoading ? (
-                <div className="space-y-2">
-                  {[1, 2, 3].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : filteredDocuments.length > 0 ? (
-                <div className="space-y-2">
-                  {filteredDocuments.map((doc) => (
-                    <div 
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 rounded-lg border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium text-sm">{doc.file_name}</p>
-                          <p className="text-xs text-muted-foreground">{doc.category}</p>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button 
-                          variant="ghost" 
-                          size="sm"
-                          onClick={() => setPreviewDocument({ url: doc.file_url, name: doc.file_name })}
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="sm" 
-                          className="gap-2"
-                          onClick={() => handleDownload(doc.file_url, doc.file_name)}
-                        >
-                          <Download className="h-4 w-4" />
-                          <span className="hidden sm:inline">Download</span>
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-8">
-                  {documentSearch ? "No documents match your search" : "No documents found for this site"}
-                </p>
-              )}
-            </CardContent>
-          </Card>
+          )}
         </TabsContent>
 
         {/* Subsections Tab */}

@@ -17,7 +17,6 @@ import {
   Zap,
   Shield,
   BarChart3,
-  Download,
   Eye,
   Loader2,
   LayoutGrid,
@@ -33,6 +32,7 @@ import { AssetVerification } from "@/components/site/AssetVerification";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { downloadFile } from "@/lib/fileDownload";
 import { Site, Subsection } from "@/types/site";
 
@@ -96,7 +96,21 @@ interface DocumentData {
   file_name: string;
   file_url: string;
   category?: string;
+  category_id?: string;
   created_at: string;
+}
+
+interface SubsectionDocumentData {
+  id: string;
+  file_name: string;
+  file_url: string;
+  subsection_id: string;
+  category_name?: string;
+}
+
+interface SiteDocCategoryData {
+  id: string;
+  name: string;
 }
 
 interface InspectionData {
@@ -125,12 +139,13 @@ const PublicSiteReview = () => {
   const [subsections, setSubsections] = useState<SubsectionData[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
   const [validations, setValidations] = useState<ValidationData[]>([]);
-  const [documents, setDocuments] = useState<DocumentData[]>([]);
+  const [siteDocuments, setSiteDocuments] = useState<DocumentData[]>([]);
+  const [siteDocCategories, setSiteDocCategories] = useState<SiteDocCategoryData[]>([]);
+  const [subsectionDocuments, setSubsectionDocuments] = useState<SubsectionDocumentData[]>([]);
   const [inspections, setInspections] = useState<InspectionData[]>([]);
   const [companySettings, setCompanySettings] = useState<{ company_name: string; company_logo_url?: string } | null>(null);
   const [activeTab, setActiveTab] = useState("dashboard");
   const [subsectionSearch, setSubsectionSearch] = useState("");
-  const [documentSearch, setDocumentSearch] = useState("");
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
 
   useEffect(() => {
@@ -206,14 +221,23 @@ const PublicSiteReview = () => {
 
         setSubsections(subsectionsData || []);
 
-        // Fetch documents
+        // Fetch site documents
         const { data: docsData } = await supabase
           .from('site_documents')
           .select('*')
           .eq('site_id', link.site_id)
           .order('created_at', { ascending: false });
 
-        setDocuments(docsData || []);
+        setSiteDocuments(docsData || []);
+
+        // Fetch site document categories
+        const { data: docCatsData } = await supabase
+          .from('site_document_categories')
+          .select('id, name')
+          .eq('site_id', link.site_id)
+          .order('order_index');
+
+        setSiteDocCategories(docCatsData || []);
 
         // Fetch inspections
         const { data: inspectionsData } = await supabase
@@ -240,6 +264,20 @@ const PublicSiteReview = () => {
             .in('subsection_id', subsectionIds);
 
           setValidations(validationsData || []);
+
+          // Fetch subsection documents
+          const { data: subDocsData } = await supabase
+            .from('subsection_documents')
+            .select(`
+              id, file_name, file_url, subsection_id,
+              document_categories(name)
+            `)
+            .in('subsection_id', subsectionIds);
+
+          setSubsectionDocuments((subDocsData || []).map(doc => ({
+            ...doc,
+            category_name: (doc.document_categories as any)?.name || "Uncategorized"
+          })));
         }
       }
     } catch (err) {
@@ -377,13 +415,7 @@ const PublicSiteReview = () => {
     );
   });
 
-  const filteredDocuments = documents.filter(doc => {
-    const searchLower = documentSearch.toLowerCase();
-    return (
-      doc.file_name?.toLowerCase().includes(searchLower) ||
-      doc.category?.toLowerCase().includes(searchLower)
-    );
-  });
+  const totalDocs = siteDocuments.length + subsectionDocuments.length;
 
   // Format data for ComplianceDashboard
   const formattedSubsections = subsections.map(s => ({
@@ -761,66 +793,14 @@ const PublicSiteReview = () => {
 
           {/* Documents Tab */}
           <TabsContent value="documents" className="space-y-4">
-            <div className="relative">
-              <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search documents..."
-                value={documentSearch}
-                onChange={(e) => setDocumentSearch(e.target.value)}
-                className="pl-9"
-              />
-            </div>
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Site Documents</CardTitle>
-                <CardDescription>
-                  {documents.length} document{documents.length !== 1 ? 's' : ''} available
-                </CardDescription>
-              </CardHeader>
-              <CardContent>
-                {filteredDocuments.length > 0 ? (
-                  <div className="space-y-2">
-                    {filteredDocuments.map((doc) => (
-                      <div 
-                        key={doc.id}
-                        className="flex items-center justify-between p-3 rounded-lg border hover:bg-accent/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <FileText className="h-5 w-5 text-muted-foreground" />
-                          <div>
-                            <p className="font-medium text-sm">{doc.file_name}</p>
-                            <p className="text-xs text-muted-foreground">{doc.category || 'Uncategorized'}</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <Button 
-                            variant="ghost" 
-                            size="sm"
-                            onClick={() => setPreviewDocument({ url: doc.file_url, name: doc.file_name })}
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
-                          <Button 
-                            variant="ghost" 
-                            size="sm" 
-                            className="gap-2"
-                            onClick={() => handleDownload(doc.file_url, doc.file_name)}
-                          >
-                            <Download className="h-4 w-4" />
-                            <span className="hidden sm:inline">Download</span>
-                          </Button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-center text-muted-foreground py-8">
-                    {documentSearch ? "No documents match your search" : "No documents found for this site"}
-                  </p>
-                )}
-              </CardContent>
-            </Card>
+            <ClientPortalDocuments
+              siteDocuments={siteDocuments}
+              siteCategories={siteDocCategories}
+              subsectionDocuments={subsectionDocuments}
+              subsections={subsections.map(s => ({ id: s.id, name: s.name }))}
+              onPreview={(url, name) => setPreviewDocument({ url, name })}
+              onDownload={handleDownload}
+            />
           </TabsContent>
 
           {/* Subsections Tab */}
