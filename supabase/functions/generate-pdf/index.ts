@@ -166,8 +166,10 @@ async function findMatchingFile(bucket: string, originalPath: string): Promise<s
 }
 
 // Memory limit constants - prevent OOM errors
-const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB max per image after processing
-const MAX_TOTAL_IMAGES = 12; // Limit total images to prevent memory exhaustion
+// Edge functions have ~150MB memory limit, each 3MB image = ~4MB base64
+// Limit aggressively to avoid OOM
+const MAX_RAW_IMAGE_SIZE = 1 * 1024 * 1024; // 1MB max per raw image
+const MAX_TOTAL_IMAGES = 6; // Limit to 6 images max to stay under memory limit
 let totalImagesProcessed = 0;
 
 // Convert image URL to base64 data URI for reliable PDF rendering
@@ -230,8 +232,8 @@ async function imageUrlToBase64(url: string): Promise<string> {
       console.log(`[imageUrlToBase64] Downloaded: ${pathToDownload} (${arrayBuffer.byteLength} bytes)`);
       
       // Skip images that are too large (would cause memory issues)
-      if (arrayBuffer.byteLength > 4 * 1024 * 1024) { // 4MB raw limit
-        console.log(`[imageUrlToBase64] Skipping oversized image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+      if (arrayBuffer.byteLength > MAX_RAW_IMAGE_SIZE) {
+        console.log(`[imageUrlToBase64] Skipping oversized image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB > 1MB limit)`);
         return '';
       }
     } else {
@@ -250,8 +252,8 @@ async function imageUrlToBase64(url: string): Promise<string> {
       arrayBuffer = await response.arrayBuffer();
       
       // Skip oversized external images too
-      if (arrayBuffer.byteLength > 4 * 1024 * 1024) {
-        console.log(`[imageUrlToBase64] Skipping oversized external image`);
+      if (arrayBuffer.byteLength > MAX_RAW_IMAGE_SIZE) {
+        console.log(`[imageUrlToBase64] Skipping oversized external image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
         return '';
       }
     }
