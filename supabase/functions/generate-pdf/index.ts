@@ -118,8 +118,56 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
   return supabaseClientForImages;
 }
 
+// Try to find a matching file in storage when exact path fails
+// This handles cases where filenames have changed due to site renaming
+async function findMatchingFile(bucket: string, originalPath: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseClient();
+    
+    // Extract the folder path (everything except the filename)
+    const pathParts = originalPath.split('/');
+    const fileName = pathParts.pop() || '';
+    const folderPath = pathParts.join('/');
+    
+    console.log(`[findMatchingFile] Looking for alternatives in: ${bucket}/${folderPath}`);
+    
+    // List files in the same folder
+    const { data: files, error } = await supabase.storage
+      .from(bucket)
+      .list(folderPath, { limit: 20 });
+    
+    if (error || !files || files.length === 0) {
+      console.log(`[findMatchingFile] No files found in folder: ${folderPath}`);
+      return null;
+    }
+    
+    // Filter to only image files
+    const imageFiles = files.filter(f => 
+      f.name.endsWith('.jpg') || 
+      f.name.endsWith('.jpeg') || 
+      f.name.endsWith('.png') ||
+      f.name.endsWith('.webp')
+    );
+    
+    if (imageFiles.length === 0) {
+      console.log(`[findMatchingFile] No image files in folder`);
+      return null;
+    }
+    
+    // Return the first image file found (or the most recent if sorted by name)
+    const matchedFile = imageFiles[0];
+    const matchedPath = `${folderPath}/${matchedFile.name}`;
+    console.log(`[findMatchingFile] Found alternative: ${matchedPath}`);
+    return matchedPath;
+  } catch (error) {
+    console.error(`[findMatchingFile] Error searching for alternatives:`, error);
+    return null;
+  }
+}
+
 // Convert image URL to base64 data URI for reliable PDF rendering
 // Uses Supabase client for internal storage URLs to avoid 400 errors
+// Includes fallback to find matching files when exact path doesn't exist
 async function imageUrlToBase64(url: string): Promise<string> {
   try {
     if (!url || url.startsWith('data:')) {
@@ -135,21 +183,42 @@ async function imageUrlToBase64(url: string): Promise<string> {
     let contentType = 'image/jpeg';
     
     if (storageInfo) {
-      // Use Supabase client to download from storage (bypasses public URL issues)
-      console.log(`[imageUrlToBase64] Using Supabase client for: ${storageInfo.bucket}/${storageInfo.path}`);
       const supabase = getSupabaseClient();
-      const { data, error } = await supabase.storage
+      let pathToDownload = storageInfo.path;
+      
+      // First try the exact path
+      console.log(`[imageUrlToBase64] Trying exact path: ${storageInfo.bucket}/${storageInfo.path}`);
+      let { data, error } = await supabase.storage
         .from(storageInfo.bucket)
         .download(storageInfo.path);
       
+      // If exact path fails, try to find a matching file in the same folder
       if (error || !data) {
-        console.error(`Failed to download from storage: ${storageInfo.bucket}/${storageInfo.path}`, error);
+        console.log(`[imageUrlToBase64] Exact path failed, searching for alternatives...`);
+        const alternativePath = await findMatchingFile(storageInfo.bucket, storageInfo.path);
+        
+        if (alternativePath) {
+          console.log(`[imageUrlToBase64] Trying alternative: ${storageInfo.bucket}/${alternativePath}`);
+          const altResult = await supabase.storage
+            .from(storageInfo.bucket)
+            .download(alternativePath);
+          
+          if (!altResult.error && altResult.data) {
+            data = altResult.data;
+            error = null;
+            pathToDownload = alternativePath;
+          }
+        }
+      }
+      
+      if (error || !data) {
+        console.error(`[imageUrlToBase64] All attempts failed for: ${storageInfo.bucket}/${storageInfo.path}`);
         return '';
       }
       
       arrayBuffer = await data.arrayBuffer();
       contentType = data.type || 'image/jpeg';
-      console.log(`[imageUrlToBase64] Downloaded via Supabase client: ${arrayBuffer.byteLength} bytes`);
+      console.log(`[imageUrlToBase64] Downloaded: ${pathToDownload} (${arrayBuffer.byteLength} bytes)`);
     } else {
       // Fall back to regular fetch for external URLs
       const encodedUrl = encodeSupabaseStorageUrl(url);
