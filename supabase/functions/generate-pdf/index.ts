@@ -1,5 +1,6 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import QRCode from 'https://esm.sh/qrcode@1.5.3';
+import { Image, decode } from 'https://deno.land/x/imagescript@1.3.0/mod.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -119,16 +120,18 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// IMAGE HANDLING - Use Signed URLs for PDFShift to fetch directly
+// IMAGE HANDLING - Server-Side Compression with ImageScript
 // ============================================================================
-// ARCHITECTURE: Instead of downloading large images and converting to Base64
-// (which causes memory limits with large photos), we generate signed URLs
-// that PDFShift can fetch directly. This supports unlimited image sizes.
+// ARCHITECTURE: Download images, resize/compress using ImageScript (pure-JS),
+// then embed as Base64. This handles large images (2-5MB) by compressing them
+// to ~100-200KB before embedding, preventing memory exhaustion.
 //
 // FALLBACK LOGIC: If exact file path fails (e.g., site was renamed), 
 // we search the directory for similar files and use those instead.
 
-const SIGNED_URL_EXPIRY = 3600; // 1 hour - plenty of time for PDFShift
+const MAX_IMAGE_DIMENSION = 800; // Resize to max 800px width/height
+const MAX_RAW_IMAGE_SIZE = 8 * 1024 * 1024; // Accept up to 8MB raw images
+const TARGET_COMPRESSED_SIZE = 200 * 1024; // Target ~200KB after compression
 
 // Extract pattern from filename for matching alternatives
 // e.g., "SITE_NAME_emergencyBoardImages_boardOpen_1234567_1.jpg" → { itemId: "boardOpen", suffix: "_1.jpg" }
@@ -206,8 +209,51 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
   }
 }
 
-// Generate signed URL for image - PDFShift will fetch directly (no size limit!)
-async function getSignedImageUrl(url: string): Promise<string | null> {
+// Compress image using ImageScript - resize and reduce quality
+async function compressImage(imageData: Uint8Array, originalSize: number): Promise<{ data: Uint8Array; compressed: boolean }> {
+  try {
+    // Decode the image using ImageScript
+    const image = await decode(imageData);
+    
+    if (!(image instanceof Image)) {
+      console.log('[compress] Decoded result is not an Image, returning original');
+      return { data: imageData, compressed: false };
+    }
+    
+    const originalWidth = image.width;
+    const originalHeight = image.height;
+    
+    // Calculate new dimensions maintaining aspect ratio
+    let newWidth = originalWidth;
+    let newHeight = originalHeight;
+    
+    if (originalWidth > MAX_IMAGE_DIMENSION || originalHeight > MAX_IMAGE_DIMENSION) {
+      const ratio = Math.min(MAX_IMAGE_DIMENSION / originalWidth, MAX_IMAGE_DIMENSION / originalHeight);
+      newWidth = Math.round(originalWidth * ratio);
+      newHeight = Math.round(originalHeight * ratio);
+      
+      // Resize the image
+      image.resize(newWidth, newHeight);
+      console.log(`[compress] Resized: ${originalWidth}x${originalHeight} → ${newWidth}x${newHeight}`);
+    }
+    
+    // Encode as JPEG with quality reduction
+    // ImageScript encodeJPEG takes quality 1-100
+    const quality = originalSize > 2 * 1024 * 1024 ? 60 : 75; // Lower quality for very large images
+    const compressed = await image.encodeJPEG(quality);
+    
+    const compressionRatio = Math.round((1 - compressed.length / originalSize) * 100);
+    console.log(`[compress] ${Math.round(originalSize / 1024)}KB → ${Math.round(compressed.length / 1024)}KB (${compressionRatio}% reduction)`);
+    
+    return { data: compressed, compressed: true };
+  } catch (error) {
+    console.log(`[compress] Failed: ${error instanceof Error ? error.message : 'Unknown'}, returning original`);
+    return { data: imageData, compressed: false };
+  }
+}
+
+// Download image, compress it, and return as Base64 data URI
+async function downloadAndCompressImage(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already data URI - keep it
   
@@ -215,63 +261,79 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
     // Parse the Supabase storage URL
     const parsed = parseSupabaseStorageUrl(url);
     if (!parsed) {
-      // Not a Supabase storage URL - return as-is, PDFShift may be able to fetch it
-      console.log('[image] Not a Supabase URL, using directly:', url.substring(0, 60));
-      return url;
-    }
-    
-    const supabase = getSupabaseClient();
-    
-    // First verify the file exists
-    const { data: fileData, error: fileError } = await supabase.storage
-      .from(parsed.bucket)
-      .download(parsed.path);
-    
-    let finalPath = parsed.path;
-    
-    // FALLBACK: If file doesn't exist, search for alternative
-    if (fileError || !fileData) {
-      console.log(`[image] File not found at ${parsed.path.substring(0, 50)}..., trying fallback`);
-      
-      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
-      if (altPath) {
-        // Verify the alternative file exists
-        const { data: altData, error: altError } = await supabase.storage
-          .from(parsed.bucket)
-          .download(altPath);
-        
-        if (!altError && altData) {
-          console.log(`[image] Fallback SUCCESS: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
-          finalPath = altPath;
-        } else {
-          console.log(`[image] Fallback file also not found`);
+      // Not a Supabase storage URL - try direct fetch
+      console.log('[image] Not a Supabase URL, trying direct fetch:', url.substring(0, 60));
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
+        if (!response.ok) return null;
+        const buffer = await response.arrayBuffer();
+        if (buffer.byteLength > MAX_RAW_IMAGE_SIZE) {
+          console.log(`[image] External image too large: ${Math.round(buffer.byteLength / 1024 / 1024)}MB`);
           return null;
         }
-      } else {
-        console.log(`[image] No alternative file found`);
+        
+    const imageData = new Uint8Array(buffer);
+        const { data: compressed } = await compressImage(imageData, buffer.byteLength);
+        const base64 = arrayBufferToBase64(new Uint8Array(compressed).buffer as ArrayBuffer);
+        return `data:image/jpeg;base64,${base64}`;
+      } catch {
         return null;
       }
     }
     
-    // Create signed URL for PDFShift to fetch
-    const { data: signedData, error: signError } = await supabase.storage
-      .from(parsed.bucket)
-      .createSignedUrl(finalPath, SIGNED_URL_EXPIRY);
+    const supabase = getSupabaseClient();
     
-    if (signError || !signedData?.signedUrl) {
-      console.log(`[image] Failed to create signed URL: ${signError?.message || 'No URL'}`);
+    // Download the image
+    let { data, error } = await supabase.storage
+      .from(parsed.bucket)
+      .download(parsed.path);
+    
+    // FALLBACK: If direct download fails, search for alternative file
+    if (error || !data) {
+      console.log(`[image] Direct download failed for ${parsed.path.substring(0, 50)}..., trying fallback`);
+      
+      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
+      if (altPath) {
+        const altResult = await supabase.storage
+          .from(parsed.bucket)
+          .download(altPath);
+        
+        if (!altResult.error && altResult.data) {
+          console.log(`[image] Fallback SUCCESS: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
+          data = altResult.data;
+          error = null;
+        }
+      }
+    }
+    
+    if (error || !data) {
+      console.log(`[image] Final download failed: ${error?.message || 'No data'}`);
       return null;
     }
     
-    console.log(`[image] Signed URL created for: ${finalPath.substring(finalPath.lastIndexOf('/') + 1)}`);
-    return signedData.signedUrl;
+    // Check raw size
+    if (data.size > MAX_RAW_IMAGE_SIZE) {
+      console.log(`[image] Image too large even for compression: ${Math.round(data.size / 1024 / 1024)}MB`);
+      return null;
+    }
+    
+    // Convert blob to array buffer and compress
+    const buffer = await data.arrayBuffer();
+    const imageData = new Uint8Array(buffer);
+    
+    console.log(`[image] Processing: ${parsed.path.substring(parsed.path.lastIndexOf('/') + 1)} (${Math.round(data.size / 1024)}KB)`);
+    
+    const { data: compressed } = await compressImage(imageData, data.size);
+    const base64 = arrayBufferToBase64(new Uint8Array(compressed).buffer as ArrayBuffer);
+    
+    return `data:image/jpeg;base64,${base64}`;
   } catch (error) {
     console.log(`[image] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
     return null;
   }
 }
 
-// Legacy function for small images (signatures, etc.) - still uses Base64
+// Legacy function for small images (signatures, etc.) - simpler processing
 async function imageToBase64(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;
@@ -323,8 +385,7 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binaryString);
 }
 
-// Process ALL inspection photos - use SIGNED URLs for PDFShift to fetch directly
-// This bypasses memory limits since we're not loading images into memory
+// Process ALL inspection photos - download, compress, and embed as Base64
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
@@ -332,71 +393,71 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   let totalPhotos = 0;
   let processedPhotos = 0;
   
-  // Process section item photos - USE SIGNED URLs
+  // Process section item photos - COMPRESS AND EMBED
   if (processed.sections) {
     for (const section of processed.sections) {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             totalPhotos += item.photos.length;
-            const signedUrls: string[] = [];
+            const compressedPhotos: string[] = [];
             for (const photoUrl of item.photos) {
-              const signedUrl = await getSignedImageUrl(photoUrl);
-              if (signedUrl) {
-                signedUrls.push(signedUrl);
+              const base64 = await downloadAndCompressImage(photoUrl);
+              if (base64) {
+                compressedPhotos.push(base64);
                 processedPhotos++;
               }
             }
-            item.photos = signedUrls;
+            item.photos = compressedPhotos;
           }
         }
       }
     }
   }
   
-  // Process tenant photos - USE SIGNED URLs
+  // Process tenant photos - COMPRESS AND EMBED
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
       if (tenant.meterImage) {
         totalPhotos++;
-        const signedUrl = await getSignedImageUrl(tenant.meterImage);
-        tenant.meterImage = signedUrl;
-        if (signedUrl) processedPhotos++;
+        const base64 = await downloadAndCompressImage(tenant.meterImage);
+        tenant.meterImage = base64;
+        if (base64) processedPhotos++;
       }
       if (tenant.breakerImage) {
         totalPhotos++;
-        const signedUrl = await getSignedImageUrl(tenant.breakerImage);
-        tenant.breakerImage = signedUrl;
-        if (signedUrl) processedPhotos++;
+        const base64 = await downloadAndCompressImage(tenant.breakerImage);
+        tenant.breakerImage = base64;
+        if (base64) processedPhotos++;
       }
       if (tenant.ctRatioImage) {
         totalPhotos++;
-        const signedUrl = await getSignedImageUrl(tenant.ctRatioImage);
-        tenant.ctRatioImage = signedUrl;
-        if (signedUrl) processedPhotos++;
+        const base64 = await downloadAndCompressImage(tenant.ctRatioImage);
+        tenant.ctRatioImage = base64;
+        if (base64) processedPhotos++;
       }
     }
   }
   
-  // Process snag photos - USE SIGNED URLs
+  // Process snag photos - COMPRESS AND EMBED
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
         totalPhotos += snag.photos.length;
-        const signedUrls: string[] = [];
+        const compressedPhotos: string[] = [];
         for (const photoUrl of snag.photos) {
-          const signedUrl = await getSignedImageUrl(photoUrl);
-          if (signedUrl) {
-            signedUrls.push(signedUrl);
+          const base64 = await downloadAndCompressImage(photoUrl);
+          if (base64) {
+            compressedPhotos.push(base64);
             processedPhotos++;
           }
         }
-        snag.photos = signedUrls;
+        snag.photos = compressedPhotos;
       }
     }
   }
   
-  // Process signature URLs - still use Base64 (signatures are small)
+  // Process signature URLs - use legacy function (signatures are small)
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
@@ -408,7 +469,7 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  console.log(`[processPhotos] SUCCESS: ${processedPhotos}/${totalPhotos} images converted to signed URLs`);
+  console.log(`[processPhotos] SUCCESS: ${processedPhotos}/${totalPhotos} images compressed and embedded`);
   return processed;
 }
 
