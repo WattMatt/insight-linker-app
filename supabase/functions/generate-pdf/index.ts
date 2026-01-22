@@ -123,7 +123,7 @@ interface COCValidationData {
   subsectionName?: string;
 }
 
-// Inspection specific data
+// Inspection specific data - with PHOTOS support for photographic documentation
 interface InspectionData {
   inspectionId: string;
   templateName?: string;
@@ -138,6 +138,8 @@ interface InspectionData {
       label: string;
       value: string | boolean | number;
       type?: string;
+      notes?: string;
+      photos?: string[]; // Array of photo URLs - CRITICAL for photographic inspection reports
     }>;
   }>;
   snags?: Array<{
@@ -145,6 +147,7 @@ interface InspectionData {
     description?: string;
     status: string;
     riskLevel?: string;
+    photos?: string[]; // Snag photos
   }>;
   signatures?: Array<{
     name: string;
@@ -1682,100 +1685,245 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
   const statusColor = insp.status?.toLowerCase() === 'completed' ? COLORS.success :
                      insp.status?.toLowerCase() === 'in_progress' ? COLORS.warning : COLORS.textMuted;
   
-  let content = '';
+  // Count total photos for the report
+  let totalPhotos = 0;
+  if (insp.sections) {
+    insp.sections.forEach(section => {
+      section.items.forEach(item => {
+        if (item.photos && item.photos.length > 0) {
+          totalPhotos += item.photos.length;
+        }
+      });
+    });
+  }
   
-  // General Info Section
-  content += `
+  // Build pages - we'll put items with photos prominently
+  let pages: string[] = [];
+  let currentPageContent = '';
+  let currentPageItemCount = 0;
+  const maxItemsPerPage = 3; // Fewer items per page to give photos room
+  
+  // Page 1: Header/General Info
+  let page1Content = `
+    <!-- Report Header -->
     <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
       <tr>
-        <td style="background: ${accentColor}; color: white; padding: 10px 15px; font-weight: 600; font-size: 12pt;">
-          General Information
+        <td style="background: ${accentColor}; color: white; padding: 15px 20px; font-weight: 700; font-size: 14pt;">
+          ${insp.templateName || 'Inspection Report'}
         </td>
       </tr>
       <tr>
-        <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
-          <table style="width: 100%;" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Status</td>
-              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; color: ${statusColor}; font-weight: 600;">${insp.status || 'Pending'}</td>
-            </tr>
-            ${insp.inspectorName ? `
-            <tr>
-              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Inspector</td>
-              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${insp.inspectorName}</td>
-            </tr>
-            ` : ''}
-            ${insp.inspectionDate ? `
-            <tr>
-              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Date</td>
-              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${new Date(insp.inspectionDate).toLocaleDateString()}</td>
-            </tr>
-            ` : ''}
-            ${insp.qualityRating ? `
-            <tr>
-              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Quality Rating</td>
-              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${insp.qualityRating}/5 ⭐</td>
-            </tr>
-            ` : ''}
-          </table>
+        <td style="background: ${COLORS.lightGray}; padding: 10px 20px; font-size: 11pt; color: ${COLORS.primary};">
+          ${data.siteName || ''} ${insp.subsectionName ? `- ${insp.subsectionName}` : ''}
+        </td>
+      </tr>
+    </table>
+    
+    <!-- Photo Summary Badge -->
+    <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="text-align: center; padding: 15px;">
+          <span style="display: inline-block; background: ${accentColor}; color: white; padding: 8px 20px; border-radius: 20px; font-size: 11pt; font-weight: 600;">
+            📷 ${totalPhotos} Photographic Record${totalPhotos !== 1 ? 's' : ''} Captured
+          </span>
+        </td>
+      </tr>
+    </table>
+    
+    <!-- General Information Grid -->
+    <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 8px;">
+      <tr>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 6px; padding: 12px;">
+          <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-bottom: 4px;">Status</div>
+          <div style="font-size: 12pt; font-weight: 600; color: ${statusColor};">${insp.status || 'Pending'}</div>
+        </td>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 6px; padding: 12px;">
+          <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-bottom: 4px;">Date</div>
+          <div style="font-size: 12pt; font-weight: 600; color: ${COLORS.primary};">${insp.inspectionDate ? new Date(insp.inspectionDate).toLocaleDateString() : 'Not set'}</div>
+        </td>
+      </tr>
+      <tr>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 6px; padding: 12px;">
+          <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-bottom: 4px;">Inspector</div>
+          <div style="font-size: 12pt; font-weight: 600; color: ${COLORS.primary};">${insp.inspectorName || 'Not assigned'}</div>
+        </td>
+        <td style="width: 50%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 6px; padding: 12px;">
+          <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; margin-bottom: 4px;">Quality Rating</div>
+          <div style="font-size: 12pt; font-weight: 600; color: ${COLORS.primary};">${insp.qualityRating ? `${insp.qualityRating}/5 ⭐` : 'Not rated'}</div>
         </td>
       </tr>
     </table>
   `;
   
-  // Template Sections
+  // Template Sections with PHOTOS - this is the critical part
   if (insp.sections && insp.sections.length > 0) {
-    insp.sections.forEach(section => {
-      content += `
-        <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+    for (const section of insp.sections) {
+      // Section header
+      page1Content += `
+        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
           <tr>
-            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+            <td style="background: ${COLORS.primary}; color: white; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0;">
               ${section.title}
-            </td>
-          </tr>
-          <tr>
-            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
-              <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                ${section.items.map(item => `
-                <tr>
-                  <td style="padding: 10px 15px; width: 40%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">${item.label}</td>
-                  <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${formatItemValue(item.value, item.type)}</td>
-                </tr>
-                `).join('')}
-              </table>
             </td>
           </tr>
         </table>
       `;
-    });
+      
+      // Render each item with its photos
+      for (const item of section.items) {
+        const hasPhotos = item.photos && item.photos.length > 0;
+        const statusBadge = formatItemValueWithBadge(item.value, item.type, accentColor);
+        
+        page1Content += `
+          <table style="width: 100%; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 6px;" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding: 12px 15px; background: ${COLORS.lightGray}; border-bottom: 1px solid ${COLORS.border};">
+                <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                  <tr>
+                    <td style="font-weight: 600; color: ${COLORS.primary}; font-size: 10pt;">${item.label}</td>
+                    <td style="text-align: right;">${statusBadge}</td>
+                  </tr>
+                </table>
+              </td>
+            </tr>
+            ${item.notes ? `
+            <tr>
+              <td style="padding: 10px 15px; font-size: 9pt; color: ${COLORS.textMuted}; border-bottom: 1px solid ${COLORS.border};">
+                <strong>Notes:</strong> ${item.notes}
+              </td>
+            </tr>
+            ` : ''}
+            ${hasPhotos ? `
+            <tr>
+              <td style="padding: 15px;">
+                <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-weight: 600;">
+                  📷 Photographic Evidence (${item.photos!.length} image${item.photos!.length !== 1 ? 's' : ''})
+                </div>
+                <table style="width: 100%;" cellpadding="0" cellspacing="8">
+                  <tr>
+                    ${item.photos!.slice(0, 3).map((photoUrl, idx) => `
+                    <td style="width: ${100 / Math.min(item.photos!.length, 3)}%; vertical-align: top;">
+                      <img src="${photoUrl}" 
+                           style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                           alt="Inspection photo ${idx + 1}" />
+                    </td>
+                    `).join('')}
+                  </tr>
+                </table>
+                ${item.photos!.length > 3 ? `
+                <table style="width: 100%; margin-top: 8px;" cellpadding="0" cellspacing="8">
+                  <tr>
+                    ${item.photos!.slice(3, 6).map((photoUrl, idx) => `
+                    <td style="width: ${100 / Math.min(item.photos!.length - 3, 3)}%; vertical-align: top;">
+                      <img src="${photoUrl}" 
+                           style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                           alt="Inspection photo ${idx + 4}" />
+                    </td>
+                    `).join('')}
+                  </tr>
+                </table>
+                ` : ''}
+                ${item.photos!.length > 6 ? `
+                <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-align: center; margin-top: 8px;">
+                  + ${item.photos!.length - 6} more image(s) available
+                </div>
+                ` : ''}
+              </td>
+            </tr>
+            ` : ''}
+          </table>
+        `;
+      }
+    }
   }
   
-  // Snags Section
+  // Snags Section with photos
   if (insp.snags && insp.snags.length > 0) {
-    content += `
-      <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+    page1Content += `
+      <table style="width: 100%; margin-top: 20px; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
         <tr>
-          <td style="background: #fef3c7; color: ${COLORS.warning}; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${COLORS.warning};">
-            Issues Found (${insp.snags.length})
+          <td style="background: #fef3c7; color: ${COLORS.warning}; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0; border-bottom: 2px solid ${COLORS.warning};">
+            ⚠️ Issues Found (${insp.snags.length})
+          </td>
+        </tr>
+      </table>
+    `;
+    
+    for (const snag of insp.snags) {
+      const riskColor = snag.riskLevel === 'high' ? COLORS.error :
+                       snag.riskLevel === 'medium' ? COLORS.warning : COLORS.info;
+      const hasSnagPhotos = snag.photos && snag.photos.length > 0;
+      
+      page1Content += `
+        <table style="width: 100%; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 6px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding: 12px 15px; background: #fef3c7;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-weight: 600; color: ${COLORS.primary};">${snag.title}</td>
+                  <td style="text-align: right;">
+                    <span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${riskColor}; color: white; font-weight: 600;">${(snag.riskLevel || 'low').toUpperCase()}</span>
+                    <span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.lightGray}; margin-left: 5px;">${snag.status}</span>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ${snag.description ? `
+          <tr>
+            <td style="padding: 10px 15px; font-size: 9pt; color: ${COLORS.textMuted}; border-top: 1px solid ${COLORS.border};">
+              ${snag.description}
+            </td>
+          </tr>
+          ` : ''}
+          ${hasSnagPhotos ? `
+          <tr>
+            <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
+              <table style="width: 100%;" cellpadding="0" cellspacing="8">
+                <tr>
+                  ${snag.photos!.slice(0, 3).map((photoUrl, idx) => `
+                  <td style="width: ${100 / Math.min(snag.photos!.length, 3)}%; vertical-align: top;">
+                    <img src="${photoUrl}" 
+                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                         alt="Snag photo ${idx + 1}" />
+                  </td>
+                  `).join('')}
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ` : ''}
+        </table>
+      `;
+    }
+  }
+  
+  // Signatures section
+  if (insp.signatures && insp.signatures.length > 0) {
+    page1Content += `
+      <table style="width: 100%; margin-top: 30px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.primary}; color: white; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0;">
+            Sign-Off
           </td>
         </tr>
         <tr>
-          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
-            <table style="width: 100%;" cellpadding="0" cellspacing="0">
-              ${insp.snags.map(snag => {
-                const riskColor = snag.riskLevel === 'high' ? COLORS.error :
-                                 snag.riskLevel === 'medium' ? COLORS.warning : COLORS.info;
-                return `
-                <tr style="border-bottom: 1px solid ${COLORS.border};">
-                  <td style="padding: 12px 15px;">
-                    <div style="font-weight: 600; margin-bottom: 4px;">${snag.title}</div>
-                    ${snag.description ? `<div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">${snag.description}</div>` : ''}
-                    <span style="display: inline-block; padding: 2px 8px; font-size: 8pt; border-radius: 4px; background: ${riskColor}22; color: ${riskColor};">${snag.riskLevel || 'low'}</span>
-                    <span style="display: inline-block; padding: 2px 8px; font-size: 8pt; border-radius: 4px; background: ${COLORS.lightGray}; margin-left: 5px;">${snag.status}</span>
-                  </td>
-                </tr>
-                `;
-              }).join('')}
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 20px;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="20">
+              <tr>
+                ${insp.signatures.map(sig => `
+                <td style="width: ${100 / insp.signatures!.length}%; text-align: center; vertical-align: top;">
+                  ${sig.signatureUrl ? `
+                  <img src="${sig.signatureUrl}" style="max-width: 150px; max-height: 60px; margin-bottom: 10px;" alt="Signature" />
+                  ` : `
+                  <div style="width: 150px; height: 60px; border-bottom: 2px solid ${COLORS.border}; margin: 0 auto 10px auto;"></div>
+                  `}
+                  <div style="font-weight: 600; color: ${COLORS.primary};">${sig.name}</div>
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted};">${sig.role || 'Signatory'}</div>
+                  ${sig.signedAt ? `<div style="font-size: 8pt; color: ${COLORS.textMuted};">${new Date(sig.signedAt).toLocaleDateString()}</div>` : ''}
+                </td>
+                `).join('')}
+              </tr>
             </table>
           </td>
         </tr>
@@ -1788,7 +1936,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>Inspection Report</title>
+  <title>Inspection Report - ${insp.templateName || 'General'}</title>
   <style>
     @page { size: A4; margin: 0; }
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -1802,12 +1950,13 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
       print-color-adjust: exact;
     }
     table { border-collapse: collapse; }
+    img { display: block; }
   </style>
 </head>
 <body>
   <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;">
     ${generatePageHeader(`Inspection Report - ${insp.templateName || 'General'}`, accentColor)}
-    ${content}
+    ${page1Content}
     ${generatePageFooter(1, '1', generatedAt)}
   </div>
 </body>
@@ -1815,14 +1964,29 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
   `;
 }
 
-function formatItemValue(value: string | boolean | number, type?: string): string {
-  if (typeof value === 'boolean') {
-    return value ? '✓ Yes' : '✗ No';
+function formatItemValueWithBadge(value: string | boolean | number, type?: string, accentColor: string = '#2563eb'): string {
+  const strValue = String(value).toLowerCase();
+  
+  if (typeof value === 'boolean' || type === 'checkbox') {
+    const checked = value === true || strValue === 'true' || strValue === 'pass' || strValue === 'complete' || strValue === 'completed';
+    return checked 
+      ? `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.success}; color: white; font-weight: 600;">✓ PASS</span>`
+      : `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.error}; color: white; font-weight: 600;">✗ FAIL</span>`;
   }
-  if (type === 'checkbox') {
-    return value ? '✓ Checked' : '○ Unchecked';
+  
+  if (strValue === 'pass' || strValue === 'complete' || strValue === 'completed' || strValue === 'yes') {
+    return `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.success}; color: white; font-weight: 600;">✓ ${String(value).toUpperCase()}</span>`;
   }
-  return String(value);
+  
+  if (strValue === 'fail' || strValue === 'failed' || strValue === 'no') {
+    return `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.error}; color: white; font-weight: 600;">✗ ${String(value).toUpperCase()}</span>`;
+  }
+  
+  if (strValue === 'pending' || strValue === 'in_progress' || strValue === 'n/a') {
+    return `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${COLORS.lightGray}; color: ${COLORS.textMuted};">${String(value)}</span>`;
+  }
+  
+  return `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${accentColor}22; color: ${accentColor};">${String(value)}</span>`;
 }
 
 async function generateFortressChecklistHTML(data: ReportData): Promise<string> {
