@@ -165,6 +165,11 @@ async function findMatchingFile(bucket: string, originalPath: string): Promise<s
   }
 }
 
+// Memory limit constants - prevent OOM errors
+const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB max per image after processing
+const MAX_TOTAL_IMAGES = 12; // Limit total images to prevent memory exhaustion
+let totalImagesProcessed = 0;
+
 // Convert image URL to base64 data URI for reliable PDF rendering
 // Uses Supabase client for internal storage URLs to avoid 400 errors
 // Includes fallback to find matching files when exact path doesn't exist
@@ -174,7 +179,13 @@ async function imageUrlToBase64(url: string): Promise<string> {
       return url; // Already base64 or empty
     }
     
-    console.log(`[imageUrlToBase64] Processing: ${url.substring(0, 100)}...`);
+    // Check if we've hit the image limit
+    if (totalImagesProcessed >= MAX_TOTAL_IMAGES) {
+      console.log(`[imageUrlToBase64] Skipping - max image limit reached (${MAX_TOTAL_IMAGES})`);
+      return '';
+    }
+    
+    console.log(`[imageUrlToBase64] Processing image ${totalImagesProcessed + 1}/${MAX_TOTAL_IMAGES}: ${url.substring(0, 80)}...`);
     
     // Try to parse as Supabase storage URL first
     const storageInfo = parseSupabaseStorageUrl(url);
@@ -187,7 +198,6 @@ async function imageUrlToBase64(url: string): Promise<string> {
       let pathToDownload = storageInfo.path;
       
       // First try the exact path
-      console.log(`[imageUrlToBase64] Trying exact path: ${storageInfo.bucket}/${storageInfo.path}`);
       let { data, error } = await supabase.storage
         .from(storageInfo.bucket)
         .download(storageInfo.path);
@@ -198,7 +208,6 @@ async function imageUrlToBase64(url: string): Promise<string> {
         const alternativePath = await findMatchingFile(storageInfo.bucket, storageInfo.path);
         
         if (alternativePath) {
-          console.log(`[imageUrlToBase64] Trying alternative: ${storageInfo.bucket}/${alternativePath}`);
           const altResult = await supabase.storage
             .from(storageInfo.bucket)
             .download(alternativePath);
@@ -219,6 +228,12 @@ async function imageUrlToBase64(url: string): Promise<string> {
       arrayBuffer = await data.arrayBuffer();
       contentType = data.type || 'image/jpeg';
       console.log(`[imageUrlToBase64] Downloaded: ${pathToDownload} (${arrayBuffer.byteLength} bytes)`);
+      
+      // Skip images that are too large (would cause memory issues)
+      if (arrayBuffer.byteLength > 4 * 1024 * 1024) { // 4MB raw limit
+        console.log(`[imageUrlToBase64] Skipping oversized image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
+        return '';
+      }
     } else {
       // Fall back to regular fetch for external URLs
       const encodedUrl = encodeSupabaseStorageUrl(url);
@@ -233,6 +248,12 @@ async function imageUrlToBase64(url: string): Promise<string> {
       
       contentType = response.headers.get('content-type') || 'image/jpeg';
       arrayBuffer = await response.arrayBuffer();
+      
+      // Skip oversized external images too
+      if (arrayBuffer.byteLength > 4 * 1024 * 1024) {
+        console.log(`[imageUrlToBase64] Skipping oversized external image`);
+        return '';
+      }
     }
     
     // Process in chunks to avoid stack overflow with large images
@@ -245,7 +266,8 @@ async function imageUrlToBase64(url: string): Promise<string> {
     }
     base64 = btoa(base64);
     
-    console.log(`[imageUrlToBase64] Successfully converted image (${uint8Array.length} bytes)`);
+    totalImagesProcessed++;
+    console.log(`[imageUrlToBase64] Converted image ${totalImagesProcessed} (${uint8Array.length} bytes)`);
     return `data:${contentType};base64,${base64}`;
   } catch (error) {
     console.error(`Error converting image to base64: ${url}`, error);
@@ -254,31 +276,38 @@ async function imageUrlToBase64(url: string): Promise<string> {
 }
 
 // Process inspection data to convert all photo URLs to base64
+// Now with limits to prevent memory exhaustion
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
   const processed = { ...inspection };
   let successCount = 0;
   let failCount = 0;
+  let skippedCount = 0;
   
-  // Process section item photos
+  // Reset the global counter for each PDF generation
+  totalImagesProcessed = 0;
+  
+  // Process section item photos - limit to 1 photo per item to save memory
   if (processed.sections) {
     for (const section of processed.sections) {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
-            console.log(`[processPhotos] Processing ${item.photos.length} photos for item: ${item.label}`);
-            const base64Photos: string[] = [];
-            for (const photoUrl of item.photos) {
-              const base64 = await imageUrlToBase64(photoUrl);
-              if (base64) {
-                base64Photos.push(base64);
-                successCount++;
-              } else {
-                failCount++;
-              }
+            // Only process first photo per item to save memory
+            const photoToProcess = item.photos[0];
+            const base64 = await imageUrlToBase64(photoToProcess);
+            if (base64) {
+              item.photos = [base64];
+              successCount++;
+            } else {
+              item.photos = [];
+              failCount++;
             }
-            item.photos = base64Photos;
+            // Track skipped photos
+            if (item.photos.length > 1) {
+              skippedCount += item.photos.length - 1;
+            }
           }
         }
       }
@@ -288,7 +317,6 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   // Process tenant photos (meterImage, breakerImage, ctRatioImage)
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
-      console.log(`[processPhotos] Processing tenant: ${tenant.shopName}`);
       if (tenant.meterImage) {
         const base64 = await imageUrlToBase64(tenant.meterImage);
         tenant.meterImage = base64 || null;
@@ -307,22 +335,22 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  // Process snag photos
+  // Process snag photos - limit to 1 photo per snag
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
-        console.log(`[processPhotos] Processing ${snag.photos.length} snag photos: ${snag.title}`);
-        const base64Photos: string[] = [];
-        for (const photoUrl of snag.photos) {
-          const base64 = await imageUrlToBase64(photoUrl);
-          if (base64) {
-            base64Photos.push(base64);
-            successCount++;
-          } else {
-            failCount++;
-          }
+        const photoToProcess = snag.photos[0];
+        const base64 = await imageUrlToBase64(photoToProcess);
+        if (base64) {
+          snag.photos = [base64];
+          successCount++;
+        } else {
+          snag.photos = [];
+          failCount++;
         }
-        snag.photos = base64Photos;
+        if (snag.photos.length > 1) {
+          skippedCount += snag.photos.length - 1;
+        }
       }
     }
   }
@@ -338,7 +366,7 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  console.log(`[processPhotos] Complete: ${successCount} successful, ${failCount} failed`);
+  console.log(`[processPhotos] Complete: ${successCount} embedded, ${failCount} failed, ${skippedCount} skipped (memory limit)`);
   return processed;
 }
 
