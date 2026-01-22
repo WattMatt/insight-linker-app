@@ -226,7 +226,7 @@ export function ClientPortalDocuments({
 
             {/* Grouped Document View */}
             {sortedGroups.length > 0 ? (
-                <Accordion type="multiple" defaultValue={sortedGroups.map(([name]) => name)} className="space-y-3">
+                <Accordion type="multiple" defaultValue={[]} className="space-y-3">
                     {sortedGroups.map(([groupName, docs]) => (
                         <AccordionItem key={groupName} value={groupName} className="border-none">
                             <Card className="overflow-hidden">
