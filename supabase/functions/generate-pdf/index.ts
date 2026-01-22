@@ -69,11 +69,11 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 // ARCHITECTURE: Generate signed URLs and let PDFShift fetch images directly.
 // Image sizing is controlled via HTML/CSS (width: 150px), avoiding CPU-intensive
 // server-side image processing that exceeds Edge Function limits.
-// LIMITS: PDFShift has a 250MB document limit. With 4MB average photos,
-// we can only safely include ~10 photos to leave room for HTML/CSS overhead.
+// LIMITS: PDFShift has 250MB limit + Edge Function memory limit.
+// With 4MB average photos, max ~6 photos to stay safe.
 
-const MAX_PHOTOS_PER_ITEM = 2;  // Strict limit per item
-const MAX_TOTAL_PHOTOS = 10;   // Strict limit to stay under 250MB PDFShift limit
+const MAX_PHOTOS_PER_ITEM = 1;  // Strict: 1 photo per item
+const MAX_TOTAL_PHOTOS = 6;    // Very strict to prevent memory issues
 
 // Track global photo count across the entire document
 let globalPhotoCount = 0;
@@ -2760,9 +2760,9 @@ Deno.serve(async (req) => {
 
     console.log('PDF generated successfully, uploading to storage...');
 
-    // Get PDF as buffer
-    const pdfBuffer = await pdfResponse.arrayBuffer();
-    const uint8Array = new Uint8Array(pdfBuffer);
+    // Get PDF as blob (more memory-efficient than arrayBuffer)
+    const pdfBlob = await pdfResponse.blob();
+    console.log(`PDF size: ${(pdfBlob.size / 1024 / 1024).toFixed(2)}MB`);
     
     // Create Supabase client for storage upload
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -2778,10 +2778,10 @@ Deno.serve(async (req) => {
       ? `site-reports/${body.siteId}/${filename}`
       : `reports/${filename}`;
     
-    // Upload to Supabase Storage (documents bucket)
+    // Upload blob directly to Supabase Storage (documents bucket)
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('documents')
-      .upload(storagePath, uint8Array, {
+      .upload(storagePath, pdfBlob, {
         contentType: 'application/pdf',
         upsert: false,
       });
