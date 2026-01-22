@@ -61,6 +61,8 @@ interface SchematicDiagramProps {
   siteId: string;
   siteName: string;
   readOnly?: boolean;
+  accessToken?: string; // For public review navigation
+  clientPortalMode?: boolean; // For authenticated client portal navigation
 }
 
 interface Subsection {
@@ -134,7 +136,7 @@ const SIZE_PRESETS = {
   custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
 };
 
-export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, siteName, readOnly = false }) => {
+export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, siteName, readOnly = false, accessToken, clientPortalMode = false }) => {
   const navigate = useNavigate();
   const { clientId } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -920,10 +922,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     e.stopPropagation();
     
     if (!isEditMode && block.subsection_id) {
-      const basePath = clientId 
-        ? `/clients/${clientId}/sites/${siteId}/subsections/${block.subsection_id}`
-        : `/sites/${siteId}/subsections/${block.subsection_id}`;
-      navigate(basePath);
+      // If readOnly with accessToken, navigate to public subsection view
+      if (readOnly && accessToken) {
+        navigate(`/review/${accessToken}/subsection/${block.subsection_id}`);
+      } else if (clientPortalMode) {
+        // Authenticated client portal - use client portal routes
+        navigate(`/client-portal/subsections/${block.subsection_id}`);
+      } else {
+        // Admin routes
+        const basePath = clientId 
+          ? `/clients/${clientId}/sites/${siteId}/subsections/${block.subsection_id}`
+          : `/sites/${siteId}/subsections/${block.subsection_id}`;
+        navigate(basePath);
+      }
     }
   };
 

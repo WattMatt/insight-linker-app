@@ -379,7 +379,7 @@ const ClientPortalSiteDetail = () => {
 
         {/* Schematic Tab */}
         <TabsContent value="schematic" className="space-y-6">
-          <SchematicDiagram siteId={siteId!} siteName={site.name} readOnly />
+          <SchematicDiagram siteId={siteId!} siteName={site.name} readOnly clientPortalMode />
         </TabsContent>
 
         {/* Asset Verification Tab */}
