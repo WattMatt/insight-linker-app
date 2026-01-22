@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { 
   Building2, FileText, MapPin, Eye, Info, Search, 
   BarChart3, CheckCircle2, AlertCircle, LayoutGrid,
-  Shield, Workflow, ShieldCheck, FileBarChart, Layers
+  Shield, Workflow, ShieldCheck, FileBarChart, Layers, ChevronRight
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -470,7 +470,7 @@ const ClientPortalSiteDetail = () => {
                     <Link 
                       key={subsection.id}
                       to={`/client-portal/subsections/${subsection.id}${previewClientId ? `?preview=${previewClientId}` : ''}`}
-                      className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
+                      className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors cursor-pointer block"
                     >
                       <div className="flex items-center gap-3">
                         <Layers className="h-5 w-5 text-muted-foreground" />
@@ -490,7 +490,7 @@ const ClientPortalSiteDetail = () => {
                             COC: {subsection.coc_status}
                           </Badge>
                         )}
-                        <Eye className="h-4 w-4 text-muted-foreground" />
+                        <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </Link>
                   ))}
