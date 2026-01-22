@@ -742,12 +742,12 @@ const PublicSiteReview = () => {
 
           {/* Schematic Tab */}
           <TabsContent value="schematic" className="space-y-6">
-            <SchematicDiagram siteId={site.id} siteName={site.name} />
+            <SchematicDiagram siteId={site.id} siteName={site.name} readOnly />
           </TabsContent>
 
           {/* Asset Verification Tab */}
           <TabsContent value="assets" className="space-y-6">
-            <AssetVerification siteId={site.id} siteName={site.name} />
+            <AssetVerification siteId={site.id} siteName={site.name} readOnly />
           </TabsContent>
 
           {/* Compliance Tab */}
@@ -888,7 +888,7 @@ const PublicSiteReview = () => {
 
           {/* Reports Tab */}
           <TabsContent value="reports" className="space-y-6">
-            <SiteReports site={site as Site} />
+            <SiteReports site={site as Site} readOnly />
           </TabsContent>
         </Tabs>
       </section>

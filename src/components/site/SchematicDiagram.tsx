@@ -60,6 +60,7 @@ pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/b
 interface SchematicDiagramProps {
   siteId: string;
   siteName: string;
+  readOnly?: boolean;
 }
 
 interface Subsection {
@@ -133,7 +134,7 @@ const SIZE_PRESETS = {
   custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
 };
 
-export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, siteName }) => {
+export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, siteName, readOnly = false }) => {
   const navigate = useNavigate();
   const { clientId } = useParams();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1273,32 +1274,37 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             Schematic Diagram
           </CardTitle>
           <CardDescription>
-            Upload a schematic distribution diagram to visualize the electrical layout
+            {readOnly 
+              ? "No schematic diagram has been uploaded for this site yet."
+              : "Upload a schematic distribution diagram to visualize the electrical layout"
+            }
           </CardDescription>
         </CardHeader>
-        <CardContent>
-          <div className="border-2 border-dashed rounded-lg p-12 text-center">
-            <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
-            <p className="text-lg font-medium mb-2">Upload Schematic PDF</p>
-            <p className="text-sm text-muted-foreground mb-4">
-              Upload your electrical distribution diagram
-            </p>
-            <label htmlFor="schematic-upload">
-              <Button asChild disabled={uploading}>
-                <span className="cursor-pointer">
-                  {uploading ? "Uploading..." : "Select PDF File"}
-                </span>
-              </Button>
-            </label>
-            <input
-              id="schematic-upload"
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
-          </div>
-        </CardContent>
+        {!readOnly && (
+          <CardContent>
+            <div className="border-2 border-dashed rounded-lg p-12 text-center">
+              <Upload className="h-12 w-12 mx-auto text-muted-foreground mb-4" />
+              <p className="text-lg font-medium mb-2">Upload Schematic PDF</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Upload your electrical distribution diagram
+              </p>
+              <label htmlFor="schematic-upload">
+                <Button asChild disabled={uploading}>
+                  <span className="cursor-pointer">
+                    {uploading ? "Uploading..." : "Select PDF File"}
+                  </span>
+                </Button>
+              </label>
+              <input
+                id="schematic-upload"
+                type="file"
+                accept=".pdf"
+                className="hidden"
+                onChange={handleFileUpload}
+              />
+            </div>
+          </CardContent>
+        )}
       </Card>
     );
   }
@@ -1449,8 +1455,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       {/* Schematic Viewer - Fixed Height */}
       <CardContent className="p-0 relative">
-        {/* Controls Overlay - Visible when not editing */}
-        {!isEditMode && (
+        {/* Controls Overlay - Visible when not editing and not readOnly */}
+        {!isEditMode && !readOnly && (
           <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
             <Button
               variant="secondary"

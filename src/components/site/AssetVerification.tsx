@@ -25,6 +25,7 @@ import {
 interface AssetVerificationProps {
   siteId: string;
   siteName: string;
+  readOnly?: boolean;
 }
 
 interface ParsedAsset {
@@ -43,7 +44,7 @@ interface ParsedAsset {
   comments?: string;
 }
 
-export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) => {
+export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetVerificationProps) => {
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -393,39 +394,41 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
             Manage and verify assets for {siteName}
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
-            <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
-            Refresh
-          </Button>
-          {assets.length > 0 && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => setDeleteDialogOpen(true)}
-              className="text-destructive hover:text-destructive"
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              Clear All
+        {!readOnly && (
+          <div className="flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+              <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
+              Refresh
             </Button>
-          )}
-          <label htmlFor="excel-upload">
-            <Button asChild disabled={uploading}>
-              <span>
-                <Upload className="h-4 w-4 mr-2" />
-                {uploading ? "Importing..." : "Import Excel"}
-              </span>
-            </Button>
-          </label>
-          <input
-            id="excel-upload"
-            type="file"
-            accept=".xlsx,.xls"
-            onChange={handleFileUpload}
-            className="hidden"
-            disabled={uploading}
-          />
-        </div>
+            {assets.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDeleteDialogOpen(true)}
+                className="text-destructive hover:text-destructive"
+              >
+                <Trash2 className="h-4 w-4 mr-2" />
+                Clear All
+              </Button>
+            )}
+            <label htmlFor="excel-upload">
+              <Button asChild disabled={uploading}>
+                <span>
+                  <Upload className="h-4 w-4 mr-2" />
+                  {uploading ? "Importing..." : "Import Excel"}
+                </span>
+              </Button>
+            </label>
+            <input
+              id="excel-upload"
+              type="file"
+              accept=".xlsx,.xls"
+              onChange={handleFileUpload}
+              className="hidden"
+              disabled={uploading}
+            />
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}
@@ -454,26 +457,33 @@ export const AssetVerification = ({ siteId, siteName }: AssetVerificationProps) 
             <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
               <Upload className="h-8 w-8 text-muted-foreground" />
             </div>
-            <h3 className="font-semibold text-lg mb-2">No Assets Imported</h3>
+            <h3 className="font-semibold text-lg mb-2">No Assets Available</h3>
             <p className="text-muted-foreground max-w-md mb-4">
-              Upload an Excel asset register to import electrical and water meter data for this site.
+              {readOnly 
+                ? "No asset data has been imported for this site yet."
+                : "Upload an Excel asset register to import electrical and water meter data for this site."
+              }
             </p>
-            <label htmlFor="excel-upload-empty">
-              <Button asChild>
-                <span>
-                  <Upload className="h-4 w-4 mr-2" />
-                  Import Asset Register
-                </span>
-              </Button>
-            </label>
-            <input
-              id="excel-upload-empty"
-              type="file"
-              accept=".xlsx,.xls"
-              onChange={handleFileUpload}
-              className="hidden"
-              disabled={uploading}
-            />
+            {!readOnly && (
+              <>
+                <label htmlFor="excel-upload-empty">
+                  <Button asChild>
+                    <span>
+                      <Upload className="h-4 w-4 mr-2" />
+                      Import Asset Register
+                    </span>
+                  </Button>
+                </label>
+                <input
+                  id="excel-upload-empty"
+                  type="file"
+                  accept=".xlsx,.xls"
+                  onChange={handleFileUpload}
+                  className="hidden"
+                  disabled={uploading}
+                />
+              </>
+            )}
           </CardContent>
         </Card>
       ) : (
