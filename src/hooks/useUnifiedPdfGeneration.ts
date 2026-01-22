@@ -184,6 +184,23 @@ export interface InspectionTemplateReportData extends BaseReportData {
   }>;
 }
 
+// Inspection Template Report Data
+export interface InspectionTemplateReportData extends BaseReportData {
+  reportType: 'inspection-template';
+  templateName: string;
+  category?: string;
+  description?: string;
+  sections: Array<{
+    title: string;
+    items: Array<{
+      label: string;
+      type: string;
+      required?: boolean;
+      options?: string[];
+    }>;
+  }>;
+}
+
 // Union type for all report data
 export type UnifiedReportData = 
   | COCValidationReportData

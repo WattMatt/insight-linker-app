@@ -5,34 +5,10 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Button } from "@/components/ui/button";
 import { Progress } from "@/components/ui/progress";
 import { toast } from "sonner";
-import { CheckCircle2, Eye } from "lucide-react";
+import { CheckCircle2, Eye, Save } from "lucide-react";
 import { generateFortressTemplate } from "@/lib/fortressTemplate";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import {
-  generatePdfBlob,
-  createCoverPage,
-  createDataTable,
-  createSectionHeader,
-  COLORS,
-  DEFAULT_STYLES,
-} from "@/lib/pdfMakeUtils";
-
-type Content = any;
-type TDocumentDefinitions = any;
-
-const PDF_COLORS = COLORS;
-
-// Simple progress bar for pdfmake
-function createProgressBar(percentage: number): Content {
-  return {
-    canvas: [
-      { type: 'rect', x: 0, y: 0, w: 200, h: 10, color: '#E5E7EB' },
-      { type: 'rect', x: 0, y: 0, w: 200 * (percentage / 100), h: 10, color: percentage >= 80 ? '#22C55E' : percentage >= 50 ? '#F59E0B' : '#EF4444' }
-    ],
-    width: 200
-  };
-}
+import { useUnifiedPdfGeneration, FortressChecklistReportData } from "@/hooks/useUnifiedPdfGeneration";
 
 interface ChecklistItem {
   id: string;
@@ -47,18 +23,18 @@ interface ChecklistItem {
 
 interface FortressMarkingChecklistProps {
   siteId: string;
+  siteName?: string;
 }
 
-export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistProps) => {
+export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingChecklistProps) => {
   const [checklistItems, setChecklistItems] = useState<ChecklistItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [updating, setUpdating] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
-  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [generating, setGenerating] = useState(false);
+  
+  const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
 
   useEffect(() => {
     initializeChecklist();
@@ -239,147 +215,51 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
     return acc;
   }, {} as Record<string, ChecklistItem[]>);
 
-  const generatePDFDocument = async (): Promise<{ fileName: string; blob: Blob }> => {
-    const content: Content[] = [];
-
-    // Cover page
-    const coverPage = createCoverPage({
-      title: 'Fortress Site Close-Out Checklist',
-      subtitle: `Progress: ${checkedItems} of ${totalItems} items completed (${completionPercentage}%)`,
-      siteName: 'Site Checklist',
-      reportType: 'Close-Out Checklist',
-      organizationName: 'Fortress',
-      reportDate: new Date(),
-    });
-    content.push(coverPage);
-
-    // Summary page
-    content.push({ text: '', pageBreak: 'after' } as Content);
-    content.push(createSectionHeader('Checklist Summary', 'secondary'));
-
-    // Progress bar
-    content.push({
-      columns: [
-        { text: 'Overall Progress', bold: true, width: 100 },
-        createProgressBar(completionPercentage)
-      ],
-      margin: [0, 10, 0, 20]
-    } as Content);
-
-    // Summary stats table
-    content.push(createSectionHeader('Summary Statistics', 'muted'));
-    const summaryTable = createDataTable(
-      [{ field: 'metric', header: 'Metric' }, { field: 'value', header: 'Value' }],
-      [
-        { metric: 'Total Items', value: totalItems.toString() },
-        { metric: 'Completed', value: checkedItems.toString() },
-        { metric: 'Pending', value: (totalItems - checkedItems).toString() },
-        { metric: 'Not Applicable', value: notApplicableCount.toString() },
-        { metric: 'Completion Rate', value: `${completionPercentage}%` },
-      ]
-    );
-    content.push(summaryTable);
-
-    // Section details
-    Object.entries(sections).forEach(([sectionName, items]) => {
+  const handlePreviewReport = async () => {
+    // Build sections data for the report
+    const sectionsData = Object.entries(sections).map(([sectionName, items]) => {
       const sectionApplicable = items.filter(i => i.status !== 'not_applicable');
       const sectionChecked = sectionApplicable.filter(i => i.is_checked).length;
       const sectionTotal = sectionApplicable.length;
       const sectionProgress = sectionTotal > 0 ? Math.round((sectionChecked / sectionTotal) * 100) : 0;
 
-      content.push({ text: '', pageBreak: 'before' } as Content);
-      content.push(createSectionHeader(`${sectionName} (${sectionProgress}%)`, 'secondary'));
-
-      const tableData = items.map(item => [
-        item.status === 'not_applicable' ? 'N/A' : (item.is_checked ? '✓' : '☐'),
-        item.item_name,
-        item.status === 'not_applicable' ? 'Not Applicable' : (item.is_checked ? 'Complete' : 'Pending')
-      ]);
-
-      const sectionTable = createDataTable(
-        [{ field: 'status', header: 'Status' }, { field: 'item', header: 'Item' }, { field: 'progress', header: 'Progress' }],
-        tableData.map(row => ({ status: row[0], item: row[1], progress: row[2] }))
-      );
-      content.push(sectionTable);
+      return {
+        name: sectionName,
+        progress: sectionProgress,
+        items: items.map(item => ({
+          id: item.item_id,
+          label: item.item_name,
+          isChecked: item.is_checked,
+          isNotApplicable: item.status === 'not_applicable',
+          checkedAt: item.checked_at || undefined,
+        })),
+      };
     });
 
-    // Build document definition
-    const date = new Date().toLocaleDateString('en-US', { 
-      year: 'numeric', 
-      month: 'long', 
-      day: 'numeric' 
-    });
-
-    const docDefinition: TDocumentDefinitions = {
-      content,
-      styles: DEFAULT_STYLES,
-      defaultStyle: {
-        font: 'Roboto',
-        fontSize: 10,
+    const reportData: FortressChecklistReportData = {
+      reportType: 'fortress-checklist',
+      title: 'Fortress Site Close-Out Checklist',
+      siteName: siteName || 'Site',
+      siteId,
+      overallProgress: completionPercentage,
+      sections: sectionsData,
+      stats: {
+        completed: checkedItems,
+        pending: totalItems - checkedItems,
+        notApplicable: notApplicableCount,
+        total: totalItems,
       },
-      pageMargins: [40, 40, 40, 60],
-      footer: (currentPage: number, pageCount: number) => {
-        if (currentPage === 1) return null;
-        return {
-          columns: [
-            { text: 'Confidential', fontSize: 8, color: PDF_COLORS.textMuted, margin: [40, 0, 0, 0] },
-            { text: `Page ${currentPage - 1} of ${pageCount - 1}`, fontSize: 8, alignment: 'center', color: PDF_COLORS.textMuted },
-            { text: date, fontSize: 8, alignment: 'right', color: PDF_COLORS.textMuted, margin: [0, 0, 40, 0] }
-          ],
-          margin: [0, 20, 0, 0]
-        };
-      }
+      generatedAt: new Date().toISOString(),
     };
 
-    const blob = await generatePdfBlob(docDefinition);
-    const fileName = `fortress-checklist-${new Date().getTime()}.pdf`;
+    const result = await generatePdfForPreview(reportData);
     
-    return { fileName, blob };
-  };
-
-  const handlePreviewReport = async () => {
-    try {
-      setGenerating(true);
-      const result = await generatePDFDocument();
-      
-      const url = URL.createObjectURL(result.blob);
-      setPreviewUrl(url);
-      setPreviewFileName(result.fileName);
-      setPdfBlob(result.blob);
+    if (result.success && result.url) {
+      setPreviewUrl(result.url);
+      setPreviewFileName(result.filename || `fortress-checklist-${Date.now()}.pdf`);
       setPreviewOpen(true);
-    } catch (error) {
-      console.error('Error generating PDF:', error);
-      toast.error('Failed to generate PDF');
-    } finally {
-      setGenerating(false);
-    }
-  };
-
-  const handleSaveToDocuments = async () => {
-    if (!pdfBlob || !siteId) {
-      toast.error("Cannot save: missing data");
-      return;
-    }
-
-    try {
-      setSaving(true);
-      const result = await savePDFToDocuments({
-        blob: pdfBlob,
-        fileName: previewFileName,
-        siteId,
-        categoryName: getReportCategoryName("fortress-checklist"),
-      });
-
-      if (result.success) {
-        toast.success("Checklist saved to site documents!");
-      } else {
-        toast.error(result.error || "Failed to save checklist");
-      }
-    } catch (error) {
-      console.error("Error saving checklist:", error);
-      toast.error("Failed to save checklist");
-    } finally {
-      setSaving(false);
+    } else {
+      toast.error(result.error || 'Failed to generate report');
     }
   };
 
@@ -412,10 +292,10 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
                 variant="outline" 
                 size="sm"
                 onClick={handlePreviewReport}
-                disabled={generating}
+                disabled={isGenerating}
               >
                 <Eye className="h-4 w-4 mr-2" />
-                {generating ? "Generating..." : "Preview Report"}
+                {isGenerating ? "Generating..." : "Preview Report"}
               </Button>
               <Button 
                 variant="outline" 
@@ -502,16 +382,13 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
         onOpenChange={(open) => {
           setPreviewOpen(open);
           if (!open && previewUrl) {
-            URL.revokeObjectURL(previewUrl);
             setPreviewUrl("");
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
-        onSaveToDocuments={handleSaveToDocuments}
         saveLocation="site"
-        contextName="Site Documents"
-        isSaving={saving}
+        contextName={siteName || 'Site'}
       />
     </div>
   );

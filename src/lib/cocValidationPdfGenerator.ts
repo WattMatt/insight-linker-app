@@ -1,20 +1,10 @@
 /**
  * COC Validation Report Generator
- * Generates PDF reports for Certificate of Compliance validations
- * 
- * TEMPLATE GATEWAY INTEGRATION:
- * This generator uses fetchPDFTemplate to get its configuration from the database.
- * All styling, sections, and branding are controlled by the PDF Template Manager.
+ * Migrated to use unified PDFShift-based generation via generate-pdf edge function
  */
 
-import {
-  generatePdfBlob,
-  createSectionHeader,
-  createInfoTable,
-  createDataTable,
-  COLORS,
-} from "@/lib/pdfMakeUtils";
-import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
+import { supabase } from "@/integrations/supabase/client";
+import { toast } from "sonner";
 
 interface ValidationReport {
   cocNumber?: string;
@@ -77,228 +67,79 @@ interface ValidationData {
   document_id?: string;
 }
 
+/**
+ * Generates a COC Validation PDF report using PDFShift via edge function
+ * Returns a blob and filename for preview/download
+ */
 export async function generateCOCValidationPDF(validation: ValidationData): Promise<{ blob: Blob; fileName: string }> {
-  // ===== FETCH TEMPLATE CONFIGURATION =====
-  const { customization, sections, accentColors } = await fetchPDFTemplate('coc_validation');
-  
-  console.log('[COCValidationReport] Template Config Applied:', {
-    coverTitle: customization.coverTitle,
-    accentColor: customization.accentColor,
-    enabledSections: sections.filter(s => s.enabled).map(s => s.id),
-  });
-
-  // Helper to check if section is enabled
-  const isSectionEnabled = (sectionId: string): boolean => {
-    const section = sections.find(s => s.id === sectionId);
-    return section?.enabled ?? true;
-  };
-
   const report = (validation.report_data || {}) as ValidationReport;
   const status = report.overallStatus || report.status || validation.status;
-  const content: any[] = [];
 
-  // ===== VALIDATION STATUS & SUMMARY (validation-status) =====
-  if (isSectionEnabled('validation-status')) {
-    content.push(createSectionHeader('Validation Status', 'primary'));
-    
-    // Compact status display with COC Type inline
-    content.push({
-      columns: [
-        {
-          width: 'auto',
-          text: (status || 'UNKNOWN').toUpperCase(),
-          fontSize: 20,
-          bold: true,
-          color: status?.toLowerCase() === 'pass' ? COLORS.success :
-                 status?.toLowerCase() === 'fail' ? COLORS.error :
-                 status?.toLowerCase() === 'incomplete' ? COLORS.warning : COLORS.textMuted,
-        },
-        { width: 20, text: '' },
-        report.cocType ? {
-          width: 'auto',
-          text: `COC Type: ${report.cocType}`,
-          fontSize: 10,
-          margin: [0, 6, 0, 0],
-        } : { text: '' },
-      ],
-      margin: [0, 0, 0, 12],
-    });
-
-    // Installation Summary (compact)
-    if (report.installationSummary) {
-      content.push({
-        text: [
-          { text: 'Installation Summary: ', bold: true, fontSize: 10 },
-          { text: report.installationSummary, fontSize: 10, color: COLORS.textSecondary },
-        ],
-        margin: [0, 0, 0, 8],
-      });
-    }
-
-    // Overall Assessment (compact)
-    if (report.overallAssessment) {
-      content.push({
-        text: [
-          { text: 'Assessment: ', bold: true, fontSize: 10 },
-          { text: report.overallAssessment, fontSize: 10, color: COLORS.textSecondary },
-        ],
-        margin: [0, 0, 0, 12],
-      });
-    }
-  }
-
-  // ===== ADMINISTRATIVE DETAILS (admin-details) =====
-  if (isSectionEnabled('admin-details') && report.administrativeDetails) {
-    content.push(createSectionHeader('Administrative Details', 'secondary'));
-
-    const details = report.administrativeDetails;
-    const adminData: [string, string][] = [
-      ['Physical Address', details.physicalAddress || 'Not Found'],
-      ['Registered Person', details.registeredPerson || 'Not Found'],
-      ['Registration Number', details.registrationNumber || 'Not Found'],
-      ['Type of Registration', details.registrationType || 'Not Found'],
-    ].filter(([_, value]) => {
-      const lowerValue = value.toLowerCase();
-      return !lowerValue.includes('not found') &&
-             !lowerValue.includes('not provided') &&
-             !lowerValue.includes('n/a') &&
-             value.trim().length > 0;
-    }) as [string, string][];
-
-    if (adminData.length > 0) {
-      content.push(createInfoTable(adminData));
-    }
-  }
-
-  // ===== TECHNICAL EVALUATION (technical-evaluation) =====
-  if (isSectionEnabled('technical-evaluation') && report.technicalEvaluation && report.technicalEvaluation.length > 0) {
-    content.push(createSectionHeader('Technical Evaluation', 'secondary'));
-
-    content.push(createDataTable(
-      [
-        { header: 'Section', field: 'section', width: 70 },
-        { header: 'Requirement', field: 'requirement', width: '*' },
-        { header: 'Finding', field: 'finding', width: '*' },
-        { header: 'Status', field: 'status', width: 50, alignment: 'center' },
-      ],
-      report.technicalEvaluation.map(item => ({
-        section: item.section,
-        requirement: item.requirement,
-        finding: item.finding,
-        status: item.status,
-      }))
-    ));
-  }
-
-  // ===== CHECK RESULTS (check-results) =====
-  if (isSectionEnabled('check-results') && report.checks && report.checks.length > 0) {
-    content.push(createSectionHeader('Check Results', 'secondary'));
-
-    content.push(createDataTable(
-      [
-        { header: 'Clause', field: 'clause', width: 50 },
-        { header: 'Description', field: 'description', width: '*' },
-        { header: 'Measured', field: 'measuredValue', width: 60 },
-        { header: 'Limit', field: 'limit', width: 60 },
-        { header: 'Result', field: 'result', width: 50, alignment: 'center' },
-      ],
-      report.checks.map(check => ({
+  // Build the report data payload for the edge function
+  const reportData = {
+    reportType: 'coc-validation' as const,
+    title: 'COC Validation Report',
+    subtitle: `COC Number: ${report.cocNumber || 'N/A'}`,
+    generatedAt: new Date().toISOString(),
+    cocValidation: {
+      cocNumber: report.cocNumber,
+      cocType: report.cocType,
+      evaluationDate: report.evaluationDate || validation.validated_at,
+      overallStatus: status,
+      installationSummary: report.installationSummary,
+      overallAssessment: report.overallAssessment,
+      checks: report.checks?.map(check => ({
+        checkId: check.checkId,
         clause: check.clause,
         description: check.description,
+        result: check.result,
         measuredValue: check.measuredValue,
         limit: check.limit,
-        result: check.result,
-      }))
-    ));
-  }
-
-  // ===== CRITICAL FAILURES (critical-failures) =====
-  const failures = report.criticalFailures || report.violations || [];
-  if (isSectionEnabled('critical-failures') && failures.length > 0) {
-    content.push(createSectionHeader(`Critical Failures (${failures.length})`, 'primary'));
-
-    const failureRows = failures.map((failure: any, index: number) => [
-      { text: `${index + 1}`, fontSize: 9, alignment: 'center' as const },
-      { text: failure.clause || '-', fontSize: 9, bold: true, color: COLORS.error },
-      { text: failure.description, fontSize: 9 },
-      { text: failure.reason || failure.evidence || '-', fontSize: 9, color: COLORS.textSecondary },
-    ]);
-
-    content.push({
-      table: {
-        headerRows: 1,
-        widths: [25, 60, '*', '*'],
-        body: [
-          [
-            { text: '#', bold: true, fontSize: 9, fillColor: '#fef2f2' },
-            { text: 'Clause', bold: true, fontSize: 9, fillColor: '#fef2f2' },
-            { text: 'Description', bold: true, fontSize: 9, fillColor: '#fef2f2' },
-            { text: 'Reason', bold: true, fontSize: 9, fillColor: '#fef2f2' },
-          ],
-          ...failureRows,
-        ],
-      },
-      layout: {
-        hLineWidth: () => 0.5,
-        vLineWidth: () => 0.5,
-        hLineColor: () => '#fecaca',
-        vLineColor: () => '#fecaca',
-        paddingLeft: () => 4,
-        paddingRight: () => 4,
-        paddingTop: () => 4,
-        paddingBottom: () => 4,
-      },
-      margin: [0, 0, 0, 12],
-    });
-  }
-
-  // ===== RECOMMENDATIONS (recommendations) =====
-  if (isSectionEnabled('recommendations') && report.recommendations && report.recommendations.length > 0) {
-    content.push(createSectionHeader('Recommendations', 'secondary'));
-
-    content.push({
-      ol: report.recommendations.map(rec => ({
-        text: rec,
-        fontSize: 9,
-        margin: [0, 0, 0, 4],
+        category: check.category,
       })),
-      margin: [0, 0, 0, 10],
-    });
-  }
-
-  // Build document with template styling
-  const reportDate = new Date(report.evaluationDate || validation.validated_at);
-  const docDefinition = {
-    pageSize: 'A4' as const,
-    pageMargins: [40, 60, 40, 50] as [number, number, number, number],
-    header: {
-      columns: [
-        { 
-          text: customization.coverTitle || 'COC Validation Report', 
-          fontSize: 10, 
-          bold: true, 
-          color: accentColors.primary,
-          margin: [40, 20, 0, 0] 
-        },
-        { text: `REF: ${report.cocNumber || 'N/A'}`, fontSize: 9, alignment: 'right' as const, margin: [0, 20, 40, 0] },
-      ],
-    },
-    footer: customization.includePageNumbers ? (currentPage: number, pageCount: number) => ({
-      columns: [
-        { text: 'CONFIDENTIAL', fontSize: 8, color: COLORS.textMuted, margin: [40, 0, 0, 0] },
-        { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, alignment: 'center' as const },
-        { text: reportDate.toLocaleDateString(), fontSize: 8, alignment: 'right' as const, margin: [0, 0, 40, 0] },
-      ],
-      margin: [0, 10, 0, 0],
-    }) : undefined,
-    content,
-    defaultStyle: {
-      fontSize: 10,
+      criticalFailures: report.criticalFailures || report.violations?.map(v => ({
+        category: 'General',
+        clause: v.clause,
+        description: v.description,
+        reason: v.evidence,
+      })),
+      administrativeDetails: report.administrativeDetails ? {
+        physicalAddress: report.administrativeDetails.physicalAddress,
+        registeredPerson: report.administrativeDetails.registeredPerson,
+        registrationNumber: report.administrativeDetails.registrationNumber,
+        registrationType: report.administrativeDetails.registrationType,
+      } : undefined,
+      technicalEvaluation: report.technicalEvaluation?.map(te => ({
+        section: te.section,
+        requirement: te.requirement,
+        finding: te.finding,
+        status: te.status,
+      })),
+      recommendations: report.recommendations,
+      subsectionName: validation.subsection_id,
     },
   };
 
-  const blob = await generatePdfBlob(docDefinition);
-  const fileName = `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
+  console.log('[COCValidationPDF] Generating via PDFShift edge function');
+
+  const { data: result, error } = await supabase.functions.invoke('generate-pdf', {
+    body: reportData,
+  });
+
+  if (error) {
+    console.error('PDF generation error:', error);
+    throw new Error(error.message || 'Failed to generate PDF');
+  }
+
+  if (!result?.url) {
+    throw new Error('No storage URL received from PDF generation');
+  }
+
+  // Fetch the blob from the generated URL
+  const response = await fetch(result.url);
+  const blob = await response.blob();
+  
+  const fileName = result.filename || `COC_Validation_Report_${report.cocNumber || 'Unknown'}_${new Date().toISOString().split('T')[0]}.pdf`;
 
   return { blob, fileName };
 }

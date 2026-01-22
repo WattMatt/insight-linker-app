@@ -13,22 +13,10 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { FileText, Plus, Download, ChevronLeft, ChevronRight, Eye, Edit, Zap, Sun, Gauge, HardDrive, ClipboardList, Map, Settings, Upload, Trash2 } from "lucide-react";
 import { toast } from "sonner";
-import {
-  generatePdfBlob,
-  createCoverPage,
-  createSectionHeader,
-  createInfoTable,
-  COLORS,
-  DEFAULT_STYLES,
-} from "@/lib/pdfMakeUtils";
 import { TemplatePreviewRenderer } from "@/components/templates/TemplatePreviewRenderer";
 import PDFTemplateUploader from "@/components/PDFTemplateUploader";
 import PDFTemplateExportDialog from "@/components/PDFTemplateExportDialog";
-
-type Content = any;
-type TDocumentDefinitions = any;
-
-const PDF_COLORS = COLORS;
+import { useUnifiedPdfGeneration, InspectionTemplateReportData } from "@/hooks/useUnifiedPdfGeneration";
 
 interface TemplateSection {
   id: string;
@@ -312,6 +300,8 @@ const InspectionTemplates = () => {
   const [showUploader, setShowUploader] = useState(false);
   const [exportTemplate, setExportTemplate] = useState<InspectionTemplate | null>(null);
   const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
+  
+  const { generatePdf, isGenerating } = useUnifiedPdfGeneration();
 
   useEffect(() => {
     fetchTemplates();
@@ -376,85 +366,35 @@ const InspectionTemplates = () => {
   };
 
   const generatePDF = async (template: InspectionTemplate) => {
-    try {
-      const content: Content[] = [];
-      const mockDate = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    const reportData: InspectionTemplateReportData = {
+      reportType: 'inspection-template',
+      title: template.name,
+      subtitle: template.category,
+      templateName: template.name,
+      category: template.category,
+      description: template.description || undefined,
+      generatedAt: new Date().toISOString(),
+      sections: (template.sections || []).map(section => ({
+        title: section.name,
+        items: (section.items || []).map(item => ({
+          label: item.name,
+          type: item.type,
+          required: item.required,
+          options: item.options,
+        })),
+      })),
+    };
 
-      // Cover page
-      const coverPage = createCoverPage({
-        title: template.name,
-        subtitle: template.cover_page?.subtitle || template.category,
-        siteName: 'Preview Project',
-        reportType: 'Inspection Template',
-        organizationName: template.cover_page?.company_name || 'Watson Mattheus',
-        reportDate: new Date(),
-      });
-      content.push(coverPage);
-
-      // General Information
-      content.push(createSectionHeader('General Information', 'secondary'));
-      const infoData: [string, string][] = [
-        ['PROJECT NAME:', 'Preview Project'],
-        ['INSPECTOR NAME:', 'Preview Inspector'],
-        ['INSPECTION DATE:', mockDate],
-        ['CLIENT REPRESENTATIVE:', 'Mock Client Rep'],
-        ['CONSULTANT NAME:', 'Mock Consultant'],
-        ['CONTRACTOR NAME:', 'Mock Contractor'],
-        ['LOCATION:', 'Site Location Address']
-      ];
-      content.push(createInfoTable(infoData));
-
-      // Template sections
-      template.sections?.forEach((section) => {
-        content.push({ text: '', pageBreak: 'before' } as Content);
-        content.push(createSectionHeader(section.name.toUpperCase(), 'primary'));
-
-        section.items?.forEach((item, idx) => {
-          content.push({
-            text: `${idx + 1}. ${item.name}`,
-            bold: true,
-            fontSize: 10,
-            margin: [0, 8, 0, 4]
-          } as Content);
-          content.push({
-            text: `Type: ${item.type} | Required: ${item.required ? 'Yes' : 'No'}`,
-            fontSize: 9,
-            color: PDF_COLORS.textMuted,
-            margin: [10, 0, 0, 4]
-          } as Content);
-        });
-      });
-
-      // Build document
-      const docDefinition: TDocumentDefinitions = {
-        content,
-        styles: DEFAULT_STYLES,
-        defaultStyle: { font: 'Roboto', fontSize: 10 },
-        pageMargins: [40, 40, 40, 60],
-        footer: (currentPage: number, pageCount: number) => {
-          if (currentPage === 1) return null;
-          return {
-            text: `${template.name} - Page ${currentPage - 1}`,
-            fontSize: 9,
-            alignment: 'center',
-            color: PDF_COLORS.textMuted,
-            margin: [0, 20, 0, 0]
-          };
-        }
-      };
-
-      const blob = await generatePdfBlob(docDefinition);
-      const url = URL.createObjectURL(blob);
+    const result = await generatePdf(reportData);
+    
+    if (result.success && result.url) {
       const a = document.createElement('a');
-      a.href = url;
-      a.download = `${template.name.replace(/\s+/g, '_')}_Preview.pdf`;
+      a.href = result.url;
+      a.download = result.filename || `${template.name.replace(/\s+/g, '_')}_Preview.pdf`;
       a.click();
-      URL.revokeObjectURL(url);
-      
       toast.success("PDF exported successfully");
-    } catch (error) {
-      console.error("Error generating PDF:", error);
-      toast.error("Failed to generate PDF");
+    } else {
+      toast.error(result.error || "Failed to generate PDF");
     }
   };
 

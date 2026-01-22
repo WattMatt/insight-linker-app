@@ -32,19 +32,7 @@ import {
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import {
-  generatePdfBlob,
-  createCoverPage,
-  createDataTable,
-  createSectionHeader,
-  COLORS,
-  DEFAULT_STYLES,
-} from "@/lib/pdfMakeUtils";
-
-type Content = any;
-type TDocumentDefinitions = any;
-
-const PDF_COLORS = COLORS;
+import { useUnifiedPdfGeneration, CalendarReportData } from "@/hooks/useUnifiedPdfGeneration";
 
 interface CalendarEvent {
   id: string;
@@ -268,87 +256,50 @@ const Calendar = () => {
     }
   };
 
-  const exportToPDF = async () => {
-    const content: Content[] = [];
+  const { generatePdf, isGenerating: isExporting } = useUnifiedPdfGeneration();
 
-    // Cover page
-    const coverPage = createCoverPage({
+  const exportToPDF = async () => {
+    const totalEvents = events?.length || 0;
+    const completedCount = events?.filter(e => e.status.toLowerCase() === 'completed').length || 0;
+    const upcomingCount = events?.filter(e => new Date(e.start_date) > new Date()).length || 0;
+    const pendingCount = totalEvents - completedCount - upcomingCount;
+
+    const reportData: CalendarReportData = {
+      reportType: 'calendar',
       title: 'Calendar Report',
       subtitle: `Year: ${currentYear}`,
-      siteName: 'All Sites',
-      reportType: 'Calendar',
-      organizationName: 'Watson Mattheus',
-      reportDate: new Date(),
-    });
-    content.push(coverPage);
-
-    // Event Summary Section
-    content.push(createSectionHeader('Event Summary', 'primary'));
-
-    // Summary stats
-    const totalEvents = events?.length || 0;
-    const highPriorityCount = events?.filter(e => e.priority === "High").length || 0;
-    const mediumPriorityCount = events?.filter(e => e.priority === "Medium").length || 0;
-    const lowPriorityCount = events?.filter(e => e.priority === "Low").length || 0;
-
-    content.push({
-      text: `Total Events: ${totalEvents}  |  High Priority: ${highPriorityCount}  |  Medium: ${mediumPriorityCount}  |  Low: ${lowPriorityCount}`,
-      fontSize: 10,
-      color: PDF_COLORS.textSecondary,
-      margin: [0, 0, 0, 15]
-    } as Content);
-
-    // Events table
-    const tableData = events?.map(event => ({
-      title: event.title,
-      site: event.site_name,
-      start: format(parseISO(event.start_date), "dd MMM yyyy"),
-      end: event.end_date ? format(parseISO(event.end_date), "dd MMM yyyy") : "—",
-      status: event.status,
-      priority: event.priority,
-    })) || [];
-
-    const eventsTable = createDataTable(
-      [
-        { field: 'title', header: 'Title' },
-        { field: 'site', header: 'Site' },
-        { field: 'start', header: 'Start Date' },
-        { field: 'end', header: 'End Date' },
-        { field: 'status', header: 'Status' },
-        { field: 'priority', header: 'Priority' },
-      ],
-      tableData
-    );
-    content.push(eventsTable);
-
-    // Build document
-    const docDefinition: TDocumentDefinitions = {
-      content,
-      styles: DEFAULT_STYLES,
-      defaultStyle: { font: 'Roboto', fontSize: 10 },
-      pageMargins: [40, 40, 40, 60],
-      footer: (currentPage: number, pageCount: number) => {
-        if (currentPage === 1) return null;
-        return {
-          columns: [
-            { text: 'Confidential', fontSize: 8, color: PDF_COLORS.textMuted, margin: [40, 0, 0, 0] },
-            { text: `Page ${currentPage - 1} of ${pageCount - 1}`, fontSize: 8, alignment: 'center', color: PDF_COLORS.textMuted },
-            { text: format(new Date(), "dd MMM yyyy"), fontSize: 8, alignment: 'right', color: PDF_COLORS.textMuted, margin: [0, 0, 40, 0] }
-          ],
-          margin: [0, 20, 0, 0]
-        };
-      }
+      year: currentYear,
+      generatedAt: new Date().toISOString(),
+      events: events?.map(event => ({
+        id: event.id,
+        title: event.title,
+        siteName: event.site_name,
+        startDate: event.start_date,
+        endDate: event.end_date || undefined,
+        status: event.status,
+        priority: event.priority,
+        eventType: event.event_type || undefined,
+      })) || [],
+      stats: {
+        totalEvents,
+        upcomingCount,
+        completedCount,
+        pendingCount,
+      },
     };
 
-    const blob = await generatePdfBlob(docDefinition);
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `calendar-${currentYear}.pdf`;
-    a.click();
-    URL.revokeObjectURL(url);
+    const result = await generatePdf(reportData);
     
-    toast({ title: "PDF exported successfully" });
+    if (result.success && result.url) {
+      // Download the generated PDF
+      const a = document.createElement('a');
+      a.href = result.url;
+      a.download = result.filename || `calendar-${currentYear}.pdf`;
+      a.click();
+      toast({ title: "PDF exported successfully" });
+    } else {
+      toast({ title: "Export failed", description: result.error, variant: "destructive" });
+    }
   };
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
@@ -364,9 +315,9 @@ const Calendar = () => {
         </div>
         
         <div className="flex gap-2">
-          <Button onClick={exportToPDF} variant="outline">
+          <Button onClick={exportToPDF} variant="outline" disabled={isExporting}>
             <Download className="h-4 w-4 mr-2" />
-            Export PDF
+            {isExporting ? "Exporting..." : "Export PDF"}
           </Button>
           <Button className="bg-sky-500 hover:bg-sky-600" onClick={openAddEventDialog}>
             <Plus className="h-4 w-4 mr-2" />
