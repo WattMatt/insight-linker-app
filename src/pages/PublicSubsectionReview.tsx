@@ -30,6 +30,10 @@ import {
 import { supabase } from "@/integrations/supabase/client";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
+import { 
+  FAILED_VALIDATION_STATUSES,
+  hasValidCocStatus 
+} from "@/lib/complianceCalculations";
 
 interface SubsectionData {
   id: string;
@@ -348,16 +352,48 @@ const PublicSubsectionReview = () => {
     return acc;
   }, {} as Record<string, DocumentFile[]>);
 
-  // Calculate stats from actual data
-  const openSnags = snags.filter(s => s.status !== 'rectified').length;
-  const rectifiedSnags = snags.filter(s => s.status === 'rectified').length;
+  // Calculate stats from actual data using consistent status checks
+  // Snag status normalization: treat 'Rectified', 'rectified', 'Closed' as resolved
+  const normalizeSnagStatus = (status: string) => status?.toLowerCase();
+  const openSnags = snags.filter(s => {
+    const status = normalizeSnagStatus(s.status);
+    return status !== 'rectified' && status !== 'closed';
+  }).length;
+  const rectifiedSnags = snags.filter(s => {
+    const status = normalizeSnagStatus(s.status);
+    return status === 'rectified' || status === 'closed';
+  }).length;
   const completedInspections = inspections.filter(i => i.status?.toLowerCase() === 'completed').length;
   const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
   
-  // Determine effective compliance status based on latest validation
-  const effectiveComplianceStatus = latestValidation 
-    ? (latestValidation.status === 'Pass' ? 'Compliant' : 'Non-Compliant')
-    : (subsection?.coc_status?.toLowerCase() === 'approved' ? 'Compliant' : 'Pending Review');
+  // Determine effective compliance status using shared logic from complianceCalculations.ts
+  // A subsection is compliant if:
+  // 1. COC is not required, OR
+  // 2. COC is required AND has a valid status AND no failed validations
+  const getEffectiveComplianceStatus = (): string => {
+    // If COC is not required, it's compliant by default
+    if (!subsection?.is_coc_required) return 'Compliant';
+    
+    // Check latest validation first (most authoritative)
+    if (latestValidation) {
+      const validationStatus = latestValidation.status;
+      if (FAILED_VALIDATION_STATUSES.includes(validationStatus as any)) {
+        return 'Non-Compliant';
+      }
+      if (validationStatus === 'Pass' || validationStatus === 'Passed') {
+        return 'Compliant';
+      }
+    }
+    
+    // Fallback to COC status field using shared utility
+    if (hasValidCocStatus(subsection?.coc_status)) {
+      return 'Compliant';
+    }
+    
+    return 'Pending Review';
+  };
+  
+  const effectiveComplianceStatus = getEffectiveComplianceStatus();
 
   if (loading) {
     return (
