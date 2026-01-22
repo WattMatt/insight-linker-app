@@ -3,8 +3,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ReportSettingsDialog, getDefaultReportSections, ReportSection } from "@/components/site/ReportSettingsDialog";
 import { GenerateFinalReportButton } from "@/components/site/GenerateFinalReportButton";
+import { BulkInspectionReportGenerator } from "@/components/site/BulkInspectionReportGenerator";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
 import { supabase } from "@/integrations/supabase/client";
@@ -21,7 +23,8 @@ import {
     FileBarChart,
     Calendar,
     Clock,
-    RefreshCw
+    RefreshCw,
+    ClipboardList
 } from "lucide-react";
 
 interface SiteReportsProps {
@@ -179,52 +182,74 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
 
     return (
         <div className="space-y-6">
-            {/* Generate Report Card - Only show in edit mode */}
+            {/* Generate Report Section - Only show in edit mode */}
             {!readOnly && (
-              <Card>
-                  <CardHeader>
-                      <CardTitle className="flex items-center gap-2">
-                          <FileBarChart className="h-5 w-5" />
-                          Generate Report
-                      </CardTitle>
-                      <CardDescription>
-                          Create comprehensive site reports with all subsection data
-                      </CardDescription>
-                  </CardHeader>
-                  <CardContent>
-                      <div className="flex flex-col sm:flex-row gap-3">
-
-                          {/* Server-side Final Report Generation */}
-                          <GenerateFinalReportButton
-                              site={{
-                                  id: site.id,
-                                  name: site.name,
-                                  address: site.address,
-                                  client: { name: site.clients.name, logo_url: site.client_logo_url }
-                              }}
-                              reportSections={reportSections}
-                              onReportSaved={fetchReports}
-                          />
-                          
-                          {/* Report Settings */}
-                          <Button
-                              variant="outline"
-                              className="flex items-center gap-2"
-                              onClick={() => setSettingsOpen(true)}
-                          >
-                              <Settings className="h-4 w-4" />
-                              Report Settings
-                          </Button>
-                      </div>
-                      
-                      <ReportSettingsDialog
-                          open={settingsOpen}
-                          onOpenChange={setSettingsOpen}
-                          sections={reportSections}
-                          onSectionToggle={handleSectionToggle}
+              <Tabs defaultValue="site-summary" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2 mb-4">
+                      <TabsTrigger value="site-summary" className="gap-2">
+                          <FileBarChart className="h-4 w-4" />
+                          Site Summary Report
+                      </TabsTrigger>
+                      <TabsTrigger value="bulk-inspections" className="gap-2">
+                          <ClipboardList className="h-4 w-4" />
+                          Bulk Inspection Reports
+                      </TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="site-summary">
+                      <Card>
+                          <CardHeader>
+                              <CardTitle className="flex items-center gap-2">
+                                  <FileBarChart className="h-5 w-5" />
+                                  Generate Site Summary Report
+                              </CardTitle>
+                              <CardDescription>
+                                  Create a comprehensive site report with all subsection data
+                              </CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                              <div className="flex flex-col sm:flex-row gap-3">
+                                  <GenerateFinalReportButton
+                                      site={{
+                                          id: site.id,
+                                          name: site.name,
+                                          address: site.address,
+                                          client: { name: site.clients.name, logo_url: site.client_logo_url }
+                                      }}
+                                      reportSections={reportSections}
+                                      onReportSaved={fetchReports}
+                                  />
+                                  
+                                  <Button
+                                      variant="outline"
+                                      className="flex items-center gap-2"
+                                      onClick={() => setSettingsOpen(true)}
+                                  >
+                                      <Settings className="h-4 w-4" />
+                                      Report Settings
+                                  </Button>
+                              </div>
+                              
+                              <ReportSettingsDialog
+                                  open={settingsOpen}
+                                  onOpenChange={setSettingsOpen}
+                                  sections={reportSections}
+                                  onSectionToggle={handleSectionToggle}
+                              />
+                          </CardContent>
+                      </Card>
+                  </TabsContent>
+                  
+                  <TabsContent value="bulk-inspections">
+                      <BulkInspectionReportGenerator
+                          siteId={site.id}
+                          siteName={site.name}
+                          clientName={site.clients?.name}
+                          siteLogoUrl={site.client_logo_url}
+                          onComplete={fetchReports}
                       />
-                  </CardContent>
-              </Card>
+                  </TabsContent>
+              </Tabs>
             )}
 
             {/* Saved Reports Card */}
