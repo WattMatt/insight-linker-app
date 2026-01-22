@@ -3,7 +3,11 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Building2, FileText, MapPin, Download, Eye, Info, Search, BarChart3, CheckCircle2, AlertCircle, Clock, LayoutGrid } from "lucide-react";
+import { 
+  Building2, FileText, MapPin, Download, Eye, Info, Search, 
+  BarChart3, CheckCircle2, AlertCircle, Clock, LayoutGrid,
+  Shield, Workflow, ShieldCheck, FileBarChart, Layers
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +17,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { Breadcrumbs } from "@/components/Breadcrumb";
+import { SchematicDiagram } from "@/components/site/SchematicDiagram";
+import { AssetVerification } from "@/components/site/AssetVerification";
+import { ComplianceDashboard } from "@/components/ComplianceDashboard";
+import { SiteReports } from "@/components/site/SiteReports";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { downloadFile } from "@/lib/fileDownload";
+import { Site, Subsection } from "@/types/site";
 
 const ClientPortalSiteDetail = () => {
   const { siteId } = useParams();
@@ -20,23 +31,24 @@ const ClientPortalSiteDetail = () => {
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   const [subsectionSearch, setSubsectionSearch] = useState("");
+  const [documentSearch, setDocumentSearch] = useState("");
+  const [activeTab, setActiveTab] = useState("overview");
+  const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
   const isMobile = useIsMobile();
 
   const { data: site, isLoading: siteLoading } = useQuery({
     queryKey: ["client-site", siteId, clientInfo?.client_id],
     enabled: !!siteId && !!clientInfo?.client_id,
     queryFn: async () => {
-      // Query with both site_id AND client_id to ensure client owns this site
       const { data, error } = await supabase
         .from("sites")
-        .select("*")
+        .select("*, clients(*)")
         .eq("id", siteId!)
         .eq("client_id", clientInfo!.client_id)
         .single();
 
       if (error) throw error;
       
-      // Generate signed URL for site image (site-images bucket is private)
       if (data?.site_image_url) {
         try {
           const urlParts = data.site_image_url.split('/site-images/');
@@ -55,11 +67,11 @@ const ClientPortalSiteDetail = () => {
         }
       }
       
-      return data;
+      return data as Site & { clients: any };
     },
   });
 
-  const { data: subsections, isLoading: subsectionsLoading } = useQuery({
+  const { data: subsections = [], isLoading: subsectionsLoading } = useQuery({
     queryKey: ["client-subsections", siteId],
     enabled: !!siteId,
     queryFn: async () => {
@@ -70,11 +82,11 @@ const ClientPortalSiteDetail = () => {
         .order("name");
 
       if (error) throw error;
-      return data;
+      return data as Subsection[];
     },
   });
 
-  const { data: documents, isLoading: docsLoading } = useQuery({
+  const { data: documents = [], isLoading: docsLoading } = useQuery({
     queryKey: ["client-site-documents", siteId],
     enabled: !!siteId,
     queryFn: async () => {
@@ -89,7 +101,7 @@ const ClientPortalSiteDetail = () => {
     },
   });
 
-  const { data: inspections } = useQuery({
+  const { data: inspections = [] } = useQuery({
     queryKey: ["client-site-inspections", siteId],
     enabled: !!siteId,
     queryFn: async () => {
@@ -106,16 +118,7 @@ const ClientPortalSiteDetail = () => {
 
   const handleDownload = async (url: string, fileName: string) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      await downloadFile(url, fileName);
     } catch (error) {
       console.error("Error downloading document:", error);
     }
@@ -144,15 +147,15 @@ const ClientPortalSiteDetail = () => {
   }
 
   const getStatusColor = (status: string) => {
-    switch (status.toLowerCase()) {
-      case "compliant": return "bg-green-500";
-      case "missing": return "bg-red-500";
-      case "expired": return "bg-orange-500";
-      default: return "bg-gray-500";
+    switch (status?.toLowerCase()) {
+      case "compliant": case "valid": case "approved": case "pass": return "bg-emerald-500";
+      case "missing": return "bg-destructive";
+      case "expired": return "bg-amber-500";
+      default: return "bg-muted-foreground";
     }
   };
 
-  const filteredSubsections = subsections?.filter(subsection => {
+  const filteredSubsections = subsections.filter(subsection => {
     const searchLower = subsectionSearch.toLowerCase();
     return (
       subsection.name.toLowerCase().includes(searchLower) ||
@@ -161,22 +164,44 @@ const ClientPortalSiteDetail = () => {
     );
   });
 
+  const filteredDocuments = documents.filter(doc => {
+    const searchLower = documentSearch.toLowerCase();
+    return (
+      doc.file_name?.toLowerCase().includes(searchLower) ||
+      doc.category?.toLowerCase().includes(searchLower)
+    );
+  });
+
   // Calculate KPIs
-  const totalSubsections = subsections?.length || 0;
-  const compliantSubsections = subsections?.filter(s => {
+  const totalSubsections = subsections.length;
+  const compliantSubsections = subsections.filter(s => {
     const status = s.coc_status?.toLowerCase();
     return status === "compliant" || status === "valid" || status === "approved" || status === "pass";
-  }).length || 0;
-  const missingCOCs = subsections?.filter(s => s.coc_status?.toLowerCase() === "missing").length || 0;
-  const expiredCOCs = subsections?.filter(s => s.coc_status?.toLowerCase() === "expired").length || 0;
-  const totalDocuments = documents?.length || 0;
-  const totalInspections = inspections?.length || 0;
-  const completedInspections = inspections?.filter(i => i.status?.toLowerCase() === "completed").length || 0;
-  const upcomingInspections = inspections?.filter(i => 
-    i.status?.toLowerCase() === "scheduled" && 
-    i.inspection_date && 
-    new Date(i.inspection_date) >= new Date()
-  ).length || 0;
+  }).length;
+  const missingCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "missing").length;
+  const expiredCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "expired").length;
+  const totalDocuments = documents.length;
+  const totalInspections = inspections.length;
+  const completedInspections = inspections.filter(i => i.status?.toLowerCase() === "completed").length;
+
+  // Format subsections for ComplianceDashboard
+  const formattedSubsections = subsections.map(s => ({
+    id: s.id,
+    name: s.name,
+    category: s.category || null,
+    coc_status: s.coc_status || '',
+    metering_status: s.metering_status || '',
+    is_compliant: s.is_compliant || false,
+    is_coc_required: s.is_coc_required || false,
+  }));
+
+  // Format inspections for ComplianceDashboard
+  const formattedInspections = inspections.map(i => ({
+    id: i.id,
+    subsection_id: i.subsection_id,
+    inspection_date: i.inspection_date || i.created_at,
+    json_data: i.json_data,
+  }));
 
   return (
     <div className="space-y-6">
@@ -232,23 +257,39 @@ const ClientPortalSiteDetail = () => {
       </Card>
 
       {/* Tabs */}
-      <Tabs defaultValue="overview" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-3">
-          <TabsTrigger value="overview" className="gap-2">
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
+        <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1 overflow-visible">
+          <TabsTrigger value="overview" className="gap-2 shrink-0">
             <LayoutGrid className="h-4 w-4 shrink-0" />
-            <span className="hidden md:inline">Overview</span>
+            <span className="hidden lg:inline">Dashboard</span>
           </TabsTrigger>
-          <TabsTrigger value="subsections" className="gap-2">
-            <Building2 className="h-4 w-4 shrink-0" />
-            <span className="hidden md:inline">Subsections</span>
+          <TabsTrigger value="schematic" className="gap-2 shrink-0">
+            <Workflow className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Schematic</span>
           </TabsTrigger>
-          <TabsTrigger value="documents" className="gap-2">
+          <TabsTrigger value="asset-verification" className="gap-2 shrink-0">
+            <ShieldCheck className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Assets</span>
+          </TabsTrigger>
+          <TabsTrigger value="compliance" className="gap-2 shrink-0">
+            <Shield className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Compliance</span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2 shrink-0">
             <FileText className="h-4 w-4 shrink-0" />
-            <span className="hidden md:inline">Documents</span>
+            <span className="hidden lg:inline">Documents</span>
+          </TabsTrigger>
+          <TabsTrigger value="subsections" className="gap-2 shrink-0">
+            <Layers className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Subsections</span>
+          </TabsTrigger>
+          <TabsTrigger value="reports" className="gap-2 shrink-0">
+            <FileBarChart className="h-4 w-4 shrink-0" />
+            <span className="hidden lg:inline">Reports</span>
           </TabsTrigger>
         </TabsList>
 
-        {/* Overview Tab */}
+        {/* Dashboard Tab */}
         <TabsContent value="overview" className="space-y-6">
           <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <Card>
@@ -309,16 +350,6 @@ const ClientPortalSiteDetail = () => {
                 </p>
               </CardContent>
             </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Upcoming Inspections</CardTitle>
-                <Clock className="h-4 w-4 text-orange-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-orange-600">{upcomingInspections}</div>
-              </CardContent>
-            </Card>
           </div>
 
           {(site.supply_authority || site.nominated_max_demand) && (
@@ -346,6 +377,92 @@ const ClientPortalSiteDetail = () => {
           )}
         </TabsContent>
 
+        {/* Schematic Tab */}
+        <TabsContent value="schematic" className="space-y-6">
+          <SchematicDiagram siteId={siteId!} siteName={site.name} />
+        </TabsContent>
+
+        {/* Asset Verification Tab */}
+        <TabsContent value="asset-verification" className="space-y-6">
+          <AssetVerification siteId={siteId!} siteName={site.name} />
+        </TabsContent>
+
+        {/* Compliance Tab */}
+        <TabsContent value="compliance" className="space-y-6">
+          <ComplianceDashboard 
+            siteId={siteId!} 
+            subsections={formattedSubsections} 
+            inspections={formattedInspections} 
+          />
+        </TabsContent>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents" className="space-y-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Search documents..."
+              value={documentSearch}
+              onChange={(e) => setDocumentSearch(e.target.value)}
+              className="pl-9"
+            />
+          </div>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Site Documents</CardTitle>
+            </CardHeader>
+            <CardContent>
+              {docsLoading ? (
+                <div className="space-y-2">
+                  {[1, 2, 3].map((i) => (
+                    <Skeleton key={i} className="h-12 w-full" />
+                  ))}
+                </div>
+              ) : filteredDocuments.length > 0 ? (
+                <div className="space-y-2">
+                  {filteredDocuments.map((doc) => (
+                    <div 
+                      key={doc.id}
+                      className="flex items-center justify-between p-3 rounded-lg border"
+                    >
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <div>
+                          <p className="font-medium text-sm">{doc.file_name}</p>
+                          <p className="text-xs text-muted-foreground">{doc.category}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => setPreviewDocument({ url: doc.file_url, name: doc.file_name })}
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          className="gap-2"
+                          onClick={() => handleDownload(doc.file_url, doc.file_name)}
+                        >
+                          <Download className="h-4 w-4" />
+                          <span className="hidden sm:inline">Download</span>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-center text-muted-foreground py-8">
+                  {documentSearch ? "No documents match your search" : "No documents found for this site"}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        </TabsContent>
+
         {/* Subsections Tab */}
         <TabsContent value="subsections" className="space-y-4">
           <div className="relative">
@@ -366,7 +483,7 @@ const ClientPortalSiteDetail = () => {
                     <Skeleton key={i} className="h-16 w-full" />
                   ))}
                 </div>
-              ) : filteredSubsections && filteredSubsections.length > 0 ? (
+              ) : filteredSubsections.length > 0 ? (
                 <div className="space-y-2">
                   {filteredSubsections.map((subsection) => (
                     <Link 
@@ -375,7 +492,7 @@ const ClientPortalSiteDetail = () => {
                       className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
                     >
                       <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
+                        <Layers className="h-5 w-5 text-muted-foreground" />
                         <div>
                           <p className="font-medium">{subsection.name}</p>
                           {subsection.description && (
@@ -408,54 +525,19 @@ const ClientPortalSiteDetail = () => {
           </Card>
         </TabsContent>
 
-        {/* Documents Tab */}
-        <TabsContent value="documents">
-          <Card>
-            <CardHeader>
-              <CardTitle>Site Documents</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {docsLoading ? (
-                <div className="space-y-2">
-                  {[1, 2].map((i) => (
-                    <Skeleton key={i} className="h-12 w-full" />
-                  ))}
-                </div>
-              ) : documents && documents.length > 0 ? (
-                <div className="space-y-2">
-                  {documents.map((doc) => (
-                    <div 
-                      key={doc.id}
-                      className="flex items-center justify-between p-3 rounded-lg border"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <div>
-                          <p className="font-medium text-sm">{doc.file_name}</p>
-                          <p className="text-xs text-muted-foreground">{doc.category}</p>
-                        </div>
-                      </div>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        className="gap-2"
-                        onClick={() => handleDownload(doc.file_url, doc.file_name)}
-                      >
-                        <Download className="h-4 w-4" />
-                        Download
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <p className="text-center text-muted-foreground py-8">
-                  No documents available for this site
-                </p>
-              )}
-            </CardContent>
-          </Card>
+        {/* Reports Tab */}
+        <TabsContent value="reports" className="space-y-6">
+          <SiteReports site={site} />
         </TabsContent>
       </Tabs>
+
+      {/* Document Preview Dialog */}
+      <DocumentPreviewDialog
+        open={previewDocument !== null}
+        onOpenChange={(open) => !open && setPreviewDocument(null)}
+        fileUrl={previewDocument?.url || ''}
+        fileName={previewDocument?.name || ''}
+      />
     </div>
   );
 };
