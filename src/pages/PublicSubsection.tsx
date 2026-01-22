@@ -5,6 +5,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { 
+  FAILED_VALIDATION_STATUSES,
+  hasValidCocStatus 
+} from "@/lib/complianceCalculations";
 
 interface SubsectionData {
   id: string;
@@ -232,8 +236,12 @@ const PublicSubsection = () => {
     );
   }
 
-  // Calculate status values
-  const openSnags = snags.filter(s => s.status !== 'Rectified' && s.status !== 'Closed' && s.status !== 'rectified');
+  // Calculate status values using consistent snag status normalization
+  const normalizeSnagStatus = (status: string) => status?.toLowerCase();
+  const openSnags = snags.filter(s => {
+    const status = normalizeSnagStatus(s.status);
+    return status !== 'rectified' && status !== 'closed';
+  });
   const openSnagsCount = openSnags.length;
   
   // Severity breakdown
@@ -244,15 +252,25 @@ const PublicSubsection = () => {
     low: openSnags.filter(s => s.risk_level?.toLowerCase() === 'low').length,
   };
   
+  // Use shared compliance logic from complianceCalculations.ts
   const getOverallStatus = () => {
-    // Check if any COC validation has failed - if supplementary work fails, installation is non-compliant
+    // Check if any COC validation has failed using shared constants
     const hasFailedValidation = Object.values(cocValidations).some(
-      (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
+      (v: any) => FAILED_VALIDATION_STATUSES.includes(v?.status as any)
     );
+    
+    // If COC is required but has failed validation
     if (subsection.is_coc_required && hasFailedValidation) return "Fail";
-    if (subsection.is_coc_required && subsection.coc_status !== 'Approved' && subsection.coc_status !== 'Valid' && subsection.coc_status !== 'Pass') return "Fail";
+    
+    // If COC is required but status is not valid (using shared utility)
+    if (subsection.is_coc_required && !hasValidCocStatus(subsection.coc_status)) return "Fail";
+    
+    // If COC is required but metering is missing
     if (subsection.is_coc_required && subsection.metering_status === 'Missing' && !subsection.meter_serial_number) return "Fail";
+    
+    // If there are open snags
     if (openSnagsCount > 0) return "Fail";
+    
     return "Pass";
   };
 
