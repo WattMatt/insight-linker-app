@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, Link } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -24,7 +24,8 @@ import {
   ShieldCheck,
   Layers,
   FileBarChart,
-  Search
+  Search,
+  ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
@@ -826,9 +827,10 @@ const PublicSiteReview = () => {
                 {filteredSubsections.length > 0 ? (
                   <div className="space-y-2">
                     {filteredSubsections.map((subsection) => (
-                      <div 
+                      <Link 
                         key={subsection.id}
-                        className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors"
+                        to={`/review/${token}/subsection/${subsection.id}`}
+                        className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent/50 transition-colors cursor-pointer block"
                       >
                         <div className="flex items-center gap-3">
                           <Layers className="h-5 w-5 text-muted-foreground" />
@@ -851,8 +853,9 @@ const PublicSiteReview = () => {
                               COC: {subsection.coc_status}
                             </Badge>
                           )}
+                          <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
-                      </div>
+                      </Link>
                     ))}
                   </div>
                 ) : (
