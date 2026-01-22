@@ -1,8 +1,9 @@
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Shield, Users, Briefcase } from "lucide-react";
+import { Shield, Users, Briefcase, Link2 } from "lucide-react";
 import ClientAccessSimulator from "./ClientAccessSimulator";
 import ContractorAccessSimulator from "./ContractorAccessSimulator";
 import SiteAssignments from "./SiteAssignments";
+import { AccessLinkGenerator } from "@/components/client-portal/AccessLinkGenerator";
 
 export default function PortalManagement() {
   return (
@@ -14,8 +15,12 @@ export default function PortalManagement() {
         </p>
       </div>
 
-      <Tabs defaultValue="client" className="space-y-6">
-        <TabsList className="grid w-full max-w-2xl grid-cols-3">
+      <Tabs defaultValue="access-links" className="space-y-6">
+        <TabsList className="grid w-full max-w-3xl grid-cols-4">
+          <TabsTrigger value="access-links" className="gap-2">
+            <Link2 className="h-4 w-4" />
+            Access Links
+          </TabsTrigger>
           <TabsTrigger value="client" className="gap-2">
             <Users className="h-4 w-4" />
             Client Simulator
@@ -26,9 +31,13 @@ export default function PortalManagement() {
           </TabsTrigger>
           <TabsTrigger value="assignments" className="gap-2">
             <Briefcase className="h-4 w-4" />
-            Site Assignments
+            Assignments
           </TabsTrigger>
         </TabsList>
+
+        <TabsContent value="access-links" className="space-y-6">
+          <AccessLinkGenerator />
+        </TabsContent>
 
         <TabsContent value="client" className="space-y-6">
           <ClientAccessSimulator />
