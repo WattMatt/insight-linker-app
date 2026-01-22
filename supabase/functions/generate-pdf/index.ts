@@ -70,10 +70,11 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 // Image sizing is controlled via HTML/CSS (width: 150px), avoiding CPU-intensive
 // server-side image processing that exceeds Edge Function limits.
 // LIMITS: Supabase Storage has 50MB upload limit.
-// With ~15MB average per photo at full resolution, max 2 photos.
+// Full-resolution photos are too large (~15-30MB each).
+// TEMPORARY: Disable photos until image optimization is implemented.
 
-const MAX_PHOTOS_PER_ITEM = 1;  // Strict: 1 photo per item
-const MAX_TOTAL_PHOTOS = 2;    // Ultra-strict: 50MB storage limit
+const MAX_PHOTOS_PER_ITEM = 0;  // DISABLED: Photos cause 50MB+ PDFs
+const MAX_TOTAL_PHOTOS = 0;    // DISABLED: Enable after implementing image CDN
 
 // Track global photo count across the entire document
 let globalPhotoCount = 0;
