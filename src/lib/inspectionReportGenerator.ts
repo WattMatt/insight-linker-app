@@ -83,7 +83,7 @@ export async function generateAndSaveInspectionReport(
       .eq('inspection_id', inspectionId);
     const signatures = signaturesData || [];
 
-    // Build sections data from template
+    // Build sections data from template - including photos!
     const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections || {});
     const sectionsForPdf = templateSections.map((section: any) => {
       const sectionId = String(section.id ?? '');
@@ -95,10 +95,15 @@ export async function generateAndSaveInspectionReport(
           const itemId = String(item.id ?? idx);
           const itemData = jsonData[sectionId]?.[itemId] || {};
           
+          // Extract photos array from the item data
+          const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
+          
           return {
             label: item.name || itemId,
             value: itemData.status || itemData.value || 'N/A',
             type: item.type || 'text',
+            notes: itemData.notes || '',
+            photos: photos, // Include all photo URLs
           };
         }),
       };
@@ -129,6 +134,7 @@ export async function generateAndSaveInspectionReport(
           description: snag.description,
           status: snag.status,
           riskLevel: snag.risk_level,
+          photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
         })),
         signatures: signatures.map(sig => ({
           name: sig.signer_name,
