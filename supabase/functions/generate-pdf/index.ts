@@ -119,16 +119,16 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// IMAGE HANDLING - Download and convert to Base64 for embedding in PDF
+// IMAGE HANDLING - Use Signed URLs for PDFShift to fetch directly
 // ============================================================================
-// Since signed URLs don't work reliably, we fetch images directly via the
-// service role client and convert to Base64 data URIs for inline embedding.
-// This ensures images render correctly regardless of bucket permissions.
+// ARCHITECTURE: Instead of downloading large images and converting to Base64
+// (which causes memory limits with large photos), we generate signed URLs
+// that PDFShift can fetch directly. This supports unlimited image sizes.
 //
 // FALLBACK LOGIC: If exact file path fails (e.g., site was renamed), 
 // we search the directory for similar files and use those instead.
 
-const MAX_IMAGE_SIZE_BYTES = 800 * 1024; // 800KB max per image for memory safety
+const SIGNED_URL_EXPIRY = 3600; // 1 hour - plenty of time for PDFShift
 
 // Extract pattern from filename for matching alternatives
 // e.g., "SITE_NAME_emergencyBoardImages_boardOpen_1234567_1.jpg" → { itemId: "boardOpen", suffix: "_1.jpg" }
@@ -206,8 +206,8 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
   }
 }
 
-// Download image from Supabase storage and convert to Base64 data URI
-async function imageToBase64(url: string): Promise<string | null> {
+// Generate signed URL for image - PDFShift will fetch directly (no size limit!)
+async function getSignedImageUrl(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already data URI - keep it
   
@@ -215,16 +215,77 @@ async function imageToBase64(url: string): Promise<string | null> {
     // Parse the Supabase storage URL
     const parsed = parseSupabaseStorageUrl(url);
     if (!parsed) {
-      // Not a Supabase storage URL - try direct fetch
-      console.log('[image] Not a Supabase URL, trying direct fetch:', url.substring(0, 60));
+      // Not a Supabase storage URL - return as-is, PDFShift may be able to fetch it
+      console.log('[image] Not a Supabase URL, using directly:', url.substring(0, 60));
+      return url;
+    }
+    
+    const supabase = getSupabaseClient();
+    
+    // First verify the file exists
+    const { data: fileData, error: fileError } = await supabase.storage
+      .from(parsed.bucket)
+      .download(parsed.path);
+    
+    let finalPath = parsed.path;
+    
+    // FALLBACK: If file doesn't exist, search for alternative
+    if (fileError || !fileData) {
+      console.log(`[image] File not found at ${parsed.path.substring(0, 50)}..., trying fallback`);
+      
+      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
+      if (altPath) {
+        // Verify the alternative file exists
+        const { data: altData, error: altError } = await supabase.storage
+          .from(parsed.bucket)
+          .download(altPath);
+        
+        if (!altError && altData) {
+          console.log(`[image] Fallback SUCCESS: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
+          finalPath = altPath;
+        } else {
+          console.log(`[image] Fallback file also not found`);
+          return null;
+        }
+      } else {
+        console.log(`[image] No alternative file found`);
+        return null;
+      }
+    }
+    
+    // Create signed URL for PDFShift to fetch
+    const { data: signedData, error: signError } = await supabase.storage
+      .from(parsed.bucket)
+      .createSignedUrl(finalPath, SIGNED_URL_EXPIRY);
+    
+    if (signError || !signedData?.signedUrl) {
+      console.log(`[image] Failed to create signed URL: ${signError?.message || 'No URL'}`);
+      return null;
+    }
+    
+    console.log(`[image] Signed URL created for: ${finalPath.substring(finalPath.lastIndexOf('/') + 1)}`);
+    return signedData.signedUrl;
+  } catch (error) {
+    console.log(`[image] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    return null;
+  }
+}
+
+// Legacy function for small images (signatures, etc.) - still uses Base64
+async function imageToBase64(url: string): Promise<string | null> {
+  if (!url || typeof url !== 'string') return null;
+  if (url.startsWith('data:')) return url;
+  
+  const MAX_SIZE = 500 * 1024; // 500KB for signatures only
+  
+  try {
+    const parsed = parseSupabaseStorageUrl(url);
+    if (!parsed) {
       try {
         const response = await fetch(url, { signal: AbortSignal.timeout(8000) });
         if (!response.ok) return null;
         const buffer = await response.arrayBuffer();
-        if (buffer.byteLength > MAX_IMAGE_SIZE_BYTES) {
-          console.log(`[image] Skipping large external image: ${Math.round(buffer.byteLength / 1024)}KB`);
-          return null;
-        }
+        if (buffer.byteLength > MAX_SIZE) return null;
         const contentType = response.headers.get('content-type') || 'image/jpeg';
         const base64 = arrayBufferToBase64(buffer);
         return `data:${contentType};base64,${base64}`;
@@ -233,50 +294,17 @@ async function imageToBase64(url: string): Promise<string | null> {
       }
     }
     
-    // Download from Supabase storage using service role
     const supabase = getSupabaseClient();
-    let { data, error } = await supabase.storage
+    const { data, error } = await supabase.storage
       .from(parsed.bucket)
       .download(parsed.path);
     
-    // FALLBACK: If direct download fails, search for alternative file
-    if (error || !data) {
-      console.log(`[image] Direct download failed for ${parsed.path.substring(0, 50)}..., trying fallback`);
-      
-      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
-      if (altPath) {
-        const altResult = await supabase.storage
-          .from(parsed.bucket)
-          .download(altPath);
-        
-        if (!altResult.error && altResult.data) {
-          console.log(`[image] Fallback SUCCESS: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
-          data = altResult.data;
-          error = null;
-        }
-      }
-    }
+    if (error || !data || data.size > MAX_SIZE) return null;
     
-    if (error || !data) {
-      console.log(`[image] Final download failed: ${error?.message || 'No data'}`);
-      return null;
-    }
-    
-    // Check size
-    if (data.size > MAX_IMAGE_SIZE_BYTES) {
-      console.log(`[image] Skipping large image: ${Math.round(data.size / 1024)}KB`);
-      return null;
-    }
-    
-    // Convert blob to base64
     const buffer = await data.arrayBuffer();
     const base64 = arrayBufferToBase64(buffer);
-    const contentType = data.type || 'image/jpeg';
-    
-    console.log(`[image] Converted: ${parsed.path.substring(parsed.path.lastIndexOf('/') + 1)}`);
-    return `data:${contentType};base64,${base64}`;
-  } catch (error) {
-    console.log(`[image] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    return `data:${data.type || 'image/jpeg'};base64,${base64}`;
+  } catch {
     return null;
   }
 }
@@ -295,7 +323,8 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binaryString);
 }
 
-// Process ALL inspection photos - convert to Base64 for reliable PDF embedding
+// Process ALL inspection photos - use SIGNED URLs for PDFShift to fetch directly
+// This bypasses memory limits since we're not loading images into memory
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
@@ -303,71 +332,71 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   let totalPhotos = 0;
   let processedPhotos = 0;
   
-  // Process section item photos
+  // Process section item photos - USE SIGNED URLs
   if (processed.sections) {
     for (const section of processed.sections) {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             totalPhotos += item.photos.length;
-            const base64Photos: string[] = [];
+            const signedUrls: string[] = [];
             for (const photoUrl of item.photos) {
-              const base64 = await imageToBase64(photoUrl);
-              if (base64) {
-                base64Photos.push(base64);
+              const signedUrl = await getSignedImageUrl(photoUrl);
+              if (signedUrl) {
+                signedUrls.push(signedUrl);
                 processedPhotos++;
               }
             }
-            item.photos = base64Photos;
+            item.photos = signedUrls;
           }
         }
       }
     }
   }
   
-  // Process tenant photos
+  // Process tenant photos - USE SIGNED URLs
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
       if (tenant.meterImage) {
         totalPhotos++;
-        const base64 = await imageToBase64(tenant.meterImage);
-        tenant.meterImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.meterImage);
+        tenant.meterImage = signedUrl;
+        if (signedUrl) processedPhotos++;
       }
       if (tenant.breakerImage) {
         totalPhotos++;
-        const base64 = await imageToBase64(tenant.breakerImage);
-        tenant.breakerImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.breakerImage);
+        tenant.breakerImage = signedUrl;
+        if (signedUrl) processedPhotos++;
       }
       if (tenant.ctRatioImage) {
         totalPhotos++;
-        const base64 = await imageToBase64(tenant.ctRatioImage);
-        tenant.ctRatioImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.ctRatioImage);
+        tenant.ctRatioImage = signedUrl;
+        if (signedUrl) processedPhotos++;
       }
     }
   }
   
-  // Process snag photos
+  // Process snag photos - USE SIGNED URLs
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
         totalPhotos += snag.photos.length;
-        const base64Photos: string[] = [];
+        const signedUrls: string[] = [];
         for (const photoUrl of snag.photos) {
-          const base64 = await imageToBase64(photoUrl);
-          if (base64) {
-            base64Photos.push(base64);
+          const signedUrl = await getSignedImageUrl(photoUrl);
+          if (signedUrl) {
+            signedUrls.push(signedUrl);
             processedPhotos++;
           }
         }
-        snag.photos = base64Photos;
+        snag.photos = signedUrls;
       }
     }
   }
   
-  // Process signature URLs
+  // Process signature URLs - still use Base64 (signatures are small)
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
@@ -379,7 +408,7 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  console.log(`[processPhotos] Completed: ${processedPhotos}/${totalPhotos} images converted to Base64`);
+  console.log(`[processPhotos] SUCCESS: ${processedPhotos}/${totalPhotos} images converted to signed URLs`);
   return processed;
 }
 
