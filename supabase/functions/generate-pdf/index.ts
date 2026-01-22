@@ -124,8 +124,87 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 // Since signed URLs don't work reliably, we fetch images directly via the
 // service role client and convert to Base64 data URIs for inline embedding.
 // This ensures images render correctly regardless of bucket permissions.
+//
+// FALLBACK LOGIC: If exact file path fails (e.g., site was renamed), 
+// we search the directory for similar files and use those instead.
 
-const MAX_IMAGE_SIZE_BYTES = 500 * 1024; // 500KB max per image for memory safety
+const MAX_IMAGE_SIZE_BYTES = 800 * 1024; // 800KB max per image for memory safety
+
+// Extract pattern from filename for matching alternatives
+// e.g., "SITE_NAME_emergencyBoardImages_boardOpen_1234567_1.jpg" → { itemId: "boardOpen", suffix: "_1.jpg" }
+function extractItemPattern(filename: string): { itemId: string; suffix: string } | null {
+  // Pattern: *_sectionId_itemId_timestamp_index.ext
+  const match = filename.match(/.*?_([a-zA-Z]+)_(\d+)_(\d+)\.(jpg|jpeg|png|webp)$/i);
+  if (match) {
+    return {
+      itemId: match[1], // e.g., "boardOpen", "cleanliness", etc.
+      suffix: `_${match[3]}.${match[4]}` // e.g., "_1.jpg"
+    };
+  }
+  // Fallback: just use extension
+  const extMatch = filename.match(/\.([a-z]+)$/i);
+  return extMatch ? { itemId: '', suffix: `.${extMatch[1]}` } : null;
+}
+
+// Find a matching file in the same directory when exact path fails
+async function findMatchingFile(bucket: string, path: string): Promise<string | null> {
+  try {
+    const supabase = getSupabaseClient();
+    
+    // Extract directory path
+    const lastSlashIndex = path.lastIndexOf('/');
+    if (lastSlashIndex <= 0) return null;
+    
+    const dirPath = path.substring(0, lastSlashIndex);
+    const targetFilename = path.substring(lastSlashIndex + 1);
+    
+    console.log(`[findFile] Searching in: ${bucket}/${dirPath}`);
+    
+    // List files in the directory
+    const { data: files, error } = await supabase.storage.from(bucket).list(dirPath, { limit: 50 });
+    
+    if (error || !files || files.length === 0) {
+      console.log(`[findFile] No files found in directory: ${error?.message || 'empty'}`);
+      return null;
+    }
+    
+    console.log(`[findFile] Found ${files.length} files in directory`);
+    
+    // Extract pattern from target filename
+    const pattern = extractItemPattern(targetFilename);
+    
+    // Strategy 1: Match by item ID pattern (e.g., "boardOpen", "meter", etc.)
+    if (pattern?.itemId) {
+      for (const file of files) {
+        if (file.name.includes(pattern.itemId) && file.name.endsWith(pattern.suffix)) {
+          console.log(`[findFile] Pattern match found: ${file.name}`);
+          return `${dirPath}/${file.name}`;
+        }
+      }
+      // Try without suffix matching
+      for (const file of files) {
+        if (file.name.includes(pattern.itemId) && /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+          console.log(`[findFile] Partial match found: ${file.name}`);
+          return `${dirPath}/${file.name}`;
+        }
+      }
+    }
+    
+    // Strategy 2: Return first valid image file in the directory
+    const imageFile = files.find(f => 
+      /\.(jpg|jpeg|png|webp)$/i.test(f.name) && !f.name.startsWith('.')
+    );
+    if (imageFile) {
+      console.log(`[findFile] Fallback to first image: ${imageFile.name}`);
+      return `${dirPath}/${imageFile.name}`;
+    }
+    
+    return null;
+  } catch (error) {
+    console.log(`[findFile] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    return null;
+  }
+}
 
 // Download image from Supabase storage and convert to Base64 data URI
 async function imageToBase64(url: string): Promise<string | null> {
@@ -156,12 +235,30 @@ async function imageToBase64(url: string): Promise<string | null> {
     
     // Download from Supabase storage using service role
     const supabase = getSupabaseClient();
-    const { data, error } = await supabase.storage
+    let { data, error } = await supabase.storage
       .from(parsed.bucket)
       .download(parsed.path);
     
+    // FALLBACK: If direct download fails, search for alternative file
     if (error || !data) {
-      console.log(`[image] Download failed for ${parsed.path}: ${error?.message || 'No data'}`);
+      console.log(`[image] Direct download failed for ${parsed.path.substring(0, 50)}..., trying fallback`);
+      
+      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
+      if (altPath) {
+        const altResult = await supabase.storage
+          .from(parsed.bucket)
+          .download(altPath);
+        
+        if (!altResult.error && altResult.data) {
+          console.log(`[image] Fallback SUCCESS: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
+          data = altResult.data;
+          error = null;
+        }
+      }
+    }
+    
+    if (error || !data) {
+      console.log(`[image] Final download failed: ${error?.message || 'No data'}`);
       return null;
     }
     
