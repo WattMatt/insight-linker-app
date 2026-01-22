@@ -69,11 +69,11 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 // ARCHITECTURE: Generate signed URLs and let PDFShift fetch images directly.
 // Image sizing is controlled via HTML/CSS (width: 150px), avoiding CPU-intensive
 // server-side image processing that exceeds Edge Function limits.
-// LIMITS: PDFShift has 250MB limit + Edge Function memory limit.
-// With 4MB average photos, max ~6 photos to stay safe.
+// LIMITS: Supabase Storage has 50MB upload limit.
+// With ~15MB average per photo at full resolution, max 2 photos.
 
 const MAX_PHOTOS_PER_ITEM = 1;  // Strict: 1 photo per item
-const MAX_TOTAL_PHOTOS = 6;    // Very strict to prevent memory issues
+const MAX_TOTAL_PHOTOS = 2;    // Ultra-strict: 50MB storage limit
 
 // Track global photo count across the entire document
 let globalPhotoCount = 0;
