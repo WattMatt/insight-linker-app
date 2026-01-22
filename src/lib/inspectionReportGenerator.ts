@@ -405,7 +405,7 @@ export async function generateAndSaveInspectionReport(
         },
       },
       defaultStyle: {
-        font: 'Helvetica',
+        font: 'Roboto',
         fontSize: 10,
       },
       pageMargins: [40, 40, 40, 60],

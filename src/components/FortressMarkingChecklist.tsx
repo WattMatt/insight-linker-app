@@ -314,7 +314,7 @@ export const FortressMarkingChecklist = ({ siteId }: FortressMarkingChecklistPro
       content,
       styles: DEFAULT_STYLES,
       defaultStyle: {
-        font: 'Helvetica',
+        font: 'Roboto',
         fontSize: 10,
       },
       pageMargins: [40, 40, 40, 60],

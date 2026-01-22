@@ -293,7 +293,7 @@ export const SiteDrawingReport = ({
         content,
         styles: DEFAULT_STYLES,
         defaultStyle: {
-          font: 'Helvetica',
+          font: 'Roboto',
           fontSize: 10,
         },
         pageMargins: [40, 40, 40, 60],
