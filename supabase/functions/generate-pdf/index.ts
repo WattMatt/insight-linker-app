@@ -118,198 +118,49 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
   return supabaseClientForImages;
 }
 
-// Try to find a matching file in storage when exact path fails
-// This handles cases where filenames have changed due to site renaming
-async function findMatchingFile(bucket: string, originalPath: string): Promise<string | null> {
+// ============================================================================
+// SIMPLIFIED IMAGE HANDLING - Let PDFShift fetch images directly
+// ============================================================================
+// PDFShift supports fetching images from public URLs directly, which eliminates
+// all memory issues from downloading and converting images to base64 in the edge function.
+// This is the recommended approach for production PDF generation with images.
+
+// Simple URL validation and cleanup for images
+function cleanImageUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  if (url.startsWith('data:')) return url; // Already data URI
+  
   try {
-    const supabase = getSupabaseClient();
-    
-    // Extract the folder path (everything except the filename)
-    const pathParts = originalPath.split('/');
-    const fileName = pathParts.pop() || '';
-    const folderPath = pathParts.join('/');
-    
-    console.log(`[findMatchingFile] Looking for alternatives in: ${bucket}/${folderPath}`);
-    
-    // List files in the same folder
-    const { data: files, error } = await supabase.storage
-      .from(bucket)
-      .list(folderPath, { limit: 20 });
-    
-    if (error || !files || files.length === 0) {
-      console.log(`[findMatchingFile] No files found in folder: ${folderPath}`);
-      return null;
-    }
-    
-    // Filter to only image files
-    const imageFiles = files.filter(f => 
-      f.name.endsWith('.jpg') || 
-      f.name.endsWith('.jpeg') || 
-      f.name.endsWith('.png') ||
-      f.name.endsWith('.webp')
-    );
-    
-    if (imageFiles.length === 0) {
-      console.log(`[findMatchingFile] No image files in folder`);
-      return null;
-    }
-    
-    // Return the first image file found (or the most recent if sorted by name)
-    const matchedFile = imageFiles[0];
-    const matchedPath = `${folderPath}/${matchedFile.name}`;
-    console.log(`[findMatchingFile] Found alternative: ${matchedPath}`);
-    return matchedPath;
-  } catch (error) {
-    console.error(`[findMatchingFile] Error searching for alternatives:`, error);
-    return null;
+    // Ensure URL is properly formed
+    const parsed = new URL(url);
+    return parsed.href;
+  } catch {
+    return '';
   }
 }
 
-// Memory limit constants - prevent OOM errors
-// Edge functions have ~150MB memory limit, each 3MB image = ~4MB base64
-// Limit aggressively to avoid OOM
-const MAX_RAW_IMAGE_SIZE = 1 * 1024 * 1024; // 1MB max per raw image
-const MAX_TOTAL_IMAGES = 6; // Limit to 6 images max to stay under memory limit
-let totalImagesProcessed = 0;
-
-// Convert image URL to base64 data URI for reliable PDF rendering
-// Uses Supabase client for internal storage URLs to avoid 400 errors
-// Includes fallback to find matching files when exact path doesn't exist
-async function imageUrlToBase64(url: string): Promise<string> {
-  try {
-    if (!url || url.startsWith('data:')) {
-      return url; // Already base64 or empty
-    }
-    
-    // Check if we've hit the image limit
-    if (totalImagesProcessed >= MAX_TOTAL_IMAGES) {
-      console.log(`[imageUrlToBase64] Skipping - max image limit reached (${MAX_TOTAL_IMAGES})`);
-      return '';
-    }
-    
-    console.log(`[imageUrlToBase64] Processing image ${totalImagesProcessed + 1}/${MAX_TOTAL_IMAGES}: ${url.substring(0, 80)}...`);
-    
-    // Try to parse as Supabase storage URL first
-    const storageInfo = parseSupabaseStorageUrl(url);
-    
-    let arrayBuffer: ArrayBuffer;
-    let contentType = 'image/jpeg';
-    
-    if (storageInfo) {
-      const supabase = getSupabaseClient();
-      let pathToDownload = storageInfo.path;
-      
-      // First try the exact path
-      let { data, error } = await supabase.storage
-        .from(storageInfo.bucket)
-        .download(storageInfo.path);
-      
-      // If exact path fails, try to find a matching file in the same folder
-      if (error || !data) {
-        console.log(`[imageUrlToBase64] Exact path failed, searching for alternatives...`);
-        const alternativePath = await findMatchingFile(storageInfo.bucket, storageInfo.path);
-        
-        if (alternativePath) {
-          const altResult = await supabase.storage
-            .from(storageInfo.bucket)
-            .download(alternativePath);
-          
-          if (!altResult.error && altResult.data) {
-            data = altResult.data;
-            error = null;
-            pathToDownload = alternativePath;
-          }
-        }
-      }
-      
-      if (error || !data) {
-        console.error(`[imageUrlToBase64] All attempts failed for: ${storageInfo.bucket}/${storageInfo.path}`);
-        return '';
-      }
-      
-      arrayBuffer = await data.arrayBuffer();
-      contentType = data.type || 'image/jpeg';
-      console.log(`[imageUrlToBase64] Downloaded: ${pathToDownload} (${arrayBuffer.byteLength} bytes)`);
-      
-      // Skip images that are too large (would cause memory issues)
-      if (arrayBuffer.byteLength > MAX_RAW_IMAGE_SIZE) {
-        console.log(`[imageUrlToBase64] Skipping oversized image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB > 1MB limit)`);
-        return '';
-      }
-    } else {
-      // Fall back to regular fetch for external URLs
-      const encodedUrl = encodeSupabaseStorageUrl(url);
-      const response = await fetch(encodedUrl, { 
-        headers: { 'Accept': 'image/*' },
-      });
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch image: ${encodedUrl} - Status: ${response.status}`);
-        return '';
-      }
-      
-      contentType = response.headers.get('content-type') || 'image/jpeg';
-      arrayBuffer = await response.arrayBuffer();
-      
-      // Skip oversized external images too
-      if (arrayBuffer.byteLength > MAX_RAW_IMAGE_SIZE) {
-        console.log(`[imageUrlToBase64] Skipping oversized external image (${(arrayBuffer.byteLength / 1024 / 1024).toFixed(1)}MB)`);
-        return '';
-      }
-    }
-    
-    // Process in chunks to avoid stack overflow with large images
-    const uint8Array = new Uint8Array(arrayBuffer);
-    const chunkSize = 8192;
-    let base64 = '';
-    for (let i = 0; i < uint8Array.length; i += chunkSize) {
-      const chunk = uint8Array.slice(i, i + chunkSize);
-      base64 += String.fromCharCode(...chunk);
-    }
-    base64 = btoa(base64);
-    
-    totalImagesProcessed++;
-    console.log(`[imageUrlToBase64] Converted image ${totalImagesProcessed} (${uint8Array.length} bytes)`);
-    return `data:${contentType};base64,${base64}`;
-  } catch (error) {
-    console.error(`Error converting image to base64: ${url}`, error);
-    return ''; // Return empty on error
-  }
-}
-
-// Process inspection data to convert all photo URLs to base64
-// Now with limits to prevent memory exhaustion
+// Process inspection photos - just validates URLs, doesn't download anything
+// PDFShift will fetch images directly from the URLs
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
   const processed = { ...inspection };
-  let successCount = 0;
-  let failCount = 0;
-  let skippedCount = 0;
+  let validCount = 0;
+  let invalidCount = 0;
   
-  // Reset the global counter for each PDF generation
-  totalImagesProcessed = 0;
-  
-  // Process section item photos - limit to 1 photo per item to save memory
+  // Process section item photos - keep all valid URLs
   if (processed.sections) {
     for (const section of processed.sections) {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
-            // Only process first photo per item to save memory
-            const photoToProcess = item.photos[0];
-            const base64 = await imageUrlToBase64(photoToProcess);
-            if (base64) {
-              item.photos = [base64];
-              successCount++;
-            } else {
-              item.photos = [];
-              failCount++;
-            }
-            // Track skipped photos
-            if (item.photos.length > 1) {
-              skippedCount += item.photos.length - 1;
-            }
+            const validPhotos = item.photos
+              .map((url: string) => cleanImageUrl(url))
+              .filter((url: string) => url.length > 0);
+            
+            validCount += validPhotos.length;
+            invalidCount += item.photos.length - validPhotos.length;
+            item.photos = validPhotos;
           }
         }
       }
@@ -320,39 +171,34 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
       if (tenant.meterImage) {
-        const base64 = await imageUrlToBase64(tenant.meterImage);
-        tenant.meterImage = base64 || null;
-        if (base64) successCount++; else failCount++;
+        const clean = cleanImageUrl(tenant.meterImage);
+        tenant.meterImage = clean || null;
+        if (clean) validCount++; else invalidCount++;
       }
       if (tenant.breakerImage) {
-        const base64 = await imageUrlToBase64(tenant.breakerImage);
-        tenant.breakerImage = base64 || null;
-        if (base64) successCount++; else failCount++;
+        const clean = cleanImageUrl(tenant.breakerImage);
+        tenant.breakerImage = clean || null;
+        if (clean) validCount++; else invalidCount++;
       }
       if (tenant.ctRatioImage) {
-        const base64 = await imageUrlToBase64(tenant.ctRatioImage);
-        tenant.ctRatioImage = base64 || null;
-        if (base64) successCount++; else failCount++;
+        const clean = cleanImageUrl(tenant.ctRatioImage);
+        tenant.ctRatioImage = clean || null;
+        if (clean) validCount++; else invalidCount++;
       }
     }
   }
   
-  // Process snag photos - limit to 1 photo per snag
+  // Process snag photos - keep all valid URLs
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
-        const photoToProcess = snag.photos[0];
-        const base64 = await imageUrlToBase64(photoToProcess);
-        if (base64) {
-          snag.photos = [base64];
-          successCount++;
-        } else {
-          snag.photos = [];
-          failCount++;
-        }
-        if (snag.photos.length > 1) {
-          skippedCount += snag.photos.length - 1;
-        }
+        const validPhotos = snag.photos
+          .map((url: string) => cleanImageUrl(url))
+          .filter((url: string) => url.length > 0);
+        
+        validCount += validPhotos.length;
+        invalidCount += snag.photos.length - validPhotos.length;
+        snag.photos = validPhotos;
       }
     }
   }
@@ -361,14 +207,15 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        const base64 = await imageUrlToBase64(sig.signatureUrl);
-        sig.signatureUrl = base64 || null;
-        if (base64) successCount++; else failCount++;
+        const clean = cleanImageUrl(sig.signatureUrl);
+        sig.signatureUrl = clean || null;
+        if (clean) validCount++; else invalidCount++;
       }
     }
   }
   
-  console.log(`[processPhotos] Complete: ${successCount} embedded, ${failCount} failed, ${skippedCount} skipped (memory limit)`);
+  console.log(`[processPhotos] URL validation complete: ${validCount} valid, ${invalidCount} invalid`);
+  console.log('[processPhotos] PDFShift will fetch images directly from URLs');
   return processed;
 }
 
