@@ -119,20 +119,30 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// IMAGE HANDLING - Thumbnail Generation for PDFShift
+// IMAGE HANDLING - Signed URLs for PDFShift (No Downloading)
 // ============================================================================
-// ARCHITECTURE: Download images, resize them to small thumbnails (max 400x400),
-// and embed as Base64 data URIs. This keeps total document size under 250MB.
-// PDFShift's 250MB limit refers to the final rendered document including all
-// fetched images - high-res photos would exceed this.
-//
-// FALLBACK LOGIC: If exact file path fails (e.g., site was renamed), 
-// we search the directory for similar files and use those instead.
+// ARCHITECTURE: Generate signed URLs for images. PDFShift fetches them directly.
+// This avoids memory issues in the edge function.
+// CRITICAL: Limit total photos to ~6 to keep rendered document under 250MB.
+// (19 high-res photos = 384MB, so max ~6-8 photos is safe)
 
-const MAX_IMAGE_DIMENSION = 400; // Maximum width or height for thumbnails
-const MAX_IMAGE_SIZE_BYTES = 150 * 1024; // 150KB max per image after compression
-const MAX_PHOTOS_PER_ITEM = 3; // Limit photos per item to control document size
-const MAX_TOTAL_PHOTOS = 15; // Hard limit on total photos in document
+const MAX_PHOTOS_PER_ITEM = 2; // Limit photos per item
+const MAX_TOTAL_PHOTOS = 6; // Strict limit - 6 photos at ~30MB each = 180MB < 250MB limit
+
+// Track global photo count across the entire document
+let globalPhotoCount = 0;
+
+function resetPhotoCount() {
+  globalPhotoCount = 0;
+}
+
+function canAddPhoto(): boolean {
+  return globalPhotoCount < MAX_TOTAL_PHOTOS;
+}
+
+function incrementPhotoCount() {
+  globalPhotoCount++;
+}
 
 // Extract pattern from filename for matching alternatives
 function extractItemPattern(filename: string): { itemId: string; suffix: string } | null {
@@ -157,28 +167,22 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
     const dirPath = path.substring(0, lastSlashIndex);
     const targetFilename = path.substring(lastSlashIndex + 1);
     
-    console.log(`[findFile] Searching in: ${bucket}/${dirPath}`);
-    
     const { data: files, error } = await supabase.storage.from(bucket).list(dirPath, { limit: 50 });
     
     if (error || !files || files.length === 0) {
-      console.log(`[findFile] No files found: ${error?.message || 'empty'}`);
       return null;
     }
     
-    console.log(`[findFile] Found ${files.length} files`);
     const pattern = extractItemPattern(targetFilename);
     
     if (pattern?.itemId) {
       for (const file of files) {
         if (file.name.includes(pattern.itemId) && file.name.endsWith(pattern.suffix)) {
-          console.log(`[findFile] Pattern match: ${file.name}`);
           return `${dirPath}/${file.name}`;
         }
       }
       for (const file of files) {
         if (file.name.includes(pattern.itemId) && /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
-          console.log(`[findFile] Partial match: ${file.name}`);
           return `${dirPath}/${file.name}`;
         }
       }
@@ -186,87 +190,56 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
     
     const imageFile = files.find(f => /\.(jpg|jpeg|png|webp)$/i.test(f.name) && !f.name.startsWith('.'));
     if (imageFile) {
-      console.log(`[findFile] First image fallback: ${imageFile.name}`);
       return `${dirPath}/${imageFile.name}`;
     }
     
     return null;
-  } catch (error) {
-    console.log(`[findFile] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+  } catch {
     return null;
   }
 }
 
-// Download and create a small placeholder Base64 for an image
-// Uses native fetch and creates a simple data URI
-async function getCompressedImageBase64(url: string): Promise<string | null> {
+// Generate signed URL for PDFShift to fetch directly (no memory usage)
+async function getSignedImageUrl(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Keep data URIs as-is
   
   try {
     const parsed = parseSupabaseStorageUrl(url);
     if (!parsed) {
-      // External URL - try to fetch directly with size limit
-      try {
-        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
-        if (!response.ok) return null;
-        const buffer = await response.arrayBuffer();
-        // Skip if too large
-        if (buffer.byteLength > 5 * 1024 * 1024) {
-          console.log(`[image] External image too large: ${(buffer.byteLength / 1024 / 1024).toFixed(1)}MB, skipping`);
-          return null;
-        }
-        const contentType = response.headers.get('content-type') || 'image/jpeg';
-        const base64 = arrayBufferToBase64(buffer);
-        console.log(`[image] External image: ${(buffer.byteLength / 1024).toFixed(0)}KB`);
-        return `data:${contentType};base64,${base64}`;
-      } catch {
-        return null;
-      }
+      // External URL - return as-is, PDFShift will fetch it
+      return url;
     }
     
     const supabase = getSupabaseClient();
     let finalPath = parsed.path;
     
-    // Check if file exists, if not try fallback
-    const { data: checkData, error: checkError } = await supabase.storage
+    // Quick existence check via signed URL attempt
+    const { error: checkError } = await supabase.storage
       .from(parsed.bucket)
-      .download(parsed.path);
+      .createSignedUrl(parsed.path, 60);
     
-    if (checkError || !checkData) {
-      console.log(`[image] File not found at ${parsed.path.substring(0, 50)}..., trying fallback`);
+    if (checkError) {
+      // File not found, try fallback
       const altPath = await findMatchingFile(parsed.bucket, parsed.path);
       if (altPath) {
         finalPath = altPath;
-        console.log(`[image] Using fallback: ${altPath.substring(altPath.lastIndexOf('/') + 1)}`);
       } else {
-        console.log(`[image] No fallback found`);
         return null;
       }
     }
     
-    // Download the image
-    const { data, error } = await supabase.storage
+    // Create signed URL with 1 hour expiry
+    const { data: signedData, error: signError } = await supabase.storage
       .from(parsed.bucket)
-      .download(finalPath);
+      .createSignedUrl(finalPath, 3600);
     
-    if (error || !data) {
-      console.log(`[image] Download failed: ${error?.message || 'No data'}`);
+    if (signError || !signedData?.signedUrl) {
       return null;
     }
     
-    const originalSize = data.size;
-    console.log(`[image] Downloaded: ${finalPath.substring(finalPath.lastIndexOf('/') + 1)} (${(originalSize / 1024).toFixed(0)}KB)`);
-    
-    // Convert to base64 - even for large images, we'll include them
-    // PDFShift will handle the rendering
-    const buffer = await data.arrayBuffer();
-    const base64 = arrayBufferToBase64(buffer);
-    const mimeType = data.type || 'image/jpeg';
-    
-    return `data:${mimeType};base64,${base64}`;
-  } catch (error) {
-    console.log(`[image] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
+    return signedData.signedUrl;
+  } catch {
     return null;
   }
 }
@@ -323,10 +296,13 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binaryString);
 }
 
-// Process inspection photos with limits to stay under 250MB document size
-// Downloads and embeds images as Base64 - with limits on count and size
+// Process inspection photos using SIGNED URLs (no memory overhead)
+// PDFShift fetches images directly via signed URLs
+// CRITICAL: Limited to MAX_TOTAL_PHOTOS to stay under 250MB document limit
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
+  
+  resetPhotoCount(); // Reset global counter for this document
   
   const processed = JSON.parse(JSON.stringify(inspection));
   let totalPhotosFound = 0;
@@ -340,7 +316,7 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             totalPhotosFound += item.photos.length;
-            const base64Images: string[] = [];
+            const signedUrls: string[] = [];
             // Limit photos per item
             const photosToProcess = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
             if (item.photos.length > MAX_PHOTOS_PER_ITEM) {
@@ -349,53 +325,62 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
             
             for (const photoUrl of photosToProcess) {
               // Check if we've hit the global limit
-              if (processedPhotos >= MAX_TOTAL_PHOTOS) {
-                console.log(`[processPhotos] Hit global limit of ${MAX_TOTAL_PHOTOS} photos`);
+              if (!canAddPhoto()) {
                 skippedForLimit++;
                 continue;
               }
               
-              const base64 = await getCompressedImageBase64(photoUrl);
-              if (base64) {
-                base64Images.push(base64);
+              const signedUrl = await getSignedImageUrl(photoUrl);
+              if (signedUrl) {
+                signedUrls.push(signedUrl);
+                incrementPhotoCount();
                 processedPhotos++;
               }
             }
-            item.photos = base64Images;
+            item.photos = signedUrls;
           }
         }
       }
     }
   }
   
-  // Process tenant photos (meter, breaker, CT) - these are important, include all
+  // Process tenant photos (meter, breaker, CT) - only if within limit
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
-      if (tenant.meterImage && processedPhotos < MAX_TOTAL_PHOTOS) {
+      if (tenant.meterImage && canAddPhoto()) {
         totalPhotosFound++;
-        const base64 = await getCompressedImageBase64(tenant.meterImage);
-        tenant.meterImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.meterImage);
+        tenant.meterImage = signedUrl;
+        if (signedUrl) {
+          incrementPhotoCount();
+          processedPhotos++;
+        }
       } else if (tenant.meterImage) {
         tenant.meterImage = null;
         skippedForLimit++;
       }
       
-      if (tenant.breakerImage && processedPhotos < MAX_TOTAL_PHOTOS) {
+      if (tenant.breakerImage && canAddPhoto()) {
         totalPhotosFound++;
-        const base64 = await getCompressedImageBase64(tenant.breakerImage);
-        tenant.breakerImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.breakerImage);
+        tenant.breakerImage = signedUrl;
+        if (signedUrl) {
+          incrementPhotoCount();
+          processedPhotos++;
+        }
       } else if (tenant.breakerImage) {
         tenant.breakerImage = null;
         skippedForLimit++;
       }
       
-      if (tenant.ctRatioImage && processedPhotos < MAX_TOTAL_PHOTOS) {
+      if (tenant.ctRatioImage && canAddPhoto()) {
         totalPhotosFound++;
-        const base64 = await getCompressedImageBase64(tenant.ctRatioImage);
-        tenant.ctRatioImage = base64;
-        if (base64) processedPhotos++;
+        const signedUrl = await getSignedImageUrl(tenant.ctRatioImage);
+        tenant.ctRatioImage = signedUrl;
+        if (signedUrl) {
+          incrementPhotoCount();
+          processedPhotos++;
+        }
       } else if (tenant.ctRatioImage) {
         tenant.ctRatioImage = null;
         skippedForLimit++;
@@ -403,47 +388,47 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  // Process snag photos - limit to 2 per snag
+  // Process snag photos - limit to 1 per snag to save space
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
         totalPhotosFound += snag.photos.length;
-        const base64Images: string[] = [];
-        const photosToProcess = snag.photos.slice(0, 2);
-        if (snag.photos.length > 2) {
-          skippedForLimit += snag.photos.length - 2;
+        const signedUrls: string[] = [];
+        // Only take first snag photo
+        const photosToProcess = snag.photos.slice(0, 1);
+        if (snag.photos.length > 1) {
+          skippedForLimit += snag.photos.length - 1;
         }
         
         for (const photoUrl of photosToProcess) {
-          if (processedPhotos >= MAX_TOTAL_PHOTOS) {
+          if (!canAddPhoto()) {
             skippedForLimit++;
             continue;
           }
           
-          const base64 = await getCompressedImageBase64(photoUrl);
-          if (base64) {
-            base64Images.push(base64);
+          const signedUrl = await getSignedImageUrl(photoUrl);
+          if (signedUrl) {
+            signedUrls.push(signedUrl);
+            incrementPhotoCount();
             processedPhotos++;
           }
         }
-        snag.photos = base64Images;
+        snag.photos = signedUrls;
       }
     }
   }
   
-  // Process signature URLs - use imageToBase64 (signatures are small)
+  // Process signature URLs - use imageToBase64 (signatures are small, no limit needed)
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        totalPhotosFound++;
         const base64 = await imageToBase64(sig.signatureUrl);
         sig.signatureUrl = base64;
-        if (base64) processedPhotos++;
       }
     }
   }
   
-  console.log(`[processPhotos] Processed ${processedPhotos}/${totalPhotosFound} photos (${skippedForLimit} skipped for size limits)`);
+  console.log(`[processPhotos] Included ${processedPhotos}/${totalPhotosFound} photos via signed URLs (${skippedForLimit} skipped to stay under 250MB limit)`);
   return processed;
 }
 
