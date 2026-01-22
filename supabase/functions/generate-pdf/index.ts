@@ -28,6 +28,87 @@ async function generateQRCodeSvgDataUri(url: string): Promise<string> {
   }
 }
 
+// Convert image URL to base64 data URI for reliable PDF rendering
+async function imageUrlToBase64(url: string): Promise<string> {
+  try {
+    if (!url || url.startsWith('data:')) {
+      return url; // Already base64 or empty
+    }
+    
+    const response = await fetch(url, { 
+      headers: { 'Accept': 'image/*' },
+    });
+    
+    if (!response.ok) {
+      console.error(`Failed to fetch image: ${url} - Status: ${response.status}`);
+      return ''; // Return empty string if fetch fails
+    }
+    
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    const arrayBuffer = await response.arrayBuffer();
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
+    
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.error(`Error converting image to base64: ${url}`, error);
+    return ''; // Return empty on error
+  }
+}
+
+// Process inspection data to convert all photo URLs to base64
+async function processInspectionPhotos(inspection: any): Promise<any> {
+  if (!inspection) return inspection;
+  
+  const processed = { ...inspection };
+  
+  // Process section item photos
+  if (processed.sections) {
+    for (const section of processed.sections) {
+      if (section.items) {
+        for (const item of section.items) {
+          if (item.photos && item.photos.length > 0) {
+            const base64Photos: string[] = [];
+            for (const photoUrl of item.photos) {
+              const base64 = await imageUrlToBase64(photoUrl);
+              if (base64) {
+                base64Photos.push(base64);
+              }
+            }
+            item.photos = base64Photos;
+          }
+        }
+      }
+    }
+  }
+  
+  // Process snag photos
+  if (processed.snags) {
+    for (const snag of processed.snags) {
+      if (snag.photos && snag.photos.length > 0) {
+        const base64Photos: string[] = [];
+        for (const photoUrl of snag.photos) {
+          const base64 = await imageUrlToBase64(photoUrl);
+          if (base64) {
+            base64Photos.push(base64);
+          }
+        }
+        snag.photos = base64Photos;
+      }
+    }
+  }
+  
+  // Process signature URLs
+  if (processed.signatures) {
+    for (const sig of processed.signatures) {
+      if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
+        sig.signatureUrl = await imageUrlToBase64(sig.signatureUrl);
+      }
+    }
+  }
+  
+  return processed;
+}
+
 // ============================================================================
 // TYPE DEFINITIONS
 // ============================================================================
@@ -1678,24 +1759,30 @@ async function generateCOCValidationHTML(data: ReportData): Promise<string> {
 }
 
 async function generateInspectionHTML(data: ReportData): Promise<string> {
-  const insp = data.inspection!;
+  // CRITICAL: Process all photos to base64 for reliable PDF rendering
+  const processedInsp = await processInspectionPhotos(data.inspection!);
+  const insp = processedInsp;
+  
   const accentColor = data.accentColor || '#2563eb';
   const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
   
   const statusColor = insp.status?.toLowerCase() === 'completed' ? COLORS.success :
                      insp.status?.toLowerCase() === 'in_progress' ? COLORS.warning : COLORS.textMuted;
   
-  // Count total photos for the report
+  // Count total photos for the report (after processing - only count valid base64 images)
   let totalPhotos = 0;
   if (insp.sections) {
-    insp.sections.forEach(section => {
-      section.items.forEach(item => {
+    insp.sections.forEach((section: any) => {
+      section.items.forEach((item: any) => {
         if (item.photos && item.photos.length > 0) {
-          totalPhotos += item.photos.length;
+          // Only count photos that were successfully converted
+          totalPhotos += item.photos.filter((p: string) => p && p.length > 0).length;
         }
       });
     });
   }
+  
+  console.log(`[Inspection PDF] Total photos after base64 conversion: ${totalPhotos}`);
   
   // Build pages - we'll put items with photos prominently
   let pages: string[] = [];
@@ -1801,7 +1888,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 </div>
                 <table style="width: 100%;" cellpadding="0" cellspacing="8">
                   <tr>
-                    ${item.photos!.slice(0, 3).map((photoUrl, idx) => `
+                    ${item.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
                     <td style="width: ${100 / Math.min(item.photos!.length, 3)}%; vertical-align: top;">
                       <img src="${photoUrl}" 
                            style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
@@ -1813,7 +1900,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 ${item.photos!.length > 3 ? `
                 <table style="width: 100%; margin-top: 8px;" cellpadding="0" cellspacing="8">
                   <tr>
-                    ${item.photos!.slice(3, 6).map((photoUrl, idx) => `
+                    ${item.photos!.slice(3, 6).map((photoUrl: string, idx: number) => `
                     <td style="width: ${100 / Math.min(item.photos!.length - 3, 3)}%; vertical-align: top;">
                       <img src="${photoUrl}" 
                            style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
@@ -1881,7 +1968,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
             <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
               <table style="width: 100%;" cellpadding="0" cellspacing="8">
                 <tr>
-                  ${snag.photos!.slice(0, 3).map((photoUrl, idx) => `
+                  ${snag.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
                   <td style="width: ${100 / Math.min(snag.photos!.length, 3)}%; vertical-align: top;">
                     <img src="${photoUrl}" 
                          style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
@@ -1911,7 +1998,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 20px;">
             <table style="width: 100%;" cellpadding="0" cellspacing="20">
               <tr>
-                ${insp.signatures.map(sig => `
+                ${insp.signatures.map((sig: any) => `
                 <td style="width: ${100 / insp.signatures!.length}%; text-align: center; vertical-align: top;">
                   ${sig.signatureUrl ? `
                   <img src="${sig.signatureUrl}" style="max-width: 150px; max-height: 60px; margin-bottom: 10px;" alt="Signature" />
