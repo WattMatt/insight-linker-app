@@ -75,6 +75,7 @@ interface AssetComparisonTableProps {
   siteName: string;
   companyLogoUrl?: string | null;
   onDataUpdated?: () => void;
+  readOnly?: boolean;
 }
 
 type EditingCell = {
@@ -114,6 +115,7 @@ export const AssetComparisonTable = ({
   siteName,
   companyLogoUrl,
   onDataUpdated,
+  readOnly = false,
 }: AssetComparisonTableProps) => {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | "verified" | "discrepancies" | "unverified">("all");
@@ -429,21 +431,23 @@ export const AssetComparisonTable = ({
       <div className="space-y-1">
         {/* Asset Value Row */}
         <div className="flex items-center gap-2">
-          {isEditingAsset ? (
+          {!readOnly && isEditingAsset ? (
             renderEditInput("asset")
           ) : (
             <>
               <span className="text-sm font-medium">{assetValue || "-"}</span>
               {matchStatus !== "na" && getValueBadge(matchStatus)}
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
-                onClick={() => setEditingCell({ rowIndex, field, source: "asset", value: assetValue || "" })}
-                title="Edit asset value"
-              >
-                <Pencil className="h-3 w-3" />
-              </Button>
+              {!readOnly && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100"
+                  onClick={() => setEditingCell({ rowIndex, field, source: "asset", value: assetValue || "" })}
+                  title="Edit asset value"
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              )}
             </>
           )}
         </div>
@@ -451,20 +455,22 @@ export const AssetComparisonTable = ({
         {/* Inspection Value Row */}
         {inspectionValue && matchStatus !== "na" && (
           <div className="flex items-center gap-1">
-            {isEditingInspection ? (
+            {!readOnly && isEditingInspection ? (
               renderEditInput("inspection")
             ) : (
               <>
                 <span className="text-xs text-muted-foreground">Inspection: {inspectionValue}</span>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
-                  onClick={() => setEditingCell({ rowIndex, field, source: "inspection", value: inspectionValue || "" })}
-                  title="Edit inspection value"
-                >
-                  <Pencil className="h-2.5 w-2.5" />
-                </Button>
+                {!readOnly && (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-4 w-4 p-0 opacity-0 group-hover:opacity-100"
+                    onClick={() => setEditingCell({ rowIndex, field, source: "inspection", value: inspectionValue || "" })}
+                    title="Edit inspection value"
+                  >
+                    <Pencil className="h-2.5 w-2.5" />
+                  </Button>
+                )}
               </>
             )}
           </div>
@@ -552,13 +558,15 @@ export const AssetComparisonTable = ({
                 className="pl-9"
               />
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={() => testPdfGeneration()}
-            >
-              Test PDF
-            </Button>
+            {!readOnly && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => testPdfGeneration()}
+              >
+                Test PDF
+              </Button>
+            )}
             <Button
               variant="default"
               size="sm"

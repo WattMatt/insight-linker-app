@@ -14,6 +14,7 @@ import { RobustImage } from "@/components/RobustImage";
 interface MeterRegisterProps {
   siteId: string;
   siteName: string;
+  readOnly?: boolean;
 }
 
 interface InspectionTenant {
@@ -44,7 +45,7 @@ interface MeterEntry {
   discrepancyDetails?: string;
 }
 
-export function MeterRegister({ siteId, siteName }: MeterRegisterProps) {
+export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegisterProps) {
   const [search, setSearch] = useState("");
   const [activeView, setActiveView] = useState("all");
   const [selectedImages, setSelectedImages] = useState<{ meterImage?: string; ctRatioImage?: string; title: string } | null>(null);
