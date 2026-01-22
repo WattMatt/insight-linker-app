@@ -98,10 +98,15 @@ export async function generateAndSaveComprehensiveReport(
           const itemId = String(item.id ?? idx);
           const itemData = jsonData[sectionId]?.[itemId] || {};
           
+          // Extract photos array for photographic documentation
+          const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
+          
           return {
             label: item.name || itemId,
             value: itemData.status || itemData.value || 'N/A',
             type: item.type || 'text',
+            notes: itemData.notes || '',
+            photos: photos,
           };
         }),
       };
@@ -132,6 +137,7 @@ export async function generateAndSaveComprehensiveReport(
           description: snag.description,
           status: snag.status,
           riskLevel: snag.risk_level,
+          photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
         })),
         signatures: signatures.map(sig => ({
           name: sig.signer_name,
@@ -317,10 +323,15 @@ export const ComprehensiveInspectionReport = ({
           const itemId = String(item.id ?? idx);
           const itemData = jsonData[sectionId]?.[itemId] || {};
           
+          // Extract photos array for photographic documentation
+          const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
+          
           return {
             label: item.name || itemId,
             value: itemData.status || itemData.value || 'N/A',
             type: item.type || 'text',
+            notes: itemData.notes || '',
+            photos: photos,
           };
         }),
       };
@@ -348,6 +359,7 @@ export const ComprehensiveInspectionReport = ({
         description: snag.description,
         status: snag.status,
         riskLevel: snag.risk_level,
+        photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
       })),
       signatures: signatures.map(sig => ({
         name: sig.signer_name,

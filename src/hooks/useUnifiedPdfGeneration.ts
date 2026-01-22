@@ -72,7 +72,7 @@ export interface COCValidationReportData extends BaseReportData {
   recommendations?: string[];
 }
 
-// Inspection Report Data
+// Inspection Report Data - Supports photographic evidence
 export interface InspectionReportData extends BaseReportData {
   reportType: 'inspection';
   inspectionId: string;
@@ -88,6 +88,8 @@ export interface InspectionReportData extends BaseReportData {
       label: string;
       value: string | boolean | number;
       type?: string;
+      notes?: string;
+      photos?: string[]; // Photographic evidence per item
     }>;
   }>;
   snags?: Array<{
@@ -95,6 +97,7 @@ export interface InspectionReportData extends BaseReportData {
     description?: string;
     status: string;
     riskLevel?: string;
+    photos?: string[]; // Snag photographic evidence
   }>;
   signatures?: Array<{
     name: string;

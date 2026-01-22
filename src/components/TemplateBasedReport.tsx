@@ -6,19 +6,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { Eye } from "lucide-react";
+import { Eye, Camera, X, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import {
-  generatePdfBlob,
-  buildDocument,
-  createSectionHeader,
-  createDataTable,
-  logComplianceCheck,
-  COLORS,
-  PDFComplianceCheck,
-} from "@/lib/pdfMakeUtils";
+import { useUnifiedPdfGeneration, InspectionReportData } from "@/hooks/useUnifiedPdfGeneration";
 
 interface TemplateSection {
   id: string;
@@ -50,6 +42,7 @@ interface ReportData {
     [itemId: string]: {
       status?: string;
       notes?: string;
+      photos?: string[]; // Support for photographic evidence
     };
   };
 }
@@ -58,19 +51,27 @@ interface TemplateBasedReportProps {
   subsectionId: string;
   subsectionName: string;
   siteName: string;
+  clientName?: string;
+  siteLogoUrl?: string;
 }
 
-export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: TemplateBasedReportProps) => {
+export const TemplateBasedReport = ({ 
+  subsectionId, 
+  subsectionName, 
+  siteName,
+  clientName,
+  siteLogoUrl
+}: TemplateBasedReportProps) => {
   const [templates, setTemplates] = useState<InspectionTemplate[]>([]);
   const [selectedTemplate, setSelectedTemplate] = useState<InspectionTemplate | null>(null);
   const [reportData, setReportData] = useState<ReportData>({});
   const [loading, setLoading] = useState(false);
-  const [generating, setGenerating] = useState(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
-  const [pdfBlob, setPdfBlob] = useState<Blob | null>(null);
   const [saving, setSaving] = useState(false);
+
+  const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
 
   useEffect(() => {
     fetchTemplates();
@@ -130,108 +131,137 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
     });
   };
 
-  const generatePDFDocument = async (): Promise<{ blob: Blob; fileName: string; complianceChecks: PDFComplianceCheck } | null> => {
-    if (!selectedTemplate) return null;
-
+  const handlePhotoUpload = async (sectionId: string, itemId: string, file: File) => {
     try {
-      const content: any[] = [];
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${subsectionId}/${sectionId}/${itemId}/${Date.now()}.${fileExt}`;
+      
+      const { data, error } = await supabase.storage
+        .from('documents')
+        .upload(fileName, file);
 
-      // Build sections
-      selectedTemplate.sections?.forEach((section) => {
-        content.push(createSectionHeader(section.name));
+      if (error) throw error;
 
-        const tableData = section.items?.map((item) => {
-          const itemData = reportData[section.id]?.[item.id];
-          return {
-            item: item.name,
-            status: itemData?.status || 'N/A',
-            notes: itemData?.notes || '',
-          };
-        }) || [];
+      const { data: { publicUrl } } = supabase.storage
+        .from('documents')
+        .getPublicUrl(fileName);
 
-        if (tableData.length > 0) {
-          content.push(createDataTable(
-            [
-              { header: 'Item', field: 'item', width: '*' },
-              { header: 'Status', field: 'status', width: 60, alignment: 'center' },
-              { header: 'Notes', field: 'notes', width: 150 },
-            ],
-            tableData
-          ));
-        }
+      setReportData(prev => {
+        const sectionData = prev[sectionId] || {};
+        const itemData = sectionData[itemId] || {};
+        const existingPhotos = itemData.photos || [];
+
+        return {
+          ...prev,
+          [sectionId]: {
+            ...sectionData,
+            [itemId]: {
+              ...itemData,
+              photos: [...existingPhotos, publicUrl]
+            }
+          }
+        };
       });
 
-      // Build document
-      const docDefinition = buildDocument({
-        title: selectedTemplate.name,
-        coverPage: {
-          title: selectedTemplate.cover_page?.title || selectedTemplate.name,
-          subtitle: selectedTemplate.cover_page?.subtitle || selectedTemplate.category,
-          siteName,
-          reportType: 'Inspection Report',
-          organizationName: selectedTemplate.cover_page?.company_name || 'Watson Mattheus',
-          reportDate: new Date(),
-        },
-        content,
-      });
-
-      // Generate blob
-      const blob = await generatePdfBlob(docDefinition);
-
-      // Log compliance
-      const complianceChecks = logComplianceCheck('TemplateBasedReport', {
-        hasCoverPage: true,
-        logoPlacement: false,
-        standardMargins: true,
-        typographyScale: true,
-        brandColors: true,
-        pageHeaders: true,
-        pageFooters: true,
-        tableStyles: true,
-        pageBreaks: true,
-      });
-
-      const fileName = `${subsectionName}_${selectedTemplate.name}_Report.pdf`;
-      return { blob, fileName, complianceChecks };
+      toast.success("Photo uploaded successfully");
     } catch (error) {
-      console.error("Error generating PDF:", error);
-      return null;
+      console.error("Error uploading photo:", error);
+      toast.error("Failed to upload photo");
     }
   };
 
+  const handleRemovePhoto = (sectionId: string, itemId: string, photoIndex: number) => {
+    setReportData(prev => {
+      const sectionData = prev[sectionId] || {};
+      const itemData = sectionData[itemId] || {};
+      const photos = [...(itemData.photos || [])];
+      photos.splice(photoIndex, 1);
+
+      return {
+        ...prev,
+        [sectionId]: {
+          ...sectionData,
+          [itemId]: {
+            ...itemData,
+            photos
+          }
+        }
+      };
+    });
+  };
+
   const handlePreviewReport = async () => {
+    if (!selectedTemplate) return;
+
     try {
-      setGenerating(true);
-      const result = await generatePDFDocument();
+      // Build sections data with photos for PDFShift
+      const sectionsForPdf = selectedTemplate.sections?.map((section) => ({
+        title: section.name,
+        items: section.items?.map((item) => {
+          const itemData = reportData[section.id]?.[item.id] || {};
+          return {
+            label: item.name,
+            value: itemData.status || 'N/A',
+            type: item.type || 'text',
+            notes: itemData.notes || '',
+            photos: itemData.photos || [], // Include photographic evidence
+          };
+        }) || [],
+      })) || [];
 
-      if (!result) {
-        toast.error("Failed to generate report");
-        return;
+      // Count total photos for summary
+      const totalPhotos = sectionsForPdf.reduce((sum, section) => 
+        sum + section.items.reduce((itemSum, item) => itemSum + (item.photos?.length || 0), 0), 0
+      );
+
+      console.log(`[TemplateBasedReport] Generating report with ${totalPhotos} photos`);
+
+      const reportPayload: InspectionReportData = {
+        reportType: 'inspection',
+        title: selectedTemplate.name,
+        subtitle: `${siteName} - ${subsectionName}`,
+        siteName,
+        clientName,
+        subsectionId,
+        companyLogoUrl: siteLogoUrl,
+        generatedAt: new Date().toISOString(),
+        inspectionId: `template-${selectedTemplate.id}`,
+        templateName: selectedTemplate.name,
+        status: 'completed',
+        sections: sectionsForPdf,
+        snags: [], // Template-based reports don't have snags
+      };
+
+      const result = await generatePdfForPreview(reportPayload);
+
+      if (result.success && result.url) {
+        setPreviewUrl(result.url);
+        setPreviewFileName(`${subsectionName}_${selectedTemplate.name}_Report.pdf`);
+        setPreviewOpen(true);
+      } else {
+        toast.error(result.error || "Failed to generate report");
       }
-
-      const url = URL.createObjectURL(result.blob);
-      setPreviewUrl(url);
-      setPreviewFileName(result.fileName);
-      setPdfBlob(result.blob);
-      setPreviewOpen(true);
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Failed to generate report");
-    } finally {
-      setGenerating(false);
     }
   };
 
   const handleSaveToDocuments = async () => {
-    if (!pdfBlob || !subsectionId) {
+    if (!previewUrl || !subsectionId) {
       toast.error("Cannot save: missing data");
       return;
     }
 
     try {
       setSaving(true);
+      
+      // Fetch the blob from the URL
+      const response = await fetch(previewUrl);
+      const blob = await response.blob();
+      
       const result = await savePDFToDocuments({
-        blob: pdfBlob,
+        blob,
         fileName: previewFileName,
         subsectionId,
         categoryName: getReportCategoryName("inspection"),
@@ -268,7 +298,7 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
           <CardHeader>
             <CardTitle>Select an Inspection Template</CardTitle>
             <p className="text-sm text-muted-foreground">
-              Choose a template to generate a structured inspection report
+              Choose a template to generate a structured inspection report with photographic evidence
             </p>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -306,9 +336,9 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
               <Button variant="outline" onClick={() => setSelectedTemplate(null)}>
                 Change Template
               </Button>
-              <Button onClick={handlePreviewReport} disabled={generating}>
+              <Button onClick={handlePreviewReport} disabled={isGenerating}>
                 <Eye className="mr-2 h-4 w-4" />
-                {generating ? "Generating..." : "Preview Report"}
+                {isGenerating ? "Generating..." : "Preview Report"}
               </Button>
             </div>
           </div>
@@ -321,7 +351,9 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
               <CardContent className="space-y-4">
                 {section.items?.map((item) => {
                   const sectionData = reportData[section.id] || {};
-                  const itemData = sectionData[item.id] || { status: '', notes: '' };
+                  const itemData = sectionData[item.id] || { status: '', notes: '', photos: [] };
+                  const photos = itemData.photos || [];
+                  
                   return (
                     <div key={item.id} className="border rounded-lg p-4 space-y-3">
                       <div className="flex items-start justify-between">
@@ -359,6 +391,66 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
                           />
                         </div>
                       </div>
+
+                      {/* Photo Upload Section */}
+                      <div className="space-y-2">
+                        <Label className="flex items-center gap-2">
+                          <ImageIcon className="h-4 w-4" />
+                          Photographic Evidence
+                        </Label>
+                        
+                        {/* Photo Grid */}
+                        {photos.length > 0 && (
+                          <div className="grid grid-cols-3 md:grid-cols-4 gap-2 mb-2">
+                            {photos.map((photo, idx) => (
+                              <div key={idx} className="relative aspect-square group">
+                                <img 
+                                  src={photo} 
+                                  alt={`Evidence ${idx + 1}`}
+                                  className="w-full h-full object-cover rounded-md border"
+                                />
+                                <button
+                                  type="button"
+                                  onClick={() => handleRemovePhoto(section.id, item.id, idx)}
+                                  className="absolute top-1 right-1 bg-destructive text-destructive-foreground rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
+                                >
+                                  <X className="h-3 w-3" />
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        
+                        {/* Upload Button */}
+                        <div>
+                          <input
+                            type="file"
+                            accept="image/*"
+                            id={`photo-${section.id}-${item.id}`}
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                handlePhotoUpload(section.id, item.id, file);
+                                e.target.value = '';
+                              }
+                            }}
+                          />
+                          <label htmlFor={`photo-${section.id}-${item.id}`}>
+                            <Button type="button" variant="outline" size="sm" asChild>
+                              <span className="cursor-pointer">
+                                <Camera className="mr-2 h-4 w-4" />
+                                Add Photo
+                              </span>
+                            </Button>
+                          </label>
+                          {photos.length > 0 && (
+                            <span className="ml-2 text-xs text-muted-foreground">
+                              {photos.length} photo{photos.length !== 1 ? 's' : ''} attached
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
                   );
                 })}
@@ -373,7 +465,6 @@ export const TemplateBasedReport = ({ subsectionId, subsectionName, siteName }: 
         onOpenChange={(open) => {
           setPreviewOpen(open);
           if (!open && previewUrl) {
-            URL.revokeObjectURL(previewUrl);
             setPreviewUrl("");
           }
         }}
