@@ -511,6 +511,7 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetV
               assets={electricalAssets} 
               inspectionMeterMatches={inspectionMeterMatches}
               siteName={siteName}
+              readOnly={readOnly}
               onDataUpdated={() => {
                 refetch();
                 queryClient.invalidateQueries({ queryKey: ["site-inspections-tenants", siteId] });
@@ -519,11 +520,11 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetV
           </TabsContent>
 
           <TabsContent value="meter-register">
-            <MeterRegister siteId={siteId} siteName={siteName} />
+            <MeterRegister siteId={siteId} siteName={siteName} readOnly={readOnly} />
           </TabsContent>
 
           <TabsContent value="electrical">
-            <AssetTable assets={electricalAssets} type="electrical" onRefresh={refetch} />
+            <AssetTable assets={electricalAssets} type="electrical" onRefresh={refetch} readOnly={readOnly} />
           </TabsContent>
         </Tabs>
       )}

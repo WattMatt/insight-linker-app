@@ -39,9 +39,10 @@ interface AssetTableProps {
   assets: Asset[];
   type: "electrical" | "water";
   onRefresh: () => void;
+  readOnly?: boolean;
 }
 
-export const AssetTable = ({ assets, type, onRefresh }: AssetTableProps) => {
+export const AssetTable = ({ assets, type, onRefresh, readOnly = false }: AssetTableProps) => {
   const [search, setSearch] = useState("");
   const [deleteAssetId, setDeleteAssetId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
@@ -130,7 +131,7 @@ export const AssetTable = ({ assets, type, onRefresh }: AssetTableProps) => {
                   </>
                 )}
                 <TableHead>Comments</TableHead>
-                <TableHead className="w-[50px]"></TableHead>
+                {!readOnly && <TableHead className="w-[50px]"></TableHead>}
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -166,16 +167,18 @@ export const AssetTable = ({ assets, type, onRefresh }: AssetTableProps) => {
                     <TableCell className="text-muted-foreground text-sm max-w-[200px] truncate">
                       {asset.comments || "-"}
                     </TableCell>
-                    <TableCell>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8 text-muted-foreground hover:text-destructive"
-                        onClick={() => setDeleteAssetId(asset.id)}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </TableCell>
+                    {!readOnly && (
+                      <TableCell>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                          onClick={() => setDeleteAssetId(asset.id)}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </TableCell>
+                    )}
                   </TableRow>
                 ))
               )}
