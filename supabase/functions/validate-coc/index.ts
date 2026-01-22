@@ -435,8 +435,10 @@ Scan the entire document and extract:
     {
       "category": "Safety | Technical | Administrative",
       "clause": "string",
-      "description": "string",
-      "reason": "detailed explanation",
+      "section": "string (Page X) - REQUIRED: Include page number in format 'Section Name (Page X)'",
+      "description": "string - what is wrong",
+      "reason": "detailed explanation with EXACT quoted evidence",
+      "evidence": "Page X, Section Y shows: '[exact quoted text or value]'",
       "immediateAction": "what must be done",
       "riskLevel": "High | Medium | Low"
     }
@@ -587,11 +589,15 @@ Every failure MUST be supported by DIRECT, VISIBLE evidence:
 **REQUIRED FORMAT for criticalFailures:**
 \`\`\`json
 {
+  "clause": "8.6",
+  "section": "Test Results - Insulation Resistance (Page 2)",
   "description": "MUST describe only what IS visible, not what should be",
   "reason": "MUST quote or reference EXACT visible text/values from document",
-  "evidence": "Page X, Row Y shows: '[exact quoted text or value]'"
+  "evidence": "Page 2, Row 3 shows: '[exact quoted text or value]'"
 }
 \`\`\`
+
+⚠️ CRITICAL: The "section" field MUST include the page number in parentheses (e.g., "(Page 1)", "(Page 2)") so users can navigate directly to the issue location.
 
 **FORBIDDEN in failure descriptions:**
 ❌ "Document states..." → Only if you can quote the EXACT text
