@@ -83,28 +83,88 @@ function encodeSupabaseStorageUrl(url: string): string {
   }
 }
 
+// Extract bucket and path from a Supabase storage URL
+function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
+  try {
+    if (!url.includes('/storage/v1/object/public/')) {
+      return null;
+    }
+    const urlObj = new URL(url);
+    const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
+    if (pathParts.length === 2) {
+      const filePathWithBucket = pathParts[1];
+      const firstSlashIndex = filePathWithBucket.indexOf('/');
+      if (firstSlashIndex > 0) {
+        const bucket = filePathWithBucket.substring(0, firstSlashIndex);
+        const filePath = filePathWithBucket.substring(firstSlashIndex + 1);
+        return { bucket, path: filePath };
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Global Supabase client for image fetching (initialized once per request)
+let supabaseClientForImages: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient(): ReturnType<typeof createClient> {
+  if (!supabaseClientForImages) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    supabaseClientForImages = createClient(supabaseUrl, supabaseServiceKey);
+  }
+  return supabaseClientForImages;
+}
+
 // Convert image URL to base64 data URI for reliable PDF rendering
+// Uses Supabase client for internal storage URLs to avoid 400 errors
 async function imageUrlToBase64(url: string): Promise<string> {
   try {
     if (!url || url.startsWith('data:')) {
       return url; // Already base64 or empty
     }
     
-    // Properly encode the URL to handle special characters in filenames
-    const encodedUrl = encodeSupabaseStorageUrl(url);
-    console.log(`[imageUrlToBase64] Fetching: ${encodedUrl.substring(0, 100)}...`);
+    console.log(`[imageUrlToBase64] Processing: ${url.substring(0, 100)}...`);
     
-    const response = await fetch(encodedUrl, { 
-      headers: { 'Accept': 'image/*' },
-    });
+    // Try to parse as Supabase storage URL first
+    const storageInfo = parseSupabaseStorageUrl(url);
     
-    if (!response.ok) {
-      console.error(`Failed to fetch image: ${encodedUrl} - Status: ${response.status}`);
-      return ''; // Return empty string if fetch fails
+    let arrayBuffer: ArrayBuffer;
+    let contentType = 'image/jpeg';
+    
+    if (storageInfo) {
+      // Use Supabase client to download from storage (bypasses public URL issues)
+      console.log(`[imageUrlToBase64] Using Supabase client for: ${storageInfo.bucket}/${storageInfo.path}`);
+      const supabase = getSupabaseClient();
+      const { data, error } = await supabase.storage
+        .from(storageInfo.bucket)
+        .download(storageInfo.path);
+      
+      if (error || !data) {
+        console.error(`Failed to download from storage: ${storageInfo.bucket}/${storageInfo.path}`, error);
+        return '';
+      }
+      
+      arrayBuffer = await data.arrayBuffer();
+      contentType = data.type || 'image/jpeg';
+      console.log(`[imageUrlToBase64] Downloaded via Supabase client: ${arrayBuffer.byteLength} bytes`);
+    } else {
+      // Fall back to regular fetch for external URLs
+      const encodedUrl = encodeSupabaseStorageUrl(url);
+      const response = await fetch(encodedUrl, { 
+        headers: { 'Accept': 'image/*' },
+      });
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch image: ${encodedUrl} - Status: ${response.status}`);
+        return '';
+      }
+      
+      contentType = response.headers.get('content-type') || 'image/jpeg';
+      arrayBuffer = await response.arrayBuffer();
     }
-    
-    const contentType = response.headers.get('content-type') || 'image/jpeg';
-    const arrayBuffer = await response.arrayBuffer();
     
     // Process in chunks to avoid stack overflow with large images
     const uint8Array = new Uint8Array(arrayBuffer);
