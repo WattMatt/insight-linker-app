@@ -21,6 +21,7 @@ const SiteDetail = lazy(() => import("./pages/SiteDetail"));
 const SubsectionDetail = lazy(() => import("./pages/SubsectionDetail"));
 const PublicSubsection = lazy(() => import("./pages/PublicSubsection"));
 const PublicSiteReview = lazy(() => import("./pages/PublicSiteReview"));
+const PublicSubsectionReview = lazy(() => import("./pages/PublicSubsectionReview"));
 const Sites = lazy(() => import("./pages/Sites"));
 const Inspections = lazy(() => import("./pages/Inspections"));
 const InspectionDetail = lazy(() => import("./pages/InspectionDetail"));
@@ -109,6 +110,7 @@ const App = () => (
           
           {/* Public Site Review - Magic link access */}
           <Route path="/review/:token" element={<PublicSiteReview />} />
+          <Route path="/review/:token/subsection/:subsectionId" element={<PublicSubsectionReview />} />
           
           <Route
             path="/dashboard"

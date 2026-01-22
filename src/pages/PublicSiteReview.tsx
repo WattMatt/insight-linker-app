@@ -742,7 +742,7 @@ const PublicSiteReview = () => {
 
           {/* Schematic Tab */}
           <TabsContent value="schematic" className="space-y-6">
-            <SchematicDiagram siteId={site.id} siteName={site.name} readOnly />
+            <SchematicDiagram siteId={site.id} siteName={site.name} readOnly accessToken={token} />
           </TabsContent>
 
           {/* Asset Verification Tab */}
