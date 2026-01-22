@@ -28,6 +28,44 @@ async function generateQRCodeSvgDataUri(url: string): Promise<string> {
   }
 }
 
+// Helper function to properly encode Supabase storage URLs
+function encodeSupabaseStorageUrl(url: string): string {
+  try {
+    // Parse the URL
+    const urlObj = new URL(url);
+    
+    // Check if it's a Supabase storage URL
+    if (urlObj.pathname.includes('/storage/v1/object/public/')) {
+      // Split the path to get bucket and file path
+      const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
+      if (pathParts.length === 2) {
+        const filePathWithBucket = pathParts[1];
+        // Split bucket from the rest of the path
+        const firstSlashIndex = filePathWithBucket.indexOf('/');
+        if (firstSlashIndex > 0) {
+          const bucket = filePathWithBucket.substring(0, firstSlashIndex);
+          const filePath = filePathWithBucket.substring(firstSlashIndex + 1);
+          
+          // Encode each path segment individually, then reconstruct
+          const encodedFilePath = filePath
+            .split('/')
+            .map(segment => encodeURIComponent(segment))
+            .join('/');
+          
+          // Reconstruct the full URL
+          return `${urlObj.origin}/storage/v1/object/public/${bucket}/${encodedFilePath}`;
+        }
+      }
+    }
+    
+    // Return original URL if not a Supabase storage URL
+    return url;
+  } catch (e) {
+    console.warn(`Failed to encode URL: ${url}`, e);
+    return url;
+  }
+}
+
 // Convert image URL to base64 data URI for reliable PDF rendering
 async function imageUrlToBase64(url: string): Promise<string> {
   try {
@@ -35,19 +73,33 @@ async function imageUrlToBase64(url: string): Promise<string> {
       return url; // Already base64 or empty
     }
     
-    const response = await fetch(url, { 
+    // Properly encode the URL to handle special characters in filenames
+    const encodedUrl = encodeSupabaseStorageUrl(url);
+    console.log(`[imageUrlToBase64] Fetching: ${encodedUrl.substring(0, 100)}...`);
+    
+    const response = await fetch(encodedUrl, { 
       headers: { 'Accept': 'image/*' },
     });
     
     if (!response.ok) {
-      console.error(`Failed to fetch image: ${url} - Status: ${response.status}`);
+      console.error(`Failed to fetch image: ${encodedUrl} - Status: ${response.status}`);
       return ''; // Return empty string if fetch fails
     }
     
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     const arrayBuffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)));
     
+    // Process in chunks to avoid stack overflow with large images
+    const uint8Array = new Uint8Array(arrayBuffer);
+    const chunkSize = 8192;
+    let base64 = '';
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      base64 += String.fromCharCode(...chunk);
+    }
+    base64 = btoa(base64);
+    
+    console.log(`[imageUrlToBase64] Successfully converted image (${uint8Array.length} bytes)`);
     return `data:${contentType};base64,${base64}`;
   } catch (error) {
     console.error(`Error converting image to base64: ${url}`, error);
