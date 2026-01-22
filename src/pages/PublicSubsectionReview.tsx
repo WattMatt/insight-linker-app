@@ -45,6 +45,7 @@ interface SubsectionData {
   metering_status?: string;
   meter_serial_number?: string;
   ct_ratio?: string;
+  is_compliant?: boolean;
 }
 
 interface SiteData {
@@ -67,6 +68,7 @@ interface DocumentFile {
   file_url: string;
   category_name?: string;
   uploaded_at?: string;
+  file_size?: number;
 }
 
 interface SnagData {
@@ -76,6 +78,8 @@ interface SnagData {
   status: string;
   risk_level?: string;
   created_at: string;
+  rectified_at?: string;
+  rectification_notes?: string;
 }
 
 interface InspectionData {
@@ -84,8 +88,23 @@ interface InspectionData {
   status: string;
   inspection_date?: string;
   template_name?: string;
+  inspector_name?: string;
+  quality_rating?: number;
 }
 
+interface ValidationData {
+  id: string;
+  status: string;
+  validated_at: string;
+  violations?: any[];
+}
+
+interface FloorPlanData {
+  id: string;
+  file_name: string;
+  file_url: string;
+  pins_count: number;
+}
 const PublicSubsectionReview = () => {
   const { token, subsectionId } = useParams<{ token: string; subsectionId: string }>();
   const navigate = useNavigate();
@@ -95,6 +114,8 @@ const PublicSubsectionReview = () => {
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
   const [inspections, setInspections] = useState<InspectionData[]>([]);
+  const [latestValidation, setLatestValidation] = useState<ValidationData | null>(null);
+  const [floorPlans, setFloorPlans] = useState<FloorPlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [companySettings, setCompanySettings] = useState<{ company_name: string; company_logo_url?: string } | null>(null);
@@ -173,7 +194,7 @@ const PublicSubsectionReview = () => {
       setSiteData(subsectionData.sites);
       setClientData(subsectionData.sites.clients);
 
-      // Fetch documents
+      // Fetch documents with file size
       const { data: docsData } = await supabase
         .from('subsection_documents')
         .select(`
@@ -181,9 +202,11 @@ const PublicSubsectionReview = () => {
           file_name,
           file_url,
           uploaded_at,
+          file_size,
           document_categories (name)
         `)
-        .eq('subsection_id', subsectionId);
+        .eq('subsection_id', subsectionId)
+        .order('uploaded_at', { ascending: false });
 
       if (docsData) {
         setDocuments(docsData.map(doc => ({
@@ -191,14 +214,15 @@ const PublicSubsectionReview = () => {
           file_name: doc.file_name,
           file_url: doc.file_url,
           category_name: doc.document_categories?.name,
-          uploaded_at: doc.uploaded_at
+          uploaded_at: doc.uploaded_at,
+          file_size: doc.file_size || undefined
         })));
       }
 
-      // Fetch snags
+      // Fetch snags with rectification data
       const { data: snagsData } = await supabase
         .from('snags')
-        .select('*')
+        .select('id, title, description, status, risk_level, created_at, rectified_at, rectification_notes')
         .eq('subsection_id', subsectionId)
         .order('created_at', { ascending: false });
 
@@ -206,7 +230,7 @@ const PublicSubsectionReview = () => {
         setSnags(snagsData);
       }
 
-      // Fetch inspections
+      // Fetch inspections with inspector info
       const { data: inspectionsData } = await supabase
         .from('inspections')
         .select(`
@@ -214,6 +238,8 @@ const PublicSubsectionReview = () => {
           title,
           status,
           inspection_date,
+          inspector_name,
+          quality_rating,
           inspection_templates (name)
         `)
         .eq('subsection_id', subsectionId)
@@ -225,7 +251,47 @@ const PublicSubsectionReview = () => {
           title: insp.title,
           status: insp.status,
           inspection_date: insp.inspection_date,
-          template_name: insp.inspection_templates?.name
+          template_name: insp.inspection_templates?.name,
+          inspector_name: insp.inspector_name || undefined,
+          quality_rating: insp.quality_rating || undefined
+        })));
+      }
+
+      // Fetch latest COC validation for this subsection
+      const { data: validationData } = await supabase
+        .from('coc_validations')
+        .select('id, status, validated_at, violations')
+        .eq('subsection_id', subsectionId)
+        .order('validated_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (validationData) {
+        setLatestValidation({
+          id: validationData.id,
+          status: validationData.status,
+          validated_at: validationData.validated_at,
+          violations: validationData.violations as any[] || []
+        });
+      }
+
+      // Fetch floor plans with pin count
+      const { data: floorPlanData } = await supabase
+        .from('subsection_floor_plans')
+        .select(`
+          id,
+          file_name,
+          file_url,
+          floor_plan_pins (id)
+        `)
+        .eq('subsection_id', subsectionId);
+
+      if (floorPlanData) {
+        setFloorPlans(floorPlanData.map(fp => ({
+          id: fp.id,
+          file_name: fp.file_name,
+          file_url: fp.file_url,
+          pins_count: fp.floor_plan_pins?.length || 0
         })));
       }
 
@@ -282,9 +348,16 @@ const PublicSubsectionReview = () => {
     return acc;
   }, {} as Record<string, DocumentFile[]>);
 
-  // Calculate stats
+  // Calculate stats from actual data
   const openSnags = snags.filter(s => s.status !== 'rectified').length;
-  const completedInspections = inspections.filter(i => i.status === 'completed').length;
+  const rectifiedSnags = snags.filter(s => s.status === 'rectified').length;
+  const completedInspections = inspections.filter(i => i.status?.toLowerCase() === 'completed').length;
+  const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
+  
+  // Determine effective compliance status based on latest validation
+  const effectiveComplianceStatus = latestValidation 
+    ? (latestValidation.status === 'Pass' ? 'Compliant' : 'Non-Compliant')
+    : (subsection?.coc_status?.toLowerCase() === 'approved' ? 'Compliant' : 'Pending Review');
 
   if (loading) {
     return (
@@ -473,16 +546,33 @@ const PublicSubsectionReview = () => {
 
       {/* KPI Stats */}
       <section className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          <Card className={`bg-gradient-to-br ${
+            effectiveComplianceStatus === 'Compliant' 
+              ? 'from-green-50 to-white border-green-200' 
+              : effectiveComplianceStatus === 'Non-Compliant'
+              ? 'from-red-50 to-white border-red-200'
+              : 'from-amber-50 to-white border-amber-200'
+          }`}>
+            <CardContent className="p-4 text-center">
+              <div className={`text-lg font-bold mb-1 ${
+                effectiveComplianceStatus === 'Compliant' ? 'text-green-600' : 
+                effectiveComplianceStatus === 'Non-Compliant' ? 'text-red-600' : 'text-amber-600'
+              }`}>
+                {effectiveComplianceStatus}
+              </div>
+              <div className="text-sm text-muted-foreground">Status</div>
+            </CardContent>
+          </Card>
           <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
             <CardContent className="p-4 text-center">
               <div className="text-3xl font-bold text-blue-600 mb-1">{documents.length}</div>
               <div className="text-sm text-muted-foreground">Documents</div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-green-50 to-white border-green-200">
+          <Card className="bg-gradient-to-br from-indigo-50 to-white border-indigo-200">
             <CardContent className="p-4 text-center">
-              <div className="text-3xl font-bold text-green-600 mb-1">{completedInspections}</div>
+              <div className="text-3xl font-bold text-indigo-600 mb-1">{inspections.length}</div>
               <div className="text-sm text-muted-foreground">Inspections</div>
             </CardContent>
           </Card>
@@ -494,10 +584,10 @@ const PublicSubsectionReview = () => {
               <div className="text-sm text-muted-foreground">Open Snags</div>
             </CardContent>
           </Card>
-          <Card className="bg-gradient-to-br from-purple-50 to-white border-purple-200">
+          <Card className="bg-gradient-to-br from-emerald-50 to-white border-emerald-200">
             <CardContent className="p-4 text-center">
-              <div className="text-3xl font-bold text-purple-600 mb-1">
-                {snags.filter(s => s.status === 'rectified').length}
+              <div className="text-3xl font-bold text-emerald-600 mb-1">
+                {rectifiedSnags}
               </div>
               <div className="text-sm text-muted-foreground">Resolved</div>
             </CardContent>
@@ -541,11 +631,28 @@ const PublicSubsectionReview = () => {
                 <CardContent>
                   <div className="space-y-4">
                     <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <span className="text-sm text-muted-foreground">Status</span>
+                      <span className="text-sm text-muted-foreground">COC Status</span>
                       <Badge className={`${getCocStatusColor(subsection.coc_status)} text-white`}>
                         {subsection.coc_status || 'Not Available'}
                       </Badge>
                     </div>
+                    {latestValidation && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
+                        <span className="text-sm text-muted-foreground">Validation Result</span>
+                        <div className="flex items-center gap-2">
+                          <Badge className={`${
+                            latestValidation.status === 'Pass' ? 'bg-green-500' : 
+                            latestValidation.status === 'Fail' ? 'bg-destructive' : 
+                            'bg-amber-500'
+                          } text-white`}>
+                            {latestValidation.status}
+                          </Badge>
+                          <span className="text-xs text-muted-foreground">
+                            {new Date(latestValidation.validated_at).toLocaleDateString()}
+                          </span>
+                        </div>
+                      </div>
+                    )}
                     {subsection.coc_number && (
                       <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
                         <span className="text-sm text-muted-foreground">Certificate Number</span>
@@ -567,7 +674,21 @@ const PublicSubsectionReview = () => {
                         </span>
                       </div>
                     )}
-                    {!subsection.coc_number && !subsection.coc_type && (
+                    {latestValidation?.violations && latestValidation.violations.length > 0 && (
+                      <div className="mt-4 pt-4 border-t">
+                        <p className="text-sm font-medium text-destructive mb-2">
+                          {latestValidation.violations.length} Validation Issue{latestValidation.violations.length !== 1 ? 's' : ''}
+                        </p>
+                        <div className="space-y-2 max-h-40 overflow-y-auto">
+                          {latestValidation.violations.slice(0, 5).map((v: any, i: number) => (
+                            <div key={i} className="text-xs p-2 rounded bg-destructive/10 text-destructive">
+                              {v.message || v.description || JSON.stringify(v)}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!subsection.coc_number && !subsection.coc_type && !latestValidation && (
                       <div className="text-center py-6 text-muted-foreground">
                         <Shield className="h-10 w-10 mx-auto mb-2 opacity-30" />
                         <p>No COC details available</p>
@@ -701,7 +822,7 @@ const PublicSubsectionReview = () => {
               <CardHeader>
                 <CardTitle>Inspections</CardTitle>
                 <CardDescription>
-                  {inspections.length} inspection{inspections.length !== 1 ? 's' : ''} recorded
+                  {inspections.length} inspection{inspections.length !== 1 ? 's' : ''} recorded • {completedInspections} completed
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -716,9 +837,12 @@ const PublicSubsectionReview = () => {
                           <div className={`w-3 h-3 rounded-full ${getInspectionStatusColor(insp.status)}`} />
                           <div>
                             <p className="font-medium">{insp.title}</p>
-                            <div className="flex items-center gap-4 text-sm text-muted-foreground mt-1">
+                            <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground mt-1">
                               {insp.template_name && (
-                                <span>{insp.template_name}</span>
+                                <span className="flex items-center gap-1">
+                                  <ClipboardList className="h-3 w-3" />
+                                  {insp.template_name}
+                                </span>
                               )}
                               {insp.inspection_date && (
                                 <span className="flex items-center gap-1">
@@ -726,15 +850,28 @@ const PublicSubsectionReview = () => {
                                   {new Date(insp.inspection_date).toLocaleDateString()}
                                 </span>
                               )}
+                              {insp.inspector_name && (
+                                <span className="flex items-center gap-1">
+                                  <Eye className="h-3 w-3" />
+                                  {insp.inspector_name}
+                                </span>
+                              )}
                             </div>
                           </div>
                         </div>
-                        <Badge 
-                          variant={insp.status === 'completed' ? 'default' : 'secondary'}
-                          className={insp.status === 'completed' ? 'bg-green-500' : ''}
-                        >
-                          {insp.status}
-                        </Badge>
+                        <div className="flex items-center gap-2">
+                          {insp.quality_rating && insp.quality_rating > 0 && (
+                            <Badge variant="outline" className="text-xs">
+                              {insp.quality_rating}/5
+                            </Badge>
+                          )}
+                          <Badge 
+                            variant={insp.status?.toLowerCase() === 'completed' ? 'default' : 'secondary'}
+                            className={insp.status?.toLowerCase() === 'completed' ? 'bg-green-500 text-white' : ''}
+                          >
+                            {insp.status || 'Unknown'}
+                          </Badge>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -757,7 +894,7 @@ const PublicSubsectionReview = () => {
                   Outstanding Issues
                 </CardTitle>
                 <CardDescription>
-                  {openSnags} open issue{openSnags !== 1 ? 's' : ''} • {snags.filter(s => s.status === 'rectified').length} resolved
+                  {openSnags} open issue{openSnags !== 1 ? 's' : ''} • {rectifiedSnags} resolved
                 </CardDescription>
               </CardHeader>
               <CardContent>
@@ -774,13 +911,19 @@ const PublicSubsectionReview = () => {
                             variant={snag.status === 'rectified' ? 'secondary' : 'destructive'}
                             className={snag.status === 'rectified' ? 'bg-green-500 text-white' : ''}
                           >
-                            {snag.status === 'rectified' ? 'Resolved' : snag.status}
+                            {snag.status === 'rectified' ? 'Resolved' : snag.status || 'Open'}
                           </Badge>
                         </div>
                         {snag.description && (
                           <p className="text-sm text-muted-foreground mb-3">{snag.description}</p>
                         )}
-                        <div className="flex items-center gap-4 text-xs">
+                        {snag.status === 'rectified' && snag.rectification_notes && (
+                          <div className="p-2 bg-green-100/50 rounded text-sm text-green-800 mb-3">
+                            <span className="font-medium">Resolution: </span>
+                            {snag.rectification_notes}
+                          </div>
+                        )}
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
                           {snag.risk_level && (
                             <Badge variant="outline" className={getSnagRiskColor(snag.risk_level)}>
                               {snag.risk_level.charAt(0).toUpperCase() + snag.risk_level.slice(1)} Risk
@@ -788,8 +931,14 @@ const PublicSubsectionReview = () => {
                           )}
                           <span className="text-muted-foreground flex items-center gap-1">
                             <Calendar className="h-3 w-3" />
-                            {new Date(snag.created_at).toLocaleDateString()}
+                            Created: {new Date(snag.created_at).toLocaleDateString()}
                           </span>
+                          {snag.rectified_at && (
+                            <span className="text-green-600 flex items-center gap-1">
+                              <CheckCircle2 className="h-3 w-3" />
+                              Resolved: {new Date(snag.rectified_at).toLocaleDateString()}
+                            </span>
+                          )}
                         </div>
                       </div>
                     ))}
