@@ -119,103 +119,141 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// SIMPLIFIED IMAGE HANDLING - Let PDFShift fetch images directly
+// IMAGE HANDLING - Convert to Base64 with strict limits for memory safety
 // ============================================================================
-// PDFShift supports fetching images from public URLs directly, which eliminates
-// all memory issues from downloading and converting images to base64 in the edge function.
-// This is the recommended approach for production PDF generation with images.
+// PDFShift cannot access Supabase storage URLs (require auth), so we must convert 
+// images to Base64 data URIs. We use STRICT limits to avoid memory exhaustion.
 
-// Simple URL validation and cleanup for images
-function cleanImageUrl(url: string): string {
+const MAX_IMAGES_PER_REPORT = 8;  // Hard limit on total images per report
+const MAX_IMAGE_SIZE_KB = 800;    // Skip images larger than 800KB raw
+let imageCounter = 0;
+
+// Convert a single image URL to Base64 data URI
+async function imageUrlToBase64(url: string): Promise<string> {
   if (!url || typeof url !== 'string') return '';
   if (url.startsWith('data:')) return url; // Already data URI
   
+  // Check global limit
+  if (imageCounter >= MAX_IMAGES_PER_REPORT) {
+    console.log(`[base64] Skipping - global limit reached (${MAX_IMAGES_PER_REPORT})`);
+    return '';
+  }
+  
   try {
-    // Ensure URL is properly formed
-    const parsed = new URL(url);
-    return parsed.href;
-  } catch {
+    const response = await fetch(url, {
+      headers: { 'Accept': 'image/*' },
+      signal: AbortSignal.timeout(5000), // 5 second timeout
+    });
+    
+    if (!response.ok) {
+      console.log(`[base64] Failed to fetch: ${response.status}`);
+      return '';
+    }
+    
+    const arrayBuffer = await response.arrayBuffer();
+    const sizeKB = arrayBuffer.byteLength / 1024;
+    
+    if (sizeKB > MAX_IMAGE_SIZE_KB) {
+      console.log(`[base64] Skipping oversized image: ${sizeKB.toFixed(0)}KB`);
+      return '';
+    }
+    
+    // Determine content type
+    const contentType = response.headers.get('content-type') || 'image/jpeg';
+    
+    // Convert to Base64 in chunks to avoid stack overflow
+    const uint8Array = new Uint8Array(arrayBuffer);
+    let binaryString = '';
+    const chunkSize = 8192;
+    for (let i = 0; i < uint8Array.length; i += chunkSize) {
+      const chunk = uint8Array.slice(i, i + chunkSize);
+      binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+    }
+    const base64 = btoa(binaryString);
+    
+    imageCounter++;
+    console.log(`[base64] Converted image ${imageCounter}/${MAX_IMAGES_PER_REPORT} (${sizeKB.toFixed(0)}KB)`);
+    return `data:${contentType};base64,${base64}`;
+  } catch (error) {
+    console.log(`[base64] Error: ${error instanceof Error ? error.message : 'Unknown'}`);
     return '';
   }
 }
 
-// Process inspection photos - just validates URLs, doesn't download anything
-// PDFShift will fetch images directly from the URLs
+// Process inspection photos - convert to Base64 with strict limits
 async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
+  // Reset counter for each report
+  imageCounter = 0;
   const processed = { ...inspection };
-  let validCount = 0;
-  let invalidCount = 0;
   
-  // Process section item photos - keep all valid URLs
+  // Process section item photos - LIMIT to 1 per item, max 4 items total
+  let itemPhotoCount = 0;
+  const MAX_ITEM_PHOTOS = 4;
+  
   if (processed.sections) {
     for (const section of processed.sections) {
-      if (section.items) {
+      if (section.items && itemPhotoCount < MAX_ITEM_PHOTOS) {
         for (const item of section.items) {
-          if (item.photos && item.photos.length > 0) {
-            const validPhotos = item.photos
-              .map((url: string) => cleanImageUrl(url))
-              .filter((url: string) => url.length > 0);
-            
-            validCount += validPhotos.length;
-            invalidCount += item.photos.length - validPhotos.length;
-            item.photos = validPhotos;
+          if (item.photos && item.photos.length > 0 && itemPhotoCount < MAX_ITEM_PHOTOS) {
+            // Only take first photo from each item
+            const firstPhoto = item.photos[0];
+            const base64 = await imageUrlToBase64(firstPhoto);
+            item.photos = base64 ? [base64] : [];
+            if (base64) itemPhotoCount++;
+          } else {
+            item.photos = [];
           }
         }
       }
     }
   }
   
-  // Process tenant photos (meterImage, breakerImage, ctRatioImage)
-  if (processed.tenants) {
-    for (const tenant of processed.tenants) {
-      if (tenant.meterImage) {
-        const clean = cleanImageUrl(tenant.meterImage);
-        tenant.meterImage = clean || null;
-        if (clean) validCount++; else invalidCount++;
-      }
-      if (tenant.breakerImage) {
-        const clean = cleanImageUrl(tenant.breakerImage);
-        tenant.breakerImage = clean || null;
-        if (clean) validCount++; else invalidCount++;
-      }
-      if (tenant.ctRatioImage) {
-        const clean = cleanImageUrl(tenant.ctRatioImage);
-        tenant.ctRatioImage = clean || null;
-        if (clean) validCount++; else invalidCount++;
-      }
+  // Process tenant photos - LIMIT to first tenant only
+  if (processed.tenants && processed.tenants.length > 0) {
+    const firstTenant = processed.tenants[0];
+    if (firstTenant.meterImage) {
+      firstTenant.meterImage = await imageUrlToBase64(firstTenant.meterImage);
+    }
+    if (firstTenant.breakerImage) {
+      firstTenant.breakerImage = await imageUrlToBase64(firstTenant.breakerImage);
+    }
+    // Skip other tenants' images
+    for (let i = 1; i < processed.tenants.length; i++) {
+      processed.tenants[i].meterImage = null;
+      processed.tenants[i].breakerImage = null;
+      processed.tenants[i].ctRatioImage = null;
     }
   }
   
-  // Process snag photos - keep all valid URLs
+  // Process snag photos - LIMIT to 1 per snag, max 2 snags
+  let snagPhotoCount = 0;
+  const MAX_SNAG_PHOTOS = 2;
+  
   if (processed.snags) {
     for (const snag of processed.snags) {
-      if (snag.photos && snag.photos.length > 0) {
-        const validPhotos = snag.photos
-          .map((url: string) => cleanImageUrl(url))
-          .filter((url: string) => url.length > 0);
-        
-        validCount += validPhotos.length;
-        invalidCount += snag.photos.length - validPhotos.length;
-        snag.photos = validPhotos;
+      if (snag.photos && snag.photos.length > 0 && snagPhotoCount < MAX_SNAG_PHOTOS) {
+        const firstPhoto = snag.photos[0];
+        const base64 = await imageUrlToBase64(firstPhoto);
+        snag.photos = base64 ? [base64] : [];
+        if (base64) snagPhotoCount++;
+      } else {
+        snag.photos = [];
       }
     }
   }
   
-  // Process signature URLs
+  // Process signature URLs - allow all (usually small)
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        const clean = cleanImageUrl(sig.signatureUrl);
-        sig.signatureUrl = clean || null;
-        if (clean) validCount++; else invalidCount++;
+        sig.signatureUrl = await imageUrlToBase64(sig.signatureUrl);
       }
     }
   }
   
-  console.log(`[processPhotos] URL validation complete: ${validCount} valid, ${invalidCount} invalid`);
-  console.log('[processPhotos] PDFShift will fetch images directly from URLs');
+  console.log(`[processPhotos] Completed with ${imageCounter} images converted to Base64`);
   return processed;
 }
 
