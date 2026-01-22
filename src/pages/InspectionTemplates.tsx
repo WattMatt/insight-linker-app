@@ -429,7 +429,7 @@ const InspectionTemplates = () => {
       const docDefinition: TDocumentDefinitions = {
         content,
         styles: DEFAULT_STYLES,
-        defaultStyle: { font: 'Helvetica', fontSize: 10 },
+        defaultStyle: { font: 'Roboto', fontSize: 10 },
         pageMargins: [40, 40, 40, 60],
         footer: (currentPage: number, pageCount: number) => {
           if (currentPage === 1) return null;

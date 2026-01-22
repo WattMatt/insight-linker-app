@@ -50,8 +50,8 @@ export const DOCUMENT_DESIGN_STANDARDS = {
   typography: {
     // Font families
     fonts: {
-      heading: 'Helvetica-Bold',
-      body: 'Helvetica',
+      heading: 'Roboto',
+      body: 'Roboto',
       mono: 'Courier',
     },
     
