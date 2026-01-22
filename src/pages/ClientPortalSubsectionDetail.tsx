@@ -1,50 +1,58 @@
-import { useParams, Link, useSearchParams } from "react-router-dom";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { FileText, Download, Info } from "lucide-react";
+import { 
+  FileText, Download, Info, Eye, ArrowLeft, 
+  CheckCircle2, AlertCircle, Calendar, Hash, User, Zap,
+  Building2, MapPin, ChevronRight, Layers, FileBarChart,
+  ShieldCheck, Clock
+} from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
-import { useEffect } from "react";
-import { Breadcrumbs } from "@/components/Breadcrumb";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import { downloadFile } from "@/lib/fileDownload";
+import { format } from "date-fns";
 
 const ClientPortalSubsectionDetail = () => {
   const { subsectionId } = useParams();
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const previewClientId = searchParams.get("preview");
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
-  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState("overview");
+  const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
     queryKey: ["client-subsection", subsectionId, clientInfo?.client_id],
     enabled: !!subsectionId && !!clientInfo?.client_id,
     queryFn: async () => {
-      // Fetch subsection with site info including client_id for verification
       const { data, error } = await supabase
         .from("subsections")
-        .select("*, sites(name, id, client_id)")
+        .select("*, sites(name, id, client_id, address)")
         .eq("id", subsectionId!)
         .single();
 
       if (error) throw error;
       
-      // Verify client owns this subsection's site
       if (data?.sites?.client_id !== clientInfo!.client_id) {
-        throw new Error("Access denied: You don't have permission to view this subsection");
+        throw new Error("Access denied");
       }
       
       return data;
     },
   });
 
-  const { data: documents, isLoading: docsLoading } = useQuery({
+  const { data: documents = [], isLoading: docsLoading } = useQuery({
     queryKey: ["client-subsection-documents", subsectionId],
-    enabled: !!subsectionId && !!subsection, // Only fetch if subsection access is verified
+    enabled: !!subsectionId && !!subsection,
     queryFn: async () => {
-      // RLS policies ensure client can only see documents for their subsections
       const { data, error } = await supabase
         .from("subsection_documents")
         .select("*, document_categories(name)")
@@ -52,74 +60,57 @@ const ClientPortalSubsectionDetail = () => {
         .order("uploaded_at", { ascending: false });
 
       if (error) throw error;
-      return data;
+      return data || [];
     },
   });
 
-  // Set up real-time subscriptions
-  useEffect(() => {
-    if (!subsectionId) return;
+  const { data: inspections = [] } = useQuery({
+    queryKey: ["client-subsection-inspections", subsectionId],
+    enabled: !!subsectionId && !!subsection,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("inspections")
+        .select("*")
+        .eq("subsection_id", subsectionId!)
+        .order("created_at", { ascending: false });
 
-    // Subscribe to subsection changes
-    const subsectionChannel = supabase
-      .channel(`client-subsection-${subsectionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'subsections',
-          filter: `id=eq.${subsectionId}`
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["client-subsection", subsectionId] });
-        }
-      )
-      .subscribe();
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
-    // Subscribe to document changes
-    const documentsChannel = supabase
-      .channel(`client-subsection-docs-${subsectionId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'subsection_documents',
-          filter: `subsection_id=eq.${subsectionId}`
-        },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ["client-subsection-documents", subsectionId] });
-        }
-      )
-      .subscribe();
+  const { data: floorPlans = [] } = useQuery({
+    queryKey: ["client-subsection-floor-plans", subsectionId],
+    enabled: !!subsectionId && !!subsection,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("subsection_floor_plans")
+        .select("*, floor_plan_pins(*)")
+        .eq("subsection_id", subsectionId!);
 
-    return () => {
-      supabase.removeChannel(subsectionChannel);
-      supabase.removeChannel(documentsChannel);
-    };
-  }, [subsectionId, queryClient]);
+      if (error) throw error;
+      return data || [];
+    },
+  });
 
   const handleDownload = async (url: string, fileName: string) => {
     try {
-      const response = await fetch(url);
-      const blob = await response.blob();
-      const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      await downloadFile(url, fileName);
     } catch (error) {
       console.error("Error downloading document:", error);
+    }
+  };
+
+  const handleBackToSite = () => {
+    if (subsection?.site_id) {
+      navigate(`/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`);
     }
   };
 
   if (subsectionLoading) {
     return (
       <div className="space-y-6">
+        <Skeleton className="h-12 w-48" />
         <Skeleton className="h-32 w-full" />
         <Skeleton className="h-64 w-full" />
       </div>
@@ -130,7 +121,9 @@ const ClientPortalSubsectionDetail = () => {
     return (
       <Card>
         <CardContent className="py-12 text-center">
+          <AlertCircle className="h-12 w-12 text-muted-foreground mx-auto mb-4" />
           <p className="text-lg font-medium">Subsection not found</p>
+          <p className="text-muted-foreground mt-1">This subsection may not exist or you don't have access to it.</p>
           <Link to="/client-portal/sites">
             <Button className="mt-4">Back to Sites</Button>
           </Link>
@@ -141,156 +134,441 @@ const ClientPortalSubsectionDetail = () => {
 
   const getStatusColor = (status: string) => {
     switch (status?.toLowerCase()) {
-      case "compliant": return "bg-green-500";
-      case "missing": return "bg-red-500";
-      case "expired": return "bg-orange-500";
-      default: return "bg-gray-500";
+      case "compliant": case "valid": case "approved": case "pass": return "bg-emerald-500";
+      case "missing": return "bg-destructive";
+      case "expired": return "bg-amber-500";
+      default: return "bg-muted-foreground";
     }
   };
 
+  const getStatusIcon = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case "compliant": case "valid": case "approved": case "pass": 
+        return <CheckCircle2 className="h-4 w-4" />;
+      case "missing": case "expired": 
+        return <AlertCircle className="h-4 w-4" />;
+      default: 
+        return <Clock className="h-4 w-4" />;
+    }
+  };
+
+  // Group documents by category
+  const groupedDocuments = documents.reduce((acc, doc) => {
+    const categoryName = (doc.document_categories as any)?.name || "Uncategorized";
+    if (!acc[categoryName]) acc[categoryName] = [];
+    acc[categoryName].push(doc);
+    return acc;
+  }, {} as Record<string, typeof documents>);
+
+  const totalPins = floorPlans.reduce((sum, fp) => sum + (fp.floor_plan_pins?.length || 0), 0);
+  const completedInspections = inspections.filter(i => i.status === "completed").length;
+
   return (
     <div className="space-y-6">
-      {/* Breadcrumbs */}
-      <Breadcrumbs 
-        items={[
-          { label: "Sites", href: `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
-          { label: subsection.sites?.name || "Site", href: `/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
-          { label: subsection.name, icon: "subsection" }
-        ]} 
-      />
+      {/* Navigation Header */}
+      <div className="flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={handleBackToSite}
+          className="gap-2"
+        >
+          <ArrowLeft className="h-4 w-4" />
+          Back to Site
+        </Button>
+        
+        {/* Breadcrumb Trail */}
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Link 
+            to={`/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`}
+            className="hover:text-foreground transition-colors"
+          >
+            Sites
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <Link 
+            to={`/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`}
+            className="hover:text-foreground transition-colors"
+          >
+            {subsection.sites?.name}
+          </Link>
+          <ChevronRight className="h-4 w-4" />
+          <span className="text-foreground font-medium">{subsection.name}</span>
+        </div>
+      </div>
 
       {previewClientId && (
-        <Alert className="bg-blue-50 border-blue-200">
-          <Info className="h-4 w-4 text-blue-600" />
-          <AlertDescription className="text-blue-800">
+        <Alert className="bg-primary/5 border-primary/20">
+          <Info className="h-4 w-4 text-primary" />
+          <AlertDescription className="text-primary">
             <strong>Admin Preview Mode:</strong> Viewing as{" "}
             {clientInfo?.clients?.company_name || clientInfo?.clients?.name}
           </AlertDescription>
         </Alert>
       )}
       
-      {/* Subsection Header */}
-      <Card>
-        <CardHeader>
+      {/* Subsection Header Card */}
+      <Card className="overflow-hidden">
+        <div className="bg-gradient-to-r from-primary/10 to-primary/5 p-6">
           <div className="flex items-start justify-between">
             <div className="flex items-center gap-4">
-              <div className="h-16 w-16 bg-primary/10 rounded-lg flex items-center justify-center">
-                <FileText className="h-8 w-8 text-primary" />
+              <div className="h-16 w-16 bg-background rounded-xl flex items-center justify-center shadow-sm">
+                <Layers className="h-8 w-8 text-primary" />
               </div>
               <div>
-                <CardTitle className="text-2xl">{subsection.name}</CardTitle>
+                <h1 className="text-2xl font-bold">{subsection.name}</h1>
                 {subsection.description && (
                   <p className="text-muted-foreground mt-1">{subsection.description}</p>
                 )}
-                <p className="text-sm text-muted-foreground mt-2">
-                  Site: {subsection.sites?.name}
-                </p>
+                <div className="flex items-center gap-2 mt-2 text-sm text-muted-foreground">
+                  <Building2 className="h-4 w-4" />
+                  <span>{subsection.sites?.name}</span>
+                  {subsection.sites?.address && (
+                    <>
+                      <span>•</span>
+                      <MapPin className="h-4 w-4" />
+                      <span>{subsection.sites.address}</span>
+                    </>
+                  )}
+                </div>
               </div>
             </div>
-          </div>
-        </CardHeader>
-        <CardContent>
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             {subsection.coc_status && (
-              <div>
-                <p className="text-sm text-muted-foreground">COC Status</p>
-                <Badge className={`${getStatusColor(subsection.coc_status)} text-white mt-1`}>
-                  {subsection.coc_status}
-                </Badge>
-              </div>
+              <Badge className={`${getStatusColor(subsection.coc_status)} text-white gap-1.5`}>
+                {getStatusIcon(subsection.coc_status)}
+                COC: {subsection.coc_status}
+              </Badge>
             )}
-            {subsection.coc_number && (
-              <div>
-                <p className="text-sm text-muted-foreground">COC Number</p>
-                <p className="font-medium mt-1">{subsection.coc_number}</p>
-              </div>
-            )}
-            {subsection.coc_issue_date && (
-              <div>
-                <p className="text-sm text-muted-foreground">COC Issue Date</p>
-                <p className="font-medium mt-1">
-                  {new Date(subsection.coc_issue_date).toLocaleDateString()}
-                </p>
-              </div>
-            )}
-            {subsection.coc_type && (
-              <div>
-                <p className="text-sm text-muted-foreground">COC Type</p>
-                <p className="font-medium mt-1">{subsection.coc_type}</p>
-              </div>
-            )}
-            {subsection.tenant_name && (
-              <div>
-                <p className="text-sm text-muted-foreground">Tenant Name</p>
-                <p className="font-medium mt-1">{subsection.tenant_name}</p>
-              </div>
-            )}
-            {subsection.meter_serial_number && (
-              <div>
-                <p className="text-sm text-muted-foreground">Meter Serial Number</p>
-                <p className="font-medium mt-1">{subsection.meter_serial_number}</p>
-              </div>
-            )}
+          </div>
+        </div>
+
+        {/* Quick Stats */}
+        <CardContent className="pt-4">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+            <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-2xl font-bold text-primary">{documents.length}</div>
+              <div className="text-xs text-muted-foreground">Documents</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-2xl font-bold text-primary">{inspections.length}</div>
+              <div className="text-xs text-muted-foreground">Inspections</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-2xl font-bold text-primary">{floorPlans.length}</div>
+              <div className="text-xs text-muted-foreground">Floor Plans</div>
+            </div>
+            <div className="text-center p-3 rounded-lg bg-muted/30">
+              <div className="text-2xl font-bold text-primary">{totalPins}</div>
+              <div className="text-xs text-muted-foreground">Annotations</div>
+            </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Documents */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Documents</CardTitle>
-        </CardHeader>
-        <CardContent>
+      {/* Tabbed Content */}
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+        <TabsList className="grid w-full grid-cols-3 lg:w-auto lg:inline-flex">
+          <TabsTrigger value="overview" className="gap-2">
+            <Info className="h-4 w-4" />
+            <span className="hidden sm:inline">Overview</span>
+          </TabsTrigger>
+          <TabsTrigger value="documents" className="gap-2">
+            <FileText className="h-4 w-4" />
+            <span className="hidden sm:inline">Documents</span>
+            {documents.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{documents.length}</Badge>
+            )}
+          </TabsTrigger>
+          <TabsTrigger value="inspections" className="gap-2">
+            <ShieldCheck className="h-4 w-4" />
+            <span className="hidden sm:inline">Inspections</span>
+            {inspections.length > 0 && (
+              <Badge variant="secondary" className="ml-1 text-xs">{inspections.length}</Badge>
+            )}
+          </TabsTrigger>
+        </TabsList>
+
+        {/* Overview Tab */}
+        <TabsContent value="overview" className="space-y-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            {/* COC Details Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <ShieldCheck className="h-5 w-5 text-primary" />
+                  Certificate of Compliance
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {subsection.coc_status ? (
+                  <>
+                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                      <span className="text-sm text-muted-foreground">Status</span>
+                      <Badge className={`${getStatusColor(subsection.coc_status)} text-white`}>
+                        {subsection.coc_status}
+                      </Badge>
+                    </div>
+                    {subsection.coc_number && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Hash className="h-4 w-4" /> COC Number
+                        </span>
+                        <span className="font-medium">{subsection.coc_number}</span>
+                      </div>
+                    )}
+                    {subsection.coc_issue_date && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Calendar className="h-4 w-4" /> Issue Date
+                        </span>
+                        <span className="font-medium">
+                          {format(new Date(subsection.coc_issue_date), "dd MMM yyyy")}
+                        </span>
+                      </div>
+                    )}
+                    {subsection.coc_type && (
+                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                        <span className="text-sm text-muted-foreground flex items-center gap-2">
+                          <Zap className="h-4 w-4" /> Type
+                        </span>
+                        <span className="font-medium">{subsection.coc_type}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No COC information available</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Tenant & Meter Details Card */}
+            <Card>
+              <CardHeader>
+                <CardTitle className="text-lg flex items-center gap-2">
+                  <User className="h-5 w-5 text-primary" />
+                  Tenant & Metering
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {subsection.tenant_name && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                    <span className="text-sm text-muted-foreground">Tenant Name</span>
+                    <span className="font-medium">{subsection.tenant_name}</span>
+                  </div>
+                )}
+                {subsection.meter_serial_number && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                    <span className="text-sm text-muted-foreground">Meter Serial</span>
+                    <span className="font-mono font-medium">{subsection.meter_serial_number}</span>
+                  </div>
+                )}
+                {subsection.ct_ratio && (
+                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                    <span className="text-sm text-muted-foreground">CT Ratio</span>
+                    <span className="font-medium">{subsection.ct_ratio}</span>
+                  </div>
+                )}
+                {!subsection.tenant_name && !subsection.meter_serial_number && !subsection.ct_ratio && (
+                  <div className="text-center py-6 text-muted-foreground">
+                    <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                    <p>No tenant or metering information</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Recent Activity Summary */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <FileBarChart className="h-5 w-5 text-primary" />
+                Activity Summary
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center">
+                      <FileText className="h-5 w-5 text-primary" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{documents.length}</p>
+                      <p className="text-xs text-muted-foreground">Total Documents</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-emerald-500/10 flex items-center justify-center">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{completedInspections}</p>
+                      <p className="text-xs text-muted-foreground">Completed Inspections</p>
+                    </div>
+                  </div>
+                </div>
+                <div className="p-4 rounded-lg border">
+                  <div className="flex items-center gap-3">
+                    <div className="h-10 w-10 rounded-lg bg-accent flex items-center justify-center">
+                      <MapPin className="h-5 w-5 text-accent-foreground" />
+                    </div>
+                    <div>
+                      <p className="text-2xl font-bold">{totalPins}</p>
+                      <p className="text-xs text-muted-foreground">Floor Plan Annotations</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </TabsContent>
+
+        {/* Documents Tab */}
+        <TabsContent value="documents" className="space-y-4">
           {docsLoading ? (
             <div className="space-y-2">
               {[1, 2, 3].map((i) => (
                 <Skeleton key={i} className="h-16 w-full" />
               ))}
             </div>
-          ) : documents && documents.length > 0 ? (
-            <div className="space-y-2">
-              {documents.map((doc) => (
-                <div 
-                  key={doc.id}
-                  className="flex items-center justify-between p-4 rounded-lg border hover:bg-accent transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <FileText className="h-5 w-5 text-muted-foreground" />
-                    <div>
-                      <p className="font-medium">{doc.file_name}</p>
-                      <div className="flex items-center gap-2 mt-1">
-                        {doc.document_categories && (
-                          <Badge variant="secondary" className="text-xs">
-                            {doc.document_categories.name}
-                          </Badge>
-                        )}
-                        {doc.file_size && (
-                          <span className="text-xs text-muted-foreground">
-                            {(doc.file_size / 1024 / 1024).toFixed(2)} MB
-                          </span>
-                        )}
+          ) : Object.keys(groupedDocuments).length > 0 ? (
+            <Accordion type="multiple" defaultValue={[]} className="space-y-3">
+              {Object.entries(groupedDocuments).sort(([a], [b]) => a.localeCompare(b)).map(([category, docs]) => (
+                <AccordionItem key={category} value={category} className="border-none">
+                  <Card className="overflow-hidden">
+                    <AccordionTrigger className="px-4 sm:px-6 py-3 sm:py-4 hover:no-underline hover:bg-primary/5 transition-colors">
+                      <div className="flex items-center gap-3">
+                        <FileText className="h-5 w-5 text-primary" />
+                        <span className="font-semibold">{category}</span>
+                        <Badge variant="secondary" className="text-xs">
+                          {docs.length} files
+                        </Badge>
                       </div>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-4 sm:px-6 pb-4">
+                      <div className="grid gap-2 mt-2">
+                        {docs.map((doc) => (
+                          <div 
+                            key={doc.id}
+                            className="flex flex-col sm:flex-row sm:items-center justify-between p-3 rounded-lg border group hover:bg-primary/5 transition-colors gap-2"
+                          >
+                            <div className="flex items-center gap-3 min-w-0">
+                              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+                              <div className="min-w-0">
+                                <span className="text-sm font-medium truncate block">{doc.file_name}</span>
+                                {doc.uploaded_at && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Uploaded {format(new Date(doc.uploaded_at), "dd MMM yyyy")}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity justify-end">
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => setPreviewDocument({ url: doc.file_url, name: doc.file_name })}
+                              >
+                                <Eye className="h-4 w-4" />
+                              </Button>
+                              <Button 
+                                size="sm" 
+                                variant="ghost" 
+                                onClick={() => handleDownload(doc.file_url, doc.file_name)}
+                              >
+                                <Download className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </AccordionContent>
+                  </Card>
+                </AccordionItem>
+              ))}
+            </Accordion>
+          ) : (
+            <Card>
+              <CardContent className="py-12 text-center">
+                <FileText className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No documents available for this subsection</p>
+              </CardContent>
+            </Card>
+          )}
+        </TabsContent>
+
+        {/* Inspections Tab */}
+        <TabsContent value="inspections" className="space-y-4">
+          {inspections.length > 0 ? (
+            <div className="space-y-3">
+              {inspections.map((inspection) => (
+                <Card key={inspection.id} className="hover:shadow-md transition-shadow">
+                  <CardContent className="p-4">
+                    <div className="flex items-start justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
+                          inspection.status === "completed" ? "bg-emerald-500/10" : "bg-amber-500/10"
+                        }`}>
+                          <ShieldCheck className={`h-5 w-5 ${
+                            inspection.status === "completed" ? "text-emerald-600" : "text-amber-600"
+                          }`} />
+                        </div>
+                        <div>
+                          <p className="font-medium">{inspection.title}</p>
+                          {inspection.description && (
+                            <p className="text-sm text-muted-foreground line-clamp-1">{inspection.description}</p>
+                          )}
+                          <div className="flex items-center gap-2 mt-1 text-xs text-muted-foreground">
+                            {inspection.inspection_date && (
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {format(new Date(inspection.inspection_date), "dd MMM yyyy")}
+                              </span>
+                            )}
+                            {inspection.inspector_name && (
+                              <span className="flex items-center gap-1">
+                                <User className="h-3 w-3" />
+                                {inspection.inspector_name}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <Badge 
+                        variant={inspection.status === "completed" ? "default" : "secondary"}
+                        className={inspection.status === "completed" ? "bg-emerald-500" : ""}
+                      >
+                        {inspection.status}
+                      </Badge>
                     </div>
-                  </div>
-                  <Button 
-                    variant="ghost" 
-                    size="sm" 
-                    className="gap-2"
-                    onClick={() => handleDownload(doc.file_url, doc.file_name)}
-                  >
-                    <Download className="h-4 w-4" />
-                    Download
-                  </Button>
-                </div>
+                  </CardContent>
+                </Card>
               ))}
             </div>
           ) : (
-            <p className="text-center text-muted-foreground py-8">
-              No documents available for this subsection
-            </p>
+            <Card>
+              <CardContent className="py-12 text-center">
+                <ShieldCheck className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                <p className="text-muted-foreground">No inspections recorded for this subsection</p>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+        </TabsContent>
+      </Tabs>
+
+      {/* Document Preview Dialog */}
+      <DocumentPreviewDialog
+        open={previewDocument !== null}
+        onOpenChange={(open) => !open && setPreviewDocument(null)}
+        fileUrl={previewDocument?.url || ''}
+        fileName={previewDocument?.name || ''}
+      />
     </div>
   );
 };
