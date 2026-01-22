@@ -49,7 +49,6 @@ const menuItems = [
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "COC Documentation", url: "/coc-documentation", icon: Shield, adminOnly: false },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
-  { title: "Portal Management", url: "/portal-management", icon: Eye, adminOnly: true },
   { title: "Users", url: "/users", icon: UserCog, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
 ];
