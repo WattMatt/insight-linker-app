@@ -147,12 +147,12 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     
     // First try to extract page from section string (most accurate - comes from AI)
     const sectionPage = extractPageFromSection(section);
-    if (sectionPage && sectionPage <= numPages) {
+    if (sectionPage && sectionPage <= numPages && numPages > 0) {
       targetPage = sectionPage;
       console.log('[COC Navigation] Using page from section:', targetPage);
-    } else if (defaultClausePages[normalizedClause]) {
+    } else if (defaultClausePages[normalizedClause] && numPages > 0) {
       // Use default mapping for common clauses
-      targetPage = Math.min(defaultClausePages[normalizedClause], numPages || 1);
+      targetPage = Math.min(defaultClausePages[normalizedClause], numPages);
       console.log('[COC Navigation] Using default page for clause:', targetPage);
     } else if (section?.toLowerCase().includes('annexure')) {
       // Annexure typically on page 1
@@ -164,16 +164,23 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
     // Navigate to the target page
     setPageNumber(targetPage);
     
-    // Scroll to top of page after navigation
+    // Scroll to top of page after navigation using scrollRef
     setTimeout(() => {
-      if (containerRef.current) {
-        const scrollContainer = containerRef.current.querySelector('[data-radix-scroll-area-viewport]');
-        if (scrollContainer) {
-          scrollContainer.scrollTop = 0;
-          console.log('[COC Navigation] Scrolled to top');
+      // Try multiple selectors for scroll container
+      const scrollViewport = scrollRef.current?.querySelector('[data-radix-scroll-area-viewport]') 
+        || containerRef.current?.querySelector('[data-radix-scroll-area-viewport]');
+      
+      if (scrollViewport) {
+        scrollViewport.scrollTo({ top: 0, behavior: 'smooth' });
+        console.log('[COC Navigation] Scrolled to top via viewport');
+      } else {
+        // Fallback: try direct scroll on scrollRef
+        if (scrollRef.current) {
+          scrollRef.current.scrollTop = 0;
+          console.log('[COC Navigation] Scrolled to top via scrollRef');
         }
       }
-    }, 150);
+    }, 200);
     
     // Auto-hide page indicator after 5 seconds
     setTimeout(() => {
@@ -337,8 +344,9 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
               className="flex-1 overflow-hidden"
               style={{ cursor: isPanning ? 'grabbing' : 'grab' }}
             >
-              <ScrollArea className="h-full bg-muted/30" ref={scrollRef}>
-                <div className="flex items-start justify-center p-4 min-h-full select-none">
+              <div ref={scrollRef} className="h-full">
+                <ScrollArea className="h-full bg-muted/30">
+                  <div className="flex items-start justify-center p-4 min-h-full select-none">
                 {isPdf ? (
                   <Document
                     file={document.file_url}
@@ -426,8 +434,9 @@ export function COCPreviewDialog({ open, onClose, document, validation }: COCPre
                     </Button>
                   </div>
                 )}
-                </div>
-              </ScrollArea>
+                  </div>
+                </ScrollArea>
+              </div>
             </div>
           </div>
 
