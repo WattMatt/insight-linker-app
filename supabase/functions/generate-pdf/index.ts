@@ -29,36 +29,53 @@ async function generateQRCodeSvgDataUri(url: string): Promise<string> {
 }
 
 // Helper function to properly encode Supabase storage URLs
+// FIXED: Only encode if path has special chars that need encoding (spaces, etc)
+// Avoid double-encoding already-encoded URLs
 function encodeSupabaseStorageUrl(url: string): string {
   try {
+    if (!url || typeof url !== 'string') {
+      return url;
+    }
+    
+    // If URL already has %20 or similar, it's already encoded - return as-is
+    if (url.includes('%20') || url.includes('%2F')) {
+      console.log('[encodeUrl] Already encoded, skipping:', url.substring(0, 80));
+      return url;
+    }
+    
     // Parse the URL
     const urlObj = new URL(url);
     
     // Check if it's a Supabase storage URL
     if (urlObj.pathname.includes('/storage/v1/object/public/')) {
-      // Split the path to get bucket and file path
       const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
       if (pathParts.length === 2) {
         const filePathWithBucket = pathParts[1];
-        // Split bucket from the rest of the path
         const firstSlashIndex = filePathWithBucket.indexOf('/');
         if (firstSlashIndex > 0) {
           const bucket = filePathWithBucket.substring(0, firstSlashIndex);
           const filePath = filePathWithBucket.substring(firstSlashIndex + 1);
           
-          // Encode each path segment individually, then reconstruct
+          // Only encode segments that contain special characters that NEED encoding
+          // Don't encode underscores, hyphens, or already-safe chars
           const encodedFilePath = filePath
             .split('/')
-            .map(segment => encodeURIComponent(segment))
+            .map(segment => {
+              // Check if this segment needs encoding (has spaces or other problematic chars)
+              if (segment.includes(' ') || segment.includes('#') || segment.includes('?')) {
+                return encodeURIComponent(segment);
+              }
+              return segment; // Keep as-is if no problematic chars
+            })
             .join('/');
           
-          // Reconstruct the full URL
-          return `${urlObj.origin}/storage/v1/object/public/${bucket}/${encodedFilePath}`;
+          const result = `${urlObj.origin}/storage/v1/object/public/${bucket}/${encodedFilePath}`;
+          console.log('[encodeUrl] Result:', result.substring(0, 100));
+          return result;
         }
       }
     }
     
-    // Return original URL if not a Supabase storage URL
     return url;
   } catch (e) {
     console.warn(`Failed to encode URL: ${url}`, e);
@@ -112,6 +129,8 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   if (!inspection) return inspection;
   
   const processed = { ...inspection };
+  let successCount = 0;
+  let failCount = 0;
   
   // Process section item photos
   if (processed.sections) {
@@ -119,11 +138,15 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
+            console.log(`[processPhotos] Processing ${item.photos.length} photos for item: ${item.label}`);
             const base64Photos: string[] = [];
             for (const photoUrl of item.photos) {
               const base64 = await imageUrlToBase64(photoUrl);
               if (base64) {
                 base64Photos.push(base64);
+                successCount++;
+              } else {
+                failCount++;
               }
             }
             item.photos = base64Photos;
@@ -133,15 +156,41 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
+  // Process tenant photos (meterImage, breakerImage, ctRatioImage)
+  if (processed.tenants) {
+    for (const tenant of processed.tenants) {
+      console.log(`[processPhotos] Processing tenant: ${tenant.shopName}`);
+      if (tenant.meterImage) {
+        const base64 = await imageUrlToBase64(tenant.meterImage);
+        tenant.meterImage = base64 || null;
+        if (base64) successCount++; else failCount++;
+      }
+      if (tenant.breakerImage) {
+        const base64 = await imageUrlToBase64(tenant.breakerImage);
+        tenant.breakerImage = base64 || null;
+        if (base64) successCount++; else failCount++;
+      }
+      if (tenant.ctRatioImage) {
+        const base64 = await imageUrlToBase64(tenant.ctRatioImage);
+        tenant.ctRatioImage = base64 || null;
+        if (base64) successCount++; else failCount++;
+      }
+    }
+  }
+  
   // Process snag photos
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
+        console.log(`[processPhotos] Processing ${snag.photos.length} snag photos: ${snag.title}`);
         const base64Photos: string[] = [];
         for (const photoUrl of snag.photos) {
           const base64 = await imageUrlToBase64(photoUrl);
           if (base64) {
             base64Photos.push(base64);
+            successCount++;
+          } else {
+            failCount++;
           }
         }
         snag.photos = base64Photos;
@@ -153,11 +202,14 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   if (processed.signatures) {
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        sig.signatureUrl = await imageUrlToBase64(sig.signatureUrl);
+        const base64 = await imageUrlToBase64(sig.signatureUrl);
+        sig.signatureUrl = base64 || null;
+        if (base64) successCount++; else failCount++;
       }
     }
   }
   
+  console.log(`[processPhotos] Complete: ${successCount} successful, ${failCount} failed`);
   return processed;
 }
 
@@ -274,6 +326,16 @@ interface InspectionData {
       notes?: string;
       photos?: string[]; // Array of photo URLs - CRITICAL for photographic inspection reports
     }>;
+  }>;
+  tenants?: Array<{
+    shopName: string;
+    shopNumber?: string;
+    meterSerialNumber?: string;
+    breakerSize?: string;
+    ctSizeAndRatio?: string;
+    meterImage?: string;
+    breakerImage?: string;
+    ctRatioImage?: string;
   }>;
   snags?: Array<{
     title: string;
@@ -1834,6 +1896,15 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
     });
   }
   
+  // Count tenant images (after base64 conversion, null means failed)
+  if (insp.tenants) {
+    insp.tenants.forEach((tenant: any) => {
+      if (tenant.meterImage) totalPhotos++;
+      if (tenant.breakerImage) totalPhotos++;
+      if (tenant.ctRatioImage) totalPhotos++;
+    });
+  }
+  
   console.log(`[Inspection PDF] Total photos after base64 conversion: ${totalPhotos}`);
   
   // Build pages - we'll put items with photos prominently
@@ -2037,7 +2108,90 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
     }
   }
   
-  // Signatures section
+  // Tenants Section with meter/breaker/CT photos
+  if (insp.tenants && insp.tenants.length > 0) {
+    const tenantsWithImages = insp.tenants.filter((t: any) => 
+      t.meterImage || t.breakerImage || t.ctRatioImage
+    );
+    
+    page1Content += `
+      <table style="width: 100%; margin-top: 20px; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${accentColor}; color: white; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0;">
+            📋 Tenant Verification (${insp.tenants.length} tenant${insp.tenants.length !== 1 ? 's' : ''})
+          </td>
+        </tr>
+      </table>
+    `;
+    
+    for (const tenant of insp.tenants) {
+      const hasImages = tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage;
+      
+      page1Content += `
+        <table style="width: 100%; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 6px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="padding: 12px 15px; background: ${COLORS.lightGray}; border-bottom: 1px solid ${COLORS.border};">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="font-weight: 600; color: ${COLORS.primary}; font-size: 11pt;">${tenant.shopName}</td>
+                  <td style="text-align: right; font-size: 9pt; color: ${COLORS.textMuted};">${tenant.shopNumber || ''}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          <tr>
+            <td style="padding: 12px 15px;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="width: 33%; font-size: 9pt;"><strong>Meter:</strong> ${tenant.meterSerialNumber || 'N/A'}</td>
+                  <td style="width: 33%; font-size: 9pt;"><strong>Breaker:</strong> ${tenant.breakerSize || 'N/A'}</td>
+                  <td style="width: 33%; font-size: 9pt;"><strong>CT Ratio:</strong> ${tenant.ctSizeAndRatio || 'N/A'}</td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ${hasImages ? `
+          <tr>
+            <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
+              <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-weight: 600;">
+                📷 Metering Photographic Evidence
+              </div>
+              <table style="width: 100%;" cellpadding="0" cellspacing="8">
+                <tr>
+                  ${tenant.meterImage ? `
+                  <td style="width: 33%; vertical-align: top; text-align: center;">
+                    <img src="${tenant.meterImage}" 
+                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                         alt="Meter" />
+                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">Meter</div>
+                  </td>
+                  ` : ''}
+                  ${tenant.breakerImage ? `
+                  <td style="width: 33%; vertical-align: top; text-align: center;">
+                    <img src="${tenant.breakerImage}" 
+                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                         alt="Breaker" />
+                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">Main Breaker</div>
+                  </td>
+                  ` : ''}
+                  ${tenant.ctRatioImage ? `
+                  <td style="width: 33%; vertical-align: top; text-align: center;">
+                    <img src="${tenant.ctRatioImage}" 
+                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                         alt="CT Ratio" />
+                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">CT Ratio</div>
+                  </td>
+                  ` : ''}
+                </tr>
+              </table>
+            </td>
+          </tr>
+          ` : ''}
+        </table>
+      `;
+    }
+  }
+  
   if (insp.signatures && insp.signatures.length > 0) {
     page1Content += `
       <table style="width: 100%; margin-top: 30px; page-break-inside: avoid;" cellpadding="0" cellspacing="0">

@@ -123,12 +123,19 @@ export function BulkInspectionReportGenerator({
           .filter(i => i.template_id)
           .sort((a, b) => new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime())[0];
         
-        // Count photos in inspection data
+        // Count photos in inspection data (sections + tenants)
         let photoCount = 0;
         if (latestInspection?.json_data) {
           const jsonData = latestInspection.json_data as Record<string, any>;
-          Object.values(jsonData).forEach((section: any) => {
-            if (typeof section === 'object' && section !== null) {
+          Object.entries(jsonData).forEach(([key, section]: [string, any]) => {
+            // Handle tenants array separately
+            if (key === 'tenants' && Array.isArray(section)) {
+              section.forEach((tenant: any) => {
+                if (tenant.meterImage) photoCount++;
+                if (tenant.breakerImage) photoCount++;
+                if (tenant.ctRatioImage) photoCount++;
+              });
+            } else if (typeof section === 'object' && section !== null && key !== 'generalInfo') {
               Object.values(section).forEach((item: any) => {
                 if (Array.isArray(item?.photos)) {
                   photoCount += item.photos.length;
@@ -285,6 +292,26 @@ export function BulkInspectionReportGenerator({
         }
       });
 
+      // Extract tenant photos and count them
+      const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants : [];
+      const tenantsForPdf = tenants.map((tenant: any) => {
+        const images: string[] = [];
+        if (tenant.meterImage) images.push(tenant.meterImage);
+        if (tenant.breakerImage) images.push(tenant.breakerImage);
+        if (tenant.ctRatioImage) images.push(tenant.ctRatioImage);
+        totalPhotos += images.length;
+        return {
+          shopName: tenant.shopName || 'Unknown Tenant',
+          shopNumber: tenant.shopNumber || '',
+          meterSerialNumber: tenant.meterSerialNumber || '',
+          breakerSize: tenant.breakerSize || '',
+          ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+          meterImage: tenant.meterImage || null,
+          breakerImage: tenant.breakerImage || null,
+          ctRatioImage: tenant.ctRatioImage || null,
+        };
+      });
+
       // Build report data
       const reportData = {
         reportType: 'inspection' as const,
@@ -305,6 +332,7 @@ export function BulkInspectionReportGenerator({
           qualityRating: inspection.quality_rating,
           generalInfo,
           sections: sectionsForPdf,
+          tenants: tenantsForPdf, // Include tenants with their images
           snags: snags.map(snag => ({
             title: snag.title,
             description: snag.description,
