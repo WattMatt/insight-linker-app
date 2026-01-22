@@ -46,10 +46,14 @@ interface COCAnnexData {
   reportData?: any;
 }
 
+type ReportType = 'site-summary' | 'compliance' | 'inspection' | 'floor-plan' | 'coc-validation' | 'site-drawing' | 'fortress-checklist' | 'calendar' | 'inspection-template';
+
 interface ReportData {
-  reportType: 'site-summary' | 'compliance' | 'inspection' | 'floor-plan';
-  siteId: string;
-  siteName: string;
+  reportType: ReportType;
+  title?: string;
+  subtitle?: string;
+  siteId?: string;
+  siteName?: string;
   siteAddress?: string;
   clientName?: string;
   clientLogoUrl?: string;
@@ -66,6 +70,164 @@ interface ReportData {
   generatedAt?: string;
   enabledSections?: Record<string, boolean>;
   cocAnnexes?: COCAnnexData[];
+  // COC Validation specific
+  cocValidation?: COCValidationData;
+  // Inspection specific
+  inspection?: InspectionData;
+  // Site Drawing specific
+  siteDrawing?: SiteDrawingData;
+  // Fortress Checklist standalone
+  fortressChecklistFull?: FortressChecklistFullData;
+  // Calendar specific
+  calendar?: CalendarData;
+  // Inspection Template specific
+  inspectionTemplate?: InspectionTemplateData;
+}
+
+// COC Validation specific data
+interface COCValidationData {
+  cocNumber?: string;
+  cocType?: string;
+  evaluationDate?: string;
+  overallStatus: string;
+  installationSummary?: string;
+  overallAssessment?: string;
+  checks?: Array<{
+    checkId: string;
+    clause: string;
+    description: string;
+    result: string;
+    measuredValue: string;
+    limit: string;
+    category: string;
+  }>;
+  criticalFailures?: Array<{
+    category: string;
+    clause: string;
+    description: string;
+    reason: string;
+  }>;
+  administrativeDetails?: {
+    physicalAddress?: string;
+    registeredPerson?: string;
+    registrationNumber?: string;
+    registrationType?: string;
+  };
+  technicalEvaluation?: Array<{
+    section: string;
+    requirement: string;
+    finding: string;
+    status: string;
+  }>;
+  recommendations?: string[];
+  subsectionName?: string;
+}
+
+// Inspection specific data
+interface InspectionData {
+  inspectionId: string;
+  templateName?: string;
+  inspectorName?: string;
+  inspectionDate?: string;
+  status?: string;
+  qualityRating?: number;
+  generalInfo?: Record<string, any>;
+  sections?: Array<{
+    title: string;
+    items: Array<{
+      label: string;
+      value: string | boolean | number;
+      type?: string;
+    }>;
+  }>;
+  snags?: Array<{
+    title: string;
+    description?: string;
+    status: string;
+    riskLevel?: string;
+  }>;
+  signatures?: Array<{
+    name: string;
+    role?: string;
+    signatureUrl?: string;
+    signedAt?: string;
+  }>;
+  subsectionName?: string;
+}
+
+// Site Drawing specific data
+interface SiteDrawingData {
+  subsectionName: string;
+  drawingImageBase64?: string;
+  pins: Array<{
+    id: string;
+    number: number;
+    x: number;
+    y: number;
+    title: string;
+    description: string;
+    images?: Array<{ url: string; name: string }>;
+  }>;
+  generalInfo?: Record<string, any>;
+}
+
+// Fortress Checklist full data for standalone report
+interface FortressChecklistFullData {
+  overallProgress: number;
+  sections: Array<{
+    name: string;
+    progress: number;
+    items: Array<{
+      id: string;
+      label: string;
+      isChecked: boolean;
+      isNotApplicable: boolean;
+      checkedAt?: string;
+    }>;
+  }>;
+  stats: {
+    completed: number;
+    pending: number;
+    notApplicable: number;
+    total: number;
+  };
+}
+
+// Calendar specific data
+interface CalendarData {
+  year: number;
+  events: Array<{
+    id: string;
+    title: string;
+    siteName?: string;
+    startDate: string;
+    endDate?: string;
+    status: string;
+    priority?: string;
+    eventType?: string;
+  }>;
+  stats: {
+    totalEvents: number;
+    upcomingCount: number;
+    completedCount: number;
+    pendingCount: number;
+  };
+}
+
+// Inspection Template specific data
+interface InspectionTemplateData {
+  templateName: string;
+  category?: string;
+  description?: string;
+  sections: Array<{
+    title: string;
+    items: Array<{
+      label: string;
+      type: string;
+      required?: boolean;
+      options?: string[];
+    }>;
+  }>;
 }
 
 interface SubsectionData {
@@ -1228,6 +1390,641 @@ function calculateHealthMetrics(data: ReportData): HealthMetrics {
 }
 
 // ============================================================================
+// HELPER FUNCTIONS FOR REPORT NAMING
+// ============================================================================
+
+function getReportTypeDisplayName(reportType: ReportType): string {
+  const names: Record<ReportType, string> = {
+    'site-summary': 'Site_Summary_Report',
+    'compliance': 'Compliance_Report',
+    'inspection': 'Inspection_Report',
+    'floor-plan': 'Floor_Plan_Report',
+    'coc-validation': 'COC_Validation_Report',
+    'site-drawing': 'Site_Drawing_Report',
+    'fortress-checklist': 'Fortress_Checklist',
+    'calendar': 'Calendar_Report',
+    'inspection-template': 'Inspection_Template',
+  };
+  return names[reportType] || 'Report';
+}
+
+function getReportCategory(reportType: ReportType): string {
+  const categories: Record<ReportType, string> = {
+    'site-summary': 'Site Summary Reports',
+    'compliance': 'Compliance Reports',
+    'inspection': 'Inspection Reports',
+    'floor-plan': 'Floor Plan Reports',
+    'coc-validation': 'COC Validation Reports',
+    'site-drawing': 'Site Drawing Reports',
+    'fortress-checklist': 'Marking Checklists',
+    'calendar': 'Calendar Reports',
+    'inspection-template': 'Inspection Templates',
+  };
+  return categories[reportType] || 'Generated Reports';
+}
+
+// ============================================================================
+// HTML GENERATORS FOR ADDITIONAL REPORT TYPES
+// ============================================================================
+
+async function generateCOCValidationHTML(data: ReportData): Promise<string> {
+  const coc = data.cocValidation!;
+  const accentColor = data.accentColor || '#2563eb';
+  const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  
+  const status = coc.overallStatus || 'Unknown';
+  const isPass = status.toLowerCase().includes('pass') || status.toLowerCase().includes('valid');
+  const isFail = status.toLowerCase().includes('fail');
+  const statusColor = isPass ? COLORS.success : isFail ? COLORS.error : COLORS.warning;
+  
+  const hasFailures = (coc.criticalFailures?.length || 0) > 0;
+  const hasRecommendations = (coc.recommendations?.length || 0) > 0;
+  const totalPages = 1 + (hasFailures || hasRecommendations ? 1 : 0);
+  
+  // Page 1 content
+  let page1Content = '';
+  
+  // Validation Status Section
+  page1Content += `
+    <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background: ${accentColor}; color: white; padding: 10px 15px; font-weight: 600; font-size: 12pt;">
+          Validation Status
+        </td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 20px;">
+          <div style="font-size: 24pt; font-weight: 700; color: ${statusColor}; margin-bottom: 10px;">${status.toUpperCase()}</div>
+          ${coc.cocType ? `<div style="font-size: 11pt; color: ${COLORS.textMuted}; margin-bottom: 10px;">COC Type: ${coc.cocType}</div>` : ''}
+          ${coc.installationSummary ? `<div style="font-size: 10pt; margin-bottom: 8px;"><strong>Installation Summary:</strong> ${coc.installationSummary}</div>` : ''}
+          ${coc.overallAssessment ? `<div style="font-size: 10pt;"><strong>Assessment:</strong> ${coc.overallAssessment}</div>` : ''}
+        </td>
+      </tr>
+    </table>
+  `;
+  
+  // Administrative Details
+  if (coc.administrativeDetails) {
+    const details = coc.administrativeDetails;
+    const fields = [
+      { label: 'Physical Address', value: details.physicalAddress },
+      { label: 'Registered Person', value: details.registeredPerson },
+      { label: 'Registration Number', value: details.registrationNumber },
+      { label: 'Type of Registration', value: details.registrationType },
+    ].filter(f => f.value && f.value.trim().length > 0 && !f.value.toLowerCase().includes('not found'));
+    
+    if (fields.length > 0) {
+      page1Content += `
+        <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+              Administrative Details
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                ${fields.map(f => `
+                <tr>
+                  <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">${f.label}</td>
+                  <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${f.value}</td>
+                </tr>
+                `).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+  }
+  
+  // Technical Evaluation
+  if (coc.technicalEvaluation && coc.technicalEvaluation.length > 0) {
+    page1Content += `
+      <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+            Technical Evaluation
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="0">
+              <tr style="background: ${COLORS.lightGray};">
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt; width: 15%;">Section</th>
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt; width: 30%;">Requirement</th>
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt;">Finding</th>
+                <th style="padding: 8px 10px; text-align: center; font-size: 9pt; width: 60px;">Status</th>
+              </tr>
+              ${coc.technicalEvaluation.map(te => {
+                const teColor = te.status?.toLowerCase() === 'pass' ? COLORS.success : 
+                               te.status?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
+                return `
+                <tr style="border-bottom: 1px solid ${COLORS.border};">
+                  <td style="padding: 8px 10px; font-size: 9pt;">${te.section || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt;">${te.requirement || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt;">${te.finding || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt; text-align: center; color: ${teColor}; font-weight: 600;">${te.status || '-'}</td>
+                </tr>
+                `;
+              }).join('')}
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+  
+  // Check Results
+  if (coc.checks && coc.checks.length > 0) {
+    page1Content += `
+      <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+            Check Results
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="0">
+              <tr style="background: ${COLORS.lightGray};">
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt; width: 10%;">Clause</th>
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt;">Description</th>
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt; width: 15%;">Measured</th>
+                <th style="padding: 8px 10px; text-align: left; font-size: 9pt; width: 15%;">Limit</th>
+                <th style="padding: 8px 10px; text-align: center; font-size: 9pt; width: 10%;">Result</th>
+              </tr>
+              ${coc.checks.map(check => {
+                const checkColor = check.result?.toLowerCase() === 'pass' ? COLORS.success : 
+                                  check.result?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
+                return `
+                <tr style="border-bottom: 1px solid ${COLORS.border};">
+                  <td style="padding: 8px 10px; font-size: 9pt;">${check.clause || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt;">${check.description || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt;">${check.measuredValue || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt;">${check.limit || '-'}</td>
+                  <td style="padding: 8px 10px; font-size: 9pt; text-align: center; color: ${checkColor}; font-weight: 600;">${check.result || '-'}</td>
+                </tr>
+                `;
+              }).join('')}
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+  
+  // Page 2 content (if needed)
+  let page2Html = '';
+  if (hasFailures || hasRecommendations) {
+    let page2Content = '';
+    
+    if (hasFailures) {
+      page2Content += `
+        <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: #fef2f2; color: ${COLORS.error}; padding: 10px 15px; font-weight: 600; font-size: 12pt; border-bottom: 2px solid ${COLORS.error};">
+              Critical Failures (${coc.criticalFailures!.length})
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid #fecaca; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                <tr style="background: #fef2f2;">
+                  <th style="padding: 10px 15px; text-align: left; font-size: 9pt; width: 5%;">#</th>
+                  <th style="padding: 10px 15px; text-align: left; font-size: 9pt; width: 15%;">Clause</th>
+                  <th style="padding: 10px 15px; text-align: left; font-size: 9pt; width: 35%;">Description</th>
+                  <th style="padding: 10px 15px; text-align: left; font-size: 9pt;">Reason</th>
+                </tr>
+                ${coc.criticalFailures!.map((f, i) => `
+                <tr style="border-bottom: 1px solid #fecaca;">
+                  <td style="padding: 10px 15px; font-size: 9pt;">${i + 1}</td>
+                  <td style="padding: 10px 15px; font-size: 9pt; color: ${COLORS.error}; font-weight: 600;">${f.clause || '-'}</td>
+                  <td style="padding: 10px 15px; font-size: 9pt;">${f.description || '-'}</td>
+                  <td style="padding: 10px 15px; font-size: 9pt; color: ${COLORS.textMuted};">${f.reason || '-'}</td>
+                </tr>
+                `).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    if (hasRecommendations) {
+      page2Content += `
+        <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 10px 15px; font-weight: 600; font-size: 12pt; border-bottom: 2px solid ${accentColor};">
+              Recommendations
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 20px;">
+              <ol style="margin: 0; padding-left: 20px; font-size: 10pt; line-height: 1.8;">
+                ${coc.recommendations!.map(rec => `<li style="margin-bottom: 10px;">${rec}</li>`).join('')}
+              </ol>
+            </td>
+          </tr>
+        </table>
+      `;
+    }
+    
+    page2Html = `
+    <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+      ${generatePageHeader('COC Validation Report', accentColor)}
+      ${page2Content}
+      ${generatePageFooter(2, totalPages.toString(), generatedAt)}
+    </div>
+    `;
+  }
+  
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>COC Validation Report - ${coc.cocNumber || 'Unknown'}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10pt;
+      color: ${COLORS.text};
+      line-height: 1.4;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  <!-- Page 1 -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+    ${generatePageHeader('COC Validation Report', accentColor)}
+    ${page1Content}
+    ${generatePageFooter(1, totalPages.toString(), generatedAt)}
+  </div>
+  ${page2Html}
+</body>
+</html>
+  `;
+}
+
+async function generateInspectionHTML(data: ReportData): Promise<string> {
+  const insp = data.inspection!;
+  const accentColor = data.accentColor || '#2563eb';
+  const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  
+  const statusColor = insp.status?.toLowerCase() === 'completed' ? COLORS.success :
+                     insp.status?.toLowerCase() === 'in_progress' ? COLORS.warning : COLORS.textMuted;
+  
+  let content = '';
+  
+  // General Info Section
+  content += `
+    <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background: ${accentColor}; color: white; padding: 10px 15px; font-weight: 600; font-size: 12pt;">
+          General Information
+        </td>
+      </tr>
+      <tr>
+        <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+          <table style="width: 100%;" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Status</td>
+              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border}; color: ${statusColor}; font-weight: 600;">${insp.status || 'Pending'}</td>
+            </tr>
+            ${insp.inspectorName ? `
+            <tr>
+              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Inspector</td>
+              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${insp.inspectorName}</td>
+            </tr>
+            ` : ''}
+            ${insp.inspectionDate ? `
+            <tr>
+              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Date</td>
+              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${new Date(insp.inspectionDate).toLocaleDateString()}</td>
+            </tr>
+            ` : ''}
+            ${insp.qualityRating ? `
+            <tr>
+              <td style="padding: 10px 15px; width: 30%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">Quality Rating</td>
+              <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${insp.qualityRating}/5 ⭐</td>
+            </tr>
+            ` : ''}
+          </table>
+        </td>
+      </tr>
+    </table>
+  `;
+  
+  // Template Sections
+  if (insp.sections && insp.sections.length > 0) {
+    insp.sections.forEach(section => {
+      content += `
+        <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 8px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+              ${section.title}
+            </td>
+          </tr>
+          <tr>
+            <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+              <table style="width: 100%;" cellpadding="0" cellspacing="0">
+                ${section.items.map(item => `
+                <tr>
+                  <td style="padding: 10px 15px; width: 40%; border-bottom: 1px solid ${COLORS.border}; font-weight: 500; color: ${COLORS.textMuted};">${item.label}</td>
+                  <td style="padding: 10px 15px; border-bottom: 1px solid ${COLORS.border};">${formatItemValue(item.value, item.type)}</td>
+                </tr>
+                `).join('')}
+              </table>
+            </td>
+          </tr>
+        </table>
+      `;
+    });
+  }
+  
+  // Snags Section
+  if (insp.snags && insp.snags.length > 0) {
+    content += `
+      <table style="width: 100%; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: #fef3c7; color: ${COLORS.warning}; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${COLORS.warning};">
+            Issues Found (${insp.snags.length})
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="0">
+              ${insp.snags.map(snag => {
+                const riskColor = snag.riskLevel === 'high' ? COLORS.error :
+                                 snag.riskLevel === 'medium' ? COLORS.warning : COLORS.info;
+                return `
+                <tr style="border-bottom: 1px solid ${COLORS.border};">
+                  <td style="padding: 12px 15px;">
+                    <div style="font-weight: 600; margin-bottom: 4px;">${snag.title}</div>
+                    ${snag.description ? `<div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">${snag.description}</div>` : ''}
+                    <span style="display: inline-block; padding: 2px 8px; font-size: 8pt; border-radius: 4px; background: ${riskColor}22; color: ${riskColor};">${snag.riskLevel || 'low'}</span>
+                    <span style="display: inline-block; padding: 2px 8px; font-size: 8pt; border-radius: 4px; background: ${COLORS.lightGray}; margin-left: 5px;">${snag.status}</span>
+                  </td>
+                </tr>
+                `;
+              }).join('')}
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+  }
+  
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Inspection Report</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10pt;
+      color: ${COLORS.text};
+      line-height: 1.4;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;">
+    ${generatePageHeader(`Inspection Report - ${insp.templateName || 'General'}`, accentColor)}
+    ${content}
+    ${generatePageFooter(1, '1', generatedAt)}
+  </div>
+</body>
+</html>
+  `;
+}
+
+function formatItemValue(value: string | boolean | number, type?: string): string {
+  if (typeof value === 'boolean') {
+    return value ? '✓ Yes' : '✗ No';
+  }
+  if (type === 'checkbox') {
+    return value ? '✓ Checked' : '○ Unchecked';
+  }
+  return String(value);
+}
+
+async function generateFortressChecklistHTML(data: ReportData): Promise<string> {
+  const checklist = data.fortressChecklistFull!;
+  const accentColor = data.accentColor || '#2563eb';
+  const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  const siteName = data.siteName || 'Site';
+  
+  const progressColor = checklist.overallProgress >= 80 ? COLORS.success :
+                        checklist.overallProgress >= 50 ? COLORS.warning : COLORS.error;
+  
+  let content = '';
+  
+  // Summary Stats
+  content += `
+    <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 10px;">
+      <tr>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${progressColor};">${checklist.overallProgress}%</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Overall Progress</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.success};">${checklist.stats.completed}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Completed</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.warning};">${checklist.stats.pending}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Pending</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.muted};">${checklist.stats.notApplicable}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">N/A</div>
+        </td>
+      </tr>
+    </table>
+  `;
+  
+  // Sections with items
+  checklist.sections.forEach(section => {
+    const sectionColor = section.progress >= 80 ? COLORS.success :
+                        section.progress >= 50 ? COLORS.warning : COLORS.error;
+    
+    content += `
+      <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-bottom: 2px solid ${accentColor};">
+            <table style="width: 100%;"><tr>
+              <td>${section.name}</td>
+              <td style="text-align: right; color: ${sectionColor}; font-weight: 700;">${section.progress}%</td>
+            </tr></table>
+          </td>
+        </tr>
+        <tr>
+          <td style="border: 1px solid ${COLORS.border}; border-top: none; padding: 0;">
+            <table style="width: 100%;" cellpadding="0" cellspacing="0">
+              ${section.items.map(item => {
+                const statusIcon = item.isNotApplicable ? '⊘' : item.isChecked ? '✓' : '○';
+                const statusColor = item.isNotApplicable ? COLORS.muted : item.isChecked ? COLORS.success : COLORS.warning;
+                return `
+                <tr style="border-bottom: 1px solid ${COLORS.border};">
+                  <td style="padding: 8px 15px; width: 30px; text-align: center; font-size: 14pt; color: ${statusColor};">${statusIcon}</td>
+                  <td style="padding: 8px 15px; font-size: 9pt;">${item.label}</td>
+                </tr>
+                `;
+              }).join('')}
+            </table>
+          </td>
+        </tr>
+      </table>
+    `;
+  });
+  
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Fortress Checklist - ${siteName}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10pt;
+      color: ${COLORS.text};
+      line-height: 1.4;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;">
+    ${generatePageHeader(`Fortress Site Close-Out Checklist - ${siteName}`, accentColor)}
+    ${content}
+    ${generatePageFooter(1, '1', generatedAt)}
+  </div>
+</body>
+</html>
+  `;
+}
+
+async function generateCalendarHTML(data: ReportData): Promise<string> {
+  const cal = data.calendar!;
+  const accentColor = data.accentColor || '#2563eb';
+  const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
+  
+  let content = '';
+  
+  // Stats Summary
+  content += `
+    <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 10px;">
+      <tr>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${accentColor};">${cal.stats.totalEvents}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Total Events</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.info};">${cal.stats.upcomingCount}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Upcoming</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.success};">${cal.stats.completedCount}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Completed</div>
+        </td>
+        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.warning};">${cal.stats.pendingCount}</div>
+          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Pending</div>
+        </td>
+      </tr>
+    </table>
+  `;
+  
+  // Events Table
+  if (cal.events.length > 0) {
+    content += `
+      <table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden;">
+        <thead>
+          <tr style="background: ${COLORS.primary};">
+            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Event</th>
+            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Site</th>
+            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Date</th>
+            <th style="padding: 12px 15px; text-align: center; color: white; font-size: 10pt;">Status</th>
+            <th style="padding: 12px 15px; text-align: center; color: white; font-size: 10pt;">Priority</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${cal.events.map(event => {
+            const statusColor = event.status === 'completed' ? COLORS.success :
+                               event.status === 'upcoming' ? COLORS.info : COLORS.warning;
+            const priorityColor = event.priority === 'high' ? COLORS.error :
+                                 event.priority === 'medium' ? COLORS.warning : COLORS.muted;
+            return `
+            <tr style="background: white; border-bottom: 1px solid ${COLORS.border};">
+              <td style="padding: 10px 15px; font-size: 10pt;">${event.title}</td>
+              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${event.siteName || '-'}</td>
+              <td style="padding: 10px 15px; font-size: 10pt;">${new Date(event.startDate).toLocaleDateString()}</td>
+              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${statusColor}22; color: ${statusColor};">${event.status}</span></td>
+              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${priorityColor}22; color: ${priorityColor};">${event.priority || 'normal'}</span></td>
+            </tr>
+            `;
+          }).join('')}
+        </tbody>
+      </table>
+    `;
+  }
+  
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Calendar Report - ${cal.year}</title>
+  <style>
+    @page { size: A4; margin: 0; }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+      font-size: 10pt;
+      color: ${COLORS.text};
+      line-height: 1.4;
+      background: white;
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    table { border-collapse: collapse; }
+  </style>
+</head>
+<body>
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;">
+    ${generatePageHeader(`Calendar Report - ${cal.year}`, accentColor)}
+    ${content}
+    ${generatePageFooter(1, '1', generatedAt)}
+  </div>
+</body>
+</html>
+  `;
+}
+
+// ============================================================================
 // MAIN HANDLER
 // ============================================================================
 
@@ -1254,11 +2051,47 @@ Deno.serve(async (req) => {
     console.log('Documents Summary:', body.documentsSummary?.length || 0, 'categories');
     console.log('Category Health:', body.categoryHealth?.length || 0, 'categories');
 
-    // Generate HTML (async for QR code generation)
+    // Generate HTML based on report type
     let html: string;
     switch (body.reportType) {
       case 'site-summary':
         html = await generateSiteSummaryHTML(body);
+        break;
+      case 'coc-validation':
+        if (!body.cocValidation) {
+          return new Response(
+            JSON.stringify({ error: 'Missing cocValidation data for coc-validation report type' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        html = await generateCOCValidationHTML(body);
+        break;
+      case 'inspection':
+        if (!body.inspection) {
+          return new Response(
+            JSON.stringify({ error: 'Missing inspection data for inspection report type' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        html = await generateInspectionHTML(body);
+        break;
+      case 'fortress-checklist':
+        if (!body.fortressChecklistFull) {
+          return new Response(
+            JSON.stringify({ error: 'Missing fortressChecklistFull data for fortress-checklist report type' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        html = await generateFortressChecklistHTML(body);
+        break;
+      case 'calendar':
+        if (!body.calendar) {
+          return new Response(
+            JSON.stringify({ error: 'Missing calendar data for calendar report type' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+        html = await generateCalendarHTML(body);
         break;
       default:
         html = await generateSiteSummaryHTML(body);
@@ -1307,11 +2140,14 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
     
-    // Generate filename with timestamp
+    // Generate filename with timestamp based on report type
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
-    const sanitizedSiteName = body.siteName.replace(/[^a-zA-Z0-9]/g, '_');
-    const filename = `Site_Summary_Report_${sanitizedSiteName}_${timestamp}.pdf`;
-    const storagePath = `site-reports/${body.siteId}/${filename}`;
+    const reportTypeName = getReportTypeDisplayName(body.reportType);
+    const sanitizedName = (body.siteName || body.title || 'Report').replace(/[^a-zA-Z0-9]/g, '_');
+    const filename = `${reportTypeName}_${sanitizedName}_${timestamp}.pdf`;
+    const storagePath = body.siteId 
+      ? `site-reports/${body.siteId}/${filename}`
+      : `reports/${filename}`;
     
     // Upload to Supabase Storage (documents bucket)
     const { data: uploadData, error: uploadError } = await supabase.storage
@@ -1336,21 +2172,23 @@ Deno.serve(async (req) => {
     
     console.log('PDF saved to storage:', urlData.publicUrl);
 
-    // Create a record in site_documents table so it appears in the Reports list
-    const { error: dbError } = await supabase
-      .from('site_documents')
-      .insert({
-        site_id: body.siteId,
-        file_name: filename,
-        file_url: urlData.publicUrl,
-        category: 'Site Summary Reports',
-      });
-    
-    if (dbError) {
-      console.error('Database insert error:', dbError);
-      // Don't fail the request - the file is saved, just log the error
-    } else {
-      console.log('Report record created in site_documents');
+    // Create a record in site_documents table so it appears in the Reports list (only for site-level reports)
+    if (body.siteId) {
+      const { error: dbError } = await supabase
+        .from('site_documents')
+        .insert({
+          site_id: body.siteId,
+          file_name: filename,
+          file_url: urlData.publicUrl,
+          category: getReportCategory(body.reportType),
+        });
+      
+      if (dbError) {
+        console.error('Database insert error:', dbError);
+        // Don't fail the request - the file is saved, just log the error
+      } else {
+        console.log('Report record created in site_documents');
+      }
     }
 
     return new Response(
