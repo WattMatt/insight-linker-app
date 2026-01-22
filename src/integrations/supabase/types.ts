@@ -207,6 +207,76 @@ export type Database = {
         }
         Relationships: []
       }
+      client_access_links: {
+        Row: {
+          access_count: number
+          access_token: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          label: string | null
+          last_accessed_at: string | null
+          link_type: string
+          site_id: string | null
+          subsection_id: string | null
+        }
+        Insert: {
+          access_count?: number
+          access_token?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          last_accessed_at?: string | null
+          link_type?: string
+          site_id?: string | null
+          subsection_id?: string | null
+        }
+        Update: {
+          access_count?: number
+          access_token?: string
+          client_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean
+          label?: string | null
+          last_accessed_at?: string | null
+          link_type?: string
+          site_id?: string | null
+          subsection_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_access_links_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_access_links_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_access_links_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clients: {
         Row: {
           company_name: string | null
@@ -2455,6 +2525,17 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      validate_access_link: {
+        Args: { token: string }
+        Returns: {
+          client_id: string
+          is_valid: boolean
+          link_id: string
+          link_type: string
+          site_id: string
+          subsection_id: string
+        }[]
       }
       validate_api_token: {
         Args: { token: string }

@@ -20,6 +20,7 @@ const ClientDetail = lazy(() => import("./pages/ClientDetail"));
 const SiteDetail = lazy(() => import("./pages/SiteDetail"));
 const SubsectionDetail = lazy(() => import("./pages/SubsectionDetail"));
 const PublicSubsection = lazy(() => import("./pages/PublicSubsection"));
+const PublicSiteReview = lazy(() => import("./pages/PublicSiteReview"));
 const Sites = lazy(() => import("./pages/Sites"));
 const Inspections = lazy(() => import("./pages/Inspections"));
 const InspectionDetail = lazy(() => import("./pages/InspectionDetail"));
@@ -105,6 +106,9 @@ const App = () => (
           {/* Public QR Code Landing Pages - both patterns supported */}
           <Route path="/public/subsections/:subsectionId" element={<PublicSubsection />} />
           <Route path="/public/clients/:clientId/sites/:siteId/subsections/:subsectionId" element={<PublicSubsection />} />
+          
+          {/* Public Site Review - Magic link access */}
+          <Route path="/review/:token" element={<PublicSiteReview />} />
           
           <Route
             path="/dashboard"
