@@ -379,12 +379,12 @@ const ClientPortalSiteDetail = () => {
 
         {/* Schematic Tab */}
         <TabsContent value="schematic" className="space-y-6">
-          <SchematicDiagram siteId={siteId!} siteName={site.name} />
+          <SchematicDiagram siteId={siteId!} siteName={site.name} readOnly />
         </TabsContent>
 
         {/* Asset Verification Tab */}
         <TabsContent value="asset-verification" className="space-y-6">
-          <AssetVerification siteId={siteId!} siteName={site.name} />
+          <AssetVerification siteId={siteId!} siteName={site.name} readOnly />
         </TabsContent>
 
         {/* Compliance Tab */}
@@ -527,7 +527,7 @@ const ClientPortalSiteDetail = () => {
 
         {/* Reports Tab */}
         <TabsContent value="reports" className="space-y-6">
-          <SiteReports site={site} />
+          <SiteReports site={site} readOnly />
         </TabsContent>
       </Tabs>
 

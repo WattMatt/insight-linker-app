@@ -26,6 +26,7 @@ import {
 
 interface SiteReportsProps {
     site: Site;
+    readOnly?: boolean;
 }
 
 interface SavedReport {
@@ -46,7 +47,7 @@ const REPORT_CATEGORIES = [
     'COC Validation Reports'
 ];
 
-export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
+export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [reports, setReports] = useState<SavedReport[]>([]);
     const [loading, setLoading] = useState(true);
@@ -178,51 +179,53 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
 
     return (
         <div className="space-y-6">
-            {/* Generate Report Card */}
-            <Card>
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <FileBarChart className="h-5 w-5" />
-                        Generate Report
-                    </CardTitle>
-                    <CardDescription>
-                        Create comprehensive site reports with all subsection data
-                    </CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <div className="flex flex-col sm:flex-row gap-3">
+            {/* Generate Report Card - Only show in edit mode */}
+            {!readOnly && (
+              <Card>
+                  <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                          <FileBarChart className="h-5 w-5" />
+                          Generate Report
+                      </CardTitle>
+                      <CardDescription>
+                          Create comprehensive site reports with all subsection data
+                      </CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                      <div className="flex flex-col sm:flex-row gap-3">
 
-                        {/* Server-side Final Report Generation */}
-                        <GenerateFinalReportButton
-                            site={{
-                                id: site.id,
-                                name: site.name,
-                                address: site.address,
-                                client: { name: site.clients.name, logo_url: site.client_logo_url }
-                            }}
-                            reportSections={reportSections}
-                            onReportSaved={fetchReports}
-                        />
-                        
-                        {/* Report Settings */}
-                        <Button
-                            variant="outline"
-                            className="flex items-center gap-2"
-                            onClick={() => setSettingsOpen(true)}
-                        >
-                            <Settings className="h-4 w-4" />
-                            Report Settings
-                        </Button>
-                    </div>
-                    
-                    <ReportSettingsDialog
-                        open={settingsOpen}
-                        onOpenChange={setSettingsOpen}
-                        sections={reportSections}
-                        onSectionToggle={handleSectionToggle}
-                    />
-                </CardContent>
-            </Card>
+                          {/* Server-side Final Report Generation */}
+                          <GenerateFinalReportButton
+                              site={{
+                                  id: site.id,
+                                  name: site.name,
+                                  address: site.address,
+                                  client: { name: site.clients.name, logo_url: site.client_logo_url }
+                              }}
+                              reportSections={reportSections}
+                              onReportSaved={fetchReports}
+                          />
+                          
+                          {/* Report Settings */}
+                          <Button
+                              variant="outline"
+                              className="flex items-center gap-2"
+                              onClick={() => setSettingsOpen(true)}
+                          >
+                              <Settings className="h-4 w-4" />
+                              Report Settings
+                          </Button>
+                      </div>
+                      
+                      <ReportSettingsDialog
+                          open={settingsOpen}
+                          onOpenChange={setSettingsOpen}
+                          sections={reportSections}
+                          onSectionToggle={handleSectionToggle}
+                      />
+                  </CardContent>
+              </Card>
+            )}
 
             {/* Saved Reports Card */}
             <Card>
@@ -237,15 +240,17 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                                 {reports.length} report{reports.length !== 1 ? 's' : ''} available for review and download
                             </CardDescription>
                         </div>
-                        <Button 
-                            variant="outline" 
-                            size="sm" 
-                            onClick={fetchReports}
-                            className="gap-2"
-                        >
-                            <RefreshCw className="h-4 w-4" />
-                            Refresh
-                        </Button>
+                        {!readOnly && (
+                          <Button 
+                              variant="outline" 
+                              size="sm" 
+                              onClick={fetchReports}
+                              className="gap-2"
+                          >
+                              <RefreshCw className="h-4 w-4" />
+                              Refresh
+                          </Button>
+                        )}
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
@@ -325,19 +330,21 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site }) => {
                                             <Download className="h-4 w-4" />
                                             <span className="hidden sm:inline">Download</span>
                                         </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                                            onClick={() => handleDeleteReport(report.id, report.file_name)}
-                                            disabled={deleting === report.id}
-                                        >
-                                            {deleting === report.id ? (
-                                                <RefreshCw className="h-4 w-4 animate-spin" />
-                                            ) : (
-                                                <Trash2 className="h-4 w-4" />
-                                            )}
-                                        </Button>
+                                        {!readOnly && (
+                                          <Button
+                                              size="sm"
+                                              variant="ghost"
+                                              className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                                              onClick={() => handleDeleteReport(report.id, report.file_name)}
+                                              disabled={deleting === report.id}
+                                          >
+                                              {deleting === report.id ? (
+                                                  <RefreshCw className="h-4 w-4 animate-spin" />
+                                              ) : (
+                                                  <Trash2 className="h-4 w-4" />
+                                              )}
+                                          </Button>
+                                        )}
                                     </div>
                                 </div>
                             ))}
