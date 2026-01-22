@@ -53,3 +53,6 @@ verify_jwt = false
 
 [functions.detect-schematic-regions]
 verify_jwt = false
+
+[functions.fix-inspection-photos]
+verify_jwt = false
