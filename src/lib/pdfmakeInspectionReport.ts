@@ -171,6 +171,7 @@ function getStatusColor(status: string): string {
 
 /**
  * Create full-width section banner (matching reference)
+ * Uses headlineLevel to keep it with following content
  */
 function createSectionBanner(title: string): Content {
   return {
@@ -191,6 +192,8 @@ function createSectionBanner(title: string): Content {
       vLineWidth: () => 0,
     },
     margin: [0, 20, 0, 15],
+    // Keep header with following content - prevents orphaned headers
+    headlineLevel: 1,
   };
 }
 
