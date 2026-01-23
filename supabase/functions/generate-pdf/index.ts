@@ -375,7 +375,7 @@ function generatePhotoGrid(photos: string[], options?: {
             <td style="padding: 4px; vertical-align: top; text-align: left;">
               ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 4px;">${item.label}</div>` : ''}
               <img src="${item.photo}" 
-                   style="width: ${imageWidth}; height: ${imageHeight}; object-fit: cover; border: 1px solid #e5e7eb; border-radius: 4px;" 
+                   style="width: ${imageWidth}; height: ${imageHeight}; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px;" 
                    alt="${item.label}" />
             </td>
           `).join('')}
@@ -2411,7 +2411,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 <td style="padding: 4px; vertical-align: top; text-align: left;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Breaker</div>
                   <img src="${tenant.breakerImage}" 
-                       style="width: 200px; height: 150px; object-fit: cover; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 200px; height: 150px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="Breaker" />
                 </td>
                 ` : ''}
@@ -2419,7 +2419,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 <td style="padding: 4px; vertical-align: top; text-align: left;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">CT Ratio</div>
                   <img src="${tenant.ctRatioImage}" 
-                       style="width: 200px; height: 150px; object-fit: cover; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 200px; height: 150px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="CT Ratio" />
                 </td>
                 ` : ''}
@@ -2427,7 +2427,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 <td style="padding: 4px; vertical-align: top; text-align: left;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Meter</div>
                   <img src="${tenant.meterImage}" 
-                       style="width: 200px; height: 150px; object-fit: cover; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 200px; height: 150px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="Meter" />
                 </td>
                 ` : ''}
