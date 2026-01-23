@@ -2163,83 +2163,70 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
     </table>
   `;
   
-  // Template Sections with PHOTOS - this is the critical part
+  // Template Sections with PHOTOS - styled to match reference PDF
   if (insp.sections && insp.sections.length > 0) {
     for (const section of insp.sections) {
-      // Section header
+      // Section header - full width teal banner matching reference PDF
       page1Content += `
-        <table style="width: 100%; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="background: ${COLORS.primary}; color: white; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0;">
-              ${section.title}
-            </td>
-          </tr>
-        </table>
+        <div style="page-break-inside: avoid; margin-bottom: 20px;">
+          <table style="width: 100%; margin-bottom: 0;" cellpadding="0" cellspacing="0">
+            <tr>
+              <td style="background: ${accentColor}; color: white; padding: 12px 20px; font-weight: 600; font-size: 13pt; text-transform: uppercase; letter-spacing: 0.5px;">
+                ${section.title}
+              </td>
+            </tr>
+          </table>
+        </div>
       `;
       
-      // Render each item with its photos
+      // Render each item with its photos - cleaner layout matching reference
       for (const item of section.items) {
         const hasPhotos = item.photos && item.photos.length > 0;
-        const statusBadge = formatItemValueWithBadge(item.value, item.type, accentColor);
+        const statusText = getStatusText(item.value, item.type);
+        const statusColor = getStatusColor(item.value, item.type);
         
         page1Content += `
-          <table style="width: 100%; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 6px;" cellpadding="0" cellspacing="0">
-            <tr>
-              <td style="padding: 12px 15px; background: ${COLORS.lightGray}; border-bottom: 1px solid ${COLORS.border};">
-                <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                  <tr>
-                    <td style="font-weight: 600; color: ${COLORS.primary}; font-size: 10pt;">${item.label}</td>
-                    <td style="text-align: right;">${statusBadge}</td>
-                  </tr>
-                </table>
-              </td>
-            </tr>
+          <div style="margin-bottom: 25px; page-break-inside: avoid;">
+            <!-- Item Label and Status -->
+            <div style="margin-bottom: 8px;">
+              <div style="font-weight: 600; color: ${COLORS.primary}; font-size: 11pt; margin-bottom: 4px;">${item.label}</div>
+              <div style="font-size: 10pt; color: ${statusColor};">Status: ${statusText}</div>
+            </div>
+            
             ${item.notes ? `
-            <tr>
-              <td style="padding: 10px 15px; font-size: 9pt; color: ${COLORS.textMuted}; border-bottom: 1px solid ${COLORS.border};">
-                <strong>Notes:</strong> ${item.notes}
-              </td>
-            </tr>
+            <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-style: italic;">
+              ${item.notes}
+            </div>
             ` : ''}
+            
             ${hasPhotos ? `
-            <tr>
-              <td style="padding: 15px;">
-                <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-weight: 600;">
-                  📷 Photographic Evidence (${item.photos!.length} image${item.photos!.length !== 1 ? 's' : ''})
-                </div>
-                <table style="width: 100%;" cellpadding="0" cellspacing="8">
-                  <tr>
-                    ${item.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
-                    <td style="width: ${100 / Math.min(item.photos!.length, 3)}%; vertical-align: top;">
-                      <img src="${photoUrl}" 
-                           style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                           alt="Inspection photo ${idx + 1}" />
-                    </td>
-                    `).join('')}
-                  </tr>
-                </table>
-                ${item.photos!.length > 3 ? `
-                <table style="width: 100%; margin-top: 8px;" cellpadding="0" cellspacing="8">
-                  <tr>
-                    ${item.photos!.slice(3, 6).map((photoUrl: string, idx: number) => `
-                    <td style="width: ${100 / Math.min(item.photos!.length - 3, 3)}%; vertical-align: top;">
-                      <img src="${photoUrl}" 
-                           style="width: 100%; max-height: 180px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                           alt="Inspection photo ${idx + 4}" />
-                    </td>
-                    `).join('')}
-                  </tr>
-                </table>
-                ` : ''}
-                ${item.photos!.length > 6 ? `
-                <div style="font-size: 8pt; color: ${COLORS.textMuted}; text-align: center; margin-top: 8px;">
-                  + ${item.photos!.length - 6} more image(s) available
-                </div>
-                ` : ''}
-              </td>
-            </tr>
+            <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
+              <tr>
+                ${item.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
+                <td style="width: ${Math.min(item.photos!.length, 3) === 1 ? '40%' : '32%'}; vertical-align: top;">
+                  <img src="${photoUrl}" 
+                       style="width: 100%; max-height: 200px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       alt="${item.label} photo ${idx + 1}" />
+                </td>
+                ${Math.min(item.photos!.length, 3) === 1 ? '<td style="width: 60%;"></td>' : ''}
+                `).join('')}
+              </tr>
+            </table>
+            ${item.photos!.length > 3 ? `
+            <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
+              <tr>
+                ${item.photos!.slice(3, 6).map((photoUrl: string, idx: number) => `
+                <td style="width: 32%; vertical-align: top;">
+                  <img src="${photoUrl}" 
+                       style="width: 100%; max-height: 200px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       alt="${item.label} photo ${idx + 4}" />
+                </td>
+                `).join('')}
+              </tr>
+            </table>
             ` : ''}
-          </table>
+            ` : ''}
+          </div>
         `;
       }
     }
@@ -2306,88 +2293,78 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
     }
   }
   
-  // Tenants Section with meter/breaker/CT photos
+  // Tenants Section with meter/breaker/CT photos - styled to match reference PDF
   if (insp.tenants && insp.tenants.length > 0) {
-    const tenantsWithImages = insp.tenants.filter((t: any) => 
-      t.meterImage || t.breakerImage || t.ctRatioImage
-    );
-    
+    // Section header - matching reference PDF style
     page1Content += `
-      <table style="width: 100%; margin-top: 20px; margin-bottom: 20px;" cellpadding="0" cellspacing="0">
-        <tr>
-          <td style="background: ${accentColor}; color: white; padding: 10px 15px; font-weight: 600; font-size: 11pt; border-radius: 6px 6px 0 0;">
-            📋 Tenant Verification (${insp.tenants.length} tenant${insp.tenants.length !== 1 ? 's' : ''})
-          </td>
-        </tr>
-      </table>
+      <div style="page-break-inside: avoid; margin-top: 30px; margin-bottom: 20px;">
+        <table style="width: 100%;" cellpadding="0" cellspacing="0">
+          <tr>
+            <td style="background: ${COLORS.success}; color: white; padding: 12px 20px; font-weight: 600; font-size: 13pt; text-transform: uppercase; letter-spacing: 0.5px;">
+              TENANTS / METERS
+            </td>
+          </tr>
+        </table>
+      </div>
     `;
     
-    for (const tenant of insp.tenants) {
+    insp.tenants.forEach((tenant: any, index: number) => {
       const hasImages = tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage;
+      const imageCount = [tenant.meterImage, tenant.breakerImage, tenant.ctRatioImage].filter(Boolean).length;
       
       page1Content += `
-        <table style="width: 100%; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 6px;" cellpadding="0" cellspacing="0">
-          <tr>
-            <td style="padding: 12px 15px; background: ${COLORS.lightGray}; border-bottom: 1px solid ${COLORS.border};">
-              <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="font-weight: 600; color: ${COLORS.primary}; font-size: 11pt;">${tenant.shopName}</td>
-                  <td style="text-align: right; font-size: 9pt; color: ${COLORS.textMuted};">${tenant.shopNumber || ''}</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding: 12px 15px;">
-              <table style="width: 100%;" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="width: 33%; font-size: 9pt;"><strong>Meter:</strong> ${tenant.meterSerialNumber || 'N/A'}</td>
-                  <td style="width: 33%; font-size: 9pt;"><strong>Breaker:</strong> ${tenant.breakerSize || 'N/A'}</td>
-                  <td style="width: 33%; font-size: 9pt;"><strong>CT Ratio:</strong> ${tenant.ctSizeAndRatio || 'N/A'}</td>
-                </tr>
-              </table>
-            </td>
-          </tr>
+        <div style="margin-bottom: 30px; page-break-inside: avoid;">
+          <!-- Tenant Header -->
+          <div style="font-weight: 700; color: ${COLORS.primary}; font-size: 12pt; margin-bottom: 12px;">
+            ${index + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}
+          </div>
+          
+          <!-- Tenant Details -->
+          <div style="margin-left: 20px; margin-bottom: 15px;">
+            <div style="font-size: 10pt; color: ${COLORS.text}; margin-bottom: 4px;">Breaker Size: ${tenant.breakerSize || 'N/A'}</div>
+            <div style="font-size: 10pt; color: ${COLORS.text}; margin-bottom: 4px;">CT Ratio: ${tenant.ctSizeAndRatio || 'N/A'}</div>
+            <div style="font-size: 10pt; color: ${COLORS.text}; margin-bottom: 4px;">Meter S/N: ${tenant.meterSerialNumber || 'N/A'}</div>
+          </div>
+          
           ${hasImages ? `
-          <tr>
-            <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
-              <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-weight: 600;">
-                📷 Metering Photographic Evidence
-              </div>
-              <table style="width: 100%;" cellpadding="0" cellspacing="8">
-                <tr>
-                  ${tenant.meterImage ? `
-                  <td style="width: 33%; vertical-align: top; text-align: center;">
-                    <img src="${tenant.meterImage}" 
-                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                         alt="Meter" />
-                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">Meter</div>
-                  </td>
-                  ` : ''}
-                  ${tenant.breakerImage ? `
-                  <td style="width: 33%; vertical-align: top; text-align: center;">
-                    <img src="${tenant.breakerImage}" 
-                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                         alt="Breaker" />
-                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">Main Breaker</div>
-                  </td>
-                  ` : ''}
-                  ${tenant.ctRatioImage ? `
-                  <td style="width: 33%; vertical-align: top; text-align: center;">
-                    <img src="${tenant.ctRatioImage}" 
-                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                         alt="CT Ratio" />
-                    <div style="font-size: 8pt; color: ${COLORS.textMuted}; margin-top: 4px;">CT Ratio</div>
-                  </td>
-                  ` : ''}
-                </tr>
-              </table>
-            </td>
-          </tr>
+          <!-- Photo Labels -->
+          <table style="width: 100%; margin-left: 20px;" cellpadding="0" cellspacing="0">
+            <tr>
+              ${tenant.breakerImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">Breaker</td>` : ''}
+              ${tenant.ctRatioImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">CT Ratio</td>` : ''}
+              ${tenant.meterImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">Meter</td>` : ''}
+            </tr>
+          </table>
+          <!-- Photo Grid -->
+          <table style="width: 100%; margin-left: 20px;" cellpadding="0" cellspacing="10">
+            <tr>
+              ${tenant.breakerImage ? `
+              <td style="width: 33%; vertical-align: top;">
+                <img src="${tenant.breakerImage}" 
+                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     alt="Breaker" />
+              </td>
+              ` : ''}
+              ${tenant.ctRatioImage ? `
+              <td style="width: 33%; vertical-align: top;">
+                <img src="${tenant.ctRatioImage}" 
+                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     alt="CT Ratio" />
+              </td>
+              ` : ''}
+              ${tenant.meterImage ? `
+              <td style="width: 33%; vertical-align: top;">
+                <img src="${tenant.meterImage}" 
+                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     alt="Meter" />
+              </td>
+              ` : ''}
+            </tr>
+          </table>
           ` : ''}
-        </table>
+        </div>
       `;
-    }
+    });
   }
   
   if (insp.signatures && insp.signatures.length > 0) {
@@ -2478,6 +2455,44 @@ function formatItemValueWithBadge(value: string | boolean | number, type?: strin
   }
   
   return `<span style="display: inline-block; padding: 3px 10px; font-size: 8pt; border-radius: 12px; background: ${accentColor}22; color: ${accentColor};">${String(value)}</span>`;
+}
+
+// Helper functions for cleaner status display (matching reference PDF style)
+function getStatusText(value: string | boolean | number, type?: string): string {
+  const strValue = String(value).toLowerCase();
+  if (typeof value === 'boolean') {
+    return value ? 'Pass' : 'Fail';
+  }
+  if (strValue === 'pass' || strValue === 'complete' || strValue === 'completed' || strValue === 'yes' || strValue === 'true') {
+    return 'Pass';
+  }
+  if (strValue === 'fail' || strValue === 'failed' || strValue === 'no' || strValue === 'false') {
+    return 'Fail';
+  }
+  if (strValue === 'pending' || strValue === 'in_progress') {
+    return 'Pending';
+  }
+  if (strValue === 'n/a' || strValue === 'na') {
+    return 'N/A';
+  }
+  return String(value);
+}
+
+function getStatusColor(value: string | boolean | number, type?: string): string {
+  const strValue = String(value).toLowerCase();
+  if (typeof value === 'boolean') {
+    return value ? COLORS.success : COLORS.error;
+  }
+  if (strValue === 'pass' || strValue === 'complete' || strValue === 'completed' || strValue === 'yes' || strValue === 'true') {
+    return COLORS.success;
+  }
+  if (strValue === 'fail' || strValue === 'failed' || strValue === 'no' || strValue === 'false') {
+    return COLORS.error;
+  }
+  if (strValue === 'pending' || strValue === 'in_progress') {
+    return COLORS.warning;
+  }
+  return COLORS.textMuted;
 }
 
 async function generateFortressChecklistHTML(data: ReportData): Promise<string> {
