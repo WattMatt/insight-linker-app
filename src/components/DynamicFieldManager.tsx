@@ -6,7 +6,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Trash2, Upload, X } from "lucide-react";
+import { Plus, Trash2, Upload, X, Camera } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useCamera } from "@/hooks/useCamera";
@@ -227,7 +227,9 @@ export const DynamicFieldManager = ({
     onFieldsChange?.(updatedFields);
   };
 
-  const handleCameraCapture = async (fieldId: string) => {
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
+  const handleTakePhoto = async (fieldId: string) => {
     // For native apps, use Capacitor camera directly
     if (isNative) {
       setUploadingImages(prev => new Set(prev).add(fieldId));
@@ -254,24 +256,42 @@ export const DynamicFieldManager = ({
       return;
     }
 
-    // For web browsers, trigger the file input with appropriate attributes
+    // For web browsers, trigger the file input with camera capture
+    const input = document.getElementById(`camera-capture-${fieldId}`) as HTMLInputElement;
+    if (!input) return;
+    input.click();
+  };
+
+  const handleAddPhotos = async (fieldId: string) => {
+    // For native apps, use Capacitor camera/gallery
+    if (isNative) {
+      setUploadingImages(prev => new Set(prev).add(fieldId));
+      try {
+        const files = await selectImages();
+        
+        if (files.length === 0) {
+          toast.info("No images selected");
+          return;
+        }
+
+        for (const file of files) {
+          await handleImageUpload(fieldId, file);
+        }
+      } catch (error) {
+        console.error("Error selecting images:", error);
+        toast.error("Failed to select images");
+        setUploadingImages(prev => {
+          const next = new Set(prev);
+          next.delete(fieldId);
+          return next;
+        });
+      }
+      return;
+    }
+
+    // For web browsers, trigger the file input for gallery selection
     const input = document.getElementById(`image-upload-${fieldId}`) as HTMLInputElement;
     if (!input) return;
-
-    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
-    
-    if (isMobileDevice) {
-      // On mobile web, open camera directly for single photo
-      input.removeAttribute('multiple');
-      input.setAttribute('capture', 'environment');
-      input.setAttribute('accept', 'image/*,.heic,.heif');
-    } else {
-      // On desktop, allow multiple file selection from gallery
-      input.setAttribute('multiple', '');
-      input.removeAttribute('capture');
-      input.setAttribute('accept', 'image/*');
-    }
-    
     input.click();
   };
 
@@ -371,29 +391,58 @@ export const DynamicFieldManager = ({
 
             {field.type === "image" && (
               <div className="space-y-3">
+                {/* Hidden input for camera capture */}
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif"
+                  capture="environment"
+                  onChange={(e) => {
+                    const files = e.target.files ? Array.from(e.target.files) : [];
+                    files.forEach(file => handleImageUpload(field.id, file));
+                    e.target.value = '';
+                  }}
+                  className="hidden"
+                  id={`camera-capture-${field.id}`}
+                />
+                {/* Hidden input for gallery selection */}
                 <input
                   type="file"
                   accept="image/*,.heic,.heif"
                   multiple
                   onChange={(e) => {
-                    const files = Array.from(e.target.files || []);
+                    const files = e.target.files ? Array.from(e.target.files) : [];
                     files.forEach(file => handleImageUpload(field.id, file));
-                    // Reset input so same file can be selected again
                     e.target.value = '';
                   }}
                   className="hidden"
                   id={`image-upload-${field.id}`}
                 />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => handleCameraCapture(field.id)}
-                  disabled={uploadingImages.has(field.id)}
-                  className="w-full sm:w-auto"
-                >
-                  <Upload className="mr-2 h-4 w-4" />
-                  {uploadingImages.has(field.id) ? "Uploading..." : "Add Photos"}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full">
+                  {/* Take Photo button - prominent on mobile */}
+                  {isMobileDevice && (
+                    <Button
+                      variant="default"
+                      size="sm"
+                      onClick={() => handleTakePhoto(field.id)}
+                      disabled={uploadingImages.has(field.id)}
+                      className="w-full sm:w-auto"
+                    >
+                      <Camera className="mr-2 h-4 w-4" />
+                      {uploadingImages.has(field.id) ? "Uploading..." : "Take Photo"}
+                    </Button>
+                  )}
+                  {/* Add Photos button - for gallery/file selection */}
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => handleAddPhotos(field.id)}
+                    disabled={uploadingImages.has(field.id)}
+                    className="w-full sm:w-auto"
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadingImages.has(field.id) ? "Uploading..." : "Add Photos"}
+                  </Button>
+                </div>
 
                 {field.images && field.images.length > 0 && (
                   <div className="grid grid-cols-3 gap-2">

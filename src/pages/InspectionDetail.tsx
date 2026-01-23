@@ -1107,6 +1107,8 @@ const InspectionDetail = () => {
     }
   };
 
+  const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+
   // Handler for camera button that uses native camera on mobile/web
   const handleCameraCapture = async (sectionKey: string, itemKey: string) => {
     const uploadKey = `${sectionKey}-${itemKey}`;
@@ -1140,6 +1142,24 @@ const InspectionDetail = () => {
         newSet.delete(uploadKey);
         return newSet;
       });
+    }
+  };
+
+  // Handler for "Add Photos" button that opens file picker/gallery
+  const handleAddPhotos = (sectionKey: string, itemKey: string) => {
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    const galleryInput = document.getElementById(`gallery-upload-${uploadKey}`) as HTMLInputElement;
+    if (galleryInput) {
+      galleryInput.click();
+    }
+  };
+
+  // Handler for "Take Photo" button that directly opens camera
+  const handleTakePhoto = (sectionKey: string, itemKey: string) => {
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    const cameraInput = document.getElementById(`camera-capture-${uploadKey}`) as HTMLInputElement;
+    if (cameraInput) {
+      cameraInput.click();
     }
   };
 
@@ -1197,6 +1217,22 @@ const InspectionDetail = () => {
       console.error("Error capturing snag photos:", error);
       toast.error("Failed to capture photos");
       setUploadingSnagPhotos(false);
+    }
+  };
+
+  // Handler for "Take Photo" button for snags that directly opens camera
+  const handleSnagTakePhoto = () => {
+    const cameraInput = document.getElementById('snag-camera-capture') as HTMLInputElement;
+    if (cameraInput) {
+      cameraInput.click();
+    }
+  };
+
+  // Handler for "Add Photos" button for snags that opens gallery
+  const handleSnagAddPhotos = () => {
+    const galleryInput = document.getElementById('snag-photo-upload') as HTMLInputElement;
+    if (galleryInput) {
+      galleryInput.click();
     }
   };
 
@@ -1608,36 +1644,70 @@ const InspectionDetail = () => {
                 </div>
               )}
 
+              {/* Hidden input for camera capture */}
+              <input
+                type="file"
+                accept="image/*,.heic,.heif"
+                capture="environment"
+                className="hidden"
+                id={`camera-capture-${uploadKey}`}
+                onChange={(e) => {
+                  handleImageUpload(sectionKey, itemKey, e.target.files);
+                  e.target.value = '';
+                }}
+              />
+              {/* Hidden input for gallery selection */}
               <input
                 ref={(el) => (fileInputRefs.current[uploadKey] = el)}
                 type="file"
                 accept="image/*,.heic,.heif"
-                capture="environment"
                 multiple
                 className="hidden"
+                id={`gallery-upload-${uploadKey}`}
                 onChange={(e) => {
                   handleImageUpload(sectionKey, itemKey, e.target.files);
-                  // Reset input so same file can be selected again
                   e.target.value = '';
                 }}
               />
 
-              <Button
-                type="button"
-                variant="outline"
-                className="w-full"
-                onClick={() => handleCameraCapture(sectionKey, itemKey)}
-                disabled={isUploading}
-              >
-                {isUploading ? (
-                  <>Uploading...</>
-                ) : (
-                  <>
-                    <Camera className="mr-2 h-4 w-4" />
-                    Add Image
-                  </>
+              <div className="flex flex-col sm:flex-row gap-2 w-full">
+                {/* Take Photo button - prominent on mobile */}
+                {isMobileDevice && (
+                  <Button
+                    type="button"
+                    variant="default"
+                    className="w-full sm:w-auto"
+                    onClick={() => handleTakePhoto(sectionKey, itemKey)}
+                    disabled={isUploading}
+                  >
+                    {isUploading ? (
+                      <>Uploading...</>
+                    ) : (
+                      <>
+                        <Camera className="mr-2 h-4 w-4" />
+                        Take Photo
+                      </>
+                    )}
+                  </Button>
                 )}
-              </Button>
+                {/* Add Photos button - for gallery/file selection */}
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => handleAddPhotos(sectionKey, itemKey)}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <>Uploading...</>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Add Photos
+                    </>
+                  )}
+                </Button>
+              </div>
             </div>
           </div>
         </div>
@@ -2561,25 +2631,56 @@ const InspectionDetail = () => {
                     ))}
                   </div>
                 )}
+                {/* Hidden input for camera capture */}
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   capture="environment"
+                  className="hidden"
+                  id="snag-camera-capture"
+                  onChange={(e) => {
+                    handleSnagPhotoUpload(e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+                {/* Hidden input for gallery selection */}
+                <input
+                  type="file"
+                  accept="image/*,.heic,.heif"
                   multiple
                   className="hidden"
                   id="snag-photo-upload"
-                  onChange={(e) => handleSnagPhotoUpload(e.target.files)}
+                  onChange={(e) => {
+                    handleSnagPhotoUpload(e.target.files);
+                    e.target.value = '';
+                  }}
                 />
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full"
-                  onClick={() => handleSnagCameraCapture()}
-                  disabled={uploadingSnagPhotos}
-                >
-                  <Camera className="mr-2 h-4 w-4" />
-                  {uploadingSnagPhotos ? 'Uploading...' : 'Add Photos'}
-                </Button>
+                <div className="flex flex-col sm:flex-row gap-2 w-full">
+                  {/* Take Photo button - prominent on mobile */}
+                  {isMobileDevice && (
+                    <Button
+                      type="button"
+                      variant="default"
+                      className="w-full sm:w-auto"
+                      onClick={handleSnagTakePhoto}
+                      disabled={uploadingSnagPhotos}
+                    >
+                      <Camera className="mr-2 h-4 w-4" />
+                      {uploadingSnagPhotos ? 'Uploading...' : 'Take Photo'}
+                    </Button>
+                  )}
+                  {/* Add Photos button - for gallery/file selection */}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full sm:w-auto"
+                    onClick={handleSnagAddPhotos}
+                    disabled={uploadingSnagPhotos}
+                  >
+                    <Upload className="mr-2 h-4 w-4" />
+                    {uploadingSnagPhotos ? 'Uploading...' : 'Add Photos'}
+                  </Button>
+                </div>
               </div>
             </div>
             <DialogFooter>
