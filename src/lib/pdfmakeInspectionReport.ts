@@ -186,36 +186,36 @@ function createInspectionSection(
   
   // Render each item with its photos inline
   section.items?.forEach((item, itemIdx) => {
-    const statusText = typeof item.value === 'boolean' 
+    const statusText = typeof item.value === 'boolean'
       ? (item.value ? 'Pass' : 'Fail')
       : String(item.value || 'N/A');
     
     const statusColor = getStatusColor(statusText);
     
-    // Item name (bold)
+    // Item name (bold) - more spacing between items
     content.push({
       text: item.label,
       fontSize: 11,
       bold: true,
-      margin: [0, itemIdx > 0 ? 15 : 5, 0, 3],
+      margin: [0, itemIdx > 0 ? 20 : 8, 0, 2],
     });
     
-    // Status line (colored)
+    // Status line (colored, slightly indented)
     content.push({
       text: `Status: ${statusText}`,
-      fontSize: 10,
+      fontSize: 9,
       color: statusColor,
-      margin: [0, 0, 0, 3],
+      margin: [8, 0, 0, 4],
     });
     
     // Notes if present
     if (item.notes) {
       content.push({
         text: item.notes,
-        fontSize: 9,
+        fontSize: 8,
         color: COLORS.textMuted,
         italics: true,
-        margin: [0, 0, 0, 5],
+        margin: [8, 0, 0, 6],
       });
     }
     
@@ -232,9 +232,13 @@ function createInspectionSection(
     });
     
     if (itemPhotos.length > 0) {
-      // Use single column for 1 photo, 2 columns for 2, 3 columns for 3+
-      const columns = Math.min(itemPhotos.length, 3);
-      content.push(createImageGrid(itemPhotos, columns, 160));
+      // Use single column for 1 photo, 2 columns for 2-3, 3 columns for 4+
+      const columns = itemPhotos.length === 1 ? 1 : Math.min(itemPhotos.length, 2);
+      const imageWidth = columns === 1 ? 180 : 140;
+      content.push({
+        ...createImageGrid(itemPhotos, columns, imageWidth),
+        margin: [8, 4, 0, 8],
+      });
     }
   });
   
