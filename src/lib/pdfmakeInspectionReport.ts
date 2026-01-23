@@ -172,8 +172,49 @@ function getStatusColor(status: string): string {
 }
 
 /**
- * Create section content for inspection items - INLINE PHOTOS per item
- * Structure: Item Name → Status: Value → Photo(s) directly below
+ * Create compact image grid with tighter spacing for inspection items
+ */
+function createCompactImageGrid(
+  images: Array<{ dataUrl: string; caption?: string }>,
+  columnsPerRow: number,
+  imageWidth: number
+): Content {
+  const rows: Content[][] = [];
+  
+  for (let i = 0; i < images.length; i += columnsPerRow) {
+    const row: Content[] = images.slice(i, i + columnsPerRow).map(img => ({
+      stack: [
+        { image: img.dataUrl, width: imageWidth, alignment: 'center' as const },
+        img.caption ? { 
+          text: img.caption, 
+          fontSize: 6, 
+          color: COLORS.textMuted, 
+          alignment: 'center' as const, 
+          margin: [0, 1, 0, 0] 
+        } : { text: '' },
+      ],
+      margin: [2, 2, 2, 2],
+    }));
+    
+    while (row.length < columnsPerRow) {
+      row.push({ text: '' } as Content);
+    }
+    rows.push(row);
+  }
+  
+  return {
+    table: {
+      widths: Array(columnsPerRow).fill('*'),
+      body: rows,
+    },
+    layout: 'noBorders',
+    margin: [0, 4, 0, 4],
+  };
+}
+
+/**
+ * Create section content for inspection items - COMPACT INLINE LAYOUT
+ * Structure: Item Name + Status inline → Photo(s) in compact 3-column grid
  */
 function createInspectionSection(
   section: InspectionSection,
@@ -195,59 +236,58 @@ function createInspectionSection(
     // Build item stack content
     const itemStack: Content[] = [];
     
-    // Item name (bold)
+    // Item name + status on same line using columns
     itemStack.push({
-      text: item.label,
-      fontSize: 11,
-      bold: true,
+      columns: [
+        { text: item.label, fontSize: 10, bold: true, width: '*' },
+        { 
+          text: statusText, 
+          fontSize: 9, 
+          color: statusColor, 
+          bold: true,
+          width: 'auto',
+          alignment: 'right' as const,
+        },
+      ],
       margin: [0, 0, 0, 2],
     });
     
-    // Status line (colored, slightly indented)
-    itemStack.push({
-      text: `Status: ${statusText}`,
-      fontSize: 9,
-      color: statusColor,
-      margin: [8, 0, 0, 4],
-    });
-    
-    // Notes if present
+    // Notes if present (compact)
     if (item.notes) {
       itemStack.push({
         text: item.notes,
         fontSize: 8,
         color: COLORS.textMuted,
         italics: true,
-        margin: [8, 0, 0, 6],
+        margin: [0, 0, 0, 3],
       });
     }
     
-    // Photos inline for this item
+    // Photos inline - use 3-column compact grid with smaller images
     const itemPhotos: Array<{ dataUrl: string; caption?: string }> = [];
     item.photos?.forEach((photoUrl, idx) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
         itemPhotos.push({
           dataUrl,
-          caption: `Photo ${idx + 1}`,
+          caption: `#${idx + 1}`,
         });
       }
     });
     
     if (itemPhotos.length > 0) {
-      const columns = itemPhotos.length === 1 ? 1 : Math.min(itemPhotos.length, 2);
-      const imageWidth = columns === 1 ? 180 : 140;
-      itemStack.push({
-        ...createImageGrid(itemPhotos, columns, imageWidth),
-        margin: [8, 4, 0, 0],
-      });
+      // 1 photo: single, 2 photos: 2 cols, 3+ photos: 3 cols
+      const columns = itemPhotos.length === 1 ? 1 : itemPhotos.length === 2 ? 2 : 3;
+      // Smaller images: 150pt for single, 110pt for 2-col, 90pt for 3-col
+      const imageWidth = columns === 1 ? 150 : columns === 2 ? 110 : 90;
+      itemStack.push(createCompactImageGrid(itemPhotos, columns, imageWidth));
     }
     
     // Wrap entire item in unbreakable stack to keep header + photos together
     content.push({
       stack: itemStack,
       unbreakable: true,
-      margin: [0, itemIdx > 0 ? 16 : 8, 0, 8],
+      margin: [0, itemIdx > 0 ? 10 : 4, 0, 6],
     });
   });
   
