@@ -245,12 +245,14 @@ function createInspectionSection(
     }
     
     // Photos - single column, stacked vertically like reference
+    // Using fit to maintain aspect ratio
     item.photos?.forEach((photoUrl) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
         itemStack.push({
           image: dataUrl,
-          width: 200,
+          fit: [350, 280], // Max width 350pt, max height 280pt - maintains aspect ratio
+          alignment: 'left' as const,
           margin: [0, 5, 0, 10],
         });
       }
@@ -333,8 +335,8 @@ function createTenantSection(
       if (dataUrl) {
         photoColumns.push({
           stack: [
-            { text: 'Breaker', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
-            { image: dataUrl, width: 140, alignment: 'center' },
+            { text: 'Breaker', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
+            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
           ],
           width: '*',
         });
@@ -346,8 +348,8 @@ function createTenantSection(
       if (dataUrl) {
         photoColumns.push({
           stack: [
-            { text: 'CT Ratio', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
-            { image: dataUrl, width: 140, alignment: 'center' },
+            { text: 'CT Ratio', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
+            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
           ],
           width: '*',
         });
@@ -359,8 +361,8 @@ function createTenantSection(
       if (dataUrl) {
         photoColumns.push({
           stack: [
-            { text: 'Meter', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
-            { image: dataUrl, width: 140, alignment: 'center' },
+            { text: 'Meter', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
+            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
           ],
           width: '*',
         });
@@ -438,13 +440,14 @@ function createSnagsSection(
       });
     }
     
-    // Photos
+    // Photos - using fit to maintain aspect ratio
     snag.photos?.forEach((photoUrl) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
         snagStack.push({
           image: dataUrl,
-          width: 180,
+          fit: [300, 240], // Max width 300pt, max height 240pt
+          alignment: 'left' as const,
           margin: [0, 5, 0, 8],
         });
       }
