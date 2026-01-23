@@ -1611,11 +1611,15 @@ const InspectionDetail = () => {
               <input
                 ref={(el) => (fileInputRefs.current[uploadKey] = el)}
                 type="file"
-                accept="image/*"
+                accept="image/*,.heic,.heif"
                 capture="environment"
                 multiple
                 className="hidden"
-                onChange={(e) => handleImageUpload(sectionKey, itemKey, e.target.files)}
+                onChange={(e) => {
+                  handleImageUpload(sectionKey, itemKey, e.target.files);
+                  // Reset input so same file can be selected again
+                  e.target.value = '';
+                }}
               />
 
               <Button

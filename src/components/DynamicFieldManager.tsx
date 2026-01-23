@@ -228,47 +228,51 @@ export const DynamicFieldManager = ({
   };
 
   const handleCameraCapture = async (fieldId: string) => {
-    const input = document.getElementById(`image-upload-${fieldId}`) as HTMLInputElement;
-    
-    if (!isNative) {
-      if (input) {
-        const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    // For native apps, use Capacitor camera directly
+    if (isNative) {
+      setUploadingImages(prev => new Set(prev).add(fieldId));
+      try {
+        const files = await selectImages();
         
-        if (isMobileDevice) {
-          input.removeAttribute('multiple');
-          input.setAttribute('capture', 'environment');
-        } else {
-          input.setAttribute('multiple', '');
-          input.removeAttribute('capture');
+        if (files.length === 0) {
+          toast.info("No images selected");
+          return;
         }
+
+        for (const file of files) {
+          await handleImageUpload(fieldId, file);
+        }
+      } catch (error) {
+        console.error("Error capturing images:", error);
+        toast.error("Failed to capture images");
+        setUploadingImages(prev => {
+          const next = new Set(prev);
+          next.delete(fieldId);
+          return next;
+        });
       }
-      
-      input?.click();
       return;
     }
 
-    setUploadingImages(prev => new Set(prev).add(fieldId));
+    // For web browsers, trigger the file input with appropriate attributes
+    const input = document.getElementById(`image-upload-${fieldId}`) as HTMLInputElement;
+    if (!input) return;
 
-    try {
-      const files = await selectImages();
-      
-      if (files.length === 0) {
-        toast.info("No images selected");
-        return;
-      }
-
-      for (const file of files) {
-        await handleImageUpload(fieldId, file);
-      }
-    } catch (error) {
-      console.error("Error capturing images:", error);
-      toast.error("Failed to capture images");
-      setUploadingImages(prev => {
-        const next = new Set(prev);
-        next.delete(fieldId);
-        return next;
-      });
+    const isMobileDevice = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
+    
+    if (isMobileDevice) {
+      // On mobile web, open camera directly for single photo
+      input.removeAttribute('multiple');
+      input.setAttribute('capture', 'environment');
+      input.setAttribute('accept', 'image/*,.heic,.heif');
+    } else {
+      // On desktop, allow multiple file selection from gallery
+      input.setAttribute('multiple', '');
+      input.removeAttribute('capture');
+      input.setAttribute('accept', 'image/*');
     }
+    
+    input.click();
   };
 
   return (
@@ -369,11 +373,13 @@ export const DynamicFieldManager = ({
               <div className="space-y-3">
                 <input
                   type="file"
-                  accept="image/*"
+                  accept="image/*,.heic,.heif"
                   multiple
                   onChange={(e) => {
                     const files = Array.from(e.target.files || []);
                     files.forEach(file => handleImageUpload(field.id, file));
+                    // Reset input so same file can be selected again
+                    e.target.value = '';
                   }}
                   className="hidden"
                   id={`image-upload-${field.id}`}
@@ -383,9 +389,10 @@ export const DynamicFieldManager = ({
                   size="sm"
                   onClick={() => handleCameraCapture(field.id)}
                   disabled={uploadingImages.has(field.id)}
+                  className="w-full sm:w-auto"
                 >
                   <Upload className="mr-2 h-4 w-4" />
-                  {uploadingImages.has(field.id) ? "Uploading..." : "Upload Images"}
+                  {uploadingImages.has(field.id) ? "Uploading..." : "Add Photos"}
                 </Button>
 
                 {field.images && field.images.length > 0 && (
