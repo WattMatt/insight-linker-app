@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   LineChart, 
@@ -26,7 +27,10 @@ import {
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Clock
+  Clock,
+  Eye,
+  FileWarning,
+  Target
 } from "lucide-react";
 import { format, subDays, startOfDay } from "date-fns";
 import { 
@@ -35,6 +39,7 @@ import {
   hasValidCocStatus,
   VALID_COC_STATUSES
 } from "@/lib/complianceCalculations";
+import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 
 interface ComplianceDashboardProps {
   siteId: string;
@@ -71,20 +76,110 @@ interface TrendDataPoint {
   snags: number;
 }
 
+interface FailedValidation {
+  id: string;
+  document_id: string;
+  subsection_id: string;
+  subsection_name: string;
+  status: string;
+  validated_at: string;
+  violations: Array<{
+    clause: string;
+    description: string;
+    reason?: string;
+    riskLevel?: string;
+    immediateAction?: string;
+    evidence?: string;
+    section?: string;
+  }>;
+  report_data: any;
+  document: {
+    id: string;
+    file_name: string;
+    file_url: string;
+    uploaded_at: string;
+  } | null;
+}
+
 export const ComplianceDashboard = ({ siteId, subsections, inspections }: ComplianceDashboardProps) => {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [snagCounts, setSnagCounts] = useState({ open: 0, inProgress: 0, closed: 0 });
   const [loading, setLoading] = useState(true);
   const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
+  const [failedValidations, setFailedValidations] = useState<FailedValidation[]>([]);
+  const [previewDoc, setPreviewDoc] = useState<FailedValidation['document']>(null);
+  const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Fetch COC validations to check for any failed supplementary validations using shared utility
+  // Fetch COC validations with full details for failed ones
   useEffect(() => {
     const fetchCocValidations = async () => {
       if (subsections.length === 0) return;
       
       const subsectionIds = subsections.map(s => s.id);
+      
+      // First get the failed set for compliance calculation
       const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
       setFailedValidationsBySubsection(failedSet);
+      
+      // Now fetch full details for failed validations
+      if (failedSet.size > 0) {
+        const { data: validations, error } = await supabase
+          .from('coc_validations')
+          .select(`
+            id,
+            document_id,
+            subsection_id,
+            status,
+            validated_at,
+            violations,
+            report_data
+          `)
+          .in('subsection_id', Array.from(failedSet))
+          .order('validated_at', { ascending: false });
+        
+        if (error) {
+          console.error('Error fetching validation details:', error);
+          return;
+        }
+        
+        // Get latest validation per subsection
+        const latestBySubsection = new Map<string, typeof validations[0]>();
+        validations?.forEach(v => {
+          if (!latestBySubsection.has(v.subsection_id)) {
+            latestBySubsection.set(v.subsection_id, v);
+          }
+        });
+        
+        // Fetch document details for each validation
+        const documentIds = Array.from(latestBySubsection.values()).map(v => v.document_id);
+        const { data: documents } = await supabase
+          .from('subsection_documents')
+          .select('id, file_name, file_url, uploaded_at')
+          .in('id', documentIds);
+        
+        const docMap = new Map(documents?.map(d => [d.id, d]) || []);
+        
+        // Map subsection names
+        const subsectionMap = new Map(subsections.map(s => [s.id, s.name]));
+        
+        // Build full failed validation list
+        const fullValidations: FailedValidation[] = Array.from(latestBySubsection.values()).map(v => ({
+          id: v.id,
+          document_id: v.document_id,
+          subsection_id: v.subsection_id,
+          subsection_name: subsectionMap.get(v.subsection_id) || 'Unknown',
+          status: v.status,
+          validated_at: v.validated_at,
+          violations: (v.violations as any[]) || [],
+          report_data: v.report_data,
+          document: docMap.get(v.document_id) || null,
+        }));
+        
+        setFailedValidations(fullValidations);
+      } else {
+        setFailedValidations([]);
+      }
     };
     
     fetchCocValidations();
@@ -578,6 +673,119 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           </CardContent>
         </Card>
       </div>
+
+      {/* Failed COC Validations Section */}
+      {failedValidations.length > 0 && (
+        <Card className="border-destructive/30">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-destructive">
+              <FileWarning className="h-5 w-5" />
+              Failed COC Validations
+              <Badge variant="destructive" className="ml-2">
+                {failedValidations.length}
+              </Badge>
+            </CardTitle>
+            <CardDescription>
+              Subsections with COC validation failures - click to preview document with error highlighting
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {failedValidations.map((validation) => (
+              <div 
+                key={validation.id}
+                className="border rounded-lg p-4 bg-destructive/5 hover:bg-destructive/10 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 mb-2">
+                      <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                      <span className="font-semibold truncate">{validation.subsection_name}</span>
+                      <Badge variant="destructive" className="shrink-0">
+                        {validation.status}
+                      </Badge>
+                    </div>
+                    
+                    <p className="text-xs text-muted-foreground mb-3">
+                      Validated: {format(new Date(validation.validated_at), 'dd MMM yyyy, HH:mm')}
+                    </p>
+                    
+                    {/* Violations List */}
+                    {validation.violations.length > 0 && (
+                      <div className="space-y-2">
+                        <p className="text-sm font-medium text-destructive flex items-center gap-1">
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          {validation.violations.length} Issue{validation.violations.length !== 1 ? 's' : ''} Found:
+                        </p>
+                        <div className="space-y-1.5">
+                          {validation.violations.slice(0, 3).map((v, idx) => (
+                            <div 
+                              key={idx}
+                              className="flex items-start gap-2 text-sm p-2 rounded bg-background/60 border border-destructive/20"
+                            >
+                              <Target className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
+                              <div className="min-w-0 flex-1">
+                                <span className="font-medium text-destructive">
+                                  Clause {v.clause}
+                                </span>
+                                {v.section && (
+                                  <span className="text-muted-foreground text-xs ml-2">
+                                    ({v.section})
+                                  </span>
+                                )}
+                                <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
+                                  {v.description}
+                                </p>
+                              </div>
+                            </div>
+                          ))}
+                          {validation.violations.length > 3 && (
+                            <p className="text-xs text-muted-foreground pl-5">
+                              +{validation.violations.length - 3} more issues...
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Preview Button */}
+                  {validation.document && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="shrink-0 gap-2"
+                      onClick={() => {
+                        setPreviewDoc(validation.document);
+                        setPreviewValidation({
+                          status: validation.status,
+                          violations: validation.violations,
+                          report_data: validation.report_data
+                        });
+                        setPreviewOpen(true);
+                      }}
+                    >
+                      <Eye className="h-4 w-4" />
+                      Preview
+                    </Button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* COC Preview Dialog */}
+      <COCPreviewDialog
+        open={previewOpen}
+        onClose={() => {
+          setPreviewOpen(false);
+          setPreviewDoc(null);
+          setPreviewValidation(null);
+        }}
+        document={previewDoc}
+        validation={previewValidation}
+      />
     </div>
   );
 };
