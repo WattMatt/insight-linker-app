@@ -66,27 +66,47 @@ const capturePhotoWeb = (options: CameraOptions = {}): Promise<File[]> => {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*,.heic,.heif'; // Explicitly include HEIC/HEIF for iOS
-
+    
+    // Accept pattern optimized for maximum device compatibility
+    // iOS Safari needs specific patterns, Android Chrome is more flexible
+    input.accept = 'image/*';
+    
     if (options.multiple) {
       input.multiple = true;
     }
 
-    // On mobile devices, prefer camera capture
-    // The 'capture' attribute opens camera directly on mobile browsers
-    if (options.preferCamera && isMobileDevice()) {
-      input.setAttribute('capture', 'environment'); // Back camera
+    // On mobile devices, use capture attribute to directly open camera
+    // 'environment' = back camera, 'user' = front camera
+    const shouldUseCamera = options.preferCamera && isMobileDevice();
+    if (shouldUseCamera) {
+      input.setAttribute('capture', 'environment');
+      // Don't allow multiple when using camera capture - take one at a time
+      input.removeAttribute('multiple');
     }
 
     // Ensure input is in DOM for iOS Safari compatibility
+    // This is critical for iOS to properly show the camera/photo picker
     input.style.position = 'fixed';
     input.style.top = '-9999px';
     input.style.left = '-9999px';
+    input.style.opacity = '0';
+    input.style.width = '1px';
+    input.style.height = '1px';
     document.body.appendChild(input);
 
+    let resolved = false;
+    
     const cleanup = () => {
       if (document.body.contains(input)) {
         document.body.removeChild(input);
+      }
+    };
+
+    const resolveOnce = (files: File[]) => {
+      if (!resolved) {
+        resolved = true;
+        cleanup();
+        resolve(files);
       }
     };
 
@@ -94,36 +114,59 @@ const capturePhotoWeb = (options: CameraOptions = {}): Promise<File[]> => {
       const filesList = (e.target as HTMLInputElement).files;
       if (filesList && filesList.length > 0) {
         const files = Array.from(filesList);
+        console.log(`[Camera] ${files.length} file(s) selected`);
         // Process each file with HEIC conversion
         const processedFiles = await Promise.all(files.map(convertHeicToJpeg));
-        cleanup();
-        resolve(processedFiles);
+        resolveOnce(processedFiles);
       } else {
-        cleanup();
-        resolve([]);
+        resolveOnce([]);
       }
     };
 
     input.oncancel = () => {
-      cleanup();
-      resolve([]); // User cancelled
+      console.log('[Camera] User cancelled selection');
+      resolveOnce([]);
     };
 
-    // Handle cases where oncancel doesn't fire (older browsers)
+    // Handle cases where oncancel doesn't fire (older browsers, iOS Safari)
+    // Use visibility change and focus events as backup
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible' && !resolved) {
+        setTimeout(() => {
+          if (!resolved && (!input.files || input.files.length === 0)) {
+            console.log('[Camera] Detected return without selection (visibility)');
+            resolveOnce([]);
+          }
+        }, 300);
+      }
+    };
+
     const handleFocusBack = () => {
       setTimeout(() => {
-        if (input.files?.length === 0) {
-          cleanup();
-          resolve([]);
+        if (!resolved && (!input.files || input.files.length === 0)) {
+          console.log('[Camera] Detected return without selection (focus)');
+          resolveOnce([]);
         }
       }, 500);
     };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('focus', handleFocusBack, { once: true });
 
+    // Cleanup event listeners after resolution
+    const originalResolve = resolveOnce;
+    const resolveWithCleanup = (files: File[]) => {
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      originalResolve(files);
+    };
+
     // Add a small delay to ensure the dialog appears across all browsers
+    // Longer delay for iOS which can be slower to respond
+    const delay = /iPhone|iPad|iPod/i.test(navigator.userAgent) ? 150 : 50;
     setTimeout(() => {
+      console.log(`[Camera] Opening file picker, preferCamera=${shouldUseCamera}, multiple=${options.multiple}`);
       input.click();
-    }, 100);
+    }, delay);
   });
 };
 

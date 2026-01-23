@@ -1644,10 +1644,10 @@ const InspectionDetail = () => {
                 </div>
               )}
 
-              {/* Hidden input for camera capture */}
+              {/* Hidden input for camera capture - use image/* only for best camera compatibility */}
               <input
                 type="file"
-                accept="image/*,.heic,.heif"
+                accept="image/*"
                 capture="environment"
                 className="hidden"
                 id={`camera-capture-${uploadKey}`}
@@ -2631,10 +2631,10 @@ const InspectionDetail = () => {
                     ))}
                   </div>
                 )}
-                {/* Hidden input for camera capture */}
+                {/* Hidden input for camera capture - use image/* only for best camera compatibility */}
                 <input
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept="image/*"
                   capture="environment"
                   className="hidden"
                   id="snag-camera-capture"
