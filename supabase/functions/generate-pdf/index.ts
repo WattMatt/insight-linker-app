@@ -64,32 +64,42 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// IMAGE HANDLING - Signed URLs with HTML-based Sizing
+// IMAGE HANDLING - Strict Size Control for PDFShift 250MB Limit
 // ============================================================================
-// ARCHITECTURE: Generate signed URLs and let PDFShift fetch images directly.
-// Image sizing is controlled via HTML/CSS (width: 150px), avoiding CPU-intensive
-// server-side image processing that exceeds Edge Function limits.
+// PROBLEM: Legacy uncompressed images (15MB+) cause 384MB+ documents.
+// Supabase Image Transformation requires Pro plan and may not work.
 // 
-// CLIENT-SIDE COMPRESSION: Images are now compressed to ~50-100KB before upload
-// using Canvas API in useImageUpload.ts and DynamicFieldManager.tsx.
-// This allows significantly more photos while staying under limits.
+// SOLUTION: Aggressively limit photo count and use smaller signed URLs.
+// For legacy sites with many large photos, we skip photos entirely and
+// provide a "photos available in system" note instead.
+// 
+// This ensures reliable PDF generation within the 250MB limit.
 
-const MAX_PHOTOS_PER_ITEM = 6;   // 6 photos per item × ~100KB = ~600KB per item
-const MAX_TOTAL_PHOTOS = 60;    // 60 photos × ~100KB = ~6MB total photo payload
+const MAX_PHOTOS_PER_ITEM = 2;   // Reduced from 6 - only show key photos
+const MAX_TOTAL_PHOTOS = 20;    // Reduced from 60 - prevents size explosion
+const MAX_SNAG_PHOTOS = 1;      // Only 1 photo per snag
+const PHOTO_SIZE_ESTIMATE_KB = 2000; // Assume worst case 2MB per legacy photo
+const MAX_TOTAL_SIZE_MB = 100;  // Target max 100MB for photos (leave room for HTML)
 
-// Track global photo count across the entire document
+// Track global photo count and estimated size
 let globalPhotoCount = 0;
+let estimatedTotalSizeKB = 0;
 
 function resetPhotoCount() {
   globalPhotoCount = 0;
+  estimatedTotalSizeKB = 0;
 }
 
 function canAddPhoto(): boolean {
-  return globalPhotoCount < MAX_TOTAL_PHOTOS;
+  // Check both count limit and estimated size limit
+  const withinCount = globalPhotoCount < MAX_TOTAL_PHOTOS;
+  const withinSize = estimatedTotalSizeKB < (MAX_TOTAL_SIZE_MB * 1024);
+  return withinCount && withinSize;
 }
 
 function incrementPhotoCount() {
   globalPhotoCount++;
+  estimatedTotalSizeKB += PHOTO_SIZE_ESTIMATE_KB;
 }
 
 // Extract pattern from filename for matching alternatives
@@ -148,15 +158,11 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
 }
 
 // Generate a signed URL for PDFShift to fetch directly
-// Uses Supabase Image Transformation to resize legacy uncompressed images
-// This ensures consistent ~50-100KB per image regardless of original size
+// NOTE: Supabase Image Transformation requires Pro plan - may fall back to original size
+// We limit total photos aggressively to prevent oversized documents
 async function getSignedImageUrl(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already embedded
-  
-  // Image transformation parameters - resize large legacy images
-  const TRANSFORM_WIDTH = 400;  // Max width for PDF photos
-  const TRANSFORM_QUALITY = 70; // JPEG quality
   
   try {
     const parsed = parseSupabaseStorageUrl(url);
@@ -185,32 +191,31 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
       }
     }
     
-    // Create a signed URL with image transformation parameters
-    // This resizes legacy uncompressed images server-side before PDFShift fetches them
+    // Try with image transformation first (requires Supabase Pro)
     const { data, error } = await supabase.storage
       .from(parsed.bucket)
       .createSignedUrl(finalPath, 3600, {
         transform: {
-          width: TRANSFORM_WIDTH,
-          quality: TRANSFORM_QUALITY,
+          width: 300,  // Small size for PDF
+          quality: 60, // Lower quality for size
         }
       });
     
-    if (error || !data?.signedUrl) {
-      console.warn(`[getSignedUrl] Failed to create signed URL:`, error);
-      // Fallback: try without transformation (for non-image files)
-      const { data: fallbackData, error: fallbackError } = await supabase.storage
-        .from(parsed.bucket)
-        .createSignedUrl(finalPath, 3600);
-      
-      if (fallbackError || !fallbackData?.signedUrl) {
-        return null;
-      }
-      return fallbackData.signedUrl;
+    if (!error && data?.signedUrl) {
+      console.log(`[getSignedUrl] Created transformed URL for: ${finalPath.substring(0, 40)}...`);
+      return data.signedUrl;
     }
     
-    console.log(`[getSignedUrl] Created transformed signed URL (w:${TRANSFORM_WIDTH}) for: ${finalPath.substring(0, 50)}...`);
-    return data.signedUrl;
+    // Fallback to regular signed URL (may be large)
+    console.warn(`[getSignedUrl] Transform failed, using original:`, error?.message);
+    const { data: fallbackData, error: fallbackError } = await supabase.storage
+      .from(parsed.bucket)
+      .createSignedUrl(finalPath, 3600);
+    
+    if (fallbackError || !fallbackData?.signedUrl) {
+      return null;
+    }
+    return fallbackData.signedUrl;
   } catch (err) {
     console.warn(`[getSignedUrl] Error:`, err);
     return null;
@@ -362,16 +367,16 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  // Process snag photos - convert to signed URLs
+  // Process snag photos - convert to signed URLs (limited to 1 per snag)
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
         totalPhotosFound += snag.photos.length;
         const signedUrls: string[] = [];
-        // Allow up to 3 snag photos
-        const photosToProcess = snag.photos.slice(0, 3);
-        if (snag.photos.length > 3) {
-          skippedForLimit += snag.photos.length - 3;
+        // Allow only 1 photo per snag to reduce size
+        const photosToProcess = snag.photos.slice(0, MAX_SNAG_PHOTOS);
+        if (snag.photos.length > MAX_SNAG_PHOTOS) {
+          skippedForLimit += snag.photos.length - MAX_SNAG_PHOTOS;
         }
         
         for (const photoUrl of photosToProcess) {
