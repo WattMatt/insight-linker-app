@@ -116,6 +116,26 @@ export async function generateAndSaveComprehensiveReport(
       };
     });
 
+    // Extract tenant data from jsonData or template
+    const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
+    const tenantsData = jsonData.tenants || {};
+    
+    const tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
+      const tenantId = String(tenant.id ?? idx);
+      const tenantData = tenantsData[tenantId] || {};
+      
+      return {
+        shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
+        shopNumber: tenant.shopNumber,
+        meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber,
+        breakerSize: tenantData.breakerSize || tenant.breakerSize,
+        ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio,
+        meterImage: tenantData.meterImage,
+        breakerImage: tenantData.breakerImage,
+        ctRatioImage: tenantData.ctRatioImage,
+      };
+    });
+
     // Build pdfmake inspection data
     const pdfData: PdfmakeInspectionData = {
       inspectionId,
@@ -126,6 +146,7 @@ export async function generateAndSaveComprehensiveReport(
       qualityRating: inspection.quality_rating,
       generalInfo,
       sections: sectionsForPdf,
+      tenants: tenantsForPdf,
       snags: snags.map(snag => ({
         title: snag.title,
         description: snag.description,
@@ -279,6 +300,26 @@ export const ComprehensiveInspectionReport = ({
         };
       });
 
+      // Extract tenant data from jsonData or template
+      const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
+      const tenantsData = jsonData.tenants || {};
+      
+      const tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
+        const tenantId = String(tenant.id ?? idx);
+        const tenantData = tenantsData[tenantId] || {};
+        
+        return {
+          shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
+          shopNumber: tenant.shopNumber,
+          meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber,
+          breakerSize: tenantData.breakerSize || tenant.breakerSize,
+          ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio,
+          meterImage: tenantData.meterImage,
+          breakerImage: tenantData.breakerImage,
+          ctRatioImage: tenantData.ctRatioImage,
+        };
+      });
+
       // Build pdfmake inspection data
       const pdfData: PdfmakeInspectionData = {
         inspectionId: inspId || '',
@@ -289,6 +330,7 @@ export const ComprehensiveInspectionReport = ({
         qualityRating: inspectionData?.quality_rating,
         generalInfo,
         sections: sectionsForPdf,
+        tenants: tenantsForPdf,
         snags: snags.map(snag => ({
           title: snag.title,
           description: snag.description,
