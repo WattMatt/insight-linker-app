@@ -1,27 +1,27 @@
 /**
  * PDFMAKE-BASED INSPECTION REPORT GENERATOR
  * 
- * Uses pdfmake for reliable image handling in inspection reports.
- * This replaces the PDFShift-based approach for inspection reports specifically.
+ * Generates professional inspection reports matching the reference layout:
+ * - Full-width colored section banners
+ * - Item name + Status: Pass/Fail format
+ * - Single photo per item, naturally stacked
+ * - Clean vertical flow with proper spacing
  */
 
 import {
   generateReport,
-  createSectionHeader,
-  createImage,
-  createImageGrid,
   loadImageAsDataUrl,
   COLORS,
   CONTENT_WIDTH_PT,
-  createInfoTable,
-  createStatusBadge,
-  getStatusType,
   CoverPageOptions,
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
 
 // Type definitions
 type Content = any;
+
+// Section banner color (matching example - teal/dark blue)
+const SECTION_BANNER_COLOR = '#1a7a8a';
 
 export interface InspectionSection {
   title: string;
@@ -144,9 +144,7 @@ function collectImageUrls(inspection: InspectionReportData): string[] {
   
   // Signature images
   inspection.signatures?.forEach(sig => {
-    if (sig.signatureUrl && sig.signatureUrl.startsWith('data:')) {
-      // Already a data URL, skip
-    } else if (sig.signatureUrl) {
+    if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
       urls.push(sig.signatureUrl);
     }
   });
@@ -160,61 +158,44 @@ function collectImageUrls(inspection: InspectionReportData): string[] {
 function getStatusColor(status: string): string {
   const statusLower = status.toLowerCase();
   if (['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(statusLower)) {
-    return COLORS.success;
+    return '#22c55e'; // Green
   }
   if (['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(statusLower)) {
-    return COLORS.error;
+    return '#ef4444'; // Red
   }
   if (['pending', 'in progress', 'partial', 'warning', 'n/a'].includes(statusLower)) {
-    return COLORS.warning;
+    return '#f59e0b'; // Amber
   }
   return COLORS.textMuted;
 }
 
 /**
- * Create compact image grid with tighter spacing for inspection items
+ * Create full-width section banner (matching reference)
  */
-function createCompactImageGrid(
-  images: Array<{ dataUrl: string; caption?: string }>,
-  columnsPerRow: number,
-  imageWidth: number
-): Content {
-  const rows: Content[][] = [];
-  
-  for (let i = 0; i < images.length; i += columnsPerRow) {
-    const row: Content[] = images.slice(i, i + columnsPerRow).map(img => ({
-      stack: [
-        { image: img.dataUrl, width: imageWidth, alignment: 'center' as const },
-        img.caption ? { 
-          text: img.caption, 
-          fontSize: 6, 
-          color: COLORS.textMuted, 
-          alignment: 'center' as const, 
-          margin: [0, 1, 0, 0] 
-        } : { text: '' },
-      ],
-      margin: [2, 2, 2, 2],
-    }));
-    
-    while (row.length < columnsPerRow) {
-      row.push({ text: '' } as Content);
-    }
-    rows.push(row);
-  }
-  
+function createSectionBanner(title: string): Content {
   return {
     table: {
-      widths: Array(columnsPerRow).fill('*'),
-      body: rows,
+      widths: ['*'],
+      body: [[{
+        text: title.toUpperCase(),
+        fontSize: 14,
+        bold: true,
+        color: '#FFFFFF',
+        alignment: 'center',
+        margin: [0, 12, 0, 12],
+      }]],
     },
-    layout: 'noBorders',
-    margin: [0, 4, 0, 4],
+    layout: {
+      fillColor: () => SECTION_BANNER_COLOR,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+    },
+    margin: [0, 20, 0, 15],
   };
 }
 
 /**
- * Create section content for inspection items - COMPACT INLINE LAYOUT
- * Structure: Item Name + Status inline → Photo(s) in compact 3-column grid
+ * Create inspection section with items and photos - MATCHING REFERENCE LAYOUT
  */
 function createInspectionSection(
   section: InspectionSection,
@@ -222,72 +203,64 @@ function createInspectionSection(
 ): Content[] {
   const content: Content[] = [];
   
-  // Section header
-  content.push(createSectionHeader(section.title));
+  // Full-width section banner
+  content.push(createSectionBanner(section.title));
   
-  // Render each item with its photos inline - wrapped in unbreakable stack
-  section.items?.forEach((item, itemIdx) => {
+  // Render each item
+  section.items?.forEach((item) => {
     const statusText = typeof item.value === 'boolean'
       ? (item.value ? 'Pass' : 'Fail')
       : String(item.value || 'N/A');
     
     const statusColor = getStatusColor(statusText);
     
-    // Build item stack content
+    // Build item stack
     const itemStack: Content[] = [];
     
-    // Item name + status on same line using columns
+    // Item name (bold, like reference)
     itemStack.push({
-      columns: [
-        { text: item.label, fontSize: 10, bold: true, width: '*' },
-        { 
-          text: statusText, 
-          fontSize: 9, 
-          color: statusColor, 
-          bold: true,
-          width: 'auto',
-          alignment: 'right' as const,
-        },
-      ],
-      margin: [0, 0, 0, 2],
+      text: item.label,
+      fontSize: 12,
+      bold: true,
+      margin: [0, 0, 0, 3],
     });
     
-    // Notes if present (compact)
+    // Status line - green "Status: Pass" format (indented)
+    itemStack.push({
+      text: `Status: ${statusText}`,
+      fontSize: 10,
+      color: statusColor,
+      margin: [15, 0, 0, 8],
+    });
+    
+    // Notes if present
     if (item.notes) {
       itemStack.push({
         text: item.notes,
-        fontSize: 8,
+        fontSize: 9,
         color: COLORS.textMuted,
         italics: true,
-        margin: [0, 0, 0, 3],
+        margin: [15, 0, 0, 8],
       });
     }
     
-    // Photos inline - use 3-column compact grid with smaller images
-    const itemPhotos: Array<{ dataUrl: string; caption?: string }> = [];
-    item.photos?.forEach((photoUrl, idx) => {
+    // Photos - single column, stacked vertically like reference
+    item.photos?.forEach((photoUrl) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
-        itemPhotos.push({
-          dataUrl,
-          caption: `#${idx + 1}`,
+        itemStack.push({
+          image: dataUrl,
+          width: 200,
+          margin: [0, 5, 0, 10],
         });
       }
     });
     
-    if (itemPhotos.length > 0) {
-      // 1 photo: single, 2 photos: 2 cols, 3+ photos: 3 cols
-      const columns = itemPhotos.length === 1 ? 1 : itemPhotos.length === 2 ? 2 : 3;
-      // Smaller images: 150pt for single, 110pt for 2-col, 90pt for 3-col
-      const imageWidth = columns === 1 ? 150 : columns === 2 ? 110 : 90;
-      itemStack.push(createCompactImageGrid(itemPhotos, columns, imageWidth));
-    }
-    
-    // Wrap entire item in unbreakable stack to keep header + photos together
+    // Wrap item in unbreakable stack
     content.push({
       stack: itemStack,
       unbreakable: true,
-      margin: [0, itemIdx > 0 ? 10 : 4, 0, 6],
+      margin: [0, 8, 0, 12],
     });
   });
   
@@ -295,7 +268,7 @@ function createInspectionSection(
 }
 
 /**
- * Create tenant verification section
+ * Create tenant verification section - matching reference layout
  */
 function createTenantSection(
   tenants: InspectionTenant[],
@@ -304,46 +277,109 @@ function createTenantSection(
   if (!tenants?.length) return [];
   
   const content: Content[] = [];
-  content.push(createSectionHeader('Tenant Verification'));
+  content.push(createSectionBanner('Tenants / Meters'));
   
   tenants.forEach((tenant, idx) => {
-    // Tenant header
-    content.push({
-      text: `${tenant.shopNumber ? `${tenant.shopNumber} - ` : ''}${tenant.shopName}`,
-      fontSize: 11,
+    const tenantStack: Content[] = [];
+    
+    // Tenant header with number
+    tenantStack.push({
+      text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
+      fontSize: 12,
       bold: true,
-      margin: [0, idx > 0 ? 15 : 5, 0, 5],
+      margin: [0, 0, 0, 8],
     });
     
-    // Tenant info table
-    const infoRows: [string, string][] = [];
-    if (tenant.meterSerialNumber) infoRows.push(['Meter S/N', tenant.meterSerialNumber]);
-    if (tenant.breakerSize) infoRows.push(['Breaker Size', tenant.breakerSize]);
-    if (tenant.ctSizeAndRatio) infoRows.push(['CT Ratio', tenant.ctSizeAndRatio]);
+    // Info table - Breaker Size, CT Ratio, Meter S/N in stacked format
+    const infoItems: Content[] = [];
     
-    if (infoRows.length > 0) {
-      content.push(createInfoTable(infoRows));
+    if (tenant.breakerSize) {
+      infoItems.push({
+        columns: [
+          { text: 'Breaker Size:', fontSize: 10, bold: true, width: 90 },
+          { text: tenant.breakerSize, fontSize: 10, width: '*' },
+        ],
+        margin: [15, 0, 0, 3],
+      });
     }
     
-    // Tenant photos - 3 column grid
-    const tenantPhotos: Array<{ dataUrl: string; caption?: string }> = [];
+    if (tenant.ctSizeAndRatio) {
+      infoItems.push({
+        columns: [
+          { text: 'CT Ratio:', fontSize: 10, bold: true, width: 90 },
+          { text: tenant.ctSizeAndRatio, fontSize: 10, width: '*' },
+        ],
+        margin: [15, 0, 0, 3],
+      });
+    }
+    
+    if (tenant.meterSerialNumber) {
+      infoItems.push({
+        columns: [
+          { text: 'Meter S/N:', fontSize: 10, bold: true, width: 90 },
+          { text: tenant.meterSerialNumber, fontSize: 10, width: '*' },
+        ],
+        margin: [15, 0, 0, 3],
+      });
+    }
+    
+    tenantStack.push(...infoItems);
+    
+    // Photos in labeled row (Breaker | CT Ratio | Meter)
+    const photoColumns: Content[] = [];
     
     if (tenant.breakerImage) {
       const dataUrl = imageCache.get(tenant.breakerImage);
-      if (dataUrl) tenantPhotos.push({ dataUrl, caption: 'Breaker' });
-    }
-    if (tenant.ctRatioImage) {
-      const dataUrl = imageCache.get(tenant.ctRatioImage);
-      if (dataUrl) tenantPhotos.push({ dataUrl, caption: 'CT Ratio' });
-    }
-    if (tenant.meterImage) {
-      const dataUrl = imageCache.get(tenant.meterImage);
-      if (dataUrl) tenantPhotos.push({ dataUrl, caption: 'Meter' });
+      if (dataUrl) {
+        photoColumns.push({
+          stack: [
+            { text: 'Breaker', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
+            { image: dataUrl, width: 140, alignment: 'center' },
+          ],
+          width: '*',
+        });
+      }
     }
     
-    if (tenantPhotos.length > 0) {
-      content.push(createImageGrid(tenantPhotos, 3, 150));
+    if (tenant.ctRatioImage) {
+      const dataUrl = imageCache.get(tenant.ctRatioImage);
+      if (dataUrl) {
+        photoColumns.push({
+          stack: [
+            { text: 'CT Ratio', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
+            { image: dataUrl, width: 140, alignment: 'center' },
+          ],
+          width: '*',
+        });
+      }
     }
+    
+    if (tenant.meterImage) {
+      const dataUrl = imageCache.get(tenant.meterImage);
+      if (dataUrl) {
+        photoColumns.push({
+          stack: [
+            { text: 'Meter', fontSize: 9, bold: true, alignment: 'center', margin: [0, 0, 0, 3] },
+            { image: dataUrl, width: 140, alignment: 'center' },
+          ],
+          width: '*',
+        });
+      }
+    }
+    
+    if (photoColumns.length > 0) {
+      tenantStack.push({
+        columns: photoColumns,
+        columnGap: 10,
+        margin: [0, 10, 0, 0],
+      });
+    }
+    
+    content.push({
+      stack: tenantStack,
+      unbreakable: true,
+      margin: [0, idx > 0 ? 15 : 5, 0, 15],
+    });
   });
   
   return content;
@@ -359,51 +395,66 @@ function createSnagsSection(
   if (!snags?.length) return [];
   
   const content: Content[] = [];
-  content.push(createSectionHeader('Issues / Snags'));
+  content.push(createSectionBanner('Observations & Snag List'));
   
   snags.forEach((snag, idx) => {
-    const riskColor = snag.riskLevel === 'critical' ? COLORS.error
-      : snag.riskLevel === 'high' ? COLORS.warning
-      : snag.riskLevel === 'medium' ? '#f59e0b'
+    const riskColor = snag.riskLevel === 'critical' ? '#ef4444'
+      : snag.riskLevel === 'high' ? '#f59e0b'
+      : snag.riskLevel === 'medium' ? '#eab308'
       : COLORS.textMuted;
     
-    content.push({
+    const snagStack: Content[] = [];
+    
+    // Title with risk level
+    snagStack.push({
       columns: [
-        { text: snag.title, fontSize: 10, bold: true, width: '*' },
-        createStatusBadge(snag.status, getStatusType(snag.status)),
+        { text: snag.title, fontSize: 11, bold: true, width: '*' },
         snag.riskLevel ? {
           text: snag.riskLevel.toUpperCase(),
-          fontSize: 8,
+          fontSize: 9,
           color: riskColor,
           bold: true,
-          width: 60,
-          alignment: 'right',
-        } : { text: '', width: 60 },
+          width: 'auto',
+        } : { text: '', width: 0 },
       ],
-      margin: [0, idx > 0 ? 10 : 0, 0, 3],
+      margin: [0, 0, 0, 3],
     });
     
+    // Status
+    snagStack.push({
+      text: `Status: ${snag.status}`,
+      fontSize: 10,
+      color: getStatusColor(snag.status),
+      margin: [15, 0, 0, 5],
+    });
+    
+    // Description
     if (snag.description) {
-      content.push({
+      snagStack.push({
         text: snag.description,
         fontSize: 9,
         color: COLORS.textMuted,
-        margin: [0, 0, 0, 5],
+        margin: [15, 0, 0, 8],
       });
     }
     
-    // Snag photos
-    const snagPhotos: Array<{ dataUrl: string; caption?: string }> = [];
-    snag.photos?.forEach((photoUrl, photoIdx) => {
+    // Photos
+    snag.photos?.forEach((photoUrl) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
-        snagPhotos.push({ dataUrl, caption: `Photo ${photoIdx + 1}` });
+        snagStack.push({
+          image: dataUrl,
+          width: 180,
+          margin: [0, 5, 0, 8],
+        });
       }
     });
     
-    if (snagPhotos.length > 0) {
-      content.push(createImageGrid(snagPhotos, 3, 150));
-    }
+    content.push({
+      stack: snagStack,
+      unbreakable: true,
+      margin: [0, idx > 0 ? 12 : 5, 0, 10],
+    });
   });
   
   return content;
@@ -419,14 +470,14 @@ function createSignaturesSection(
   if (!signatures?.length) return [];
   
   const content: Content[] = [];
-  content.push(createSectionHeader('Sign-Off'));
+  content.push(createSectionBanner('Sign-Off'));
   
   const sigColumns: Content[] = [];
   
   signatures.forEach(sig => {
     const sigContent: Content[] = [
-      { text: sig.name, fontSize: 10, bold: true },
-      { text: sig.role || 'Signatory', fontSize: 8, color: COLORS.textMuted },
+      { text: sig.name, fontSize: 11, bold: true },
+      { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.textMuted },
     ];
     
     // Add signature image if available
@@ -440,7 +491,7 @@ function createSignaturesSection(
           image: dataUrl,
           width: 120,
           height: 50,
-          margin: [0, 5, 0, 0],
+          margin: [0, 8, 0, 0],
         });
       }
     }
@@ -464,6 +515,69 @@ function createSignaturesSection(
   content.push({
     columns: sigColumns,
     margin: [0, 10, 0, 0],
+  });
+  
+  return content;
+}
+
+/**
+ * Create general info section - matching reference (stacked key-value pairs)
+ */
+function createGeneralInfoSection(
+  inspection: InspectionReportData,
+  siteName: string,
+  clientName?: string
+): Content[] {
+  const content: Content[] = [];
+  
+  content.push(createSectionBanner('General Information'));
+  
+  const infoRows: Array<{ label: string; value: string }> = [];
+  
+  infoRows.push({ label: 'Site Name', value: siteName });
+  if (inspection.subsectionName) {
+    infoRows.push({ label: 'Subsection', value: inspection.subsectionName });
+  }
+  if (clientName) {
+    infoRows.push({ label: 'Client', value: clientName });
+  }
+  if (inspection.inspectionDate) {
+    infoRows.push({ 
+      label: 'Inspection Date', 
+      value: new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
+        year: 'numeric',
+        month: 'long',
+        day: 'numeric',
+      })
+    });
+  }
+  if (inspection.inspectorName) {
+    infoRows.push({ label: 'Inspector', value: inspection.inspectorName });
+  }
+  
+  // Add any additional general info
+  if (inspection.generalInfo) {
+    Object.entries(inspection.generalInfo)
+      .filter(([key]) => !['inspectorName', 'date', 'inspectionDate'].includes(key))
+      .forEach(([key, value]) => {
+        if (value) {
+          infoRows.push({
+            label: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
+            value: String(value),
+          });
+        }
+      });
+  }
+  
+  // Render as stacked rows (like reference)
+  infoRows.forEach(row => {
+    content.push({
+      columns: [
+        { text: row.label, fontSize: 11, bold: true, width: 140 },
+        { text: row.value, fontSize: 11, width: '*' },
+      ],
+      margin: [0, 4, 0, 4],
+    });
   });
   
   return content;
@@ -497,41 +611,21 @@ export async function generateInspectionReportPdf(
     const content: Content[] = [];
     
     // General info section
-    if (inspection.generalInfo && Object.keys(inspection.generalInfo).length > 0) {
-      content.push(createSectionHeader('General Information'));
-      const infoRows: [string, string][] = Object.entries(inspection.generalInfo)
-        .filter(([key]) => key !== 'inspectorName' && key !== 'date')
-        .map(([key, value]): [string, string] => [
-          key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
-          String(value || '-'),
-        ]);
-      
-      // Add inspector and date
-      if (inspection.inspectorName) {
-        infoRows.unshift(['Inspector', inspection.inspectorName]);
-      }
-      if (inspection.inspectionDate) {
-        infoRows.unshift(['Date', new Date(inspection.inspectionDate).toLocaleDateString('en-GB')]);
-      }
-      
-      if (infoRows.length > 0) {
-        content.push(createInfoTable(infoRows));
-      }
-    }
+    content.push(...createGeneralInfoSection(inspection, siteName, clientName));
     
     // Inspection sections with items and photos
     inspection.sections?.forEach(section => {
       content.push(...createInspectionSection(section, imageCache));
     });
     
-    // Tenant verification section
-    if (inspection.tenants?.length) {
-      content.push(...createTenantSection(inspection.tenants, imageCache));
-    }
-    
     // Snags section
     if (inspection.snags?.length) {
       content.push(...createSnagsSection(inspection.snags, imageCache));
+    }
+    
+    // Tenant verification section
+    if (inspection.tenants?.length) {
+      content.push(...createTenantSection(inspection.tenants, imageCache));
     }
     
     // Signatures section
