@@ -184,7 +184,7 @@ function createInspectionSection(
   // Section header
   content.push(createSectionHeader(section.title));
   
-  // Render each item with its photos inline
+  // Render each item with its photos inline - wrapped in unbreakable stack
   section.items?.forEach((item, itemIdx) => {
     const statusText = typeof item.value === 'boolean'
       ? (item.value ? 'Pass' : 'Fail')
@@ -192,16 +192,19 @@ function createInspectionSection(
     
     const statusColor = getStatusColor(statusText);
     
-    // Item name (bold) - more spacing between items
-    content.push({
+    // Build item stack content
+    const itemStack: Content[] = [];
+    
+    // Item name (bold)
+    itemStack.push({
       text: item.label,
       fontSize: 11,
       bold: true,
-      margin: [0, itemIdx > 0 ? 20 : 8, 0, 2],
+      margin: [0, 0, 0, 2],
     });
     
     // Status line (colored, slightly indented)
-    content.push({
+    itemStack.push({
       text: `Status: ${statusText}`,
       fontSize: 9,
       color: statusColor,
@@ -210,7 +213,7 @@ function createInspectionSection(
     
     // Notes if present
     if (item.notes) {
-      content.push({
+      itemStack.push({
         text: item.notes,
         fontSize: 8,
         color: COLORS.textMuted,
@@ -232,14 +235,20 @@ function createInspectionSection(
     });
     
     if (itemPhotos.length > 0) {
-      // Use single column for 1 photo, 2 columns for 2-3, 3 columns for 4+
       const columns = itemPhotos.length === 1 ? 1 : Math.min(itemPhotos.length, 2);
       const imageWidth = columns === 1 ? 180 : 140;
-      content.push({
+      itemStack.push({
         ...createImageGrid(itemPhotos, columns, imageWidth),
-        margin: [8, 4, 0, 8],
+        margin: [8, 4, 0, 0],
       });
     }
+    
+    // Wrap entire item in unbreakable stack to keep header + photos together
+    content.push({
+      stack: itemStack,
+      unbreakable: true,
+      margin: [0, itemIdx > 0 ? 16 : 8, 0, 8],
+    });
   });
   
   return content;
