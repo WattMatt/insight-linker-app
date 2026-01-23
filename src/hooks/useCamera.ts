@@ -42,21 +42,53 @@ const convertHeicToJpeg = async (file: File): Promise<File> => {
   return file;
 };
 
+// Detect mobile device for appropriate fallback behavior
+const isMobileDevice = (): boolean => {
+  if (typeof navigator === 'undefined') return false;
+  const userAgent = navigator.userAgent || navigator.vendor || (window as any).opera;
+  return /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile|tablet/i.test(userAgent.toLowerCase());
+};
+
+// Detect if device likely has a camera
+const hasCamera = async (): Promise<boolean> => {
+  try {
+    if (!navigator.mediaDevices?.enumerateDevices) return isMobileDevice();
+    const devices = await navigator.mediaDevices.enumerateDevices();
+    return devices.some(device => device.kind === 'videoinput');
+  } catch {
+    // Fallback: assume mobile devices have cameras
+    return isMobileDevice();
+  }
+};
+
 // Web fallback: Create file input and trigger file picker
 const capturePhotoWeb = (options: CameraOptions = {}): Promise<File[]> => {
   return new Promise((resolve, reject) => {
     const input = document.createElement('input');
     input.type = 'file';
-    input.accept = 'image/*';
+    input.accept = 'image/*,.heic,.heif'; // Explicitly include HEIC/HEIF for iOS
 
     if (options.multiple) {
       input.multiple = true;
     }
 
-    // Hint at camera if preferred
-    if (options.preferCamera) {
-      input.setAttribute('capture', 'environment');
+    // On mobile devices, prefer camera capture
+    // The 'capture' attribute opens camera directly on mobile browsers
+    if (options.preferCamera && isMobileDevice()) {
+      input.setAttribute('capture', 'environment'); // Back camera
     }
+
+    // Ensure input is in DOM for iOS Safari compatibility
+    input.style.position = 'fixed';
+    input.style.top = '-9999px';
+    input.style.left = '-9999px';
+    document.body.appendChild(input);
+
+    const cleanup = () => {
+      if (document.body.contains(input)) {
+        document.body.removeChild(input);
+      }
+    };
 
     input.onchange = async (e) => {
       const filesList = (e.target as HTMLInputElement).files;
@@ -64,15 +96,29 @@ const capturePhotoWeb = (options: CameraOptions = {}): Promise<File[]> => {
         const files = Array.from(filesList);
         // Process each file with HEIC conversion
         const processedFiles = await Promise.all(files.map(convertHeicToJpeg));
+        cleanup();
         resolve(processedFiles);
       } else {
+        cleanup();
         resolve([]);
       }
     };
 
     input.oncancel = () => {
+      cleanup();
       resolve([]); // User cancelled
     };
+
+    // Handle cases where oncancel doesn't fire (older browsers)
+    const handleFocusBack = () => {
+      setTimeout(() => {
+        if (input.files?.length === 0) {
+          cleanup();
+          resolve([]);
+        }
+      }, 500);
+    };
+    window.addEventListener('focus', handleFocusBack, { once: true });
 
     // Add a small delay to ensure the dialog appears across all browsers
     setTimeout(() => {
@@ -83,11 +129,17 @@ const capturePhotoWeb = (options: CameraOptions = {}): Promise<File[]> => {
 
 export const useCamera = () => {
   const isNative = Capacitor.isNativePlatform();
+  const isMobile = isMobileDevice();
 
   const takePicture = async (options: CameraOptions = {}): Promise<File | null> => {
     if (!isNative) {
       try {
-        const files = await capturePhotoWeb({ ...options, multiple: false });
+        // On web mobile, prefer camera by default
+        const files = await capturePhotoWeb({ 
+          ...options, 
+          multiple: false,
+          preferCamera: options.preferCamera ?? isMobile 
+        });
         return files.length > 0 ? files[0] : null;
       } catch (error) {
         console.error('Error capturing photo on web:', error);
@@ -138,6 +190,11 @@ export const useCamera = () => {
   const selectImages = async (options: CameraOptions = {}): Promise<File[]> => {
     if (!isNative) {
       try {
+        // On mobile web, if preferCamera is set, open camera for single image
+        if (options.preferCamera && isMobile) {
+          const file = await takePicture({ ...options, preferCamera: true });
+          return file ? [file] : [];
+        }
         return await capturePhotoWeb({ ...options, multiple: true });
       } catch (error) {
         console.error('Error selecting images on web:', error);
@@ -184,7 +241,9 @@ export const useCamera = () => {
 
   return {
     isNative,
+    isMobile,
     takePicture,
     selectImages,
+    hasCamera,
   };
 };
