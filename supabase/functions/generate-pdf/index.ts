@@ -148,10 +148,15 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
 }
 
 // Generate a signed URL for PDFShift to fetch directly
-// This avoids CPU-intensive image processing in Edge Functions
+// Uses Supabase Image Transformation to resize legacy uncompressed images
+// This ensures consistent ~50-100KB per image regardless of original size
 async function getSignedImageUrl(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already embedded
+  
+  // Image transformation parameters - resize large legacy images
+  const TRANSFORM_WIDTH = 400;  // Max width for PDF photos
+  const TRANSFORM_QUALITY = 70; // JPEG quality
   
   try {
     const parsed = parseSupabaseStorageUrl(url);
@@ -180,17 +185,31 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
       }
     }
     
-    // Create a signed URL valid for 1 hour
+    // Create a signed URL with image transformation parameters
+    // This resizes legacy uncompressed images server-side before PDFShift fetches them
     const { data, error } = await supabase.storage
       .from(parsed.bucket)
-      .createSignedUrl(finalPath, 3600);
+      .createSignedUrl(finalPath, 3600, {
+        transform: {
+          width: TRANSFORM_WIDTH,
+          quality: TRANSFORM_QUALITY,
+        }
+      });
     
     if (error || !data?.signedUrl) {
       console.warn(`[getSignedUrl] Failed to create signed URL:`, error);
-      return null;
+      // Fallback: try without transformation (for non-image files)
+      const { data: fallbackData, error: fallbackError } = await supabase.storage
+        .from(parsed.bucket)
+        .createSignedUrl(finalPath, 3600);
+      
+      if (fallbackError || !fallbackData?.signedUrl) {
+        return null;
+      }
+      return fallbackData.signedUrl;
     }
     
-    console.log(`[getSignedUrl] Created signed URL for: ${finalPath.substring(0, 50)}...`);
+    console.log(`[getSignedUrl] Created transformed signed URL (w:${TRANSFORM_WIDTH}) for: ${finalPath.substring(0, 50)}...`);
     return data.signedUrl;
   } catch (err) {
     console.warn(`[getSignedUrl] Error:`, err);
