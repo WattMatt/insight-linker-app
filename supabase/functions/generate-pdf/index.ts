@@ -339,19 +339,18 @@ async function imageToBase64(url: string): Promise<string | null> {
 }
 
 // Generate a responsive photo grid - 3 images per row using table layout for PDF reliability
+// Images fill their cells completely (no max-width constraint) to match reference PDF layout
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
-  maxWidth?: string;
   showLabels?: boolean;
 }): string {
   if (!photos || photos.length === 0) return '';
   
   const perRow = options?.perRow || 3;
   const labels = options?.labels || [];
-  const maxWidth = options?.maxWidth || '160px';
   const showLabels = options?.showLabels ?? false;
-  const cellWidth = `${Math.floor(100 / perRow)}%`;
+  const cellWidth = `${Math.floor(96 / perRow)}%`; // 96% to leave room for spacing
   
   // Split photos into rows
   const rows: { photo: string; label?: string }[][] = [];
@@ -364,14 +363,14 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   return `
-    <table style="width: 100%; border-collapse: separate; border-spacing: 8px; page-break-inside: avoid; margin-bottom: 15px;">
+    <table style="width: 100%; border-collapse: separate; border-spacing: 6px 8px; page-break-inside: avoid; margin-bottom: 15px;">
       ${rows.map(row => `
         <tr>
           ${row.map(item => `
             <td style="width: ${cellWidth}; vertical-align: top; text-align: center;">
-              ${showLabels ? `<div style="font-size: 8pt; color: #6b7280; margin-bottom: 4px;">${item.label}</div>` : ''}
+              ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 4px;">${item.label}</div>` : ''}
               <img src="${item.photo}" 
-                   style="width: 100%; max-width: ${maxWidth}; height: auto; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px;" 
+                   style="width: 100%; height: auto; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px;" 
                    alt="${item.label}" />
             </td>
           `).join('')}
@@ -2308,8 +2307,8 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
             ` : ''}
             
             ${hasPhotos ? `
-            <div style="margin-left: 0;">
-              ${generatePhotoGrid(item.photos!, { perRow: 3, maxWidth: '160px' })}
+            <div style="margin-top: 10px;">
+              ${generatePhotoGrid(item.photos!, { perRow: 3 })}
             </div>
             ` : ''}
           </div>
@@ -2360,7 +2359,7 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           ${hasSnagPhotos ? `
           <tr>
             <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
-              ${generatePhotoGrid(snag.photos!.slice(0, 6), { perRow: 3, maxWidth: '150px' })}
+              ${generatePhotoGrid(snag.photos!.slice(0, 3), { perRow: 3 })}
             </td>
           </tr>
           ` : ''}
