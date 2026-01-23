@@ -2818,11 +2818,29 @@ Deno.serve(async (req) => {
         html = await generateCOCValidationHTML(body);
         break;
       case 'inspection':
-        if (!body.inspection) {
+        // Support both nested (body.inspection) and flat (body.inspectionId, body.sections, etc.) formats
+        if (!body.inspection && !(body as any).inspectionId) {
           return new Response(
             JSON.stringify({ error: 'Missing inspection data for inspection report type' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+        // If flat format, wrap into nested format for consistency
+        if (!body.inspection && (body as any).inspectionId) {
+          const flatBody = body as any;
+          body.inspection = {
+            inspectionId: flatBody.inspectionId,
+            templateName: flatBody.templateName,
+            inspectorName: flatBody.inspectorName,
+            inspectionDate: flatBody.inspectionDate,
+            status: flatBody.status,
+            qualityRating: flatBody.qualityRating,
+            generalInfo: flatBody.generalInfo,
+            sections: flatBody.sections,
+            snags: flatBody.snags,
+            signatures: flatBody.signatures,
+            subsectionName: flatBody.subsectionName || flatBody.subtitle?.split(' - ')[1],
+          };
         }
         html = await generateInspectionHTML(body);
         break;
