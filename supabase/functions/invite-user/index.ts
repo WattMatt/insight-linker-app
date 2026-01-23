@@ -1,4 +1,7 @@
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
+import { Resend } from 'https://esm.sh/resend@2.0.0';
+
+const resend = new Resend(Deno.env.get('RESEND_API_KEY'));
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -362,20 +365,101 @@ Deno.serve(async (req) => {
     }
 
     console.log('Fresh invite link generated');
+    
+    // Get the magic link URL from the generated link
+    const inviteUrl = inviteData?.properties?.action_link || redirectTo;
 
-    // Send invite email via Supabase
-    const { error: emailError } = await supabase.auth.admin.inviteUserByEmail(email, {
-      data: {
-        full_name: fullName,
-        role: role,
-      },
-      redirectTo,
+    // Send branded invite email via Resend
+    const { data: companySettings } = await supabase
+      .from('settings')
+      .select('company_name, logo_url')
+      .single();
+
+    const companyName = companySettings?.company_name || 'WM Compliance';
+    const logoUrl = companySettings?.logo_url;
+
+    const emailHtml = `
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're Invited to ${companyName}</title>
+</head>
+<body style="margin: 0; padding: 0; background-color: #f4f4f5; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;">
+  <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="background-color: #f4f4f5;">
+    <tr>
+      <td align="center" style="padding: 40px 20px;">
+        <table role="presentation" width="100%" cellspacing="0" cellpadding="0" style="max-width: 600px; background-color: #ffffff; border-radius: 12px; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          <!-- Header -->
+          <tr>
+            <td style="padding: 40px 40px 20px; text-align: center; border-bottom: 1px solid #e4e4e7;">
+              ${logoUrl ? `<img src="${logoUrl}" alt="${companyName}" style="max-height: 60px; max-width: 200px;">` : `<h1 style="margin: 0; color: #18181b; font-size: 24px; font-weight: 700;">${companyName}</h1>`}
+            </td>
+          </tr>
+          
+          <!-- Content -->
+          <tr>
+            <td style="padding: 40px;">
+              <h2 style="margin: 0 0 16px; color: #18181b; font-size: 20px; font-weight: 600;">
+                Welcome, ${fullName}!
+              </h2>
+              <p style="margin: 0 0 24px; color: #52525b; font-size: 16px; line-height: 1.6;">
+                You've been invited to join <strong>${companyName}</strong> as a <strong style="color: #2563eb;">${role}</strong>.
+              </p>
+              <p style="margin: 0 0 32px; color: #52525b; font-size: 16px; line-height: 1.6;">
+                Click the button below to set up your password and access your account.
+              </p>
+              
+              <!-- CTA Button -->
+              <table role="presentation" width="100%" cellspacing="0" cellpadding="0">
+                <tr>
+                  <td align="center">
+                    <a href="${inviteUrl}" style="display: inline-block; padding: 14px 32px; background-color: #2563eb; color: #ffffff; text-decoration: none; font-size: 16px; font-weight: 600; border-radius: 8px;">
+                      Accept Invitation
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              
+              <p style="margin: 32px 0 0; color: #71717a; font-size: 14px; line-height: 1.6;">
+                If the button doesn't work, copy and paste this link into your browser:
+              </p>
+              <p style="margin: 8px 0 0; word-break: break-all;">
+                <a href="${inviteUrl}" style="color: #2563eb; font-size: 14px;">${inviteUrl}</a>
+              </p>
+            </td>
+          </tr>
+          
+          <!-- Footer -->
+          <tr>
+            <td style="padding: 24px 40px; background-color: #fafafa; border-top: 1px solid #e4e4e7; border-radius: 0 0 12px 12px;">
+              <p style="margin: 0; color: #71717a; font-size: 12px; text-align: center;">
+                This invitation was sent by ${companyName}. If you didn't expect this email, you can safely ignore it.
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>
+    `;
+
+    const { error: emailError } = await resend.emails.send({
+      from: `${companyName} <onboarding@resend.dev>`,
+      to: [email],
+      subject: `You're invited to join ${companyName}`,
+      html: emailHtml,
     });
 
     if (emailError) {
-      console.warn('Invite email error:', emailError);
-      // Don't throw - we can still return success
+      console.error('Resend email error:', emailError);
+      throw new Error(`Failed to send invite email: ${emailError.message}`);
     }
+
+    console.log('Invite email sent via Resend');
 
     return new Response(
       JSON.stringify({
