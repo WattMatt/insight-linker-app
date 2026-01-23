@@ -2403,34 +2403,34 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           </div>
           
           ${hasImages ? `
-          <!-- Photo Grid with Labels - Table-based 3-column layout -->
-          <div style="margin-left: 20px;">
-            <table style="width: 100%; border-collapse: separate; border-spacing: 8px; page-break-inside: avoid;">
+          <!-- Photo Grid with Labels - Full-width 3-column layout -->
+          <div style="margin-top: 15px;">
+            <table style="width: 100%; border-collapse: separate; border-spacing: 6px 0; page-break-inside: avoid;">
               <tr>
                 ${tenant.breakerImage ? `
-                <td style="width: 33%; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">Breaker</div>
+                <td style="width: 32%; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Breaker</div>
                   <img src="${tenant.breakerImage}" 
-                       style="width: 100%; max-width: 150px; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 100%; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="Breaker" />
                 </td>
-                ` : '<td style="width: 33%;"></td>'}
+                ` : '<td style="width: 32%;"></td>'}
                 ${tenant.ctRatioImage ? `
-                <td style="width: 33%; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">CT Ratio</div>
+                <td style="width: 32%; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">CT Ratio</div>
                   <img src="${tenant.ctRatioImage}" 
-                       style="width: 100%; max-width: 150px; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 100%; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="CT Ratio" />
                 </td>
-                ` : '<td style="width: 33%;"></td>'}
+                ` : '<td style="width: 32%;"></td>'}
                 ${tenant.meterImage ? `
-                <td style="width: 33%; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">Meter</div>
+                <td style="width: 32%; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Meter</div>
                   <img src="${tenant.meterImage}" 
-                       style="width: 100%; max-width: 150px; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="width: 100%; height: auto; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="Meter" />
                 </td>
-                ` : '<td style="width: 33%;"></td>'}
+                ` : '<td style="width: 32%;"></td>'}
               </tr>
             </table>
           </div>
