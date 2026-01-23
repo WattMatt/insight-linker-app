@@ -78,6 +78,70 @@ export const DynamicFieldManager = ({
     toast.success("Field removed");
   };
 
+  /**
+   * Compresses an image using Canvas API before upload
+   * Target: ~50-100KB output for efficient PDF generation
+   */
+  const compressImageForUpload = async (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+        
+        const MAX_WIDTH = 800;
+        const QUALITY = 0.7;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > MAX_WIDTH) {
+          height = Math.round((height * MAX_WIDTH) / width);
+          width = MAX_WIDTH;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              console.log(`Image compressed: ${(file.size / 1024).toFixed(0)}KB → ${(blob.size / 1024).toFixed(0)}KB`);
+              resolve(blob);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          QUALITY
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        resolve(file);
+      };
+
+      img.src = url;
+    });
+  };
+
   const handleImageUpload = async (fieldId: string, file: File) => {
     const field = fields.find(f => f.id === fieldId);
     if (!field) return;
@@ -97,7 +161,6 @@ export const DynamicFieldManager = ({
             quality: 0.9
           });
           
-          // heic2any can return Blob or Blob[], handle both cases
           const blob = Array.isArray(convertedBlob) ? convertedBlob[0] : convertedBlob;
           processedFile = new File([blob], file.name.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg'), { type: 'image/jpeg' });
         } catch (conversionError) {
@@ -107,12 +170,17 @@ export const DynamicFieldManager = ({
         }
       }
       
-      const fileName = `${Date.now()}-${processedFile.name}`;
+      // Compress image before upload for optimized storage and PDF generation
+      const compressedBlob = await compressImageForUpload(processedFile);
+      const finalFileName = processedFile.name.replace(/\.[^.]+$/, '.jpg');
+      const finalFile = new File([compressedBlob], finalFileName, { type: 'image/jpeg' });
+      
+      const fileName = `${Date.now()}-${finalFile.name}`;
       const filePath = `${inspectionId}/${sectionKey}/${fileName}`;
 
       const { error: uploadError, data } = await supabase.storage
         .from("inspection-photos")
-        .upload(filePath, processedFile);
+        .upload(filePath, finalFile);
 
       if (uploadError) throw uploadError;
 

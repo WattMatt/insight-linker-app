@@ -8,8 +8,83 @@ interface UploadResult {
   path: string;
 }
 
+// Image compression settings for optimized storage and PDF generation
+const COMPRESSION_CONFIG = {
+  maxWidth: 800,        // Max width in pixels
+  quality: 0.7,         // JPEG quality (0.7 = 70%)
+  targetSizeKB: 100,    // Target ~100KB per image
+};
+
 export const useImageUpload = () => {
   const [uploading, setUploading] = useState(false);
+
+  /**
+   * Compresses an image using Canvas API before upload
+   * Target: ~50-100KB output for efficient PDF generation
+   */
+  const compressImageForUpload = async (file: File): Promise<Blob> => {
+    return new Promise((resolve) => {
+      // Skip compression for non-image files
+      if (!file.type.startsWith('image/')) {
+        resolve(file);
+        return;
+      }
+
+      const img = new Image();
+      const url = URL.createObjectURL(file);
+
+      img.onload = () => {
+        URL.revokeObjectURL(url);
+
+        const { maxWidth, quality } = COMPRESSION_CONFIG;
+        let width = img.width;
+        let height = img.height;
+
+        // Scale down if larger than maxWidth
+        if (width > maxWidth) {
+          height = Math.round((height * maxWidth) / width);
+          width = maxWidth;
+        }
+
+        const canvas = document.createElement('canvas');
+        canvas.width = width;
+        canvas.height = height;
+
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          console.warn('Canvas context unavailable, using original file');
+          resolve(file);
+          return;
+        }
+
+        // Use high-quality image smoothing
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(img, 0, 0, width, height);
+
+        canvas.toBlob(
+          (blob) => {
+            if (blob) {
+              console.log(`Image compressed: ${(file.size / 1024).toFixed(0)}KB → ${(blob.size / 1024).toFixed(0)}KB`);
+              resolve(blob);
+            } else {
+              resolve(file);
+            }
+          },
+          'image/jpeg',
+          quality
+        );
+      };
+
+      img.onerror = () => {
+        URL.revokeObjectURL(url);
+        console.warn('Image load failed, using original file');
+        resolve(file);
+      };
+
+      img.src = url;
+    });
+  };
 
   /**
    * Converts HEIC images to JPG for browser compatibility
@@ -55,20 +130,24 @@ export const useImageUpload = () => {
 
     try {
       // Convert HEIC to JPG if needed
-      const processedFile = await convertHeicToJpg(file);
+      const heicConverted = await convertHeicToJpg(file);
       
-      // Update path if file was converted
-      let uploadPath = path;
-      if (processedFile !== file) {
-        uploadPath = path.replace(/\.heic$/i, '.jpg').replace(/\.heif$/i, '.jpg');
-      }
+      // Compress image for optimized storage and PDF generation
+      const compressedBlob = await compressImageForUpload(heicConverted);
+      
+      // Create final file with .jpg extension (compression outputs JPEG)
+      const finalFileName = heicConverted.name.replace(/\.[^.]+$/, '.jpg');
+      const finalFile = new File([compressedBlob], finalFileName, { type: 'image/jpeg' });
+      
+      // Update path to use .jpg extension
+      let uploadPath = path.replace(/\.[^.]+$/, '.jpg');
 
       for (let attempt = 1; attempt <= retries; attempt++) {
         try {
-          // Upload the file
+          // Upload the compressed file
           const { data, error } = await supabase.storage
             .from(bucket)
-            .upload(uploadPath, processedFile, {
+            .upload(uploadPath, finalFile, {
               cacheControl: '3600',
               upsert: false
             });
@@ -77,8 +156,7 @@ export const useImageUpload = () => {
             // If file already exists, try with a different timestamp
             if (error.message.includes('duplicate') || error.message.includes('already exists')) {
               const timestamp = Date.now();
-              const ext = processedFile.name.split('.').pop();
-              const newPath = uploadPath.replace(/\.[^.]+$/, `_${timestamp}.${ext}`);
+              const newPath = uploadPath.replace(/\.[^.]+$/, `_${timestamp}.jpg`);
               return uploadImage(file, bucket, newPath, 1); // Don't retry on duplicate
             }
             throw error;

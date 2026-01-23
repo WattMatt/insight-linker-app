@@ -69,12 +69,13 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 // ARCHITECTURE: Generate signed URLs and let PDFShift fetch images directly.
 // Image sizing is controlled via HTML/CSS (width: 150px), avoiding CPU-intensive
 // server-side image processing that exceeds Edge Function limits.
-// LIMITS: Supabase Storage has 50MB upload limit.
-// Full-resolution photos are too large (~15-30MB each).
-// TEMPORARY: Disable photos until image optimization is implemented.
+// 
+// CLIENT-SIDE COMPRESSION: Images are now compressed to ~50-100KB before upload
+// using Canvas API in useImageUpload.ts and DynamicFieldManager.tsx.
+// This allows significantly more photos while staying under limits.
 
-const MAX_PHOTOS_PER_ITEM = 0;  // DISABLED: Photos cause 50MB+ PDFs
-const MAX_TOTAL_PHOTOS = 0;    // DISABLED: Enable after implementing image CDN
+const MAX_PHOTOS_PER_ITEM = 6;   // 6 photos per item × ~100KB = ~600KB per item
+const MAX_TOTAL_PHOTOS = 60;    // 60 photos × ~100KB = ~6MB total photo payload
 
 // Track global photo count across the entire document
 let globalPhotoCount = 0;
