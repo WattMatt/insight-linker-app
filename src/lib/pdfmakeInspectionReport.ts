@@ -155,7 +155,25 @@ function collectImageUrls(inspection: InspectionReportData): string[] {
 }
 
 /**
- * Create section content for inspection items
+ * Get status color based on value
+ */
+function getStatusColor(status: string): string {
+  const statusLower = status.toLowerCase();
+  if (['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(statusLower)) {
+    return COLORS.success;
+  }
+  if (['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(statusLower)) {
+    return COLORS.error;
+  }
+  if (['pending', 'in progress', 'partial', 'warning', 'n/a'].includes(statusLower)) {
+    return COLORS.warning;
+  }
+  return COLORS.textMuted;
+}
+
+/**
+ * Create section content for inspection items - INLINE PHOTOS per item
+ * Structure: Item Name → Status: Value → Photo(s) directly below
  */
 function createInspectionSection(
   section: InspectionSection,
@@ -166,64 +184,59 @@ function createInspectionSection(
   // Section header
   content.push(createSectionHeader(section.title));
   
-  // Items table
-  const tableBody: Content[][] = [
-    [
-      { text: 'Item', bold: true, fontSize: 9, fillColor: COLORS.bgHeader },
-      { text: 'Status/Value', bold: true, fontSize: 9, fillColor: COLORS.bgHeader },
-      { text: 'Notes', bold: true, fontSize: 9, fillColor: COLORS.bgHeader },
-    ]
-  ];
-  
-  section.items?.forEach(item => {
+  // Render each item with its photos inline
+  section.items?.forEach((item, itemIdx) => {
     const statusText = typeof item.value === 'boolean' 
-      ? (item.value ? 'Yes' : 'No')
+      ? (item.value ? 'Pass' : 'Fail')
       : String(item.value || 'N/A');
     
-    tableBody.push([
-      { text: item.label, fontSize: 9 },
-      createStatusBadge(statusText, getStatusType(statusText)),
-      { text: item.notes || '-', fontSize: 8, color: COLORS.textMuted },
-    ]);
-  });
-  
-  content.push({
-    table: {
-      headerRows: 1,
-      widths: ['*', 80, '*'],
-      body: tableBody,
-    },
-    layout: {
-      hLineWidth: (i: number) => (i === 0 || i === 1) ? 1 : 0.5,
-      vLineWidth: () => 0.5,
-      hLineColor: () => COLORS.border,
-      vLineColor: () => COLORS.border,
-      paddingLeft: () => 8,
-      paddingRight: () => 8,
-      paddingTop: () => 6,
-      paddingBottom: () => 6,
-    },
-    margin: [0, 0, 0, 10],
-  });
-  
-  // Photos for this section
-  const sectionPhotos: Array<{ dataUrl: string; caption?: string }> = [];
-  section.items?.forEach(item => {
+    const statusColor = getStatusColor(statusText);
+    
+    // Item name (bold)
+    content.push({
+      text: item.label,
+      fontSize: 11,
+      bold: true,
+      margin: [0, itemIdx > 0 ? 15 : 5, 0, 3],
+    });
+    
+    // Status line (colored)
+    content.push({
+      text: `Status: ${statusText}`,
+      fontSize: 10,
+      color: statusColor,
+      margin: [0, 0, 0, 3],
+    });
+    
+    // Notes if present
+    if (item.notes) {
+      content.push({
+        text: item.notes,
+        fontSize: 9,
+        color: COLORS.textMuted,
+        italics: true,
+        margin: [0, 0, 0, 5],
+      });
+    }
+    
+    // Photos inline for this item
+    const itemPhotos: Array<{ dataUrl: string; caption?: string }> = [];
     item.photos?.forEach((photoUrl, idx) => {
       const dataUrl = imageCache.get(photoUrl);
       if (dataUrl) {
-        sectionPhotos.push({
+        itemPhotos.push({
           dataUrl,
-          caption: `${item.label} - Photo ${idx + 1}`,
+          caption: `Photo ${idx + 1}`,
         });
       }
     });
+    
+    if (itemPhotos.length > 0) {
+      // Use single column for 1 photo, 2 columns for 2, 3 columns for 3+
+      const columns = Math.min(itemPhotos.length, 3);
+      content.push(createImageGrid(itemPhotos, columns, 160));
+    }
   });
-  
-  if (sectionPhotos.length > 0) {
-    content.push({ text: 'Photographic Evidence', fontSize: 10, bold: true, margin: [0, 10, 0, 5] });
-    content.push(createImageGrid(sectionPhotos, 3, 150));
-  }
   
   return content;
 }
