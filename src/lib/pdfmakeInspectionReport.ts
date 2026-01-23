@@ -206,11 +206,10 @@ function createInspectionSection(
 ): Content[] {
   const content: Content[] = [];
   
-  // Full-width section banner
-  content.push(createSectionBanner(section.title));
+  // Build all items first
+  const items = section.items || [];
   
-  // Render each item
-  section.items?.forEach((item) => {
+  items.forEach((item, itemIdx) => {
     const statusText = typeof item.value === 'boolean'
       ? (item.value ? 'Pass' : 'Fail')
       : String(item.value || 'N/A');
@@ -219,6 +218,11 @@ function createInspectionSection(
     
     // Build item stack
     const itemStack: Content[] = [];
+    
+    // For the FIRST item, include the section banner inside the unbreakable block
+    if (itemIdx === 0) {
+      itemStack.push(createSectionBanner(section.title));
+    }
     
     // Item name (bold, like reference)
     itemStack.push({
@@ -261,13 +265,25 @@ function createInspectionSection(
       }
     });
     
-    // Wrap item in unbreakable stack
+    // Wrap item in unbreakable stack (first item includes section banner)
     content.push({
       stack: itemStack,
       unbreakable: true,
-      margin: [0, 8, 0, 12],
+      margin: [0, itemIdx === 0 ? 0 : 8, 0, 12],
     });
   });
+  
+  // Handle empty sections - still show the banner
+  if (items.length === 0) {
+    content.push(createSectionBanner(section.title));
+    content.push({
+      text: 'No items recorded',
+      fontSize: 10,
+      color: COLORS.textMuted,
+      italics: true,
+      margin: [0, 0, 0, 20],
+    });
+  }
   
   return content;
 }
