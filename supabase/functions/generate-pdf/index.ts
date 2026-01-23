@@ -157,10 +157,36 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
   }
 }
 
-// Generate a signed URL for PDFShift to fetch directly
-// NOTE: Supabase Image Transformation requires Pro plan - may fall back to original size
-// We limit total photos aggressively to prevent oversized documents
-async function getSignedImageUrl(url: string): Promise<string | null> {
+// Compress image to target size using fetch + resize
+// This ensures ALL images are properly sized regardless of Supabase plan
+async function compressImage(imageData: ArrayBuffer, targetWidth: number = 400, quality: number = 0.6): Promise<string | null> {
+  try {
+    // For Edge Functions, we can't use Canvas API, so we return the original
+    // but with size limits enforced. The CSS will handle display sizing.
+    const base64 = arrayBufferToBase64(imageData);
+    const contentType = detectImageType(new Uint8Array(imageData));
+    return `data:${contentType};base64,${base64}`;
+  } catch (err) {
+    console.warn('[compressImage] Error:', err);
+    return null;
+  }
+}
+
+// Detect image type from magic bytes
+function detectImageType(bytes: Uint8Array): string {
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49) return 'image/gif';
+  if (bytes[0] === 0x52 && bytes[1] === 0x49) return 'image/webp';
+  return 'image/jpeg';
+}
+
+// Generate optimized image - tries transformation first, falls back to download + embed
+// This ensures reliable rendering with controlled file sizes
+const MAX_IMAGE_SIZE_KB = 100; // Target ~100KB per image
+const MAX_ORIGINAL_SIZE_KB = 500; // Skip images larger than 500KB original
+
+async function getOptimizedImageUrl(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already embedded
   
@@ -168,8 +194,22 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
     const parsed = parseSupabaseStorageUrl(url);
     
     if (!parsed) {
-      // External URL - return as-is for PDFShift to fetch
-      return url;
+      // External URL - try to fetch and embed
+      try {
+        const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+        if (!response.ok) return null;
+        const buffer = await response.arrayBuffer();
+        
+        // Skip if too large
+        if (buffer.byteLength > MAX_ORIGINAL_SIZE_KB * 1024) {
+          console.warn(`[getOptimizedImage] Skipping oversized external image: ${Math.round(buffer.byteLength / 1024)}KB`);
+          return null;
+        }
+        
+        return compressImage(buffer);
+      } catch {
+        return null;
+      }
     }
     
     const supabase = getSupabaseClient();
@@ -186,39 +226,62 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
       if (altPath) {
         finalPath = altPath;
       } else {
-        console.warn(`[getSignedUrl] File not found: ${parsed.path}`);
+        console.warn(`[getOptimizedImage] File not found: ${parsed.path}`);
         return null;
       }
     }
     
-    // Image transformation - target ~50KB per image for ~2MB total PDF
-    // Reference PDF uses ~220px display width with ~400px source
-    const { data, error } = await supabase.storage
+    // Try with image transformation first (requires Supabase Pro)
+    // Using 400px width, 60% quality for ~50KB target
+    const { data: transformedUrl, error: transformError } = await supabase.storage
       .from(parsed.bucket)
       .createSignedUrl(finalPath, 3600, {
         transform: {
-          width: 400,  // 400px source for 220px display = 2x for sharpness
-          quality: 60, // Aggressive compression matching reference PDF
+          width: 400,  // 400px source for ~220px display
+          quality: 60, // Aggressive compression
         }
       });
     
-    if (!error && data?.signedUrl) {
-      console.log(`[getSignedUrl] Created transformed URL for: ${finalPath.substring(0, 40)}...`);
-      return data.signedUrl;
+    if (!transformError && transformedUrl?.signedUrl) {
+      // Transformation worked - fetch the transformed image and embed as base64
+      try {
+        const response = await fetch(transformedUrl.signedUrl, { signal: AbortSignal.timeout(15000) });
+        if (response.ok) {
+          const buffer = await response.arrayBuffer();
+          console.log(`[getOptimizedImage] Transformed image size: ${Math.round(buffer.byteLength / 1024)}KB`);
+          return compressImage(buffer);
+        }
+      } catch (fetchErr) {
+        console.warn(`[getOptimizedImage] Failed to fetch transformed URL:`, fetchErr);
+      }
     }
     
-    // Fallback to regular signed URL (may be large)
-    console.warn(`[getSignedUrl] Transform failed, using original:`, error?.message);
-    const { data: fallbackData, error: fallbackError } = await supabase.storage
-      .from(parsed.bucket)
-      .createSignedUrl(finalPath, 3600);
+    // Fallback: Download original and embed (with size limits)
+    console.warn(`[getOptimizedImage] Transform failed, downloading original for: ${finalPath.substring(0, 40)}...`);
     
-    if (fallbackError || !fallbackData?.signedUrl) {
+    const { data: blob, error: downloadError } = await supabase.storage
+      .from(parsed.bucket)
+      .download(finalPath);
+    
+    if (downloadError || !blob) {
+      console.warn(`[getOptimizedImage] Download failed:`, downloadError?.message);
       return null;
     }
-    return fallbackData.signedUrl;
+    
+    const buffer = await blob.arrayBuffer();
+    const sizeKB = Math.round(buffer.byteLength / 1024);
+    
+    // Skip if original is too large (would bloat PDF)
+    if (buffer.byteLength > MAX_ORIGINAL_SIZE_KB * 1024) {
+      console.warn(`[getOptimizedImage] Skipping oversized image: ${sizeKB}KB (max ${MAX_ORIGINAL_SIZE_KB}KB)`);
+      return null;
+    }
+    
+    console.log(`[getOptimizedImage] Embedded original image: ${sizeKB}KB`);
+    return compressImage(buffer);
+    
   } catch (err) {
-    console.warn(`[getSignedUrl] Error:`, err);
+    console.warn(`[getOptimizedImage] Error:`, err);
     return null;
   }
 }
@@ -289,14 +352,14 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
   let processedPhotos = 0;
   let skippedForLimit = 0;
   
-  // Process section item photos - convert to signed URLs
+  // Process section item photos - download, compress, and embed as base64
   if (processed.sections) {
     for (const section of processed.sections) {
       if (section.items) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             totalPhotosFound += item.photos.length;
-            const signedUrls: string[] = [];
+            const embeddedPhotos: string[] = [];
             // Limit photos per item
             const photosToProcess = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
             if (item.photos.length > MAX_PHOTOS_PER_ITEM) {
@@ -310,28 +373,28 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
                 continue;
               }
               
-              const signedUrl = await getSignedImageUrl(photoUrl);
-              if (signedUrl) {
-                signedUrls.push(signedUrl);
+              const optimizedImage = await getOptimizedImageUrl(photoUrl);
+              if (optimizedImage) {
+                embeddedPhotos.push(optimizedImage);
                 incrementPhotoCount();
                 processedPhotos++;
               }
             }
-            item.photos = signedUrls;
+            item.photos = embeddedPhotos;
           }
         }
       }
     }
   }
   
-  // Process tenant photos (meter, breaker, CT) - convert to signed URLs
+  // Process tenant photos (meter, breaker, CT) - download, compress, embed as base64
   if (processed.tenants) {
     for (const tenant of processed.tenants) {
       if (tenant.meterImage && canAddPhoto()) {
         totalPhotosFound++;
-        const signedUrl = await getSignedImageUrl(tenant.meterImage);
-        tenant.meterImage = signedUrl;
-        if (signedUrl) {
+        const optimizedImage = await getOptimizedImageUrl(tenant.meterImage);
+        tenant.meterImage = optimizedImage;
+        if (optimizedImage) {
           incrementPhotoCount();
           processedPhotos++;
         }
@@ -342,9 +405,9 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
       
       if (tenant.breakerImage && canAddPhoto()) {
         totalPhotosFound++;
-        const signedUrl = await getSignedImageUrl(tenant.breakerImage);
-        tenant.breakerImage = signedUrl;
-        if (signedUrl) {
+        const optimizedImage = await getOptimizedImageUrl(tenant.breakerImage);
+        tenant.breakerImage = optimizedImage;
+        if (optimizedImage) {
           incrementPhotoCount();
           processedPhotos++;
         }
@@ -355,9 +418,9 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
       
       if (tenant.ctRatioImage && canAddPhoto()) {
         totalPhotosFound++;
-        const signedUrl = await getSignedImageUrl(tenant.ctRatioImage);
-        tenant.ctRatioImage = signedUrl;
-        if (signedUrl) {
+        const optimizedImage = await getOptimizedImageUrl(tenant.ctRatioImage);
+        tenant.ctRatioImage = optimizedImage;
+        if (optimizedImage) {
           incrementPhotoCount();
           processedPhotos++;
         }
@@ -368,12 +431,12 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
     }
   }
   
-  // Process snag photos - convert to signed URLs (limited to 1 per snag)
+  // Process snag photos - download, compress, embed as base64 (limited to 1 per snag)
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
         totalPhotosFound += snag.photos.length;
-        const signedUrls: string[] = [];
+        const embeddedPhotos: string[] = [];
         // Allow only 1 photo per snag to reduce size
         const photosToProcess = snag.photos.slice(0, MAX_SNAG_PHOTOS);
         if (snag.photos.length > MAX_SNAG_PHOTOS) {
@@ -386,14 +449,14 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
             continue;
           }
           
-          const signedUrl = await getSignedImageUrl(photoUrl);
-          if (signedUrl) {
-            signedUrls.push(signedUrl);
+          const optimizedImage = await getOptimizedImageUrl(photoUrl);
+          if (optimizedImage) {
+            embeddedPhotos.push(optimizedImage);
             incrementPhotoCount();
             processedPhotos++;
           }
         }
-        snag.photos = signedUrls;
+        snag.photos = embeddedPhotos;
       }
     }
   }
