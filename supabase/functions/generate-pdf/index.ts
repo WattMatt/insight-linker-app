@@ -2203,9 +2203,9 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
             <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
               <tr>
                 ${item.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
-                <td style="width: ${Math.min(item.photos!.length, 3) === 1 ? '40%' : '32%'}; vertical-align: top;">
+                <td style="width: ${Math.min(item.photos!.length, 3) === 1 ? '40%' : '32%'}; vertical-align: top; text-align: center;">
                   <img src="${photoUrl}" 
-                       style="width: 100%; max-height: 200px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="${item.label} photo ${idx + 1}" />
                 </td>
                 ${Math.min(item.photos!.length, 3) === 1 ? '<td style="width: 60%;"></td>' : ''}
@@ -2216,9 +2216,9 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
             <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
               <tr>
                 ${item.photos!.slice(3, 6).map((photoUrl: string, idx: number) => `
-                <td style="width: 32%; vertical-align: top;">
+                <td style="width: 32%; vertical-align: top; text-align: center;">
                   <img src="${photoUrl}" 
-                       style="width: 100%; max-height: 200px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                       style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                        alt="${item.label} photo ${idx + 4}" />
                 </td>
                 `).join('')}
@@ -2277,9 +2277,9 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
               <table style="width: 100%;" cellpadding="0" cellspacing="8">
                 <tr>
                   ${snag.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
-                  <td style="width: ${100 / Math.min(snag.photos!.length, 3)}%; vertical-align: top;">
+                  <td style="width: ${100 / Math.min(snag.photos!.length, 3)}%; vertical-align: top; text-align: center;">
                     <img src="${photoUrl}" 
-                         style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                         style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid ${COLORS.border};" 
                          alt="Snag photo ${idx + 1}" />
                   </td>
                   `).join('')}
@@ -2339,23 +2339,23 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           <table style="width: 100%; margin-left: 20px;" cellpadding="0" cellspacing="10">
             <tr>
               ${tenant.breakerImage ? `
-              <td style="width: 33%; vertical-align: top;">
+              <td style="width: 33%; vertical-align: top; text-align: center;">
                 <img src="${tenant.breakerImage}" 
-                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                      alt="Breaker" />
               </td>
               ` : ''}
               ${tenant.ctRatioImage ? `
-              <td style="width: 33%; vertical-align: top;">
+              <td style="width: 33%; vertical-align: top; text-align: center;">
                 <img src="${tenant.ctRatioImage}" 
-                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                      alt="CT Ratio" />
               </td>
               ` : ''}
               ${tenant.meterImage ? `
-              <td style="width: 33%; vertical-align: top;">
+              <td style="width: 33%; vertical-align: top; text-align: center;">
                 <img src="${tenant.meterImage}" 
-                     style="width: 100%; max-height: 180px; object-fit: contain; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
                      alt="Meter" />
               </td>
               ` : ''}
