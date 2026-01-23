@@ -391,10 +391,10 @@ export const DynamicFieldManager = ({
 
             {field.type === "image" && (
               <div className="space-y-3">
-                {/* Hidden input for camera capture */}
+                {/* Hidden input for camera capture - use image/* only for best camera compatibility */}
                 <input
                   type="file"
-                  accept="image/*,.heic,.heif"
+                  accept="image/*"
                   capture="environment"
                   onChange={(e) => {
                     const files = e.target.files ? Array.from(e.target.files) : [];
