@@ -106,8 +106,67 @@ export interface GenerateReportResult {
 // IMAGE UTILITIES
 // ============================================================================
 
+// Image compression settings for PDF generation
+const PDF_IMAGE_CONFIG = {
+  maxWidth: 600,      // Max width in pixels
+  maxHeight: 600,     // Max height in pixels
+  quality: 0.65,      // JPEG quality (0-1)
+  format: 'image/jpeg' as const,
+};
+
 /**
- * Load an image from URL and convert to base64 data URL for embedding in PDF
+ * Compress an image blob using canvas
+ */
+async function compressImageBlob(blob: Blob): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(blob);
+    
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      
+      // Calculate new dimensions
+      let { width, height } = img;
+      const { maxWidth, maxHeight } = PDF_IMAGE_CONFIG;
+      
+      if (width > maxWidth || height > maxHeight) {
+        const ratio = Math.min(maxWidth / width, maxHeight / height);
+        width = Math.round(width * ratio);
+        height = Math.round(height * ratio);
+      }
+      
+      // Create canvas and draw scaled image
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      
+      if (!ctx) {
+        reject(new Error('Could not get canvas context'));
+        return;
+      }
+      
+      // White background for JPEG
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillRect(0, 0, width, height);
+      ctx.drawImage(img, 0, 0, width, height);
+      
+      // Convert to compressed JPEG
+      const dataUrl = canvas.toDataURL(PDF_IMAGE_CONFIG.format, PDF_IMAGE_CONFIG.quality);
+      resolve(dataUrl);
+    };
+    
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error('Failed to load image for compression'));
+    };
+    
+    img.src = url;
+  });
+}
+
+/**
+ * Load an image from URL, compress it, and convert to base64 data URL for embedding in PDF
  */
 export async function loadImageAsDataUrl(url: string): Promise<string | null> {
   try {
@@ -117,15 +176,31 @@ export async function loadImageAsDataUrl(url: string): Promise<string | null> {
       return null;
     }
     const blob = await response.blob();
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onloadend = () => resolve(reader.result as string);
-      reader.onerror = () => {
-        console.warn('Failed to read image blob');
-        resolve(null);
-      };
-      reader.readAsDataURL(blob);
-    });
+    
+    // Skip compression for SVGs and very small files
+    if (blob.type === 'image/svg+xml' || blob.size < 5000) {
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
+    
+    // Compress image
+    try {
+      const compressedDataUrl = await compressImageBlob(blob);
+      console.log(`[PDF] Compressed image: ${(blob.size / 1024).toFixed(1)}KB → ~${(compressedDataUrl.length * 0.75 / 1024).toFixed(1)}KB`);
+      return compressedDataUrl;
+    } catch (compressError) {
+      console.warn('Image compression failed, using original:', compressError);
+      return new Promise((resolve) => {
+        const reader = new FileReader();
+        reader.onloadend = () => resolve(reader.result as string);
+        reader.onerror = () => resolve(null);
+        reader.readAsDataURL(blob);
+      });
+    }
   } catch (error) {
     console.error('Error loading image:', error);
     return null;
