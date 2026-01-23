@@ -372,13 +372,11 @@ function generatePhotoGrid(photos: string[], options?: {
       ${rows.map(row => `
         <tr>
           ${row.map(item => `
-            <td style="padding: 4px; vertical-align: top; text-align: center;">
-              ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 4px;">${item.label}</div>` : ''}
-              <div style="width: ${imageWidth}; height: ${imageHeight}; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden;">
-                <img src="${item.photo}" 
-                     style="width: 100%; height: 100%; object-fit: contain;" 
-                     alt="${item.label}" />
-              </div>
+            <td style="width: ${100 / perRow}%; padding: 8px; vertical-align: top; text-align: center;">
+              ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 6px; font-weight: 500;">${item.label}</div>` : ''}
+              <img src="${item.photo}" 
+                   style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" 
+                   alt="${item.label}" />
             </td>
           `).join('')}
         </tr>
@@ -2410,33 +2408,27 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
             <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid;">
               <tr>
                 ${tenant.breakerImage ? `
-                <td style="padding: 4px; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Breaker</div>
-                  <div style="width: 200px; height: 150px; background: #f9fafb; border: 1px solid ${COLORS.border}; border-radius: 4px; overflow: hidden;">
-                    <img src="${tenant.breakerImage}" 
-                         style="width: 100%; height: 100%; object-fit: contain;" 
-                         alt="Breaker" />
-                  </div>
+                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Breaker</div>
+                  <img src="${tenant.breakerImage}" 
+                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       alt="Breaker" />
                 </td>
                 ` : ''}
                 ${tenant.ctRatioImage ? `
-                <td style="padding: 4px; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">CT Ratio</div>
-                  <div style="width: 200px; height: 150px; background: #f9fafb; border: 1px solid ${COLORS.border}; border-radius: 4px; overflow: hidden;">
-                    <img src="${tenant.ctRatioImage}" 
-                         style="width: 100%; height: 100%; object-fit: contain;" 
-                         alt="CT Ratio" />
-                  </div>
+                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">CT Ratio</div>
+                  <img src="${tenant.ctRatioImage}" 
+                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       alt="CT Ratio" />
                 </td>
                 ` : ''}
                 ${tenant.meterImage ? `
-                <td style="padding: 4px; vertical-align: top; text-align: center;">
-                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 4px;">Meter</div>
-                  <div style="width: 200px; height: 150px; background: #f9fafb; border: 1px solid ${COLORS.border}; border-radius: 4px; overflow: hidden;">
-                    <img src="${tenant.meterImage}" 
-                         style="width: 100%; height: 100%; object-fit: contain;" 
-                         alt="Meter" />
-                  </div>
+                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                  <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Meter</div>
+                  <img src="${tenant.meterImage}" 
+                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       alt="Meter" />
                 </td>
                 ` : ''}
               </tr>
