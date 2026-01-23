@@ -196,8 +196,8 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
       .from(parsed.bucket)
       .createSignedUrl(finalPath, 3600, {
         transform: {
-          width: 300,  // Small size for PDF
-          quality: 60, // Lower quality for size
+          width: 600,  // Good quality for PDF display at 220px
+          quality: 75, // Balanced quality
         }
       });
     
@@ -2179,52 +2179,32 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
         </div>
       `;
       
-      // Render each item with its photos - cleaner layout matching reference
+      // Render each item with its photos - matching reference PDF layout
       for (const item of section.items) {
         const hasPhotos = item.photos && item.photos.length > 0;
         const statusText = getStatusText(item.value, item.type);
         const statusColor = getStatusColor(item.value, item.type);
         
         page1Content += `
-          <div style="margin-bottom: 25px; page-break-inside: avoid;">
+          <div style="margin-bottom: 30px; page-break-inside: avoid;">
             <!-- Item Label and Status -->
-            <div style="margin-bottom: 8px;">
-              <div style="font-weight: 600; color: ${COLORS.primary}; font-size: 11pt; margin-bottom: 4px;">${item.label}</div>
-              <div style="font-size: 10pt; color: ${statusColor};">Status: ${statusText}</div>
-            </div>
+            <div style="font-weight: 600; color: ${COLORS.primary}; font-size: 12pt; margin-bottom: 4px;">${item.label}</div>
+            <div style="font-size: 10pt; color: ${statusColor}; margin-bottom: 10px; margin-left: 15px;">Status: ${statusText}</div>
             
             ${item.notes ? `
-            <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; font-style: italic;">
+            <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 10px; margin-left: 15px; font-style: italic;">
               ${item.notes}
             </div>
             ` : ''}
             
             ${hasPhotos ? `
-            <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
-              <tr>
-                ${item.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
-                <td style="width: ${Math.min(item.photos!.length, 3) === 1 ? '40%' : '32%'}; vertical-align: top; text-align: center;">
-                  <img src="${photoUrl}" 
-                       style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
-                       alt="${item.label} photo ${idx + 1}" />
-                </td>
-                ${Math.min(item.photos!.length, 3) === 1 ? '<td style="width: 60%;"></td>' : ''}
-                `).join('')}
-              </tr>
-            </table>
-            ${item.photos!.length > 3 ? `
-            <table style="width: 100%; margin-top: 10px;" cellpadding="0" cellspacing="10">
-              <tr>
-                ${item.photos!.slice(3, 6).map((photoUrl: string, idx: number) => `
-                <td style="width: 32%; vertical-align: top; text-align: center;">
-                  <img src="${photoUrl}" 
-                       style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
-                       alt="${item.label} photo ${idx + 4}" />
-                </td>
-                `).join('')}
-              </tr>
-            </table>
-            ` : ''}
+            <div style="margin-left: 0;">
+              ${item.photos!.map((photoUrl: string, idx: number) => `
+              <img src="${photoUrl}" 
+                   style="display: block; width: 220px; height: auto; margin-bottom: 15px; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                   alt="${item.label} photo ${idx + 1}" />
+              `).join('')}
+            </div>
             ` : ''}
           </div>
         `;
@@ -2274,17 +2254,11 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           ${hasSnagPhotos ? `
           <tr>
             <td style="padding: 15px; border-top: 1px solid ${COLORS.border};">
-              <table style="width: 100%;" cellpadding="0" cellspacing="8">
-                <tr>
-                  ${snag.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
-                  <td style="width: ${100 / Math.min(snag.photos!.length, 3)}%; vertical-align: top; text-align: center;">
-                    <img src="${photoUrl}" 
-                         style="max-width: 100%; height: auto; border-radius: 6px; border: 1px solid ${COLORS.border};" 
-                         alt="Snag photo ${idx + 1}" />
-                  </td>
-                  `).join('')}
-                </tr>
-              </table>
+              ${snag.photos!.slice(0, 3).map((photoUrl: string, idx: number) => `
+              <img src="${photoUrl}" 
+                   style="display: inline-block; width: 150px; height: auto; margin-right: 10px; margin-bottom: 10px; border-radius: 6px; border: 1px solid ${COLORS.border};" 
+                   alt="Snag photo ${idx + 1}" />
+              `).join('')}
             </td>
           </tr>
           ` : ''}
@@ -2327,40 +2301,33 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           </div>
           
           ${hasImages ? `
-          <!-- Photo Labels -->
-          <table style="width: 100%; margin-left: 20px;" cellpadding="0" cellspacing="0">
-            <tr>
-              ${tenant.breakerImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">Breaker</td>` : ''}
-              ${tenant.ctRatioImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">CT Ratio</td>` : ''}
-              ${tenant.meterImage ? `<td style="width: 33%; font-size: 9pt; color: ${COLORS.textMuted}; padding-bottom: 5px;">Meter</td>` : ''}
-            </tr>
-          </table>
-          <!-- Photo Grid -->
-          <table style="width: 100%; margin-left: 20px;" cellpadding="0" cellspacing="10">
-            <tr>
-              ${tenant.breakerImage ? `
-              <td style="width: 33%; vertical-align: top; text-align: center;">
-                <img src="${tenant.breakerImage}" 
-                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
-                     alt="Breaker" />
-              </td>
-              ` : ''}
-              ${tenant.ctRatioImage ? `
-              <td style="width: 33%; vertical-align: top; text-align: center;">
-                <img src="${tenant.ctRatioImage}" 
-                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
-                     alt="CT Ratio" />
-              </td>
-              ` : ''}
-              ${tenant.meterImage ? `
-              <td style="width: 33%; vertical-align: top; text-align: center;">
-                <img src="${tenant.meterImage}" 
-                     style="max-width: 100%; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
-                     alt="Meter" />
-              </td>
-              ` : ''}
-            </tr>
-          </table>
+          <!-- Photo Grid with Labels -->
+          <div style="margin-left: 20px;">
+            ${tenant.breakerImage ? `
+            <div style="display: inline-block; margin-right: 15px; margin-bottom: 15px; text-align: center; vertical-align: top;">
+              <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">Breaker</div>
+              <img src="${tenant.breakerImage}" 
+                   style="display: block; width: 150px; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                   alt="Breaker" />
+            </div>
+            ` : ''}
+            ${tenant.ctRatioImage ? `
+            <div style="display: inline-block; margin-right: 15px; margin-bottom: 15px; text-align: center; vertical-align: top;">
+              <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">CT Ratio</div>
+              <img src="${tenant.ctRatioImage}" 
+                   style="display: block; width: 150px; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                   alt="CT Ratio" />
+            </div>
+            ` : ''}
+            ${tenant.meterImage ? `
+            <div style="display: inline-block; margin-right: 15px; margin-bottom: 15px; text-align: center; vertical-align: top;">
+              <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 5px;">Meter</div>
+              <img src="${tenant.meterImage}" 
+                   style="display: block; width: 150px; height: auto; border: 1px solid ${COLORS.border}; border-radius: 4px;" 
+                   alt="Meter" />
+            </div>
+            ` : ''}
+          </div>
           ` : ''}
         </div>
       `;
