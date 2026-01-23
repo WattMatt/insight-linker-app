@@ -191,13 +191,14 @@ async function getSignedImageUrl(url: string): Promise<string | null> {
       }
     }
     
-    // Try with image transformation first (requires Supabase Pro)
+    // Image transformation - target ~50KB per image for ~2MB total PDF
+    // Reference PDF uses ~220px display width with ~400px source
     const { data, error } = await supabase.storage
       .from(parsed.bucket)
       .createSignedUrl(finalPath, 3600, {
         transform: {
-          width: 600,  // Good quality for PDF display at 220px
-          quality: 75, // Balanced quality
+          width: 400,  // 400px source for 220px display = 2x for sharpness
+          quality: 60, // Aggressive compression matching reference PDF
         }
       });
     
