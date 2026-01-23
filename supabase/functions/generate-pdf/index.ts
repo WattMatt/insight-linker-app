@@ -339,7 +339,7 @@ async function imageToBase64(url: string): Promise<string | null> {
 }
 
 // Generate a responsive photo grid - 3 images per row using table layout for PDF reliability
-// Images fill their cells completely (no max-width constraint) to match reference PDF layout
+// Uses explicit pixel widths to ensure proper sizing in PDFShift
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
@@ -350,7 +350,10 @@ function generatePhotoGrid(photos: string[], options?: {
   const perRow = options?.perRow || 3;
   const labels = options?.labels || [];
   const showLabels = options?.showLabels ?? false;
-  const cellWidth = `${Math.floor(96 / perRow)}%`; // 96% to leave room for spacing
+  
+  // A4 content width is ~174mm (658px) with 18mm margins
+  // For 3 columns with 8px gaps: (658 - 16) / 3 ≈ 214px per image
+  const imageWidth = perRow === 3 ? '200px' : perRow === 2 ? '300px' : '400px';
   
   // Split photos into rows
   const rows: { photo: string; label?: string }[][] = [];
@@ -363,21 +366,17 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   return `
-    <table style="width: 100%; border-collapse: separate; border-spacing: 6px 8px; page-break-inside: avoid; margin-bottom: 15px;">
+    <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;">
       ${rows.map(row => `
         <tr>
           ${row.map(item => `
-            <td style="width: ${cellWidth}; vertical-align: top; text-align: center;">
+            <td style="padding: 4px; vertical-align: top; text-align: left;">
               ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 4px;">${item.label}</div>` : ''}
               <img src="${item.photo}" 
-                   style="width: 100%; height: auto; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px;" 
+                   style="width: ${imageWidth}; height: auto; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 4px;" 
                    alt="${item.label}" />
             </td>
           `).join('')}
-          ${/* Fill empty cells for incomplete rows */
-            Array(perRow - row.length).fill('').map(() => 
-              `<td style="width: ${cellWidth};"></td>`
-            ).join('')}
         </tr>
       `).join('')}
     </table>
