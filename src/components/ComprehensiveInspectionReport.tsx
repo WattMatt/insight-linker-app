@@ -211,23 +211,32 @@ export const ComprehensiveInspectionReport = ({
 
   const handlePreviewReport = async () => {
     setIsGenerating(true);
+    console.log('[ComprehensiveReport] Starting preview generation...');
     
     try {
       // Fetch template
       let template: any = null;
       if (templateId) {
-        const { data: templateData } = await supabase
+        console.log('[ComprehensiveReport] Fetching template:', templateId);
+        const { data: templateData, error: templateError } = await supabase
           .from('inspection_templates')
           .select('*')
           .eq('id', templateId)
           .maybeSingle();
+        
+        if (templateError) {
+          console.error('[ComprehensiveReport] Template fetch error:', templateError);
+        }
         template = templateData;
       }
 
       if (!template) {
+        console.error('[ComprehensiveReport] No template found');
         toast.error("Cannot generate report without a template");
         return;
       }
+
+      console.log('[ComprehensiveReport] Template loaded:', template.name);
 
       // Fetch signatures if we have an inspection ID
       let signatures: any[] = [];
@@ -296,6 +305,13 @@ export const ComprehensiveInspectionReport = ({
         subsectionName,
       };
 
+      console.log('[ComprehensiveReport] Generating PDF with pdfmake...');
+      console.log('[ComprehensiveReport] Data:', { 
+        sectionsCount: sectionsForPdf.length, 
+        snagsCount: snags.length,
+        signaturesCount: signatures.length 
+      });
+
       // Generate using pdfmake
       const result = await generateInspectionReportPdf({
         inspection: pdfData,
@@ -304,6 +320,13 @@ export const ComprehensiveInspectionReport = ({
         siteLogoUrl,
       });
       
+      console.log('[ComprehensiveReport] Result:', { 
+        success: result.success, 
+        hasPreviewUrl: !!result.previewUrl, 
+        filename: result.filename,
+        error: result.error 
+      });
+
       if (result.success && result.previewUrl) {
         setPreviewUrl(result.previewUrl);
         setPreviewFileName(result.filename || `${subsectionName}_Inspection_Report.pdf`);
@@ -311,6 +334,9 @@ export const ComprehensiveInspectionReport = ({
       } else {
         toast.error(result.error || "Failed to generate report");
       }
+    } catch (error) {
+      console.error('[ComprehensiveReport] Preview error:', error);
+      toast.error("Failed to generate preview");
     } finally {
       setIsGenerating(false);
     }
