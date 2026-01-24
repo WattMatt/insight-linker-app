@@ -76,7 +76,7 @@ interface TrendDataPoint {
   snags: number;
 }
 
-interface FailedValidation {
+interface ValidationRecord {
   id: string;
   document_id: string;
   subsection_id: string;
@@ -101,89 +101,131 @@ interface FailedValidation {
   } | null;
 }
 
+// Alias for backward compatibility
+type FailedValidation = ValidationRecord;
+
 export const ComplianceDashboard = ({ siteId, subsections, inspections }: ComplianceDashboardProps) => {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [snagCounts, setSnagCounts] = useState({ open: 0, inProgress: 0, closed: 0 });
   const [loading, setLoading] = useState(true);
   const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
   const [failedValidations, setFailedValidations] = useState<FailedValidation[]>([]);
-  const [previewDoc, setPreviewDoc] = useState<FailedValidation['document']>(null);
+  const [allValidations, setAllValidations] = useState<ValidationRecord[]>([]);
+  const [validationFilter, setValidationFilter] = useState<'all' | 'passed' | 'failed'>('all');
+  const [previewDoc, setPreviewDoc] = useState<ValidationRecord['document']>(null);
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Fetch COC validations with full details for failed ones
-  useEffect(() => {
-    const fetchCocValidations = async () => {
-      if (subsections.length === 0) return;
-      
-      const subsectionIds = subsections.map(s => s.id);
-      
-      // First get the failed set for compliance calculation
-      const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
-      setFailedValidationsBySubsection(failedSet);
-      
-      // Now fetch full details for failed validations
-      if (failedSet.size > 0) {
-        const { data: validations, error } = await supabase
-          .from('coc_validations')
-          .select(`
-            id,
-            document_id,
-            subsection_id,
-            status,
-            validated_at,
-            violations,
-            report_data
-          `)
-          .in('subsection_id', Array.from(failedSet))
-          .order('validated_at', { ascending: false });
-        
-        if (error) {
-          console.error('Error fetching validation details:', error);
-          return;
-        }
-        
-        // Get latest validation per subsection
-        const latestBySubsection = new Map<string, typeof validations[0]>();
-        validations?.forEach(v => {
-          if (!latestBySubsection.has(v.subsection_id)) {
-            latestBySubsection.set(v.subsection_id, v);
-          }
-        });
-        
-        // Fetch document details for each validation
-        const documentIds = Array.from(latestBySubsection.values()).map(v => v.document_id);
-        const { data: documents } = await supabase
-          .from('subsection_documents')
-          .select('id, file_name, file_url, uploaded_at')
-          .in('id', documentIds);
-        
-        const docMap = new Map(documents?.map(d => [d.id, d]) || []);
-        
-        // Map subsection names
-        const subsectionMap = new Map(subsections.map(s => [s.id, s.name]));
-        
-        // Build full failed validation list
-        const fullValidations: FailedValidation[] = Array.from(latestBySubsection.values()).map(v => ({
-          id: v.id,
-          document_id: v.document_id,
-          subsection_id: v.subsection_id,
-          subsection_name: subsectionMap.get(v.subsection_id) || 'Unknown',
-          status: v.status,
-          validated_at: v.validated_at,
-          violations: (v.violations as any[]) || [],
-          report_data: v.report_data,
-          document: docMap.get(v.document_id) || null,
-        }));
-        
-        setFailedValidations(fullValidations);
-      } else {
-        setFailedValidations([]);
-      }
-    };
+  // Fetch ALL COC validations with full details
+  const fetchAllValidations = async () => {
+    if (subsections.length === 0) return;
     
-    fetchCocValidations();
+    const subsectionIds = subsections.map(s => s.id);
+    
+    // First get the failed set for compliance calculation
+    const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
+    setFailedValidationsBySubsection(failedSet);
+    
+    // Fetch ALL validations (not just failed) for this site's subsections
+    const { data: validations, error } = await supabase
+      .from('coc_validations')
+      .select(`
+        id,
+        document_id,
+        subsection_id,
+        status,
+        validated_at,
+        violations,
+        report_data
+      `)
+      .in('subsection_id', subsectionIds)
+      .order('validated_at', { ascending: false });
+    
+    if (error) {
+      console.error('Error fetching validation details:', error);
+      return;
+    }
+    
+    // Get latest validation per subsection
+    const latestBySubsection = new Map<string, typeof validations[0]>();
+    validations?.forEach(v => {
+      if (!latestBySubsection.has(v.subsection_id)) {
+        latestBySubsection.set(v.subsection_id, v);
+      }
+    });
+    
+    // Fetch document details for each validation
+    const documentIds = Array.from(latestBySubsection.values()).map(v => v.document_id);
+    const { data: documents } = await supabase
+      .from('subsection_documents')
+      .select('id, file_name, file_url, uploaded_at')
+      .in('id', documentIds);
+    
+    const docMap = new Map(documents?.map(d => [d.id, d]) || []);
+    
+    // Map subsection names
+    const subsectionMap = new Map(subsections.map(s => [s.id, s.name]));
+    
+    // Build full validation list with ALL statuses
+    const fullValidations: ValidationRecord[] = Array.from(latestBySubsection.values()).map(v => ({
+      id: v.id,
+      document_id: v.document_id,
+      subsection_id: v.subsection_id,
+      subsection_name: subsectionMap.get(v.subsection_id) || 'Unknown',
+      status: v.status,
+      validated_at: v.validated_at,
+      violations: (v.violations as any[]) || [],
+      report_data: v.report_data,
+      document: docMap.get(v.document_id) || null,
+    }));
+    
+    setAllValidations(fullValidations);
+    
+    // Also set failed validations for backward compatibility
+    const failedOnly = fullValidations.filter(v => 
+      ['Fail', 'Failed', 'Incomplete'].includes(v.status)
+    );
+    setFailedValidations(failedOnly);
+  };
+
+  useEffect(() => {
+    fetchAllValidations();
   }, [subsections]);
+
+  // Real-time subscription to coc_validations for live updates during bulk runs
+  useEffect(() => {
+    if (subsections.length === 0) return;
+    
+    const subsectionIds = new Set(subsections.map(s => s.id));
+    
+    const channel = supabase
+      .channel(`coc_validations_${siteId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'coc_validations'
+        },
+        (payload) => {
+          // Check if the change affects one of our subsections
+          const newRecord = payload.new as { subsection_id?: string } | undefined;
+          const oldRecord = payload.old as { subsection_id?: string } | undefined;
+          const affectedSubsectionId = newRecord?.subsection_id || oldRecord?.subsection_id;
+          
+          if (affectedSubsectionId && subsectionIds.has(affectedSubsectionId)) {
+            console.log('COC validation change detected for site:', payload);
+            // Re-fetch all validations when changes occur
+            fetchAllValidations();
+          }
+        }
+      )
+      .subscribe();
+    
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [siteId, subsections]);
 
   // Calculate overall compliance score using shared utility
   const calculateOverallScore = () => {
@@ -674,103 +716,199 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         </Card>
       </div>
 
-      {/* Failed COC Validations Section */}
-      {failedValidations.length > 0 && (
-        <Card className="border-destructive/30">
+      {/* COC Validation History Section */}
+      {allValidations.length > 0 && (
+        <Card>
           <CardHeader>
-            <CardTitle className="flex items-center gap-2 text-destructive">
-              <FileWarning className="h-5 w-5" />
-              Failed COC Validations
-              <Badge variant="destructive" className="ml-2">
-                {failedValidations.length}
-              </Badge>
-            </CardTitle>
-            <CardDescription>
-              Subsections with COC validation failures - click to preview document with error highlighting
-            </CardDescription>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <FileCheck className="h-5 w-5 text-muted-foreground" />
+                  COC Validation History
+                  <Badge variant="outline" className="ml-2">
+                    {allValidations.length}
+                  </Badge>
+                </CardTitle>
+                <CardDescription>
+                  All COC validation results - click to preview with error highlighting
+                </CardDescription>
+              </div>
+              
+              {/* Filter buttons */}
+              <div className="flex gap-2">
+                <Button
+                  variant={validationFilter === 'all' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setValidationFilter('all')}
+                >
+                  All ({allValidations.length})
+                </Button>
+                <Button
+                  variant={validationFilter === 'passed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setValidationFilter('passed')}
+                  className={validationFilter === 'passed' ? '' : 'text-green-600 border-green-600/30 hover:bg-green-500/10'}
+                >
+                  <CheckCircle2 className="h-4 w-4 mr-1" />
+                  Passed ({allValidations.filter(v => v.status === 'Pass').length})
+                </Button>
+                <Button
+                  variant={validationFilter === 'failed' ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setValidationFilter('failed')}
+                  className={validationFilter === 'failed' ? '' : 'text-destructive border-destructive/30 hover:bg-destructive/10'}
+                >
+                  <XCircle className="h-4 w-4 mr-1" />
+                  Failed ({allValidations.filter(v => ['Fail', 'Failed', 'Incomplete'].includes(v.status)).length})
+                </Button>
+              </div>
+            </div>
           </CardHeader>
           <CardContent className="space-y-3">
-            {failedValidations.map((validation) => (
-              <div 
-                key={validation.id}
-                className="border rounded-lg p-4 bg-destructive/5 hover:bg-destructive/10 transition-colors"
-              >
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <XCircle className="h-4 w-4 text-destructive shrink-0" />
-                      <span className="font-semibold truncate">{validation.subsection_name}</span>
-                      <Badge variant="destructive" className="shrink-0">
-                        {validation.status}
-                      </Badge>
-                    </div>
-                    
-                    <p className="text-xs text-muted-foreground mb-3">
-                      Validated: {format(new Date(validation.validated_at), 'dd MMM yyyy, HH:mm')}
-                    </p>
-                    
-                    {/* Violations List */}
-                    {validation.violations.length > 0 && (
-                      <div className="space-y-2">
-                        <p className="text-sm font-medium text-destructive flex items-center gap-1">
-                          <AlertTriangle className="h-3.5 w-3.5" />
-                          {validation.violations.length} Issue{validation.violations.length !== 1 ? 's' : ''} Found:
-                        </p>
-                        <div className="space-y-1.5">
-                          {validation.violations.slice(0, 3).map((v, idx) => (
-                            <div 
-                              key={idx}
-                              className="flex items-start gap-2 text-sm p-2 rounded bg-background/60 border border-destructive/20"
-                            >
-                              <Target className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
-                              <div className="min-w-0 flex-1">
-                                <span className="font-medium text-destructive">
-                                  Clause {v.clause}
-                                </span>
-                                {v.section && (
-                                  <span className="text-muted-foreground text-xs ml-2">
-                                    ({v.section})
-                                  </span>
-                                )}
-                                <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
-                                  {v.description}
-                                </p>
-                              </div>
-                            </div>
-                          ))}
-                          {validation.violations.length > 3 && (
-                            <p className="text-xs text-muted-foreground pl-5">
-                              +{validation.violations.length - 3} more issues...
-                            </p>
+            {allValidations
+              .filter(validation => {
+                if (validationFilter === 'all') return true;
+                if (validationFilter === 'passed') return validation.status === 'Pass';
+                if (validationFilter === 'failed') return ['Fail', 'Failed', 'Incomplete'].includes(validation.status);
+                return true;
+              })
+              .map((validation) => {
+                const isPassed = validation.status === 'Pass';
+                const isFailed = ['Fail', 'Failed', 'Incomplete'].includes(validation.status);
+                
+                return (
+                  <div 
+                    key={validation.id}
+                    className={`border rounded-lg p-4 transition-colors ${
+                      isPassed 
+                        ? 'bg-green-500/5 hover:bg-green-500/10 border-green-500/20' 
+                        : isFailed 
+                          ? 'bg-destructive/5 hover:bg-destructive/10 border-destructive/20'
+                          : 'bg-muted/30 hover:bg-muted/50'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-2">
+                          {isPassed ? (
+                            <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" />
+                          ) : isFailed ? (
+                            <XCircle className="h-4 w-4 text-destructive shrink-0" />
+                          ) : (
+                            <Clock className="h-4 w-4 text-muted-foreground shrink-0" />
                           )}
+                          <span className="font-semibold truncate">{validation.subsection_name}</span>
+                          <Badge 
+                            variant={isPassed ? 'default' : isFailed ? 'destructive' : 'secondary'}
+                            className={isPassed ? 'bg-green-600 hover:bg-green-700' : ''}
+                          >
+                            {validation.status}
+                          </Badge>
                         </div>
+                        
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Validated: {format(new Date(validation.validated_at), 'dd MMM yyyy, HH:mm')}
+                          {validation.document && (
+                            <span className="ml-2">• {validation.document.file_name}</span>
+                          )}
+                        </p>
+                        
+                        {/* Show violations for failed validations */}
+                        {isFailed && validation.violations.length > 0 && (
+                          <div className="space-y-2 mt-3">
+                            <p className="text-sm font-medium text-destructive flex items-center gap-1">
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              {validation.violations.length} Issue{validation.violations.length !== 1 ? 's' : ''} Found:
+                            </p>
+                            <div className="space-y-1.5">
+                              {validation.violations.slice(0, 3).map((v, idx) => (
+                                <div 
+                                  key={idx}
+                                  className="flex items-start gap-2 text-sm p-2 rounded bg-background/60 border border-destructive/20"
+                                >
+                                  <Target className="h-3.5 w-3.5 text-destructive mt-0.5 shrink-0" />
+                                  <div className="min-w-0 flex-1">
+                                    <span className="font-medium text-destructive">
+                                      Clause {v.clause}
+                                    </span>
+                                    {v.section && (
+                                      <span className="text-muted-foreground text-xs ml-2">
+                                        ({v.section})
+                                      </span>
+                                    )}
+                                    <p className="text-muted-foreground text-xs mt-0.5 line-clamp-2">
+                                      {v.description}
+                                    </p>
+                                  </div>
+                                </div>
+                              ))}
+                              {validation.violations.length > 3 && (
+                                <p className="text-xs text-muted-foreground pl-5">
+                                  +{validation.violations.length - 3} more issues...
+                                </p>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                        
+                        {/* Show summary for passed validations */}
+                        {isPassed && (
+                          <p className="text-sm text-green-600">
+                            ✓ All compliance checks passed
+                          </p>
+                        )}
                       </div>
-                    )}
+                      
+                      {/* Preview Button */}
+                      {validation.document && (
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          className="shrink-0 gap-2"
+                          onClick={() => {
+                            setPreviewDoc(validation.document);
+                            setPreviewValidation({
+                              status: validation.status,
+                              violations: validation.violations,
+                              report_data: validation.report_data
+                            });
+                            setPreviewOpen(true);
+                          }}
+                        >
+                          <Eye className="h-4 w-4" />
+                          Preview
+                        </Button>
+                      )}
+                    </div>
                   </div>
-                  
-                  {/* Preview Button */}
-                  {validation.document && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="shrink-0 gap-2"
-                      onClick={() => {
-                        setPreviewDoc(validation.document);
-                        setPreviewValidation({
-                          status: validation.status,
-                          violations: validation.violations,
-                          report_data: validation.report_data
-                        });
-                        setPreviewOpen(true);
-                      }}
-                    >
-                      <Eye className="h-4 w-4" />
-                      Preview
-                    </Button>
-                  )}
-                </div>
+                );
+              })}
+            
+            {/* Empty state for filtered results */}
+            {allValidations.filter(validation => {
+              if (validationFilter === 'all') return true;
+              if (validationFilter === 'passed') return validation.status === 'Pass';
+              if (validationFilter === 'failed') return ['Fail', 'Failed', 'Incomplete'].includes(validation.status);
+              return true;
+            }).length === 0 && (
+              <div className="text-center py-8 text-muted-foreground">
+                <FileCheck className="h-12 w-12 mx-auto mb-2 opacity-50" />
+                <p>No {validationFilter === 'all' ? '' : validationFilter} validations found</p>
               </div>
-            ))}
+            )}
+          </CardContent>
+        </Card>
+      )}
+      
+      {/* Empty state when no validations exist */}
+      {allValidations.length === 0 && !loading && (
+        <Card className="border-dashed">
+          <CardContent className="py-12 text-center">
+            <FileCheck className="h-12 w-12 mx-auto mb-4 text-muted-foreground/50" />
+            <h3 className="text-lg font-medium mb-2">No Validation Results Yet</h3>
+            <p className="text-muted-foreground mb-4">
+              Run bulk COC validation above to check compliance of all certificates
+            </p>
           </CardContent>
         </Card>
       )}
