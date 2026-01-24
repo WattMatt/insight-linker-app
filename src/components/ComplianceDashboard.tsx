@@ -116,17 +116,17 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
 
-  // Fetch ALL COC validations with full details
+  // Fetch ALL COC validations with full details - shows complete history log
   const fetchAllValidations = async () => {
     if (subsections.length === 0) return;
     
     const subsectionIds = subsections.map(s => s.id);
     
-    // First get the failed set for compliance calculation
+    // First get the failed set for compliance calculation (uses latest per subsection)
     const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
     setFailedValidationsBySubsection(failedSet);
     
-    // Fetch ALL validations (not just failed) for this site's subsections
+    // Fetch ALL validations history for this site's subsections
     const { data: validations, error } = await supabase
       .from('coc_validations')
       .select(`
@@ -139,23 +139,22 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         report_data
       `)
       .in('subsection_id', subsectionIds)
-      .order('validated_at', { ascending: false });
+      .order('validated_at', { ascending: false })
+      .limit(100); // Limit to most recent 100 for performance
     
     if (error) {
       console.error('Error fetching validation details:', error);
       return;
     }
     
-    // Get latest validation per subsection
-    const latestBySubsection = new Map<string, typeof validations[0]>();
-    validations?.forEach(v => {
-      if (!latestBySubsection.has(v.subsection_id)) {
-        latestBySubsection.set(v.subsection_id, v);
-      }
-    });
+    if (!validations || validations.length === 0) {
+      setAllValidations([]);
+      setFailedValidations([]);
+      return;
+    }
     
-    // Fetch document details for each validation
-    const documentIds = Array.from(latestBySubsection.values()).map(v => v.document_id);
+    // Fetch document details for ALL validations (not just latest)
+    const documentIds = [...new Set(validations.map(v => v.document_id))];
     const { data: documents } = await supabase
       .from('subsection_documents')
       .select('id, file_name, file_url, uploaded_at')
@@ -166,8 +165,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     // Map subsection names
     const subsectionMap = new Map(subsections.map(s => [s.id, s.name]));
     
-    // Build full validation list with ALL statuses
-    const fullValidations: ValidationRecord[] = Array.from(latestBySubsection.values()).map(v => ({
+    // Build FULL validation history list (not just latest per subsection)
+    const fullValidations: ValidationRecord[] = validations.map(v => ({
       id: v.id,
       document_id: v.document_id,
       subsection_id: v.subsection_id,
@@ -179,6 +178,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       document: docMap.get(v.document_id) || null,
     }));
     
+    console.log('[ComplianceDashboard] Loaded validation history:', fullValidations.length, 'records');
     setAllValidations(fullValidations);
     
     // Also set failed validations for backward compatibility
@@ -716,7 +716,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         </Card>
       </div>
 
-      {/* COC Validation History Section */}
+      {/* COC Validation History Section - Persistent Log */}
       {allValidations.length > 0 && (
         <Card>
           <CardHeader>
@@ -724,13 +724,13 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
               <div>
                 <CardTitle className="flex items-center gap-2">
                   <FileCheck className="h-5 w-5 text-muted-foreground" />
-                  COC Validation History
+                  COC Validation Log
                   <Badge variant="outline" className="ml-2">
-                    {allValidations.length}
+                    {allValidations.length} records
                   </Badge>
                 </CardTitle>
                 <CardDescription>
-                  All COC validation results - click to preview with error highlighting
+                  Complete history of all bulk and individual validations • Click to preview with error highlighting
                 </CardDescription>
               </div>
               
