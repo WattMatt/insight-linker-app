@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
@@ -117,16 +117,21 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [previewOpen, setPreviewOpen] = useState(false);
 
   // Fetch ALL COC validations with full details - shows complete history log
-  const fetchAllValidations = async () => {
-    if (subsections.length === 0) return;
+  const fetchAllValidations = useCallback(async () => {
+    if (subsections.length === 0) {
+      setAllValidations([]);
+      setFailedValidations([]);
+      return;
+    }
     
     const subsectionIds = subsections.map(s => s.id);
+    console.log('[ComplianceDashboard] Fetching validations for', subsectionIds.length, 'subsections');
     
     // First get the failed set for compliance calculation (uses latest per subsection)
     const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
     setFailedValidationsBySubsection(failedSet);
     
-    // Fetch ALL validations history for this site's subsections
+    // Fetch ALL validations history for this site's subsections with FULL data
     const { data: validations, error } = await supabase
       .from('coc_validations')
       .select(`
@@ -143,9 +148,11 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       .limit(100); // Limit to most recent 100 for performance
     
     if (error) {
-      console.error('Error fetching validation details:', error);
+      console.error('[ComplianceDashboard] Error fetching validation details:', error);
       return;
     }
+    
+    console.log('[ComplianceDashboard] Raw validations from DB:', validations?.length || 0);
     
     if (!validations || validations.length === 0) {
       setAllValidations([]);
@@ -154,11 +161,11 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     }
     
     // Fetch document details for ALL validations (not just latest)
-    const documentIds = [...new Set(validations.map(v => v.document_id))];
+    const documentIds = [...new Set(validations.map(v => v.document_id).filter(Boolean))];
     const { data: documents } = await supabase
       .from('subsection_documents')
       .select('id, file_name, file_url, uploaded_at')
-      .in('id', documentIds);
+      .in('id', documentIds.length > 0 ? documentIds : ['none']);
     
     const docMap = new Map(documents?.map(d => [d.id, d]) || []);
     
@@ -178,7 +185,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       document: docMap.get(v.document_id) || null,
     }));
     
-    console.log('[ComplianceDashboard] Loaded validation history:', fullValidations.length, 'records');
+    console.log('[ComplianceDashboard] Loaded validation history:', fullValidations.length, 'records, with violations:', 
+      fullValidations.filter(v => v.violations.length > 0).length);
     setAllValidations(fullValidations);
     
     // Also set failed validations for backward compatibility
@@ -186,11 +194,12 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       ['Fail', 'Failed', 'Incomplete'].includes(v.status)
     );
     setFailedValidations(failedOnly);
-  };
+  }, [subsections]);
 
+  // Fetch validations on mount and when subsections change
   useEffect(() => {
     fetchAllValidations();
-  }, [subsections]);
+  }, [fetchAllValidations]);
 
   // Real-time subscription to coc_validations for live updates during bulk runs
   useEffect(() => {
@@ -214,18 +223,20 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           const affectedSubsectionId = newRecord?.subsection_id || oldRecord?.subsection_id;
           
           if (affectedSubsectionId && subsectionIds.has(affectedSubsectionId)) {
-            console.log('COC validation change detected for site:', payload);
+            console.log('[ComplianceDashboard] Real-time: COC validation change detected:', payload.eventType);
             // Re-fetch all validations when changes occur
             fetchAllValidations();
           }
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log('[ComplianceDashboard] Real-time subscription status:', status);
+      });
     
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [siteId, subsections]);
+  }, [siteId, subsections, fetchAllValidations]);
 
   // Calculate overall compliance score using shared utility
   const calculateOverallScore = () => {
