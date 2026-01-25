@@ -221,8 +221,9 @@ Scan the entire document and extract:
 | ≤ 500V          | 500V DC      | ≥ 1.0MΩ    |
 | > 500V          | 1000V DC     | ≥ 1.0MΩ    |
 
-**PASS:** All circuits ≥ minimum threshold
-**FAIL:** Any circuit below minimum indicates insulation breakdown
+**PASS:** All circuits ≥ minimum threshold OR value shows infinity symbol (∞, >∞, OL, >500MΩ, or similar "infinite" readings)
+**IMPORTANT:** The infinity symbol (∞) indicates resistance is beyond meter range (typically >500MΩ) which is an EXCELLENT pass result. Values like "∞", ">∞", "OL" (over limit), ">500", ">999", or ">500MΩ" are ALL valid PASS values.
+**FAIL:** Any circuit with a numeric value below minimum threshold indicates insulation breakdown
 **Note:** Test between all live conductors and earth, and between live conductors
 
 ### 🔄 POLARITY & CONTINUITY (Clause 8.7)
