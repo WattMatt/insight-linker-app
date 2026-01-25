@@ -935,6 +935,14 @@ serve(async (req) => {
               type: 'text',
               text: `Analyze this COC document against SANS 10142-1:2020. Extract ALL visible information.
 
+📅 CURRENT DATE: ${new Date().toISOString().split('T')[0]} (use this as "today" for all date comparisons)
+
+⚠️ DATE VALIDATION RULES:
+- A COC issue date is "future-dated" ONLY if it is AFTER ${new Date().toISOString().split('T')[0]}
+- Common date formats on COCs: DD/MM/YYYY, YYYY-MM-DD, DD-MM-YYYY
+- Example: 18/03/2025 means March 18, 2025 - this is BEFORE today, so it is VALID (not future-dated)
+- Only flag as future-dated if the date is genuinely in the future relative to ${new Date().toISOString().split('T')[0]}
+
 ⚠️ ZERO-TOLERANCE ANTI-HALLUCINATION RULES:
 1. ONLY report what you can DIRECTLY SEE - no fabrication, invention, or inference
 2. For ANY failure you report, you MUST be able to quote the EXACT visible text/value as evidence
