@@ -340,8 +340,8 @@ export function BulkInspectionReportGenerator({
         subsectionName: sub.subsectionName,
       };
 
-      // Generate PDF via PDFShift Edge Function
-      console.log(`[BulkInspection] Generating PDFShift report for ${sub.subsectionName}`);
+      // Generate DOCX via Edge Function
+      console.log(`[BulkInspection] Generating DOCX report for ${sub.subsectionName}`);
       
       const result = await generateAndSavePdfShiftInspectionReport({
         inspection: inspectionData,
@@ -353,7 +353,7 @@ export function BulkInspectionReportGenerator({
       });
 
       if (!result.success) {
-        throw new Error(result.error || 'PDF generation failed');
+        throw new Error(result.error || 'Report generation failed');
       }
 
       return {
