@@ -1054,6 +1054,7 @@ function createInspectionItemContent(
   }
 
   // Photos in grid layout (2 columns) - kept with item
+  // Using larger size (250x200) with subtle border for professional look
   const photos = item.photos?.filter(Boolean) || [];
   if (photos.length > 0) {
     const photoRows: Content[][] = [];
@@ -1061,25 +1062,36 @@ function createInspectionItemContent(
     for (let i = 0; i < photos.length; i += 2) {
       const rowPhotos: Content[] = [];
       
-      // First photo
+      // First photo with border frame
       const photo1 = imageCache.get(photos[i]);
       if (photo1) {
         rowPhotos.push({
-          stack: [
-            {
-              image: photo1,
-              fit: [230, 180],
-              alignment: 'center',
-            },
-            {
-              text: `Photo ${i + 1}`,
-              fontSize: 7,
-              color: REPORT_COLORS.textMuted,
-              alignment: 'center',
-              margin: [0, 3, 0, 0],
-            },
-          ],
-          margin: [0, 0, 5, 0],
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                {
+                  image: photo1,
+                  fit: [250, 200],
+                  alignment: 'center',
+                },
+                {
+                  text: `Photo ${i + 1}`,
+                  fontSize: 8,
+                  color: REPORT_COLORS.textSecondary,
+                  alignment: 'center',
+                  margin: [0, 4, 0, 0],
+                },
+              ],
+              margin: [5, 5, 5, 5],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => REPORT_COLORS.border,
+            vLineColor: () => REPORT_COLORS.border,
+          },
         });
       } else {
         rowPhotos.push({ text: '' });
@@ -1090,21 +1102,32 @@ function createInspectionItemContent(
         const photo2 = imageCache.get(photos[i + 1]);
         if (photo2) {
           rowPhotos.push({
-            stack: [
-              {
-                image: photo2,
-                fit: [230, 180],
-                alignment: 'center',
-              },
-              {
-                text: `Photo ${i + 2}`,
-                fontSize: 7,
-                color: REPORT_COLORS.textMuted,
-                alignment: 'center',
-                margin: [0, 3, 0, 0],
-              },
-            ],
-            margin: [5, 0, 0, 0],
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  {
+                    image: photo2,
+                    fit: [250, 200],
+                    alignment: 'center',
+                  },
+                  {
+                    text: `Photo ${i + 2}`,
+                    fontSize: 8,
+                    color: REPORT_COLORS.textSecondary,
+                    alignment: 'center',
+                    margin: [0, 4, 0, 0],
+                  },
+                ],
+                margin: [5, 5, 5, 5],
+              }]],
+            },
+            layout: {
+              hLineWidth: () => 0.5,
+              vLineWidth: () => 0.5,
+              hLineColor: () => REPORT_COLORS.border,
+              vLineColor: () => REPORT_COLORS.border,
+            },
           });
         } else {
           rowPhotos.push({ text: '' });
@@ -1123,7 +1146,7 @@ function createInspectionItemContent(
           body: photoRows,
         },
         layout: 'noBorders',
-        margin: [0, 5, 0, 10],
+        margin: [0, 8, 0, 12],
       });
     }
   }
@@ -1277,7 +1300,7 @@ function createSnagCardContent(
     margin: [0, 0, 0, 10],
   });
 
-  // Snag photos (2-column grid)
+  // Snag photos (2-column grid) - larger size with professional borders
   const photos = snag.photos?.filter(Boolean) || [];
   if (photos.length > 0) {
     const photoRows: Content[][] = [];
@@ -1287,10 +1310,22 @@ function createSnagCardContent(
       const photo1 = imageCache.get(photos[i]);
       if (photo1) {
         row.push({
-          stack: [
-            { image: photo1, fit: [230, 160], alignment: 'center' },
-            { text: `Photo ${i + 1}`, fontSize: 7, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
-          ],
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                { image: photo1, fit: [250, 190], alignment: 'center' },
+                { text: `Evidence ${i + 1}`, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
+              ],
+              margin: [5, 5, 5, 5],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => REPORT_COLORS.border,
+            vLineColor: () => REPORT_COLORS.border,
+          },
         });
       } else {
         row.push({ text: '' });
@@ -1300,10 +1335,22 @@ function createSnagCardContent(
         const photo2 = imageCache.get(photos[i + 1]);
         if (photo2) {
           row.push({
-            stack: [
-              { image: photo2, fit: [230, 160], alignment: 'center' },
-              { text: `Photo ${i + 2}`, fontSize: 7, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
-            ],
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  { image: photo2, fit: [250, 190], alignment: 'center' },
+                  { text: `Evidence ${i + 2}`, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
+                ],
+                margin: [5, 5, 5, 5],
+              }]],
+            },
+            layout: {
+              hLineWidth: () => 0.5,
+              vLineWidth: () => 0.5,
+              hLineColor: () => REPORT_COLORS.border,
+              vLineColor: () => REPORT_COLORS.border,
+            },
           });
         } else {
           row.push({ text: '' });
@@ -1318,7 +1365,7 @@ function createSnagCardContent(
     snagStack.push({
       table: { widths: ['*', '*'], body: photoRows },
       layout: 'noBorders',
-      margin: [0, 0, 0, 15],
+      margin: [0, 5, 0, 15],
     });
   }
 
@@ -1416,7 +1463,7 @@ function createTenantCardContent(
     });
   }
 
-  // Photos in 3-column grid
+  // Photos in 3-column grid - larger with professional borders
   const photoData: Array<{ url: string; label: string }> = [];
   if (tenant.breakerImage) photoData.push({ url: tenant.breakerImage, label: 'Breaker' });
   if (tenant.ctRatioImage) photoData.push({ url: tenant.ctRatioImage, label: 'CT Ratio' });
@@ -1426,18 +1473,38 @@ function createTenantCardContent(
     const photoColumns = photoData.map(photo => {
       const dataUrl = imageCache.get(photo.url);
       return dataUrl ? {
-        stack: [
-          { image: dataUrl, fit: [150, 140], alignment: 'center' as const },
-          { text: photo.label, fontSize: 8, bold: true, alignment: 'center' as const, margin: [0, 4, 0, 0] },
-        ],
+        table: {
+          widths: ['*'],
+          body: [[{
+            stack: [
+              { image: dataUrl, fit: [160, 150], alignment: 'center' as const },
+              { 
+                text: photo.label, 
+                fontSize: 9, 
+                bold: true, 
+                color: REPORT_COLORS.textPrimary,
+                alignment: 'center' as const, 
+                margin: [0, 5, 0, 0] 
+              },
+            ],
+            margin: [4, 4, 4, 4],
+          }]],
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => REPORT_COLORS.border,
+          vLineColor: () => REPORT_COLORS.border,
+          fillColor: () => REPORT_COLORS.lightBg,
+        },
         width: '*',
       } : { text: '', width: '*' };
     });
 
     tenantStack.push({
       columns: photoColumns,
-      columnGap: 10,
-      margin: [0, 0, 0, 15],
+      columnGap: 8,
+      margin: [0, 5, 0, 15],
     });
   }
 
