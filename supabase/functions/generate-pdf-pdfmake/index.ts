@@ -26,8 +26,8 @@ const CONFIG = {
   IMAGE_TRANSFORM_QUALITY: 75,
   LOGO_MAX_SIZE_KB: 600,
   MAX_IMAGES_PER_REPORT: 30,
-  PHOTO_WIDTH: 165,
-  PHOTO_HEIGHT: 125,
+  PHOTO_WIDTH: 75,
+  PHOTO_HEIGHT: 100,
 };
 
 // Color palette - professional engineering report
@@ -743,7 +743,7 @@ function buildDocDefinition(
       if (tenant.meterImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.meterImage), fit: [150, 120], alignment: 'center' },
+            { image: getImage(tenant.meterImage), fit: [75, 100], alignment: 'center' },
             { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -751,7 +751,7 @@ function buildDocDefinition(
       if (tenant.breakerImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.breakerImage), fit: [150, 120], alignment: 'center' },
+            { image: getImage(tenant.breakerImage), fit: [75, 100], alignment: 'center' },
             { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -759,7 +759,7 @@ function buildDocDefinition(
       if (tenant.ctRatioImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), fit: [150, 120], alignment: 'center' },
+            { image: getImage(tenant.ctRatioImage), fit: [75, 100], alignment: 'center' },
             { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -823,7 +823,7 @@ function buildDocDefinition(
         content.push({
           columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
             stack: [
-              { image: getImage(photo), fit: [200, 150], alignment: 'center' },
+              { image: getImage(photo), fit: [75, 100], alignment: 'center' },
               { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
