@@ -1,15 +1,14 @@
 /**
  * PDFMake-based PDF Generator Edge Function
  * 
- * Uses pdfmake library for reliable PDF generation with embedded images.
- * This approach handles images natively without browser rendering issues.
+ * Professional Engineering Report Generator for SANS 10142-1 Compliance
  * 
- * Design matches the exact layout of the Browserless version:
- * - Cover page with logo and metadata
+ * Design Features:
+ * - Professional cover page with logo, vertical accent bar, and metadata
  * - Quality Score Dashboard with circular compliance indicator
- * - Section tables with photo grids
- * - Tenant verification with images
- * - Snags section with photos
+ * - Section breakdown tables with photo grids
+ * - Tenant verification with labeled images
+ * - Snags section with risk levels
  * - Signature section
  */
 
@@ -22,17 +21,19 @@ const corsHeaders = {
 
 // Configuration
 const CONFIG = {
-  MAX_IMAGE_SIZE_KB: 300,
-  IMAGE_TRANSFORM_WIDTH: 400,
-  IMAGE_TRANSFORM_QUALITY: 65,
-  LOGO_MAX_SIZE_KB: 500,
-  MAX_IMAGES_PER_REPORT: 20,
+  MAX_IMAGE_SIZE_KB: 400,
+  IMAGE_TRANSFORM_WIDTH: 600,
+  IMAGE_TRANSFORM_QUALITY: 75,
+  LOGO_MAX_SIZE_KB: 600,
+  MAX_IMAGES_PER_REPORT: 30,
+  PHOTO_WIDTH: 165,
+  PHOTO_HEIGHT: 125,
 };
 
-// Color palette matching the design
+// Color palette - professional engineering report
 const COLORS = {
   primary: '#1e3a5f',
-  secondary: '#1a7a8a',
+  secondary: '#0d7377',
   accent: '#2563eb',
   success: '#16a34a',
   warning: '#d97706',
@@ -40,14 +41,15 @@ const COLORS = {
   lightBg: '#f8fafc',
   border: '#e2e8f0',
   textPrimary: '#1e293b',
-  textSecondary: '#64748b',
+  textSecondary: '#475569',
   textMuted: '#94a3b8',
+  white: '#ffffff',
 };
 
-// Placeholder for failed images
-const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjNmNGY2Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOWNhM2FmIiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+// Placeholder SVG for failed images
+const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjFmNWY5Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjExIiBmaWxsPSIjOTRhM2I4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
 
-// Supabase client
+// Supabase client singleton
 let supabaseClient: ReturnType<typeof createClient> | null = null;
 
 function getSupabaseClient(): ReturnType<typeof createClient> {
@@ -105,7 +107,7 @@ function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } 
   }
 }
 
-// Track logos for special handling
+// Logo URL tracking
 const logoUrls = new Set<string>();
 
 async function downloadImage(url: string, isLogo: boolean = false): Promise<string> {
@@ -114,53 +116,52 @@ async function downloadImage(url: string, isLogo: boolean = false): Promise<stri
   if (parsed) {
     const supabase = getSupabaseClient();
     
-    // Logos: download original
+    // For logos, try to get better quality
     if (isLogo) {
-      console.log(`[Image] Downloading logo original...`);
-      const { data: blob, error } = await supabase.storage
-        .from(parsed.bucket)
-        .download(parsed.path);
-      
-      if (error || !blob) {
-        console.warn(`[Image] Logo download failed: ${error?.message}`);
-        return PLACEHOLDER_IMAGE;
-      }
-      
-      const buffer = await blob.arrayBuffer();
-      const sizeKB = buffer.byteLength / 1024;
-      console.log(`[Image] Logo: ${Math.round(sizeKB)}KB`);
-      
-      // If logo is too big, try transformation
-      if (sizeKB > CONFIG.LOGO_MAX_SIZE_KB) {
-        console.log(`[Image] Logo too large, applying transformation...`);
+      console.log(`[Image] Downloading logo...`);
+      try {
+        // First try with transformation for manageable size
         const { data: signedUrlData } = await supabase.storage
           .from(parsed.bucket)
-          .createSignedUrl(parsed.path, 60, {
-            transform: { width: 300, quality: 85 }
+          .createSignedUrl(parsed.path, 120, {
+            transform: { width: 400, quality: 90 }
           });
         
         if (signedUrlData?.signedUrl) {
-          try {
-            const resp = await fetch(signedUrlData.signedUrl);
-            if (resp.ok) {
-              const transformedBuffer = await resp.arrayBuffer();
-              const mimeType = detectImageType(new Uint8Array(transformedBuffer));
-              const base64 = arrayBufferToBase64(transformedBuffer);
-              console.log(`[Image] Logo transformed: ${Math.round(transformedBuffer.byteLength / 1024)}KB`);
-              return `data:${mimeType};base64,${base64}`;
-            }
-          } catch (err) {
-            console.warn(`[Image] Logo transformation failed:`, err);
+          const resp = await fetch(signedUrlData.signedUrl);
+          if (resp.ok) {
+            const buffer = await resp.arrayBuffer();
+            const sizeKB = buffer.byteLength / 1024;
+            const mimeType = detectImageType(new Uint8Array(buffer));
+            const base64 = arrayBufferToBase64(buffer);
+            console.log(`[Image] Logo downloaded: ${Math.round(sizeKB)}KB`);
+            return `data:${mimeType};base64,${base64}`;
           }
         }
+        
+        // Fallback to direct download
+        const { data: blob, error } = await supabase.storage
+          .from(parsed.bucket)
+          .download(parsed.path);
+        
+        if (!error && blob) {
+          const buffer = await blob.arrayBuffer();
+          const sizeKB = buffer.byteLength / 1024;
+          console.log(`[Image] Logo (original): ${Math.round(sizeKB)}KB`);
+          
+          if (sizeKB <= CONFIG.LOGO_MAX_SIZE_KB) {
+            const mimeType = detectImageType(new Uint8Array(buffer));
+            const base64 = arrayBufferToBase64(buffer);
+            return `data:${mimeType};base64,${base64}`;
+          }
+        }
+      } catch (err) {
+        console.warn(`[Image] Logo download failed:`, err);
       }
-      
-      const mimeType = detectImageType(new Uint8Array(buffer));
-      const base64 = arrayBufferToBase64(buffer);
-      return `data:${mimeType};base64,${base64}`;
+      return PLACEHOLDER_IMAGE;
     }
     
-    // Photos: use transformation for compression
+    // Standard photos: use transformation for compression
     try {
       const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from(parsed.bucket)
@@ -183,6 +184,7 @@ async function downloadImage(url: string, isLogo: boolean = false): Promise<stri
             console.log(`[Image] Photo: ${Math.round(sizeKB)}KB`);
             return `data:${mimeType};base64,${base64}`;
           }
+          console.warn(`[Image] Photo too large after transform: ${Math.round(sizeKB)}KB`);
         }
       }
       
@@ -197,23 +199,26 @@ async function downloadImage(url: string, isLogo: boolean = false): Promise<stri
         if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
           const mimeType = detectImageType(new Uint8Array(buffer));
           const base64 = arrayBufferToBase64(buffer);
+          console.log(`[Image] Photo (original): ${Math.round(sizeKB)}KB`);
           return `data:${mimeType};base64,${base64}`;
         }
+        console.warn(`[Image] Photo too large: ${Math.round(sizeKB)}KB, skipping`);
       }
     } catch (err) {
-      console.warn(`[Image] Error downloading:`, err);
+      console.warn(`[Image] Photo download error:`, err);
     }
   }
   
   // External URLs
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
     if (response.ok) {
       const buffer = await response.arrayBuffer();
       const sizeKB = buffer.byteLength / 1024;
       if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
         const mimeType = detectImageType(new Uint8Array(buffer));
         const base64 = arrayBufferToBase64(buffer);
+        console.log(`[Image] External: ${Math.round(sizeKB)}KB`);
         return `data:${mimeType};base64,${base64}`;
       }
     }
@@ -225,7 +230,7 @@ async function downloadImage(url: string, isLogo: boolean = false): Promise<stri
 }
 
 // ============================================================================
-// STATISTICS
+// STATISTICS CALCULATION
 // ============================================================================
 
 interface Stats {
@@ -238,13 +243,13 @@ interface Stats {
 }
 
 function isPassStatus(status: string): boolean {
-  const s = status.toLowerCase();
-  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(s);
+  const s = String(status).toLowerCase().trim();
+  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed', 'true'].includes(s);
 }
 
 function isFailStatus(status: string): boolean {
-  const s = status.toLowerCase();
-  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(s);
+  const s = String(status).toLowerCase().trim();
+  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical', 'false'].includes(s);
 }
 
 function calculateStats(inspection: any): Stats {
@@ -253,7 +258,7 @@ function calculateStats(inspection: any): Stats {
   inspection.sections?.forEach((section: any) => {
     section.items?.forEach((item: any) => {
       totalItems++;
-      const status = String(item.value || '');
+      const status = String(item.value || item.status || '');
       if (isPassStatus(status)) passCount++;
       else if (isFailStatus(status)) failCount++;
       else pendingCount++;
@@ -282,37 +287,61 @@ function calculateStats(inspection: any): Stats {
 }
 
 // ============================================================================
-// PDFMAKE DOCUMENT DEFINITION BUILDER
+// STATUS BADGE GENERATOR
 // ============================================================================
 
-function getStatusBadge(status: string): any {
-  const s = String(status).toLowerCase();
+function getStatusBadgeTable(status: string): any {
+  const s = String(status).toLowerCase().trim();
   let text = status || 'N/A';
-  let color = COLORS.textMuted;
-  let bgColor = '#f3f4f6';
+  let textColor = COLORS.textMuted;
+  let bgColor = '#f1f5f9';
   
   if (isPassStatus(s)) {
-    text = '✓ PASS';
-    color = '#ffffff';
+    text = 'PASS';
+    textColor = COLORS.white;
     bgColor = COLORS.success;
   } else if (isFailStatus(s)) {
-    text = '✗ FAIL';
-    color = '#ffffff';
+    text = 'FAIL';
+    textColor = COLORS.white;
     bgColor = COLORS.error;
-  } else if (['pending', 'in_progress'].includes(s)) {
-    text = '⏳ PENDING';
-    color = '#ffffff';
+  } else if (['pending', 'in_progress', 'in progress'].includes(s)) {
+    text = 'PENDING';
+    textColor = COLORS.white;
     bgColor = COLORS.warning;
+  } else if (['n/a', 'na', 'not applicable'].includes(s)) {
+    text = 'N/A';
+    textColor = COLORS.textMuted;
+    bgColor = '#f1f5f9';
   }
   
+  // Return as a mini table for fillColor support
   return {
-    text,
-    fontSize: 9,
-    bold: true,
-    color,
-    fillColor: bgColor,
-    margin: [6, 3, 6, 3],
+    table: {
+      body: [[{ text, fontSize: 8, bold: true, color: textColor, alignment: 'center', margin: [6, 2, 6, 2] }]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      fillColor: () => bgColor,
+      paddingLeft: () => 0,
+      paddingRight: () => 0,
+      paddingTop: () => 0,
+      paddingBottom: () => 0,
+    },
   };
+}
+
+// ============================================================================
+// DOCUMENT BUILDER
+// ============================================================================
+
+function formatDate(d?: string): string {
+  if (!d) return 'N/A';
+  try {
+    return new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {
+    return d;
+  }
 }
 
 function buildDocDefinition(
@@ -324,115 +353,135 @@ function buildDocDefinition(
   logoDataUri?: string,
   accentColor: string = '#2563eb'
 ): any {
-  const getImage = (url?: string) => {
+  const getImage = (url?: string): string => {
     if (!url) return PLACEHOLDER_IMAGE;
     if (url.startsWith('data:')) return url;
     return imageMap.get(url) || PLACEHOLDER_IMAGE;
   };
 
-  const formatDate = (d?: string) => {
-    if (!d) return 'N/A';
-    try {
-      return new Date(d).toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
-    } catch {
-      return d;
-    }
-  };
-
   const content: any[] = [];
 
-  // ==================== COVER PAGE ====================
-  // Logo
+  // ==================== PAGE 1: COVER PAGE ====================
+  
+  // Logo at top center
   if (logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE) {
     content.push({
       image: logoDataUri,
-      width: 150,
+      width: 180,
       alignment: 'center',
-      margin: [0, 60, 0, 40],
+      margin: [0, 40, 0, 30],
     });
   } else {
-    content.push({ text: '', margin: [0, 100, 0, 0] });
+    // Spacer when no logo
+    content.push({ text: '', margin: [0, 80, 0, 0] });
   }
 
-  // Title
+  // Main title
   content.push({
     text: 'INSPECTION REPORT',
-    fontSize: 28,
+    fontSize: 32,
+    bold: true,
+    color: COLORS.primary,
+    alignment: 'center',
+    margin: [0, 20, 0, 15],
+  });
+
+  // Site name
+  content.push({
+    text: siteName.toUpperCase(),
+    fontSize: 20,
     bold: true,
     color: accentColor,
     alignment: 'center',
-    margin: [0, 0, 0, 10],
+    margin: [0, 0, 0, 8],
   });
 
-  content.push({
-    text: siteName,
-    fontSize: 16,
-    color: COLORS.textPrimary,
-    alignment: 'center',
-    margin: [0, 0, 0, 5],
-  });
-
+  // Subsection name
   if (inspection.subsectionName) {
     content.push({
-      text: inspection.subsectionName,
-      fontSize: 12,
-      color: COLORS.textSecondary,
+      text: inspection.subsectionName.toUpperCase(),
+      fontSize: 14,
+      color: COLORS.secondary,
       alignment: 'center',
       margin: [0, 0, 0, 40],
     });
+  } else {
+    content.push({ text: '', margin: [0, 0, 0, 40] });
   }
 
-  // Info box
-  const infoRows: any[][] = [
-    [{ text: 'Template:', color: COLORS.textSecondary }, { text: inspection.templateName || 'Standard', bold: true }],
-    [{ text: 'Inspector:', color: COLORS.textSecondary }, { text: inspection.inspectorName || 'N/A', bold: true }],
-    [{ text: 'Date:', color: COLORS.textSecondary }, { text: formatDate(inspection.inspectionDate), bold: true }],
+  // Info table - centered with vertical accent bar
+  const infoTableData = [
+    ['Template', inspection.templateName || 'Standard Inspection'],
+    ['Inspector', inspection.inspectorName || 'N/A'],
+    ['Date', formatDate(inspection.inspectionDate)],
   ];
   if (clientName) {
-    infoRows.push([{ text: 'Client:', color: COLORS.textSecondary }, { text: clientName, bold: true }]);
+    infoTableData.push(['Client', clientName]);
   }
 
   content.push({
-    table: {
-      widths: [80, '*'],
-      body: infoRows.map(row => row.map(cell => ({ ...cell, fontSize: 10, margin: [8, 6] }))),
-    },
-    layout: {
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-      fillColor: () => '#f9fafb',
-    },
-    margin: [100, 20, 100, 0],
+    columns: [
+      { width: '*', text: '' },
+      {
+        width: 'auto',
+        table: {
+          widths: [100, 200],
+          body: infoTableData.map(([label, value]) => [
+            { text: label, fontSize: 10, color: COLORS.textSecondary, margin: [10, 8, 5, 8] },
+            { text: value, fontSize: 11, bold: true, color: COLORS.textPrimary, margin: [5, 8, 10, 8] },
+          ]),
+        },
+        layout: {
+          hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 1 : 0.5,
+          vLineWidth: (i: number) => (i === 0) ? 4 : (i === 2 ? 1 : 0),
+          hLineColor: () => COLORS.border,
+          vLineColor: (i: number) => (i === 0) ? accentColor : COLORS.border,
+          paddingLeft: () => 0,
+          paddingRight: () => 0,
+          paddingTop: () => 0,
+          paddingBottom: () => 0,
+        },
+      },
+      { width: '*', text: '' },
+    ],
+    margin: [0, 0, 0, 60],
   });
 
-  // Footer on cover
+  // Generated timestamp
   content.push({
-    text: [
-      { text: `Generated on ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`, fontSize: 8, color: COLORS.textMuted },
-      '\n',
-      { text: 'CONFIDENTIAL - SANS 10142-1 Compliant Document', fontSize: 7, color: '#d1d5db' },
-    ],
+    text: `Generated on ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    fontSize: 9,
+    color: COLORS.textMuted,
     alignment: 'center',
-    margin: [0, 60, 0, 0],
+    margin: [0, 20, 0, 5],
+  });
+
+  content.push({
+    text: 'CONFIDENTIAL - SANS 10142-1 Compliant Document',
+    fontSize: 8,
+    color: COLORS.textMuted,
+    alignment: 'center',
+    margin: [0, 0, 0, 0],
   });
 
   content.push({ text: '', pageBreak: 'after' });
 
-  // ==================== DASHBOARD PAGE ====================
+  // ==================== PAGE 2: QUALITY SCORE DASHBOARD ====================
+  
   const scoreColor = stats.passPercentage >= 80 ? COLORS.success 
     : stats.passPercentage >= 50 ? COLORS.warning 
     : COLORS.error;
 
   content.push({
     text: 'Quality Score Dashboard',
-    fontSize: 18,
+    fontSize: 22,
     bold: true,
-    color: accentColor,
+    color: COLORS.primary,
     alignment: 'center',
-    margin: [0, 0, 0, 20],
+    margin: [0, 20, 0, 30],
   });
 
-  // Compliance circle (using canvas)
+  // Large compliance percentage with circular indicator
   content.push({
     columns: [
       { width: '*', text: '' },
@@ -441,98 +490,126 @@ function buildDocDefinition(
         stack: [
           {
             canvas: [
-              { type: 'ellipse', x: 60, y: 60, r1: 50, r2: 50, lineWidth: 8, lineColor: scoreColor },
+              // Outer circle (background)
+              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 12, lineColor: '#e5e7eb' },
+              // Progress arc
+              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 12, lineColor: scoreColor },
             ],
           },
           {
             text: `${stats.passPercentage}%`,
-            fontSize: 28,
+            fontSize: 36,
             bold: true,
             color: scoreColor,
             alignment: 'center',
-            relativePosition: { x: 0, y: -80 },
+            relativePosition: { x: 0, y: -95 },
           },
           {
             text: 'Compliance',
-            fontSize: 9,
-            color: COLORS.textMuted,
+            fontSize: 11,
+            color: COLORS.textSecondary,
             alignment: 'center',
-            relativePosition: { x: 0, y: -50 },
+            relativePosition: { x: 0, y: -55 },
           },
         ],
       },
       { width: '*', text: '' },
     ],
-    margin: [0, 10, 0, 20],
+    margin: [0, 0, 0, 40],
   });
 
-  // KPI Grid
+  // KPI Grid - 2x2
   content.push({
     columns: [
+      { width: '*', text: '' },
       {
-        stack: [
-          { text: String(stats.passCount), fontSize: 24, bold: true, color: COLORS.success, alignment: 'center' },
-          { text: 'Items Passed', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
-        ],
-        width: '*',
+        width: 'auto',
+        table: {
+          widths: [120, 120],
+          body: [
+            [
+              {
+                stack: [
+                  { text: String(stats.passCount), fontSize: 32, bold: true, color: COLORS.success, alignment: 'center' },
+                  { text: 'Items Passed', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
+                ],
+                margin: [15, 15],
+                fillColor: '#f0fdf4',
+              },
+              {
+                stack: [
+                  { text: String(stats.failCount), fontSize: 32, bold: true, color: COLORS.error, alignment: 'center' },
+                  { text: 'Items Failed', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
+                ],
+                margin: [15, 15],
+                fillColor: '#fef2f2',
+              },
+            ],
+            [
+              {
+                stack: [
+                  { text: String(stats.pendingCount), fontSize: 32, bold: true, color: COLORS.warning, alignment: 'center' },
+                  { text: 'Pending', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
+                ],
+                margin: [15, 15],
+                fillColor: '#fffbeb',
+              },
+              {
+                stack: [
+                  { text: String(stats.totalPhotos), fontSize: 32, bold: true, color: accentColor, alignment: 'center' },
+                  { text: 'Photos', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
+                ],
+                margin: [15, 15],
+                fillColor: '#eff6ff',
+              },
+            ],
+          ],
+        },
+        layout: {
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          hLineColor: () => COLORS.border,
+          vLineColor: () => COLORS.border,
+        },
       },
-      {
-        stack: [
-          { text: String(stats.failCount), fontSize: 24, bold: true, color: COLORS.error, alignment: 'center' },
-          { text: 'Items Failed', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
-        ],
-        width: '*',
-      },
-      {
-        stack: [
-          { text: String(stats.pendingCount), fontSize: 24, bold: true, color: COLORS.warning, alignment: 'center' },
-          { text: 'Pending', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
-        ],
-        width: '*',
-      },
-      {
-        stack: [
-          { text: String(stats.totalPhotos), fontSize: 24, bold: true, color: accentColor, alignment: 'center' },
-          { text: 'Photos', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
-        ],
-        width: '*',
-      },
+      { width: '*', text: '' },
     ],
-    margin: [20, 20, 20, 30],
+    margin: [0, 0, 0, 30],
   });
 
   // SANS Notice
   content.push({
     text: 'This report complies with SANS 10142-1 electrical installation standards',
-    fontSize: 8,
+    fontSize: 9,
     color: COLORS.textMuted,
     alignment: 'center',
-    margin: [0, 0, 0, 20],
+    italics: true,
+    margin: [0, 20, 0, 0],
   });
 
   content.push({ text: '', pageBreak: 'after' });
 
   // ==================== INSPECTION SECTIONS ====================
+  
   content.push({
-    text: '📋 Inspection Sections',
-    fontSize: 14,
+    text: 'Inspection Sections',
+    fontSize: 18,
     bold: true,
-    color: accentColor,
+    color: COLORS.primary,
     margin: [0, 0, 0, 15],
   });
 
   inspection.sections?.forEach((section: any, sIdx: number) => {
-    // Section header
+    // Section header with navy background
     content.push({
       table: {
         widths: ['*'],
         body: [[{
-          text: [
-            { text: `Section ${sIdx + 1}: `, fontSize: 9, opacity: 0.8 },
-            { text: section.title, fontSize: 12, bold: true },
-          ],
-          color: '#ffffff',
-          margin: [10, 8],
+          text: `Section ${sIdx + 1}: ${section.title}`,
+          fontSize: 12,
+          bold: true,
+          color: COLORS.white,
+          margin: [12, 10, 12, 10],
         }]],
       },
       layout: {
@@ -540,43 +617,51 @@ function buildDocDefinition(
         vLineWidth: () => 0,
         fillColor: () => COLORS.primary,
       },
-      margin: [0, 10, 0, 0],
+      margin: [0, sIdx > 0 ? 15 : 0, 0, 0],
     });
 
     // Items table
     const tableBody: any[][] = [
       [
-        { text: 'Item', bold: true, fontSize: 9, color: COLORS.textPrimary },
-        { text: 'Status', bold: true, fontSize: 9, color: COLORS.textPrimary, alignment: 'center' },
-        { text: 'Notes', bold: true, fontSize: 9, color: COLORS.textPrimary },
+        { text: 'Item', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', margin: [8, 8] },
+        { text: 'Status', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', alignment: 'center', margin: [8, 8] },
+        { text: 'Notes', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', margin: [8, 8] },
       ],
     ];
 
     section.items?.forEach((item: any) => {
       tableBody.push([
-        { text: item.label || '', fontSize: 9, color: COLORS.textPrimary },
-        { ...getStatusBadge(String(item.value)), alignment: 'center' },
-        { text: item.notes || '-', fontSize: 8, color: COLORS.textSecondary },
+        { text: item.label || '-', fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
+        { stack: [getStatusBadgeTable(String(item.value || item.status || 'N/A'))], alignment: 'center', margin: [4, 4] },
+        { text: item.notes || '-', fontSize: 8, color: COLORS.textSecondary, margin: [8, 6] },
       ]);
 
-      // Photos row
+      // Photos row if present
       if (item.photos && item.photos.length > 0) {
-        const photoColumns = item.photos.slice(0, 3).map((photo: string) => ({
-          image: getImage(photo),
-          width: 120,
-          height: 90,
-          margin: [0, 5, 10, 5],
+        const photoColumns = item.photos.slice(0, 3).map((photo: string, pIdx: number) => ({
+          stack: [
+            {
+              image: getImage(photo),
+              width: CONFIG.PHOTO_WIDTH,
+              height: CONFIG.PHOTO_HEIGHT,
+              alignment: 'center',
+            },
+            { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+          ],
+          margin: [5, 5],
         }));
+
+        // Pad to 3 columns for consistent layout
+        while (photoColumns.length < 3) {
+          photoColumns.push({ text: '', width: CONFIG.PHOTO_WIDTH });
+        }
 
         tableBody.push([{
           colSpan: 3,
-          stack: [
-            {
-              columns: photoColumns,
-            },
-          ],
+          columns: photoColumns,
+          columnGap: 8,
           fillColor: '#fafafa',
-          margin: [5, 5],
+          margin: [5, 8, 5, 8],
         }, {}, {}]);
       }
     });
@@ -588,16 +673,16 @@ function buildDocDefinition(
         body: tableBody,
       },
       layout: {
-        hLineWidth: (i: number) => (i === 1 ? 1 : 0.5),
+        hLineWidth: (i: number) => (i <= 1 ? 1 : 0.5),
         vLineWidth: () => 0.5,
         hLineColor: () => COLORS.border,
         vLineColor: () => COLORS.border,
-        paddingLeft: () => 8,
-        paddingRight: () => 8,
-        paddingTop: () => 6,
-        paddingBottom: () => 6,
+        paddingLeft: () => 0,
+        paddingRight: () => 0,
+        paddingTop: () => 0,
+        paddingBottom: () => 0,
       },
-      margin: [0, 0, 0, 15],
+      margin: [0, 0, 0, 10],
     });
   });
 
@@ -605,24 +690,25 @@ function buildDocDefinition(
   if (inspection.tenants && inspection.tenants.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
-      text: '🏢 Tenant Verification',
-      fontSize: 14,
+      text: 'Tenant Verification',
+      fontSize: 18,
       bold: true,
-      color: accentColor,
+      color: COLORS.primary,
       margin: [0, 0, 0, 15],
     });
 
     inspection.tenants.forEach((tenant: any, idx: number) => {
+      // Tenant header
       content.push({
         table: {
           widths: ['*'],
           body: [[{
             stack: [
-              { text: `Tenant #${idx + 1}`, fontSize: 8, color: COLORS.textMuted },
-              { text: tenant.shopName || 'Unknown', fontSize: 12, bold: true, color: COLORS.textPrimary },
-              tenant.shopNumber ? { text: `Shop: ${tenant.shopNumber}`, fontSize: 9, color: COLORS.textSecondary } : {},
+              { text: `Tenant ${idx + 1}`, fontSize: 8, color: COLORS.textMuted },
+              { text: tenant.shopName || 'Unknown Tenant', fontSize: 13, bold: true, color: COLORS.textPrimary },
+              tenant.shopNumber ? { text: `Shop Number: ${tenant.shopNumber}`, fontSize: 9, color: COLORS.textSecondary, margin: [0, 2, 0, 0] } : { text: '' },
             ],
-            margin: [10, 8],
+            margin: [12, 10],
           }]],
         },
         layout: {
@@ -630,18 +716,28 @@ function buildDocDefinition(
           vLineWidth: () => 1,
           hLineColor: () => COLORS.border,
           vLineColor: () => COLORS.border,
+          fillColor: () => COLORS.lightBg,
         },
-        margin: [0, 0, 0, 5],
+        margin: [0, idx > 0 ? 15 : 0, 0, 8],
       });
 
-      // Meter details
+      // Meter details row
       content.push({
-        columns: [
-          { text: `Meter S/N: ${tenant.meterSerialNumber || 'N/A'}`, fontSize: 9 },
-          { text: `Breaker: ${tenant.breakerSize || 'N/A'}`, fontSize: 9 },
-          { text: `CT Ratio: ${tenant.ctSizeAndRatio || 'N/A'}`, fontSize: 9 },
-        ],
-        margin: [0, 5, 0, 10],
+        table: {
+          widths: ['33%', '33%', '34%'],
+          body: [[
+            { text: `Meter S/N: ${tenant.meterSerialNumber || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
+            { text: `Breaker: ${tenant.breakerSize || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
+            { text: `CT Ratio: ${tenant.ctSizeAndRatio || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
+          ]],
+        },
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => COLORS.border,
+          vLineColor: () => COLORS.border,
+        },
+        margin: [0, 0, 0, 10],
       });
 
       // Tenant images
@@ -649,24 +745,24 @@ function buildDocDefinition(
       if (tenant.meterImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.meterImage), width: 100, height: 75 },
-            { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            { image: getImage(tenant.meterImage), width: 140, height: 105, alignment: 'center' },
+            { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
       if (tenant.breakerImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.breakerImage), width: 100, height: 75 },
-            { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            { image: getImage(tenant.breakerImage), width: 140, height: 105, alignment: 'center' },
+            { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
       if (tenant.ctRatioImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), width: 100, height: 75 },
-            { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            { image: getImage(tenant.ctRatioImage), width: 140, height: 105, alignment: 'center' },
+            { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
@@ -675,24 +771,28 @@ function buildDocDefinition(
         content.push({
           columns: tenantImages,
           columnGap: 15,
-          margin: [0, 0, 0, 20],
+          margin: [0, 5, 0, 15],
         });
       }
     });
   }
 
-  // ==================== SNAGS ====================
+  // ==================== SNAGS SECTION ====================
   if (inspection.snags && inspection.snags.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
-      text: '⚠️ Issues & Snags',
-      fontSize: 14,
+      text: 'Issues & Snags',
+      fontSize: 18,
       bold: true,
-      color: accentColor,
+      color: COLORS.primary,
       margin: [0, 0, 0, 15],
     });
 
     inspection.snags.forEach((snag: any, idx: number) => {
+      const riskColor = snag.riskLevel === 'high' ? COLORS.error 
+        : snag.riskLevel === 'medium' ? COLORS.warning 
+        : COLORS.textSecondary;
+
       content.push({
         table: {
           widths: ['*'],
@@ -700,13 +800,14 @@ function buildDocDefinition(
             stack: [
               {
                 columns: [
-                  { text: `Issue #${idx + 1}: ${snag.title}`, fontSize: 11, bold: true, color: '#92400e', width: '*' },
-                  { ...getStatusBadge(snag.status), width: 'auto' },
+                  { text: `Issue ${idx + 1}: ${snag.title}`, fontSize: 11, bold: true, color: '#92400e', width: '*' },
+                  getStatusBadgeTable(snag.status),
                 ],
               },
-              snag.description ? { text: snag.description, fontSize: 9, color: '#78350f', margin: [0, 5, 0, 0] } : {},
+              snag.riskLevel ? { text: `Risk Level: ${snag.riskLevel.toUpperCase()}`, fontSize: 8, bold: true, color: riskColor, margin: [0, 4, 0, 0] } : { text: '' },
+              snag.description ? { text: snag.description, fontSize: 9, color: '#78350f', margin: [0, 6, 0, 0] } : { text: '' },
             ],
-            margin: [10, 8],
+            margin: [12, 10],
           }]],
         },
         layout: {
@@ -716,59 +817,80 @@ function buildDocDefinition(
           vLineColor: () => '#fcd34d',
           fillColor: () => '#fef3c7',
         },
-        margin: [0, 0, 0, 5],
+        margin: [0, idx > 0 ? 10 : 0, 0, 8],
       });
 
+      // Snag photos
       if (snag.photos && snag.photos.length > 0) {
         content.push({
-          columns: snag.photos.slice(0, 2).map((photo: string) => ({
-            image: getImage(photo),
-            width: 140,
-            height: 105,
+          columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
+            stack: [
+              { image: getImage(photo), width: 180, height: 135, alignment: 'center' },
+              { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            ],
           })),
-          columnGap: 10,
-          margin: [0, 5, 0, 15],
+          columnGap: 15,
+          margin: [0, 0, 0, 15],
         });
       }
     });
   }
 
-  // ==================== SIGNATURES ====================
+  // ==================== SIGNATURES SECTION ====================
   if (inspection.signatures && inspection.signatures.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
-      text: '✍️ Signatures & Approvals',
-      fontSize: 14,
+      text: 'Signatures & Approvals',
+      fontSize: 18,
       bold: true,
-      color: accentColor,
-      margin: [0, 0, 0, 15],
+      color: COLORS.primary,
+      margin: [0, 0, 0, 20],
     });
 
     const sigColumns = inspection.signatures.map((sig: any) => ({
       stack: [
-        sig.signatureUrl ? {
-          image: getImage(sig.signatureUrl),
-          width: 120,
-          height: 50,
-          alignment: 'center',
-        } : { text: '________________', alignment: 'center', margin: [0, 20, 0, 10] },
-        { text: sig.name, fontSize: 10, bold: true, alignment: 'center' },
-        { text: sig.role || 'Signatory', fontSize: 8, color: COLORS.textMuted, alignment: 'center' },
-        { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+        {
+          table: {
+            widths: ['*'],
+            body: [[{
+              stack: [
+                sig.signatureUrl && getImage(sig.signatureUrl) !== PLACEHOLDER_IMAGE ? {
+                  image: getImage(sig.signatureUrl),
+                  width: 140,
+                  height: 60,
+                  alignment: 'center',
+                  margin: [0, 10, 0, 10],
+                } : { text: '', margin: [0, 40, 0, 0] },
+                { canvas: [{ type: 'line', x1: 20, y1: 0, x2: 150, y2: 0, lineWidth: 1, lineColor: COLORS.border }] },
+                { text: sig.name, fontSize: 11, bold: true, alignment: 'center', margin: [0, 8, 0, 2] },
+                { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
+                { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
+              ],
+              margin: [10, 10],
+            }]],
+          },
+          layout: {
+            hLineWidth: () => 1,
+            vLineWidth: () => 1,
+            hLineColor: () => COLORS.border,
+            vLineColor: () => COLORS.border,
+          },
+        },
       ],
       width: '*',
     }));
 
     content.push({
       columns: sigColumns,
-      margin: [0, 20, 0, 0],
+      columnGap: 20,
+      margin: [0, 10, 0, 0],
     });
   }
 
-  // Build document definition
+  // Build final document definition
   return {
     pageSize: 'A4',
-    pageMargins: [40, 40, 40, 60],
+    pageMargins: [40, 50, 40, 60],
     defaultStyle: {
       font: 'Roboto',
       fontSize: 10,
@@ -776,11 +898,11 @@ function buildDocDefinition(
     content,
     footer: (currentPage: number, pageCount: number) => ({
       columns: [
-        { text: 'CONFIDENTIAL', fontSize: 7, color: COLORS.textMuted, margin: [40, 0] },
+        { text: 'CONFIDENTIAL', fontSize: 7, color: COLORS.textMuted, margin: [40, 0, 0, 0] },
         { text: `Page ${currentPage} of ${pageCount}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center' },
         { text: new Date().toISOString().split('T')[0], fontSize: 7, color: COLORS.textMuted, alignment: 'right', margin: [0, 0, 40, 0] },
       ],
-      margin: [0, 20, 0, 0],
+      margin: [0, 15, 0, 0],
     }),
   };
 }
@@ -809,6 +931,8 @@ Deno.serve(async (req) => {
     }
 
     console.log('[PDFMake] Starting report generation...');
+    console.log('[PDFMake] Site:', siteName);
+    console.log('[PDFMake] Subsection:', inspection.subsectionName || 'N/A');
     console.log('[PDFMake] Sections:', inspection.sections?.length || 0);
     console.log('[PDFMake] Tenants:', inspection.tenants?.length || 0);
     console.log('[PDFMake] Snags:', inspection.snags?.length || 0);
@@ -821,7 +945,7 @@ Deno.serve(async (req) => {
     const extractStart = Date.now();
     const imageUrls: string[] = [];
     
-    // Logo first
+    // Logo first (mark as logo for special handling)
     if (siteLogoUrl && !siteLogoUrl.startsWith('data:')) {
       imageUrls.push(siteLogoUrl);
       logoUrls.add(siteLogoUrl);
@@ -831,7 +955,10 @@ Deno.serve(async (req) => {
     inspection.sections?.forEach((section: any) => {
       section.items?.forEach((item: any) => {
         if (item.photos?.length) {
-          imageUrls.push(...item.photos.filter((p: string) => p && !p.startsWith('data:')).slice(0, 3));
+          const validPhotos = item.photos
+            .filter((p: string) => p && typeof p === 'string' && !p.startsWith('data:'))
+            .slice(0, 3);
+          imageUrls.push(...validPhotos);
         }
       });
     });
@@ -846,7 +973,10 @@ Deno.serve(async (req) => {
     // Snag photos
     inspection.snags?.forEach((snag: any) => {
       if (snag.photos?.length) {
-        imageUrls.push(...snag.photos.filter((p: string) => p && !p.startsWith('data:')).slice(0, 2));
+        const validPhotos = snag.photos
+          .filter((p: string) => p && typeof p === 'string' && !p.startsWith('data:'))
+          .slice(0, 2);
+        imageUrls.push(...validPhotos);
       }
     });
 
@@ -875,7 +1005,9 @@ Deno.serve(async (req) => {
     console.log(`[PDFMake] Downloaded ${imageMap.size} images`);
 
     // Get logo data URI
-    const logoDataUri = siteLogoUrl ? (imageMap.get(siteLogoUrl) || await downloadImage(siteLogoUrl, true)) : undefined;
+    const logoDataUri = siteLogoUrl 
+      ? (siteLogoUrl.startsWith('data:') ? siteLogoUrl : imageMap.get(siteLogoUrl)) 
+      : undefined;
 
     // Build document definition
     const docDefStart = Date.now();
@@ -890,26 +1022,23 @@ Deno.serve(async (req) => {
     );
     timings.build_doc = Date.now() - docDefStart;
 
-    // Import pdfmake dynamically - using UMD build compatible with Deno
+    // Import pdfmake dynamically
     const pdfmakeStart = Date.now();
     
-    // @ts-ignore - Dynamic import for Deno compatibility
+    // @ts-ignore - Dynamic import for Deno
     const pdfMakeModule = await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.min.js?bundle');
     // @ts-ignore - Dynamic import for fonts
     const vfsModule = await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js?bundle') as any;
     
     const pdfMake = pdfMakeModule.default || pdfMakeModule;
-    // @ts-ignore - VFS fonts structure varies
     pdfMake.vfs = vfsModule?.pdfMake?.vfs || vfsModule?.default?.pdfMake?.vfs || (vfsModule as any)?.vfs || {};
     
     timings.load_pdfmake = Date.now() - pdfmakeStart;
 
     // Generate PDF
     const generateStart = Date.now();
-    
     const pdfDoc = pdfMake.createPdf(docDefinition);
     
-    // Get buffer using promise
     const pdfBuffer = await new Promise<Uint8Array>((resolve, reject) => {
       try {
         pdfDoc.getBuffer((buffer: Uint8Array) => {
