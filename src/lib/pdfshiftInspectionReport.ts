@@ -177,21 +177,33 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
   const processed = JSON.parse(JSON.stringify(inspection)) as InspectionReportData;
   let processedCount = 0;
   let totalCount = 0;
+  let failedUrls: string[] = [];
+  
+  console.log('[embedAllImages] Starting image embedding...');
+  console.log('[embedAllImages] Sections count:', processed.sections?.length || 0);
+  console.log('[embedAllImages] Tenants count:', processed.tenants?.length || 0);
+  console.log('[embedAllImages] Snags count:', processed.snags?.length || 0);
   
   // Process section item photos
   if (processed.sections) {
     for (const section of processed.sections) {
       for (const item of section.items) {
         if (item.photos && item.photos.length > 0) {
+          console.log(`[embedAllImages] Processing ${item.photos.length} photos for item: ${item.label}`);
           totalCount += item.photos.length;
           const embeddedPhotos: string[] = [];
           
           // Limit to 4 photos per item to keep size manageable
           for (const photoUrl of item.photos.slice(0, 4)) {
+            console.log(`[embedAllImages] Converting: ${photoUrl.substring(0, 80)}...`);
             const base64 = await imageToBase64(photoUrl);
             if (base64) {
               embeddedPhotos.push(base64);
               processedCount++;
+              console.log(`[embedAllImages] ✓ Converted successfully`);
+            } else {
+              failedUrls.push(photoUrl);
+              console.warn(`[embedAllImages] ✗ Failed to convert`);
             }
           }
           
@@ -206,21 +218,27 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
     for (const tenant of processed.tenants) {
       if (tenant.meterImage) {
         totalCount++;
+        console.log(`[embedAllImages] Converting tenant meter image for: ${tenant.shopName}`);
         const base64 = await imageToBase64(tenant.meterImage);
         tenant.meterImage = base64 || undefined;
         if (base64) processedCount++;
+        else failedUrls.push(tenant.meterImage);
       }
       if (tenant.breakerImage) {
         totalCount++;
+        console.log(`[embedAllImages] Converting tenant breaker image for: ${tenant.shopName}`);
         const base64 = await imageToBase64(tenant.breakerImage);
         tenant.breakerImage = base64 || undefined;
         if (base64) processedCount++;
+        else failedUrls.push(tenant.breakerImage);
       }
       if (tenant.ctRatioImage) {
         totalCount++;
+        console.log(`[embedAllImages] Converting tenant CT ratio image for: ${tenant.shopName}`);
         const base64 = await imageToBase64(tenant.ctRatioImage);
         tenant.ctRatioImage = base64 || undefined;
         if (base64) processedCount++;
+        else failedUrls.push(tenant.ctRatioImage);
       }
     }
   }
@@ -229,15 +247,19 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
   if (processed.snags) {
     for (const snag of processed.snags) {
       if (snag.photos && snag.photos.length > 0) {
+        console.log(`[embedAllImages] Processing ${snag.photos.length} photos for snag: ${snag.title}`);
         totalCount += snag.photos.length;
         const embeddedPhotos: string[] = [];
         
         // Limit to 2 photos per snag
         for (const photoUrl of snag.photos.slice(0, 2)) {
+          console.log(`[embedAllImages] Converting snag photo: ${photoUrl.substring(0, 80)}...`);
           const base64 = await imageToBase64(photoUrl);
           if (base64) {
             embeddedPhotos.push(base64);
             processedCount++;
+          } else {
+            failedUrls.push(photoUrl);
           }
         }
         
@@ -251,14 +273,22 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
     for (const sig of processed.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
         totalCount++;
+        console.log(`[embedAllImages] Converting signature for: ${sig.name}`);
         const base64 = await imageToBase64(sig.signatureUrl);
         sig.signatureUrl = base64 || undefined;
         if (base64) processedCount++;
+        else if (sig.signatureUrl) failedUrls.push(sig.signatureUrl);
       }
     }
   }
   
-  console.log(`[embedAllImages] Processed ${processedCount}/${totalCount} images`);
+  console.log(`[embedAllImages] ========================================`);
+  console.log(`[embedAllImages] Processed ${processedCount}/${totalCount} images successfully`);
+  if (failedUrls.length > 0) {
+    console.warn(`[embedAllImages] Failed URLs:`, failedUrls.slice(0, 5));
+  }
+  console.log(`[embedAllImages] ========================================`);
+  
   return processed;
 }
 

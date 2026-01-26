@@ -273,11 +273,20 @@ export const ComprehensiveInspectionReport = ({
       const jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
       const generalInfo = jsonData.generalInfo || {};
 
+      console.log('[ComprehensiveReport] jsonData keys:', Object.keys(jsonData));
+      console.log('[ComprehensiveReport] Full jsonData:', JSON.stringify(jsonData).substring(0, 500));
+
       // Build sections data from template
       const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections || {});
+      
+      let totalPhotosFound = 0;
+      
       const sectionsForPdf = templateSections.map((section: any) => {
         const sectionId = String(section.id ?? '');
         const items = Array.isArray(section.items) ? section.items : Object.values(section.items || {});
+        const sectionData = jsonData[sectionId];
+        
+        console.log(`[ComprehensiveReport] Section "${sectionId}" data:`, sectionData ? 'exists' : 'MISSING');
         
         return {
           title: section.name || sectionId,
@@ -287,6 +296,11 @@ export const ComprehensiveInspectionReport = ({
             
             // Extract photos array for photographic documentation
             const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
+            
+            if (photos.length > 0) {
+              console.log(`[ComprehensiveReport] Found ${photos.length} photos for ${sectionId}/${itemId}:`, photos[0]?.substring(0, 60));
+              totalPhotosFound += photos.length;
+            }
             
             return {
               label: item.name || itemId,
@@ -298,6 +312,8 @@ export const ComprehensiveInspectionReport = ({
           }),
         };
       });
+      
+      console.log(`[ComprehensiveReport] Total photos found across all sections: ${totalPhotosFound}`);
 
       // Extract tenant data from jsonData or template
       const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
