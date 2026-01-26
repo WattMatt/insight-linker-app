@@ -1,12 +1,10 @@
 /**
- * Word Document (DOCX) Report Generator
+ * Word Document (DOCX) Report Generator v2.0
  * 
- * Generates professional inspection reports as Word documents using the docx library.
- * Benefits over PDF:
- * - Native image buffer support (no Base64 issues)
- * - Editable documents for clients
- * - Reliable rendering across platforms
- * - Efficient compression
+ * Optimized for performance:
+ * - Pre-downloads all images in parallel
+ * - Uses Supabase image transformation for resizing (reduces bandwidth)
+ * - Caches images to avoid re-downloading
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -25,17 +23,15 @@ import {
   HeadingLevel,
   AlignmentType,
   WidthType,
-  BorderStyle,
-  TableOfContents,
-  StyleLevel,
-  convertInchesToTwip,
   VerticalAlign,
   ShadingType,
   PageNumber,
-  NumberFormat,
+  convertInchesToTwip,
 } from "https://esm.sh/docx@8.5.0";
 
-const VERSION = '1.0.0';
+const VERSION = '2.0.0';
+const MAX_IMAGE_WIDTH = 400; // Max width for document images
+const MAX_CONCURRENT_DOWNLOADS = 5;
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -107,22 +103,21 @@ interface RequestPayload {
   accentColor?: string;
 }
 
+type ImageCache = Map<string, Uint8Array>;
+
 // ============================================================================
-// IMAGE HANDLING
+// IMAGE HANDLING - OPTIMIZED
 // ============================================================================
 
 function parseStorageUrl(url: string): { bucket: string; path: string } | null {
   if (!url || typeof url !== 'string') return null;
   
   try {
-    // Handle Supabase storage URLs
-    // Format: https://xxx.supabase.co/storage/v1/object/public/bucket-name/path
     const publicMatch = url.match(/\/storage\/v1\/object\/public\/([^\/]+)\/(.+)/);
     if (publicMatch) {
       return { bucket: publicMatch[1], path: decodeURIComponent(publicMatch[2]) };
     }
     
-    // Format: https://xxx.supabase.co/storage/v1/object/sign/bucket-name/path?token=xxx
     const signedMatch = url.match(/\/storage\/v1\/object\/sign\/([^\/]+)\/([^?]+)/);
     if (signedMatch) {
       return { bucket: signedMatch[1], path: decodeURIComponent(signedMatch[2]) };
@@ -134,25 +129,25 @@ function parseStorageUrl(url: string): { bucket: string; path: string } | null {
   }
 }
 
-async function downloadImage(
+async function downloadSingleImage(
   supabase: any,
-  url: string
-): Promise<{ buffer: Uint8Array; type: 'png' | 'jpeg' | 'gif' } | null> {
+  supabaseUrl: string,
+  url: string,
+  maxWidth: number = MAX_IMAGE_WIDTH
+): Promise<Uint8Array | null> {
   if (!url) return null;
   
   // Handle data URLs
   if (url.startsWith('data:')) {
     try {
-      const [header, base64Data] = url.split(',');
+      const [, base64Data] = url.split(',');
       const binaryString = atob(base64Data);
       const bytes = new Uint8Array(binaryString.length);
       for (let i = 0; i < binaryString.length; i++) {
         bytes[i] = binaryString.charCodeAt(i);
       }
-      const type = header.includes('png') ? 'png' : header.includes('gif') ? 'gif' : 'jpeg';
-      return { buffer: bytes, type };
-    } catch (e) {
-      console.error('[downloadImage] Failed to parse data URL:', e);
+      return bytes;
+    } catch {
       return null;
     }
   }
@@ -160,42 +155,108 @@ async function downloadImage(
   const parsed = parseStorageUrl(url);
   
   if (parsed) {
-    // Use Supabase Storage API
-    console.log(`[downloadImage] Downloading from storage: ${parsed.bucket}/${parsed.path.substring(0, 50)}...`);
-    const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
+    // Use Supabase Image Transformation API for resizing
+    // This dramatically reduces download size and processing time
+    const transformUrl = `${supabaseUrl}/storage/v1/render/image/public/${parsed.bucket}/${parsed.path}?width=${maxWidth}&quality=75`;
     
-    if (error || !data) {
-      console.error('[downloadImage] Storage download failed:', error?.message);
-      return null;
+    try {
+      const response = await fetch(transformUrl);
+      if (response.ok) {
+        const buffer = new Uint8Array(await response.arrayBuffer());
+        console.log(`[img] ✓ ${parsed.path.substring(0, 30)}... ${Math.round(buffer.length / 1024)}KB`);
+        return buffer;
+      }
+    } catch {
+      // Fallback to direct download if transformation fails
     }
+    
+    // Fallback: direct download
+    const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
+    if (error || !data) return null;
     
     const buffer = new Uint8Array(await data.arrayBuffer());
-    const type = parsed.path.toLowerCase().endsWith('.png') ? 'png' 
-               : parsed.path.toLowerCase().endsWith('.gif') ? 'gif' 
-               : 'jpeg';
-    console.log(`[downloadImage] ✓ Downloaded ${Math.round(buffer.length / 1024)}KB`);
-    return { buffer, type };
+    console.log(`[img] ✓ fallback ${parsed.path.substring(0, 30)}... ${Math.round(buffer.length / 1024)}KB`);
+    return buffer;
   }
   
-  // Try direct fetch for external URLs
+  // External URL
   try {
-    console.log(`[downloadImage] Fetching external URL: ${url.substring(0, 60)}...`);
     const response = await fetch(url);
-    if (!response.ok) {
-      console.error('[downloadImage] Fetch failed:', response.status);
-      return null;
-    }
-    const buffer = new Uint8Array(await response.arrayBuffer());
-    const contentType = response.headers.get('content-type') || '';
-    const type = contentType.includes('png') ? 'png' 
-               : contentType.includes('gif') ? 'gif' 
-               : 'jpeg';
-    console.log(`[downloadImage] ✓ Fetched ${Math.round(buffer.length / 1024)}KB`);
-    return { buffer, type };
-  } catch (e) {
-    console.error('[downloadImage] External fetch failed:', e);
+    if (!response.ok) return null;
+    return new Uint8Array(await response.arrayBuffer());
+  } catch {
     return null;
   }
+}
+
+function collectAllImageUrls(data: RequestPayload): string[] {
+  const urls: string[] = [];
+  
+  if (data.siteLogoUrl) urls.push(data.siteLogoUrl);
+  
+  if (data.inspection.sections) {
+    for (const section of data.inspection.sections) {
+      for (const item of section.items) {
+        if (item.photos) {
+          urls.push(...item.photos.slice(0, 4)); // Limit to 4 per item
+        }
+      }
+    }
+  }
+  
+  if (data.inspection.tenants) {
+    for (const tenant of data.inspection.tenants) {
+      if (tenant.meterImage) urls.push(tenant.meterImage);
+      if (tenant.breakerImage) urls.push(tenant.breakerImage);
+      if (tenant.ctRatioImage) urls.push(tenant.ctRatioImage);
+    }
+  }
+  
+  if (data.inspection.snags) {
+    for (const snag of data.inspection.snags) {
+      if (snag.photos) {
+        urls.push(...snag.photos.slice(0, 2)); // Limit to 2 per snag
+      }
+    }
+  }
+  
+  if (data.inspection.signatures) {
+    for (const sig of data.inspection.signatures) {
+      if (sig.signatureUrl) urls.push(sig.signatureUrl);
+    }
+  }
+  
+  return [...new Set(urls)]; // Deduplicate
+}
+
+async function preloadAllImages(
+  supabase: any,
+  supabaseUrl: string,
+  urls: string[]
+): Promise<ImageCache> {
+  const cache: ImageCache = new Map();
+  
+  console.log(`[preload] Starting parallel download of ${urls.length} images...`);
+  
+  // Process in batches to avoid overwhelming the server
+  for (let i = 0; i < urls.length; i += MAX_CONCURRENT_DOWNLOADS) {
+    const batch = urls.slice(i, i + MAX_CONCURRENT_DOWNLOADS);
+    const results = await Promise.all(
+      batch.map(async (url) => {
+        const buffer = await downloadSingleImage(supabase, supabaseUrl, url);
+        return { url, buffer };
+      })
+    );
+    
+    for (const { url, buffer } of results) {
+      if (buffer) {
+        cache.set(url, buffer);
+      }
+    }
+  }
+  
+  console.log(`[preload] ✓ Cached ${cache.size}/${urls.length} images`);
+  return cache;
 }
 
 // ============================================================================
@@ -220,26 +281,41 @@ function createLabelValue(label: string, value: string): Paragraph {
   });
 }
 
+function createImageParagraph(buffer: Uint8Array, width: number, height: number): Paragraph {
+  return new Paragraph({
+    children: [
+      new ImageRun({
+        data: buffer,
+        transformation: { width, height },
+      }),
+    ],
+    spacing: { before: 100, after: 200 },
+  });
+}
+
 function buildCoverPage(
   data: RequestPayload,
-  logoImage: { buffer: Uint8Array; type: 'png' | 'jpeg' | 'gif' } | null
+  imageCache: ImageCache
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
   
-  // Logo if available
-  if (logoImage) {
-    elements.push(
-      new Paragraph({
-        children: [
-          new ImageRun({
-            data: logoImage.buffer,
-            transformation: { width: 150, height: 60 },
-          }),
-        ],
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 400 },
-      })
-    );
+  // Logo
+  if (data.siteLogoUrl) {
+    const logoBuffer = imageCache.get(data.siteLogoUrl);
+    if (logoBuffer) {
+      elements.push(
+        new Paragraph({
+          children: [
+            new ImageRun({
+              data: logoBuffer,
+              transformation: { width: 150, height: 60 },
+            }),
+          ],
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 400 },
+        })
+      );
+    }
   }
   
   // Title
@@ -258,7 +334,6 @@ function buildCoverPage(
     })
   );
   
-  // Subtitle with subsection name
   if (data.inspection.subsectionName) {
     elements.push(
       new Paragraph({
@@ -317,10 +392,10 @@ function buildCoverPage(
   return elements;
 }
 
-async function buildSections(
+function buildSections(
   sections: InspectionSection[] | undefined,
-  supabase: any
-): Promise<(Paragraph | Table)[]> {
+  imageCache: ImageCache
+): (Paragraph | Table)[] {
   if (!sections || sections.length === 0) return [];
   
   const elements: (Paragraph | Table)[] = [];
@@ -331,14 +406,12 @@ async function buildSections(
     elements.push(createHeading(section.title, HeadingLevel.HEADING_2));
     
     for (const item of section.items) {
-      // Item header
       const valueText = typeof item.value === 'boolean' 
         ? (item.value ? '✓ Yes' : '✗ No')
         : String(item.value || 'N/A');
       
       elements.push(createLabelValue(item.label, valueText));
       
-      // Notes if present
       if (item.notes) {
         elements.push(
           new Paragraph({
@@ -351,22 +424,12 @@ async function buildSections(
         );
       }
       
-      // Photos
+      // Photos from cache
       if (item.photos && item.photos.length > 0) {
         for (const photoUrl of item.photos.slice(0, 4)) {
-          const imageData = await downloadImage(supabase, photoUrl);
-          if (imageData) {
-            elements.push(
-              new Paragraph({
-                children: [
-                  new ImageRun({
-                    data: imageData.buffer,
-                    transformation: { width: 300, height: 225 },
-                  }),
-                ],
-                spacing: { before: 100, after: 200 },
-              })
-            );
+          const buffer = imageCache.get(photoUrl);
+          if (buffer) {
+            elements.push(createImageParagraph(buffer, 300, 225));
           }
         }
       }
@@ -378,10 +441,10 @@ async function buildSections(
   return elements;
 }
 
-async function buildTenantSection(
+function buildTenantSection(
   tenants: InspectionTenant[] | undefined,
-  supabase: any
-): Promise<(Paragraph | Table)[]> {
+  imageCache: ImageCache
+): (Paragraph | Table)[] {
   if (!tenants || tenants.length === 0) return [];
   
   const elements: (Paragraph | Table)[] = [];
@@ -392,38 +455,16 @@ async function buildTenantSection(
   for (const tenant of tenants) {
     elements.push(createHeading(tenant.shopName, HeadingLevel.HEADING_2));
     
-    if (tenant.shopNumber) {
-      elements.push(createLabelValue('Shop Number', tenant.shopNumber));
-    }
-    if (tenant.meterSerialNumber) {
-      elements.push(createLabelValue('Meter Serial', tenant.meterSerialNumber));
-    }
-    if (tenant.breakerSize) {
-      elements.push(createLabelValue('Breaker Size', tenant.breakerSize));
-    }
-    if (tenant.ctSizeAndRatio) {
-      elements.push(createLabelValue('CT Ratio', tenant.ctSizeAndRatio));
-    }
+    if (tenant.shopNumber) elements.push(createLabelValue('Shop Number', tenant.shopNumber));
+    if (tenant.meterSerialNumber) elements.push(createLabelValue('Meter Serial', tenant.meterSerialNumber));
+    if (tenant.breakerSize) elements.push(createLabelValue('Breaker Size', tenant.breakerSize));
+    if (tenant.ctSizeAndRatio) elements.push(createLabelValue('CT Ratio', tenant.ctSizeAndRatio));
     
-    // Tenant images in a row
-    const imageUrls = [tenant.meterImage, tenant.breakerImage, tenant.ctRatioImage].filter(Boolean);
-    
+    const imageUrls = [tenant.meterImage, tenant.breakerImage, tenant.ctRatioImage].filter(Boolean) as string[];
     for (const url of imageUrls) {
-      if (url) {
-        const imageData = await downloadImage(supabase, url);
-        if (imageData) {
-          elements.push(
-            new Paragraph({
-              children: [
-                new ImageRun({
-                  data: imageData.buffer,
-                  transformation: { width: 200, height: 150 },
-                }),
-              ],
-              spacing: { before: 100, after: 100 },
-            })
-          );
-        }
+      const buffer = imageCache.get(url);
+      if (buffer) {
+        elements.push(createImageParagraph(buffer, 200, 150));
       }
     }
     
@@ -433,10 +474,10 @@ async function buildTenantSection(
   return elements;
 }
 
-async function buildSnagSection(
+function buildSnagSection(
   snags: InspectionSnag[] | undefined,
-  supabase: any
-): Promise<(Paragraph | Table)[]> {
+  imageCache: ImageCache
+): (Paragraph | Table)[] {
   if (!snags || snags.length === 0) return [];
   
   const elements: (Paragraph | Table)[] = [];
@@ -468,22 +509,11 @@ async function buildSnagSection(
       elements.push(createLabelValue('Risk Level', snag.riskLevel));
     }
     
-    // Snag photos
     if (snag.photos && snag.photos.length > 0) {
       for (const photoUrl of snag.photos.slice(0, 2)) {
-        const imageData = await downloadImage(supabase, photoUrl);
-        if (imageData) {
-          elements.push(
-            new Paragraph({
-              children: [
-                new ImageRun({
-                  data: imageData.buffer,
-                  transformation: { width: 250, height: 187 },
-                }),
-              ],
-              spacing: { before: 100, after: 200 },
-            })
-          );
+        const buffer = imageCache.get(photoUrl);
+        if (buffer) {
+          elements.push(createImageParagraph(buffer, 250, 187));
         }
       }
     }
@@ -494,10 +524,10 @@ async function buildSnagSection(
   return elements;
 }
 
-async function buildSignatureSection(
+function buildSignatureSection(
   signatures: InspectionSignature[] | undefined,
-  supabase: any
-): Promise<(Paragraph | Table)[]> {
+  imageCache: ImageCache
+): (Paragraph | Table)[] {
   if (!signatures || signatures.length === 0) return [];
   
   const elements: (Paragraph | Table)[] = [];
@@ -529,19 +559,9 @@ async function buildSignatureSection(
     }
     
     if (sig.signatureUrl) {
-      const imageData = await downloadImage(supabase, sig.signatureUrl);
-      if (imageData) {
-        elements.push(
-          new Paragraph({
-            children: [
-              new ImageRun({
-                data: imageData.buffer,
-                transformation: { width: 200, height: 80 },
-              }),
-            ],
-            spacing: { after: 300 },
-          })
-        );
+      const buffer = imageCache.get(sig.signatureUrl);
+      if (buffer) {
+        elements.push(createImageParagraph(buffer, 200, 80));
       }
     }
   }
@@ -562,37 +582,32 @@ Deno.serve(async (req: Request) => {
   
   try {
     const payload: RequestPayload = await req.json();
-    const { inspection, siteName, clientName, siteLogoUrl } = payload;
+    const { inspection, siteName } = payload;
     
-    console.log('[DOCX] Starting document generation');
     console.log('[DOCX] Site:', siteName);
     console.log('[DOCX] Sections:', inspection.sections?.length || 0);
-    console.log('[DOCX] Tenants:', inspection.tenants?.length || 0);
-    console.log('[DOCX] Snags:', inspection.snags?.length || 0);
-    console.log('[DOCX] Signatures:', inspection.signatures?.length || 0);
     
-    // Initialize Supabase client with service role for storage access
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     
-    // Download logo if provided
-    let logoImage: { buffer: Uint8Array; type: 'png' | 'jpeg' | 'gif' } | null = null;
-    if (siteLogoUrl) {
-      logoImage = await downloadImage(supabase, siteLogoUrl);
-    }
+    // Phase 1: Collect and preload ALL images in parallel
+    const allImageUrls = collectAllImageUrls(payload);
+    console.log(`[DOCX] Total images to download: ${allImageUrls.length}`);
     
-    // Build document sections
-    const coverPage = buildCoverPage(payload, logoImage);
-    const sections = await buildSections(inspection.sections, supabase);
-    const tenants = await buildTenantSection(inspection.tenants, supabase);
-    const snags = await buildSnagSection(inspection.snags, supabase);
-    const signatures = await buildSignatureSection(inspection.signatures, supabase);
+    const imageCache = await preloadAllImages(supabase, supabaseUrl, allImageUrls);
     
-    // Create the document
+    // Phase 2: Build document (no async, uses cached images)
+    console.log('[DOCX] Building document...');
+    const coverPage = buildCoverPage(payload, imageCache);
+    const sections = buildSections(inspection.sections, imageCache);
+    const tenants = buildTenantSection(inspection.tenants, imageCache);
+    const snags = buildSnagSection(inspection.snags, imageCache);
+    const signatures = buildSignatureSection(inspection.signatures, imageCache);
+    
     const doc = new Document({
       title: `Inspection Report - ${inspection.subsectionName || siteName}`,
-      description: `Electrical inspection report generated on ${new Date().toISOString()}`,
+      description: `Generated on ${new Date().toISOString()}`,
       creator: 'WM Compliance System',
       sections: [{
         properties: {
@@ -643,24 +658,19 @@ Deno.serve(async (req: Request) => {
       }],
     });
     
-    console.log('[DOCX] Packing document...');
-    
-    // Generate the DOCX buffer
+    console.log('[DOCX] Packing...');
     const buffer = await Packer.toBuffer(doc);
     console.log(`[DOCX] Document size: ${Math.round(buffer.byteLength / 1024)}KB`);
     
-    // Generate filename
+    // Upload
     const timestamp = new Date().toISOString().split('T')[0];
     const safeName = (inspection.subsectionName || siteName || 'Report')
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 50);
     const fileName = `${safeName}_Inspection_${timestamp}.docx`;
-    
-    // Upload to Supabase Storage
     const filePath = `inspection-reports/${fileName}`;
-    console.log(`[DOCX] Uploading to: ${filePath}`);
     
-    const { data: uploadData, error: uploadError } = await supabase.storage
+    const { error: uploadError } = await supabase.storage
       .from('documents')
       .upload(filePath, buffer, {
         contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -668,40 +678,23 @@ Deno.serve(async (req: Request) => {
       });
     
     if (uploadError) {
-      console.error('[DOCX] Upload error:', uploadError);
-      throw new Error(`Failed to upload document: ${uploadError.message}`);
+      throw new Error(`Upload failed: ${uploadError.message}`);
     }
     
-    // Get public URL
     const { data: urlData } = supabase.storage.from('documents').getPublicUrl(filePath);
-    const publicUrl = urlData.publicUrl;
     
-    console.log(`[DOCX] ✓ Document uploaded successfully: ${publicUrl}`);
+    console.log(`[DOCX] ✓ Done: ${urlData.publicUrl}`);
     
     return new Response(
-      JSON.stringify({
-        success: true,
-        url: publicUrl,
-        fileName,
-        version: VERSION,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ success: true, url: urlData.publicUrl, fileName, version: VERSION }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
     
   } catch (error) {
     console.error('[DOCX] Error:', error);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        version: VERSION,
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      }
+      JSON.stringify({ success: false, error: error instanceof Error ? error.message : 'Unknown error', version: VERSION }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
 });
