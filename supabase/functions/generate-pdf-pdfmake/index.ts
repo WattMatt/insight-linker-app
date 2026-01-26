@@ -1,8 +1,8 @@
 /**
- * PDFMake PDF Generator - Version 4.0.0 (Complete Rebuild)
+ * PDFMake PDF Generator - Version 5.0.0
  * 
  * Electrical Inspection Report Generator
- * Clean implementation with verified image rendering
+ * Fixes: toBase64 buffer handling, font config, explicit error returns
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -16,10 +16,10 @@ const corsHeaders = {
 // CONFIGURATION
 // ============================================================================
 
-const VERSION = '4.0.0';
+const VERSION = '5.0.0';
 
 const IMAGE_CONFIG = {
-  MAX_SIZE_KB: 500,
+  MAX_SIZE_KB: 800,
   TRANSFORM_WIDTH: 800,
   TRANSFORM_QUALITY: 80,
 };
@@ -68,10 +68,9 @@ const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9I
 function toBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   let binary = '';
-  const chunkSize = 8192;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
-    binary += String.fromCharCode(...chunk);
+  // Character-by-character loop - safer than spread operator for large buffers
+  for (let i = 0; i < bytes.length; i++) {
+    binary += String.fromCharCode(bytes[i]);
   }
   return btoa(binary);
 }
@@ -123,11 +122,18 @@ async function downloadImage(url: string): Promise<string> {
           const buffer = await resp.arrayBuffer();
           const sizeKB = buffer.byteLength / 1024;
           if (sizeKB <= IMAGE_CONFIG.MAX_SIZE_KB) {
-            const bytes = new Uint8Array(buffer);
-            const mime = getMimeType(bytes);
-            const b64 = toBase64(buffer);
-            console.log(`[IMG] Transformed: ${Math.round(sizeKB)}KB`);
-            return `data:${mime};base64,${b64}`;
+            try {
+              const bytes = new Uint8Array(buffer);
+              const mime = getMimeType(bytes);
+              const b64 = toBase64(buffer);
+              console.log(`[IMG] Transformed: ${Math.round(sizeKB)}KB`);
+              return `data:${mime};base64,${b64}`;
+            } catch (e) {
+              console.warn('[IMG] Base64 conversion failed:', e);
+              return PLACEHOLDER;
+            }
+          } else {
+            console.warn(`[IMG] Transform too large: ${Math.round(sizeKB)}KB`);
           }
         }
       }
@@ -141,13 +147,19 @@ async function downloadImage(url: string): Promise<string> {
         const buffer = await blob.arrayBuffer();
         const sizeKB = buffer.byteLength / 1024;
         if (sizeKB <= IMAGE_CONFIG.MAX_SIZE_KB) {
-          const bytes = new Uint8Array(buffer);
-          const mime = getMimeType(bytes);
-          const b64 = toBase64(buffer);
-          console.log(`[IMG] Direct: ${Math.round(sizeKB)}KB`);
-          return `data:${mime};base64,${b64}`;
+          try {
+            const bytes = new Uint8Array(buffer);
+            const mime = getMimeType(bytes);
+            const b64 = toBase64(buffer);
+            console.log(`[IMG] Direct: ${Math.round(sizeKB)}KB`);
+            return `data:${mime};base64,${b64}`;
+          } catch (e) {
+            console.warn('[IMG] Base64 conversion failed:', e);
+            return PLACEHOLDER;
+          }
         }
         console.warn(`[IMG] Too large: ${Math.round(sizeKB)}KB`);
+        return PLACEHOLDER;
       }
     } catch (err) {
       console.warn(`[IMG] Download error:`, err);
@@ -724,7 +736,7 @@ function buildDocument(
     pageMargins: [40, 50, 40, 60],
     content,
     defaultStyle: {
-      font: 'Helvetica',
+      font: 'Roboto',
       fontSize: 10,
       color: COLORS.slate700,
     },
