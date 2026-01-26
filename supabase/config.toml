@@ -56,3 +56,9 @@ verify_jwt = false
 
 [functions.fix-inspection-photos]
 verify_jwt = false
+
+[functions.compress-image]
+verify_jwt = true
+
+[functions.batch-compress-images]
+verify_jwt = true
