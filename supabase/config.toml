@@ -51,6 +51,9 @@ verify_jwt = true
 [functions.generate-pdf]
 verify_jwt = false
 
+[functions.generate-pdf-browserless]
+verify_jwt = false
+
 [functions.detect-schematic-regions]
 verify_jwt = false
 
