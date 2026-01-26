@@ -297,8 +297,8 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 // ============================================================================
 
 /**
- * Generate inspection report via Google Docs Edge Function
- * Uses Google Docs API for reliable image embedding, then exports to PDF
+ * Generate inspection report via PDFShift Edge Function
+ * Uses PDFShift for HTML-to-PDF conversion with embedded Base64 images
  */
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
@@ -306,40 +306,30 @@ export async function generatePdfShiftInspectionReport(
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = options;
   
   try {
-    console.log('[GoogleDocs PDF] Starting inspection report generation...');
-    console.log('[GoogleDocs PDF] Sections:', inspection.sections?.length || 0);
-    console.log('[GoogleDocs PDF] Tenants:', inspection.tenants?.length || 0);
-    console.log('[GoogleDocs PDF] Snags:', inspection.snags?.length || 0);
+    console.log('[PDFShift] Starting inspection report generation...');
+    console.log('[PDFShift] Sections:', inspection.sections?.length || 0);
+    console.log('[PDFShift] Tenants:', inspection.tenants?.length || 0);
+    console.log('[PDFShift] Snags:', inspection.snags?.length || 0);
     
-    // Count total photos
-    let totalPhotos = 0;
-    if (inspection.sections) {
-      for (const section of inspection.sections) {
-        for (const item of section.items) {
-          if (item.photos && item.photos.length > 0) {
-            totalPhotos += item.photos.length;
-            console.log(`[GoogleDocs PDF] Section "${section.title}" item "${item.label}": ${item.photos.length} photos`);
-          }
-        }
-      }
-    }
-    console.log('[GoogleDocs PDF] Total photos to embed:', totalPhotos);
+    // Pre-embed all images as Base64 client-side
+    console.log('[PDFShift] Embedding images as Base64...');
+    const processedInspection = await embedAllImages(inspection);
     
-    // Build payload for Edge Function - send raw URLs, Google will fetch them
+    // Build payload for Edge Function
     const payload = {
       inspection: {
-        inspectionId: inspection.inspectionId,
-        templateName: inspection.templateName,
-        inspectorName: inspection.inspectorName,
-        inspectionDate: inspection.inspectionDate,
-        status: inspection.status,
-        qualityRating: inspection.qualityRating,
-        generalInfo: inspection.generalInfo,
-        sections: inspection.sections,
-        tenants: inspection.tenants,
-        snags: inspection.snags,
-        signatures: inspection.signatures,
-        subsectionName: inspection.subsectionName,
+        inspectionId: processedInspection.inspectionId,
+        templateName: processedInspection.templateName,
+        inspectorName: processedInspection.inspectorName,
+        inspectionDate: processedInspection.inspectionDate,
+        status: processedInspection.status,
+        qualityRating: processedInspection.qualityRating,
+        generalInfo: processedInspection.generalInfo,
+        sections: processedInspection.sections,
+        tenants: processedInspection.tenants,
+        snags: processedInspection.snags,
+        signatures: processedInspection.signatures,
+        subsectionName: processedInspection.subsectionName,
       },
       siteName,
       clientName,
@@ -347,24 +337,24 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[GoogleDocs PDF] Calling Edge Function...');
+    console.log('[PDFShift] Calling Edge Function...');
     
-    // Call Google Docs Edge Function
-    const { data, error } = await supabase.functions.invoke('generate-pdf-google', {
+    // Call PDFShift Edge Function
+    const { data, error } = await supabase.functions.invoke('generate-pdf', {
       body: payload,
     });
     
     if (error) {
-      console.error('[GoogleDocs PDF] Edge Function error:', error);
+      console.error('[PDFShift] Edge Function error:', error);
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
     
     if (!data?.url) {
-      console.error('[GoogleDocs PDF] No URL returned from Edge Function');
+      console.error('[PDFShift] No URL returned from Edge Function');
       return { success: false, error: data?.error || 'No PDF URL returned' };
     }
     
-    console.log('[GoogleDocs PDF] PDF generated successfully:', data.url);
+    console.log('[PDFShift] PDF generated successfully:', data.url);
     
     return {
       success: true,
@@ -374,7 +364,7 @@ export async function generatePdfShiftInspectionReport(
     };
     
   } catch (error) {
-    console.error('[GoogleDocs PDF] Error generating report:', error);
+    console.error('[PDFShift] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
