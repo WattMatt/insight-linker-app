@@ -212,18 +212,34 @@ Scan the entire document and extract:
 **FAIL:** Zs exceeds maximum OR not tested
 **Critical:** This ensures automatic disconnection within 0.4s for final circuits
 
-### 🛡️ INSULATION RESISTANCE (Clause 8.6)
+### 🛡️ INSULATION RESISTANCE (Clause 8.6) ⚠️ CRITICAL SAFETY CHECK ⚠️
 **Check ID:** INSUL-001
-**Minimum Values:**
-| Circuit Voltage | Test Voltage | Minimum IR |
-|-----------------|--------------|------------|
-| SELV/PELV       | 250V DC      | ≥ 0.5MΩ    |
-| ≤ 500V          | 500V DC      | ≥ 1.0MΩ    |
-| > 500V          | 1000V DC     | ≥ 1.0MΩ    |
 
-**PASS:** All circuits ≥ minimum threshold OR value shows infinity symbol (∞, >∞, OL, >500MΩ, or similar "infinite" readings)
-**IMPORTANT:** The infinity symbol (∞) indicates resistance is beyond meter range (typically >500MΩ) which is an EXCELLENT pass result. Values like "∞", ">∞", "OL" (over limit), ">500", ">999", or ">500MΩ" are ALL valid PASS values.
-**FAIL:** Any circuit with a numeric value below minimum threshold indicates insulation breakdown
+**⚡⚡⚡ MANDATORY THRESHOLD - NO EXCEPTIONS ⚡⚡⚡**
+
+**Minimum Values (STRICT ENFORCEMENT):**
+| Circuit Voltage | Test Voltage | Minimum IR     | Rule                    |
+|-----------------|--------------|----------------|-------------------------|
+| SELV/PELV       | 250V DC      | ≥ 0.5MΩ        | FAIL if < 0.5MΩ         |
+| ≤ 500V          | 500V DC      | ≥ 1.0MΩ        | FAIL if < 1.0MΩ         |
+| > 500V          | 1000V DC     | ≥ 1.0MΩ        | FAIL if < 1.0MΩ         |
+
+**🟢 AUTOMATIC PASS CONDITIONS:**
+- Numeric value ≥ 1.0MΩ (e.g., "1.5MΩ", "2.0MΩ", "500MΩ")
+- Infinity symbols: ∞, >∞, OL, >500, >999, >500MΩ, "infinite", "over limit"
+- These indicate resistance beyond meter range (excellent insulation)
+
+**🔴 AUTOMATIC FAIL CONDITIONS (NO EXCEPTIONS - SAFETY CRITICAL):**
+- ANY numeric value BELOW the threshold is an IMMEDIATE FAIL
+- Examples that MUST FAIL: 0.1MΩ, 0.3MΩ, 0.5MΩ, 0.6MΩ, 0.8MΩ, 0.9MΩ, 0.99MΩ
+- Specifically: 0.6MΩ < 1.0MΩ → FAIL (insulation breakdown risk)
+- Missing/blank values → FAIL (test not performed)
+
+**⚠️ DO NOT CONFUSE:**
+- "∞" (infinity) = PASS (excellent insulation, beyond meter range)
+- "0.6MΩ" = FAIL (below 1.0MΩ threshold, dangerous)
+
+**Remediation for FAIL:** Identify and replace damaged cable insulation, check for moisture ingress, verify correct test procedure was followed.
 **Note:** Test between all live conductors and earth, and between live conductors
 
 ### 🔄 POLARITY & CONTINUITY (Clause 8.7)
