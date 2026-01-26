@@ -404,7 +404,7 @@ export const ComprehensiveInspectionReport = ({
 
       if (result.success && result.previewUrl) {
         setPreviewUrl(result.previewUrl);
-        setPreviewFileName(result.filename || `${subsectionName}_Inspection_Report.pdf`);
+        setPreviewFileName(result.filename || `${subsectionName}_Inspection_Report.docx`);
         setPreviewOpen(true);
       } else {
         toast.error(result.error || "Failed to generate report");
@@ -421,7 +421,7 @@ export const ComprehensiveInspectionReport = ({
     <>
       <Button onClick={handlePreviewReport} disabled={isGenerating} variant="default">
         <Eye className="mr-2 h-4 w-4" />
-        {isGenerating ? "Generating..." : "Preview Report"}
+        {isGenerating ? "Generating..." : "Generate Report"}
       </Button>
 
       <DocumentPreviewDialog

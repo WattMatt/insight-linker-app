@@ -1,11 +1,12 @@
 /**
- * Browserless.io PDF Generator
+ * Word Document (DOCX) Report Generator
  * 
- * Uses the server-side Edge Function with Browserless.io (Puppeteer-as-a-service)
- * for high-fidelity Chrome rendering. This provides:
- * - Perfect CSS support and rendering
- * - Reliable image embedding without storage quota issues
- * - No external storage dependencies (Google Drive)
+ * Uses the server-side Edge Function with the docx library to generate
+ * professional Word documents. This provides:
+ * - Native image buffer support (no Base64 issues)
+ * - Editable documents for clients
+ * - Reliable rendering across all platforms
+ * - Efficient compression
  * 
  * This is the PREFERRED method for inspection reports with photographic evidence.
  */
@@ -76,13 +77,16 @@ export interface GeneratePdfShiftReportOptions {
   accentColor?: string;
 }
 
-export interface GeneratePdfShiftReportResult {
+export interface GenerateDocxReportResult {
   success: boolean;
   url?: string;
   filename?: string;
   previewUrl?: string;
   error?: string;
 }
+
+// Legacy alias for backward compatibility
+export type GeneratePdfShiftReportResult = GenerateDocxReportResult;
 
 // ============================================================================
 // IMAGE COMPRESSION & EMBEDDING
@@ -297,19 +301,19 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 // ============================================================================
 
 /**
- * Generate inspection report via PDFShift Edge Function
+ * Generate inspection report as Word document via DOCX Edge Function
  * Sends raw image URLs - the edge function handles fetching with service role
  */
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
-): Promise<GeneratePdfShiftReportResult> {
+): Promise<GenerateDocxReportResult> {
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = options;
   
   try {
-    console.log('[PDFShift] Starting inspection report generation...');
-    console.log('[PDFShift] Sections:', inspection.sections?.length || 0);
-    console.log('[PDFShift] Tenants:', inspection.tenants?.length || 0);
-    console.log('[PDFShift] Snags:', inspection.snags?.length || 0);
+    console.log('[DOCX] Starting inspection report generation...');
+    console.log('[DOCX] Sections:', inspection.sections?.length || 0);
+    console.log('[DOCX] Tenants:', inspection.tenants?.length || 0);
+    console.log('[DOCX] Snags:', inspection.snags?.length || 0);
     
     // Count total photos for logging
     let totalPhotos = 0;
@@ -322,7 +326,7 @@ export async function generatePdfShiftInspectionReport(
         }
       }
     }
-    console.log('[PDFShift] Total photos to process server-side:', totalPhotos);
+    console.log('[DOCX] Total photos to process server-side:', totalPhotos);
     
     // Build payload - send RAW URLs, edge function will fetch with service role
     const payload = {
@@ -335,7 +339,7 @@ export async function generatePdfShiftInspectionReport(
         status: inspection.status,
         qualityRating: inspection.qualityRating,
         generalInfo: inspection.generalInfo,
-        sections: inspection.sections, // Keep original URLs
+        sections: inspection.sections,
         tenants: inspection.tenants,
         snags: inspection.snags,
         signatures: inspection.signatures,
@@ -347,36 +351,36 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[PDFMake] Calling Edge Function...');
+    console.log('[DOCX] Calling Edge Function...');
     
-    // Call PDFMake Edge Function for reliable PDF generation
-    const { data, error } = await supabase.functions.invoke('generate-pdf-pdfmake', {
+    // Call DOCX Edge Function for reliable Word document generation
+    const { data, error } = await supabase.functions.invoke('generate-docx-report', {
       body: payload,
     });
     
     if (error) {
-      console.error('[PDFShift] Edge Function error:', error);
-      return { success: false, error: error.message || 'Failed to generate PDF' };
+      console.error('[DOCX] Edge Function error:', error);
+      return { success: false, error: error.message || 'Failed to generate document' };
     }
     
-    console.log('[PDFShift] Edge Function response:', { success: data?.success, url: data?.url, fileName: data?.fileName });
+    console.log('[DOCX] Edge Function response:', { success: data?.success, url: data?.url, fileName: data?.fileName });
     
     if (!data?.url) {
-      console.error('[PDFShift] No URL returned from Edge Function:', data);
-      return { success: false, error: data?.error || 'No PDF URL returned' };
+      console.error('[DOCX] No URL returned from Edge Function:', data);
+      return { success: false, error: data?.error || 'No document URL returned' };
     }
     
-    console.log('[PDFShift] PDF generated successfully:', data.url);
+    console.log('[DOCX] Document generated successfully:', data.url);
     
     return {
       success: true,
       url: data.url,
-      filename: data.fileName || data.filename,  // Handle both cases
+      filename: data.fileName || data.filename,
       previewUrl: data.url,
     };
     
   } catch (error) {
-    console.error('[PDFShift] Error generating report:', error);
+    console.error('[DOCX] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -444,12 +448,15 @@ export async function generateAndSavePdfShiftInspectionReport(
     }
     
     if (categoryId) {
+      // Use .docx extension for document record
+      const docFileName = result.filename || 'Inspection_Report.docx';
+      
       const { data: docData, error: docError } = await supabase
         .from('subsection_documents')
         .insert({
           subsection_id: subsectionId,
           category_id: categoryId,
-          file_name: result.filename || 'Inspection_Report.pdf',
+          file_name: docFileName,
           file_url: result.url,
           uploaded_by: user.id,
         })
