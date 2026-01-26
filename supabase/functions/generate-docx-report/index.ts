@@ -1,10 +1,12 @@
 /**
- * Word Document (DOCX) Report Generator v2.0
+ * Word Document (DOCX) Report Generator v3.0
  * 
- * Optimized for performance:
- * - Pre-downloads all images in parallel
- * - Uses Supabase image transformation for resizing (reduces bandwidth)
- * - Caches images to avoid re-downloading
+ * Matches the exact format of the reference "Low Voltage Line Shop Board Audit" document:
+ * - Cover Page with template title, subsection name, metadata block
+ * - Quality Score Dashboard (Page 2)
+ * - Section Breakdown with Overall % and table (Page 3)
+ * - Numbered sections with PASS/N/A badges and photo grids
+ * - Professional header/footer on every page
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -26,12 +28,26 @@ import {
   VerticalAlign,
   ShadingType,
   PageNumber,
+  BorderStyle,
   convertInchesToTwip,
 } from "https://esm.sh/docx@8.5.0";
 
-const VERSION = '2.0.0';
-const MAX_IMAGE_WIDTH = 400; // Max width for document images
+const VERSION = '3.0.0';
+const MAX_IMAGE_WIDTH = 400;
 const MAX_CONCURRENT_DOWNLOADS = 5;
+
+// Colors matching reference document
+const COLORS = {
+  navy: '1a365d',
+  darkBlue: '2d3748',
+  gray: '718096',
+  lightGray: 'e2e8f0',
+  white: 'ffffff',
+  green: '48bb78',
+  red: 'e53e3e',
+  orange: 'ed8936',
+  teal: '319795',
+};
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -106,7 +122,85 @@ interface RequestPayload {
 type ImageCache = Map<string, Uint8Array>;
 
 // ============================================================================
-// IMAGE HANDLING - OPTIMIZED
+// CALCULATIONS
+// ============================================================================
+
+interface SectionStats {
+  name: string;
+  items: number;
+  pass: number;
+  fail: number;
+  photos: number;
+  score: number;
+}
+
+function calculateStats(sections: InspectionSection[] | undefined): {
+  totalItems: number;
+  passed: number;
+  failed: number;
+  pending: number;
+  totalPhotos: number;
+  compliance: number;
+  sectionStats: SectionStats[];
+} {
+  if (!sections || sections.length === 0) {
+    return { totalItems: 0, passed: 0, failed: 0, pending: 0, totalPhotos: 0, compliance: 0, sectionStats: [] };
+  }
+  
+  let totalItems = 0;
+  let passed = 0;
+  let failed = 0;
+  let pending = 0;
+  let totalPhotos = 0;
+  const sectionStats: SectionStats[] = [];
+  
+  for (const section of sections) {
+    let sectionPassed = 0;
+    let sectionFailed = 0;
+    let sectionPhotos = 0;
+    
+    for (const item of section.items) {
+      totalItems++;
+      const photos = item.photos?.length || 0;
+      totalPhotos += photos;
+      sectionPhotos += photos;
+      
+      const value = item.value;
+      if (value === true || value === 'PASS' || value === 'Yes' || value === 'pass') {
+        passed++;
+        sectionPassed++;
+      } else if (value === false || value === 'FAIL' || value === 'No' || value === 'fail') {
+        failed++;
+        sectionFailed++;
+      } else if (value === 'N/A' || value === '' || value === null || value === undefined) {
+        pending++;
+      } else {
+        // Has a value, count as pass
+        passed++;
+        sectionPassed++;
+      }
+    }
+    
+    const sectionTotal = section.items.length;
+    const sectionScore = sectionTotal > 0 ? Math.round((sectionPassed / sectionTotal) * 100) : 0;
+    
+    sectionStats.push({
+      name: section.title,
+      items: sectionTotal,
+      pass: sectionPassed,
+      fail: sectionFailed,
+      photos: sectionPhotos,
+      score: sectionScore,
+    });
+  }
+  
+  const compliance = totalItems > 0 ? Math.round((passed / totalItems) * 100) : 0;
+  
+  return { totalItems, passed, failed, pending, totalPhotos, compliance, sectionStats };
+}
+
+// ============================================================================
+// IMAGE HANDLING
 // ============================================================================
 
 function parseStorageUrl(url: string): { bucket: string; path: string } | null {
@@ -137,7 +231,6 @@ async function downloadSingleImage(
 ): Promise<Uint8Array | null> {
   if (!url) return null;
   
-  // Handle data URLs
   if (url.startsWith('data:')) {
     try {
       const [, base64Data] = url.split(',');
@@ -155,8 +248,6 @@ async function downloadSingleImage(
   const parsed = parseStorageUrl(url);
   
   if (parsed) {
-    // Use Supabase Image Transformation API for resizing
-    // This dramatically reduces download size and processing time
     const transformUrl = `${supabaseUrl}/storage/v1/render/image/public/${parsed.bucket}/${parsed.path}?width=${maxWidth}&quality=75`;
     
     try {
@@ -167,19 +258,16 @@ async function downloadSingleImage(
         return buffer;
       }
     } catch {
-      // Fallback to direct download if transformation fails
+      // Fallback
     }
     
-    // Fallback: direct download
     const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
     if (error || !data) return null;
     
     const buffer = new Uint8Array(await data.arrayBuffer());
-    console.log(`[img] ✓ fallback ${parsed.path.substring(0, 30)}... ${Math.round(buffer.length / 1024)}KB`);
     return buffer;
   }
   
-  // External URL
   try {
     const response = await fetch(url);
     if (!response.ok) return null;
@@ -198,7 +286,7 @@ function collectAllImageUrls(data: RequestPayload): string[] {
     for (const section of data.inspection.sections) {
       for (const item of section.items) {
         if (item.photos) {
-          urls.push(...item.photos.slice(0, 4)); // Limit to 4 per item
+          urls.push(...item.photos.slice(0, 4));
         }
       }
     }
@@ -215,7 +303,7 @@ function collectAllImageUrls(data: RequestPayload): string[] {
   if (data.inspection.snags) {
     for (const snag of data.inspection.snags) {
       if (snag.photos) {
-        urls.push(...snag.photos.slice(0, 2)); // Limit to 2 per snag
+        urls.push(...snag.photos.slice(0, 2));
       }
     }
   }
@@ -226,7 +314,7 @@ function collectAllImageUrls(data: RequestPayload): string[] {
     }
   }
   
-  return [...new Set(urls)]; // Deduplicate
+  return [...new Set(urls)];
 }
 
 async function preloadAllImages(
@@ -238,7 +326,6 @@ async function preloadAllImages(
   
   console.log(`[preload] Starting parallel download of ${urls.length} images...`);
   
-  // Process in batches to avoid overwhelming the server
   for (let i = 0; i < urls.length; i += MAX_CONCURRENT_DOWNLOADS) {
     const batch = urls.slice(i, i + MAX_CONCURRENT_DOWNLOADS);
     const results = await Promise.all(
@@ -260,126 +347,352 @@ async function preloadAllImages(
 }
 
 // ============================================================================
-// DOCUMENT BUILDERS
+// HELPER FUNCTIONS
 // ============================================================================
 
-function createHeading(text: string, level: typeof HeadingLevel[keyof typeof HeadingLevel] = HeadingLevel.HEADING_1): Paragraph {
-  return new Paragraph({
-    text,
-    heading: level,
-    spacing: { after: 200 },
-  });
+const noBorder = {
+  top: { style: BorderStyle.NONE, size: 0, color: COLORS.white },
+  bottom: { style: BorderStyle.NONE, size: 0, color: COLORS.white },
+  left: { style: BorderStyle.NONE, size: 0, color: COLORS.white },
+  right: { style: BorderStyle.NONE, size: 0, color: COLORS.white },
+};
+
+const thinBorder = {
+  top: { style: BorderStyle.SINGLE, size: 4, color: COLORS.lightGray },
+  bottom: { style: BorderStyle.SINGLE, size: 4, color: COLORS.lightGray },
+  left: { style: BorderStyle.SINGLE, size: 4, color: COLORS.lightGray },
+  right: { style: BorderStyle.SINGLE, size: 4, color: COLORS.lightGray },
+};
+
+function formatDate(dateStr?: string): string {
+  if (!dateStr) return new Date().toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+  try {
+    return new Date(dateStr).toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+  } catch {
+    return dateStr;
+  }
 }
 
-function createLabelValue(label: string, value: string): Paragraph {
-  return new Paragraph({
-    children: [
-      new TextRun({ text: `${label}: `, bold: true }),
-      new TextRun({ text: value }),
-    ],
-    spacing: { after: 100 },
-  });
+function getStatusBadge(value: any): { text: string; color: string } {
+  if (value === true || value === 'PASS' || value === 'Yes' || value === 'pass') {
+    return { text: 'PASS', color: COLORS.green };
+  }
+  if (value === false || value === 'FAIL' || value === 'No' || value === 'fail') {
+    return { text: 'FAIL', color: COLORS.red };
+  }
+  if (value === 'N/A' || value === '' || value === null || value === undefined) {
+    return { text: 'N/A', color: COLORS.gray };
+  }
+  return { text: String(value), color: COLORS.navy };
 }
 
-function createImageParagraph(buffer: Uint8Array, width: number, height: number): Paragraph {
-  return new Paragraph({
-    children: [
-      new ImageRun({
-        data: buffer,
-        transformation: { width, height },
-      }),
-    ],
-    spacing: { before: 100, after: 200 },
-  });
-}
+// ============================================================================
+// PAGE BUILDERS
+// ============================================================================
 
 function buildCoverPage(
   data: RequestPayload,
   imageCache: ImageCache
 ): (Paragraph | Table)[] {
   const elements: (Paragraph | Table)[] = [];
+  const templateName = data.inspection.templateName || 'Electrical Inspection Report';
   
-  // Logo
+  // Header with template name (small, top)
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: templateName, size: 20, color: COLORS.gray })],
+      alignment: AlignmentType.LEFT,
+      spacing: { after: 600 },
+    })
+  );
+  
+  // Large template title
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: templateName, bold: true, size: 56, color: COLORS.navy })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 400 },
+    })
+  );
+  
+  // Logo (if available)
   if (data.siteLogoUrl) {
     const logoBuffer = imageCache.get(data.siteLogoUrl);
     if (logoBuffer) {
       elements.push(
         new Paragraph({
-          children: [
-            new ImageRun({
-              data: logoBuffer,
-              transformation: { width: 150, height: 60 },
-            }),
-          ],
+          children: [new ImageRun({ data: logoBuffer, transformation: { width: 180, height: 72 } })],
           alignment: AlignmentType.CENTER,
-          spacing: { after: 400 },
+          spacing: { after: 200 },
         })
       );
     }
   }
   
+  // Large subsection name
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: data.inspection.subsectionName || data.siteName, bold: true, size: 72, color: COLORS.navy })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 600 },
+    })
+  );
+  
+  // Metadata block (vertical layout like reference)
+  const metadataItems = [
+    ['Site', data.siteName],
+    ['Client', data.clientName || 'N/A'],
+    ['Inspector', data.inspection.inspectorName || 'N/A'],
+    ['Date', formatDate(data.inspection.inspectionDate)],
+  ];
+  
+  for (const [label, value] of metadataItems) {
+    elements.push(
+      new Paragraph({
+        children: [
+          new TextRun({ text: `${label}: `, size: 22, color: COLORS.gray }),
+          new TextRun({ text: value || 'N/A', size: 22, color: COLORS.darkBlue }),
+        ],
+        alignment: AlignmentType.CENTER,
+        spacing: { after: 100 },
+      })
+    );
+  }
+  
+  elements.push(new Paragraph({ children: [new PageBreak()] }));
+  
+  return elements;
+}
+
+function buildQualityScoreDashboard(stats: ReturnType<typeof calculateStats>): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+  
   // Title
   elements.push(
     new Paragraph({
-      children: [
-        new TextRun({
-          text: 'ELECTRICAL INSPECTION REPORT',
-          bold: true,
-          size: 48,
-          color: '1a365d',
+      children: [new TextRun({ text: 'QUALITY SCORE DASHBOARD', bold: true, size: 36, color: COLORS.navy })],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 400, after: 400 },
+    })
+  );
+  
+  // Top row: % COMPLIANCE | ITEMS CHECKED | PHOTOS
+  elements.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: noBorder,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: '% COMPLIANCE', size: 18, color: COLORS.gray })], alignment: AlignmentType.CENTER }),
+                new Paragraph({ children: [new TextRun({ text: String(stats.compliance), bold: true, size: 80, color: COLORS.navy })], alignment: AlignmentType.CENTER }),
+              ],
+              width: { size: 33, type: WidthType.PERCENTAGE },
+              borders: noBorder,
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: 'ITEMS CHECKED', size: 18, color: COLORS.gray })], alignment: AlignmentType.CENTER }),
+                new Paragraph({ children: [new TextRun({ text: String(stats.totalItems), bold: true, size: 80, color: COLORS.navy })], alignment: AlignmentType.CENTER }),
+              ],
+              width: { size: 33, type: WidthType.PERCENTAGE },
+              borders: noBorder,
+            }),
+            new TableCell({
+              children: [
+                new Paragraph({ children: [new TextRun({ text: 'PHOTOS', size: 18, color: COLORS.gray })], alignment: AlignmentType.CENTER }),
+                new Paragraph({ children: [new TextRun({ text: String(stats.totalPhotos), bold: true, size: 80, color: COLORS.navy })], alignment: AlignmentType.CENTER }),
+              ],
+              width: { size: 33, type: WidthType.PERCENTAGE },
+              borders: noBorder,
+            }),
+          ],
         }),
+      ],
+    })
+  );
+  
+  // SANS notice
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'This inspection is conducted in accordance with SANS 10142-1 requirements', size: 20, italics: true, color: COLORS.gray })],
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 300, after: 300 },
+    })
+  );
+  
+  // Status grid: Items Passed | Items Failed | Pending Review | Photos Captured
+  elements.push(
+    new Table({
+      width: { size: 100, type: WidthType.PERCENTAGE },
+      borders: thinBorder,
+      rows: [
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: 'Items Passed', size: 20, color: COLORS.darkBlue })], alignment: AlignmentType.CENTER })],
+              shading: { fill: 'f0fff4', type: ShadingType.SOLID },
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: 'Items Failed', size: 20, color: COLORS.darkBlue })], alignment: AlignmentType.CENTER })],
+              shading: { fill: 'fff5f5', type: ShadingType.SOLID },
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: 'Pending Review', size: 20, color: COLORS.darkBlue })], alignment: AlignmentType.CENTER })],
+              shading: { fill: 'fffaf0', type: ShadingType.SOLID },
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: 'Photos Captured', size: 20, color: COLORS.darkBlue })], alignment: AlignmentType.CENTER })],
+              shading: { fill: 'ebf8ff', type: ShadingType.SOLID },
+              borders: thinBorder,
+            }),
+          ],
+        }),
+        new TableRow({
+          children: [
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: String(stats.passed), bold: true, size: 40, color: COLORS.green })], alignment: AlignmentType.CENTER })],
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: String(stats.failed), bold: true, size: 40, color: COLORS.red })], alignment: AlignmentType.CENTER })],
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: String(stats.pending), bold: true, size: 40, color: COLORS.orange })], alignment: AlignmentType.CENTER })],
+              borders: thinBorder,
+            }),
+            new TableCell({
+              children: [new Paragraph({ children: [new TextRun({ text: String(stats.totalPhotos), bold: true, size: 40, color: COLORS.teal })], alignment: AlignmentType.CENTER })],
+              borders: thinBorder,
+            }),
+          ],
+        }),
+      ],
+    })
+  );
+  
+  elements.push(new Paragraph({ children: [new PageBreak()] }));
+  
+  return elements;
+}
+
+function buildSectionBreakdownPage(
+  data: RequestPayload,
+  stats: ReturnType<typeof calculateStats>
+): (Paragraph | Table)[] {
+  const elements: (Paragraph | Table)[] = [];
+  
+  // Overall percentage (large, centered)
+  elements.push(
+    new Paragraph({
+      children: [
+        new TextRun({ text: `${stats.compliance}%`, bold: true, size: 72, color: COLORS.navy }),
+        new TextRun({ text: ' OVERALL', size: 36, color: COLORS.gray }),
       ],
       alignment: AlignmentType.CENTER,
       spacing: { after: 200 },
     })
   );
   
-  if (data.inspection.subsectionName) {
-    elements.push(
-      new Paragraph({
+  // Section Breakdown title
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'Section Breakdown', bold: true, size: 32, color: COLORS.navy })],
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 200 },
+    })
+  );
+  
+  // Section breakdown table
+  if (stats.sectionStats.length > 0) {
+    const headerRow = new TableRow({
+      children: ['Section', 'Items', 'Pass', 'Fail', 'Photos', 'Score'].map((text, idx) =>
+        new TableCell({
+          children: [new Paragraph({ children: [new TextRun({ text, bold: true, size: 18, color: COLORS.white })], alignment: AlignmentType.CENTER })],
+          shading: { fill: COLORS.navy, type: ShadingType.SOLID },
+          width: { size: idx === 0 ? 40 : 12, type: WidthType.PERCENTAGE },
+          borders: thinBorder,
+        })
+      ),
+    });
+    
+    const dataRows = stats.sectionStats.map((section) =>
+      new TableRow({
         children: [
-          new TextRun({
-            text: data.inspection.subsectionName,
-            size: 32,
-            color: '4a5568',
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: section.name, size: 18 })] })],
+            borders: thinBorder,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: String(section.items), size: 18 })], alignment: AlignmentType.CENTER })],
+            borders: thinBorder,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: String(section.pass), size: 18, color: COLORS.green })], alignment: AlignmentType.CENTER })],
+            borders: thinBorder,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: String(section.fail), size: 18, color: COLORS.red })], alignment: AlignmentType.CENTER })],
+            borders: thinBorder,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: String(section.photos), size: 18 })], alignment: AlignmentType.CENTER })],
+            borders: thinBorder,
+          }),
+          new TableCell({
+            children: [new Paragraph({ children: [new TextRun({ text: `${section.score}%`, size: 18, bold: true })], alignment: AlignmentType.CENTER })],
+            borders: thinBorder,
           }),
         ],
-        alignment: AlignmentType.CENTER,
-        spacing: { after: 400 },
+      })
+    );
+    
+    elements.push(
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        rows: [headerRow, ...dataRows],
       })
     );
   }
   
-  // Details table
-  const detailRows: [string, string][] = [
-    ['Site', data.siteName || 'N/A'],
-    ['Client', data.clientName || 'N/A'],
-    ['Template', data.inspection.templateName || 'N/A'],
-    ['Inspector', data.inspection.inspectorName || 'N/A'],
-    ['Date', data.inspection.inspectionDate || new Date().toLocaleDateString()],
-    ['Status', data.inspection.status || 'Pending'],
-  ];
+  // General Information section
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'GENERAL INFORMATION', bold: true, size: 28, color: COLORS.navy })],
+      spacing: { before: 400, after: 200 },
+    })
+  );
   
-  if (data.inspection.qualityRating) {
-    detailRows.push(['Quality Rating', `${data.inspection.qualityRating}%`]);
-  }
+  const generalInfo = [
+    ['Site Name', data.siteName],
+    ['Subsection', data.inspection.subsectionName || 'N/A'],
+    ['Client', data.clientName || 'N/A'],
+    ['Inspection Date', formatDate(data.inspection.inspectionDate)],
+    ['Inspector', data.inspection.inspectorName || 'N/A'],
+    ['Template', data.inspection.templateName || 'N/A'],
+  ];
   
   elements.push(
     new Table({
       width: { size: 100, type: WidthType.PERCENTAGE },
-      rows: detailRows.map(([label, value]) =>
+      rows: generalInfo.map(([label, value]) =>
         new TableRow({
           children: [
             new TableCell({
-              children: [new Paragraph({ children: [new TextRun({ text: label, bold: true })] })],
+              children: [new Paragraph({ children: [new TextRun({ text: label, bold: true, size: 20 })] })],
               width: { size: 30, type: WidthType.PERCENTAGE },
               shading: { fill: 'f7fafc', type: ShadingType.SOLID },
-              verticalAlign: VerticalAlign.CENTER,
+              borders: thinBorder,
             }),
             new TableCell({
-              children: [new Paragraph({ text: value })],
-              width: { size: 70, type: WidthType.PERCENTAGE },
-              verticalAlign: VerticalAlign.CENTER,
+              children: [new Paragraph({ children: [new TextRun({ text: value || 'N/A', size: 20 })] })],
+              borders: thinBorder,
             }),
           ],
         })
@@ -392,7 +705,7 @@ function buildCoverPage(
   return elements;
 }
 
-function buildSections(
+function buildInspectionSections(
   sections: InspectionSection[] | undefined,
   imageCache: ImageCache
 ): (Paragraph | Table)[] {
@@ -400,43 +713,149 @@ function buildSections(
   
   const elements: (Paragraph | Table)[] = [];
   
-  elements.push(createHeading('Inspection Details', HeadingLevel.HEADING_1));
-  
-  for (const section of sections) {
-    elements.push(createHeading(section.title, HeadingLevel.HEADING_2));
+  sections.forEach((section, sectionIndex) => {
+    // Section header with number (e.g., "1 NORMAL BOARD STATE IMAGES")
+    elements.push(
+      new Paragraph({
+        children: [new TextRun({ text: `${sectionIndex + 1}  ${section.title.toUpperCase()}`, bold: true, size: 28, color: COLORS.navy })],
+        spacing: { before: 300, after: 200 },
+      })
+    );
     
+    // Group items, each with status badge and photos
     for (const item of section.items) {
-      const valueText = typeof item.value === 'boolean' 
-        ? (item.value ? '✓ Yes' : '✗ No')
-        : String(item.value || 'N/A');
+      const status = getStatusBadge(item.value);
       
-      elements.push(createLabelValue(item.label, valueText));
+      // Item row: Label with PASS/FAIL badge
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: thinBorder,
+          rows: [
+            new TableRow({
+              children: [
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: item.label, bold: true, size: 20 })] })],
+                  width: { size: 70, type: WidthType.PERCENTAGE },
+                  borders: thinBorder,
+                  shading: { fill: 'f7fafc', type: ShadingType.SOLID },
+                }),
+                new TableCell({
+                  children: [new Paragraph({ children: [new TextRun({ text: status.text, bold: true, size: 20, color: status.color })], alignment: AlignmentType.CENTER })],
+                  width: { size: 30, type: WidthType.PERCENTAGE },
+                  borders: thinBorder,
+                }),
+              ],
+            }),
+          ],
+        })
+      );
       
+      // Notes if present
       if (item.notes) {
         elements.push(
           new Paragraph({
-            children: [
-              new TextRun({ text: 'Notes: ', italics: true, color: '718096' }),
-              new TextRun({ text: item.notes, italics: true, color: '718096' }),
-            ],
-            spacing: { after: 100 },
+            children: [new TextRun({ text: item.notes, size: 18, italics: true, color: COLORS.gray })],
+            spacing: { before: 50, after: 100 },
           })
         );
       }
       
-      // Photos from cache
+      // Photos with "Photo 1", "Photo 2" labels
       if (item.photos && item.photos.length > 0) {
-        for (const photoUrl of item.photos.slice(0, 4)) {
+        const photoCells: TableCell[] = [];
+        
+        for (let i = 0; i < Math.min(item.photos.length, 2); i++) {
+          const photoUrl = item.photos[i];
           const buffer = imageCache.get(photoUrl);
+          
           if (buffer) {
-            elements.push(createImageParagraph(buffer, 300, 225));
+            photoCells.push(
+              new TableCell({
+                children: [
+                  new Paragraph({
+                    children: [new ImageRun({ data: buffer, transformation: { width: 220, height: 165 } })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                  new Paragraph({
+                    children: [new TextRun({ text: `Photo ${i + 1}`, size: 16, color: COLORS.gray })],
+                    alignment: AlignmentType.CENTER,
+                  }),
+                ],
+                borders: noBorder,
+                width: { size: 50, type: WidthType.PERCENTAGE },
+              })
+            );
+          }
+        }
+        
+        if (photoCells.length > 0) {
+          // Add empty cell if only one photo
+          if (photoCells.length === 1) {
+            photoCells.push(new TableCell({ children: [new Paragraph({})], borders: noBorder }));
+          }
+          
+          elements.push(
+            new Table({
+              width: { size: 100, type: WidthType.PERCENTAGE },
+              borders: noBorder,
+              rows: [new TableRow({ children: photoCells })],
+            })
+          );
+        }
+        
+        // Handle additional photos (3, 4, etc.) in next row
+        if (item.photos.length > 2) {
+          const morePhotoCells: TableCell[] = [];
+          
+          for (let i = 2; i < Math.min(item.photos.length, 4); i++) {
+            const photoUrl = item.photos[i];
+            const buffer = imageCache.get(photoUrl);
+            
+            if (buffer) {
+              morePhotoCells.push(
+                new TableCell({
+                  children: [
+                    new Paragraph({
+                      children: [new ImageRun({ data: buffer, transformation: { width: 220, height: 165 } })],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                    new Paragraph({
+                      children: [new TextRun({ text: `Photo ${i + 1}`, size: 16, color: COLORS.gray })],
+                      alignment: AlignmentType.CENTER,
+                    }),
+                  ],
+                  borders: noBorder,
+                  width: { size: 50, type: WidthType.PERCENTAGE },
+                })
+              );
+            }
+          }
+          
+          if (morePhotoCells.length > 0) {
+            if (morePhotoCells.length === 1) {
+              morePhotoCells.push(new TableCell({ children: [new Paragraph({})], borders: noBorder }));
+            }
+            
+            elements.push(
+              new Table({
+                width: { size: 100, type: WidthType.PERCENTAGE },
+                borders: noBorder,
+                rows: [new TableRow({ children: morePhotoCells })],
+              })
+            );
           }
         }
       }
+      
+      elements.push(new Paragraph({ spacing: { after: 150 } }));
     }
     
-    elements.push(new Paragraph({ spacing: { after: 200 } }));
-  }
+    // Page break after each section (except last)
+    if (sectionIndex < sections.length - 1) {
+      elements.push(new Paragraph({ children: [new PageBreak()] }));
+    }
+  });
   
   return elements;
 }
@@ -450,25 +869,75 @@ function buildTenantSection(
   const elements: (Paragraph | Table)[] = [];
   
   elements.push(new Paragraph({ children: [new PageBreak()] }));
-  elements.push(createHeading('Tenant Verification', HeadingLevel.HEADING_1));
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'TENANT VERIFICATION', bold: true, size: 32, color: COLORS.navy })],
+      spacing: { after: 200 },
+    })
+  );
   
   for (const tenant of tenants) {
-    elements.push(createHeading(tenant.shopName, HeadingLevel.HEADING_2));
+    elements.push(
+      new Paragraph({
+        children: [new TextRun({ text: tenant.shopName, bold: true, size: 24, color: COLORS.darkBlue })],
+        spacing: { before: 200, after: 100 },
+      })
+    );
     
-    if (tenant.shopNumber) elements.push(createLabelValue('Shop Number', tenant.shopNumber));
-    if (tenant.meterSerialNumber) elements.push(createLabelValue('Meter Serial', tenant.meterSerialNumber));
-    if (tenant.breakerSize) elements.push(createLabelValue('Breaker Size', tenant.breakerSize));
-    if (tenant.ctSizeAndRatio) elements.push(createLabelValue('CT Ratio', tenant.ctSizeAndRatio));
+    const infoItems = [
+      ['Shop Number', tenant.shopNumber],
+      ['Meter Serial', tenant.meterSerialNumber],
+      ['Breaker Size', tenant.breakerSize],
+      ['CT Ratio', tenant.ctSizeAndRatio],
+    ].filter(([, val]) => val);
     
-    const imageUrls = [tenant.meterImage, tenant.breakerImage, tenant.ctRatioImage].filter(Boolean) as string[];
-    for (const url of imageUrls) {
-      const buffer = imageCache.get(url);
-      if (buffer) {
-        elements.push(createImageParagraph(buffer, 200, 150));
-      }
+    for (const [label, value] of infoItems) {
+      elements.push(
+        new Paragraph({
+          children: [
+            new TextRun({ text: `${label}: `, bold: true, size: 18 }),
+            new TextRun({ text: String(value), size: 18 }),
+          ],
+        })
+      );
     }
     
-    elements.push(new Paragraph({ spacing: { after: 200 } }));
+    // Tenant images in a row
+    const tenantImages = [
+      { url: tenant.meterImage, label: 'Meter' },
+      { url: tenant.breakerImage, label: 'Breaker' },
+      { url: tenant.ctRatioImage, label: 'CT Ratio' },
+    ].filter(img => img.url);
+    
+    if (tenantImages.length > 0) {
+      const cells = tenantImages.map(img => {
+        const buffer = imageCache.get(img.url!);
+        if (buffer) {
+          return new TableCell({
+            children: [
+              new Paragraph({
+                children: [new ImageRun({ data: buffer, transformation: { width: 150, height: 112 } })],
+                alignment: AlignmentType.CENTER,
+              }),
+              new Paragraph({
+                children: [new TextRun({ text: img.label, size: 16, color: COLORS.gray })],
+                alignment: AlignmentType.CENTER,
+              }),
+            ],
+            borders: noBorder,
+          });
+        }
+        return new TableCell({ children: [new Paragraph({})], borders: noBorder });
+      });
+      
+      elements.push(
+        new Table({
+          width: { size: 100, type: WidthType.PERCENTAGE },
+          borders: noBorder,
+          rows: [new TableRow({ children: cells })],
+        })
+      );
+    }
   }
   
   return elements;
@@ -483,42 +952,64 @@ function buildSnagSection(
   const elements: (Paragraph | Table)[] = [];
   
   elements.push(new Paragraph({ children: [new PageBreak()] }));
-  elements.push(createHeading('Issues / Snags', HeadingLevel.HEADING_1));
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'OBSERVATIONS & ISSUES', bold: true, size: 32, color: COLORS.navy })],
+      spacing: { after: 200 },
+    })
+  );
   
   for (const snag of snags) {
-    const statusColor = snag.status === 'resolved' ? '48bb78' 
-                      : snag.status === 'in_progress' ? 'ed8936' 
-                      : 'e53e3e';
+    const statusColor = snag.status === 'resolved' ? COLORS.green
+      : snag.status === 'in_progress' ? COLORS.orange
+      : COLORS.red;
     
     elements.push(
-      new Paragraph({
-        children: [
-          new TextRun({ text: snag.title, bold: true, size: 24 }),
-          new TextRun({ text: '  ' }),
-          new TextRun({ text: `[${snag.status.toUpperCase()}]`, color: statusColor, bold: true }),
+      new Table({
+        width: { size: 100, type: WidthType.PERCENTAGE },
+        borders: thinBorder,
+        rows: [
+          new TableRow({
+            children: [
+              new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: snag.title, bold: true, size: 20 })] })],
+                width: { size: 70, type: WidthType.PERCENTAGE },
+                borders: thinBorder,
+              }),
+              new TableCell({
+                children: [new Paragraph({ children: [new TextRun({ text: snag.status.toUpperCase(), bold: true, size: 18, color: statusColor })], alignment: AlignmentType.CENTER })],
+                borders: thinBorder,
+              }),
+            ],
+          }),
         ],
-        spacing: { after: 100 },
       })
     );
     
     if (snag.description) {
-      elements.push(new Paragraph({ text: snag.description, spacing: { after: 100 } }));
-    }
-    
-    if (snag.riskLevel) {
-      elements.push(createLabelValue('Risk Level', snag.riskLevel));
+      elements.push(
+        new Paragraph({
+          children: [new TextRun({ text: snag.description, size: 18 })],
+          spacing: { before: 50, after: 100 },
+        })
+      );
     }
     
     if (snag.photos && snag.photos.length > 0) {
       for (const photoUrl of snag.photos.slice(0, 2)) {
         const buffer = imageCache.get(photoUrl);
         if (buffer) {
-          elements.push(createImageParagraph(buffer, 250, 187));
+          elements.push(
+            new Paragraph({
+              children: [new ImageRun({ data: buffer, transformation: { width: 250, height: 187 } })],
+              spacing: { before: 100, after: 100 },
+            })
+          );
         }
       }
     }
     
-    elements.push(new Paragraph({ spacing: { after: 200 } }));
+    elements.push(new Paragraph({ spacing: { after: 150 } }));
   }
   
   return elements;
@@ -533,26 +1024,28 @@ function buildSignatureSection(
   const elements: (Paragraph | Table)[] = [];
   
   elements.push(new Paragraph({ children: [new PageBreak()] }));
-  elements.push(createHeading('Signatures', HeadingLevel.HEADING_1));
+  elements.push(
+    new Paragraph({
+      children: [new TextRun({ text: 'SIGNATURES', bold: true, size: 32, color: COLORS.navy })],
+      spacing: { after: 200 },
+    })
+  );
   
   for (const sig of signatures) {
     elements.push(
       new Paragraph({
         children: [
-          new TextRun({ text: sig.name, bold: true }),
-          sig.role ? new TextRun({ text: ` (${sig.role})`, italics: true }) : new TextRun({ text: '' }),
+          new TextRun({ text: sig.name, bold: true, size: 20 }),
+          sig.role ? new TextRun({ text: ` (${sig.role})`, size: 18, italics: true, color: COLORS.gray }) : new TextRun({}),
         ],
-        spacing: { after: 100 },
+        spacing: { after: 50 },
       })
     );
     
     if (sig.signedAt) {
       elements.push(
         new Paragraph({
-          children: [
-            new TextRun({ text: 'Signed: ', color: '718096' }),
-            new TextRun({ text: new Date(sig.signedAt).toLocaleString(), color: '718096' }),
-          ],
+          children: [new TextRun({ text: `Signed: ${new Date(sig.signedAt).toLocaleString()}`, size: 16, color: COLORS.gray })],
           spacing: { after: 100 },
         })
       );
@@ -561,7 +1054,12 @@ function buildSignatureSection(
     if (sig.signatureUrl) {
       const buffer = imageCache.get(sig.signatureUrl);
       if (buffer) {
-        elements.push(createImageParagraph(buffer, 200, 80));
+        elements.push(
+          new Paragraph({
+            children: [new ImageRun({ data: buffer, transformation: { width: 200, height: 80 } })],
+            spacing: { after: 200 },
+          })
+        );
       }
     }
   }
@@ -591,22 +1089,29 @@ Deno.serve(async (req: Request) => {
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, serviceRoleKey);
     
-    // Phase 1: Collect and preload ALL images in parallel
+    // Phase 1: Preload all images
     const allImageUrls = collectAllImageUrls(payload);
     console.log(`[DOCX] Total images to download: ${allImageUrls.length}`);
-    
     const imageCache = await preloadAllImages(supabase, supabaseUrl, allImageUrls);
     
-    // Phase 2: Build document (no async, uses cached images)
-    console.log('[DOCX] Building document...');
+    // Phase 2: Calculate stats
+    const stats = calculateStats(inspection.sections);
+    console.log(`[DOCX] Stats - Compliance: ${stats.compliance}%, Items: ${stats.totalItems}, Photos: ${stats.totalPhotos}`);
+    
+    // Phase 3: Build document sections
     const coverPage = buildCoverPage(payload, imageCache);
-    const sections = buildSections(inspection.sections, imageCache);
+    const dashboard = buildQualityScoreDashboard(stats);
+    const breakdown = buildSectionBreakdownPage(payload, stats);
+    const sections = buildInspectionSections(inspection.sections, imageCache);
     const tenants = buildTenantSection(inspection.tenants, imageCache);
     const snags = buildSnagSection(inspection.snags, imageCache);
     const signatures = buildSignatureSection(inspection.signatures, imageCache);
     
+    const templateName = inspection.templateName || 'Electrical Inspection Report';
+    const currentDate = new Date().toLocaleDateString('en-GB');
+    
     const doc = new Document({
-      title: `Inspection Report - ${inspection.subsectionName || siteName}`,
+      title: `${templateName} - ${inspection.subsectionName || siteName}`,
       description: `Generated on ${new Date().toISOString()}`,
       creator: 'WM Compliance System',
       sections: [{
@@ -615,7 +1120,7 @@ Deno.serve(async (req: Request) => {
             margin: {
               top: convertInchesToTwip(0.75),
               right: convertInchesToTwip(0.75),
-              bottom: convertInchesToTwip(0.75),
+              bottom: convertInchesToTwip(1),
               left: convertInchesToTwip(0.75),
             },
           },
@@ -624,10 +1129,8 @@ Deno.serve(async (req: Request) => {
           default: new Header({
             children: [
               new Paragraph({
-                children: [
-                  new TextRun({ text: siteName || 'Inspection Report', size: 18, color: '718096' }),
-                ],
-                alignment: AlignmentType.RIGHT,
+                children: [new TextRun({ text: templateName, size: 18, color: COLORS.gray })],
+                alignment: AlignmentType.LEFT,
               }),
             ],
           }),
@@ -637,19 +1140,27 @@ Deno.serve(async (req: Request) => {
             children: [
               new Paragraph({
                 children: [
-                  new TextRun({ text: 'Generated by WM Compliance | ', size: 16, color: '718096' }),
-                  new TextRun({ text: `Page `, size: 16, color: '718096' }),
-                  new TextRun({ children: [PageNumber.CURRENT], size: 16, color: '718096' }),
-                  new TextRun({ text: ' of ', size: 16, color: '718096' }),
-                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, color: '718096' }),
+                  new TextRun({ text: 'CONFIDENTIAL - For authorized use only', size: 16, color: COLORS.gray }),
                 ],
-                alignment: AlignmentType.CENTER,
+                alignment: AlignmentType.LEFT,
+              }),
+              new Paragraph({
+                children: [
+                  new TextRun({ text: 'Page ', size: 16, color: COLORS.gray }),
+                  new TextRun({ children: [PageNumber.CURRENT], size: 16, color: COLORS.gray }),
+                  new TextRun({ text: ' of ', size: 16, color: COLORS.gray }),
+                  new TextRun({ children: [PageNumber.TOTAL_PAGES], size: 16, color: COLORS.gray }),
+                  new TextRun({ text: `    ${currentDate}`, size: 16, color: COLORS.gray }),
+                ],
+                alignment: AlignmentType.RIGHT,
               }),
             ],
           }),
         },
         children: [
           ...coverPage,
+          ...dashboard,
+          ...breakdown,
           ...sections,
           ...tenants,
           ...snags,
