@@ -110,35 +110,34 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
   return data.access_token;
 }
 
-// Create a new Google Doc
+// Create a new Google Doc using Drive API (service accounts have better permission here)
 async function createGoogleDoc(accessToken: string, title: string): Promise<string> {
-  console.log('Attempting to create Google Doc with title:', title);
-  console.log('Using access token (first 20 chars):', accessToken.substring(0, 20) + '...');
+  console.log('Attempting to create Google Doc via Drive API with title:', title);
   
-  const response = await fetch(GOOGLE_DOCS_API, {
+  // Use Drive API to create a Google Doc (more reliable for service accounts)
+  const response = await fetch(GOOGLE_DRIVE_API, {
     method: 'POST',
     headers: {
       'Authorization': `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ title }),
+    body: JSON.stringify({
+      name: title,
+      mimeType: 'application/vnd.google-apps.document',
+    }),
   });
 
-  console.log('Google Docs API response status:', response.status);
+  console.log('Google Drive API response status:', response.status);
   
   if (!response.ok) {
     const error = await response.text();
-    console.error('Google Docs API error response:', error);
-    console.error('This usually means:');
-    console.error('1. Google Docs API is not enabled in Google Cloud Console');
-    console.error('2. Service account does not have permission to create documents');
-    console.error('3. The access token scope does not include docs permissions');
+    console.error('Google Drive API error response:', error);
     throw new Error(`Failed to create doc: ${error}`);
   }
 
-  const doc = await response.json();
-  console.log('Created Google Doc:', doc.documentId);
-  return doc.documentId;
+  const file = await response.json();
+  console.log('Created Google Doc via Drive:', file.id);
+  return file.id;
 }
 
 // Upload image to Google Drive and get inline object ID
