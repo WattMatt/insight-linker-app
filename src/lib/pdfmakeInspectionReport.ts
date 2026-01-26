@@ -482,7 +482,16 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
     italics: true,
     color: REPORT_COLORS.textSecondary,
     alignment: 'center',
-    margin: [0, 0, 0, 30],
+    margin: [0, 0, 0, 8],
+  });
+
+  // Confidential notice below SANS text (matching reference)
+  content.push({
+    text: 'CONFIDENTIAL - For authorized use only',
+    fontSize: 9,
+    color: REPORT_COLORS.textMuted,
+    alignment: 'center',
+    margin: [0, 0, 0, 40],
   });
 
   // 2x2 KPI grid - Items Passed, Items Failed, Pending Review, Photos Captured
@@ -560,7 +569,7 @@ function createSectionBreakdownPage(
     : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
     : REPORT_COLORS.error;
 
-  // Circle and percentage - centered design matching reference
+  // Circle with percentage and OVERALL label INSIDE - matching reference exactly
   content.push({
     columns: [
       {
@@ -568,18 +577,26 @@ function createSectionBreakdownPage(
         stack: [
           {
             canvas: [
-              // White filled center with colored ring
-              { type: 'ellipse', x: 75, y: 75, r1: 65, r2: 65, color: '#ffffff' },
+              // Colored ring circle
               { type: 'ellipse', x: 75, y: 75, r1: 65, r2: 65, lineWidth: 12, lineColor: scoreColor },
             ],
           },
+          // Percentage text centered inside circle
           {
             text: `${stats.passPercentage}%`,
-            fontSize: 38,
+            fontSize: 42,
             bold: true,
             color: scoreColor,
             alignment: 'center',
-            relativePosition: { x: 0, y: -95 },
+            relativePosition: { x: 0, y: -100 },
+          },
+          // OVERALL label inside circle, below percentage
+          {
+            text: 'OVERALL',
+            fontSize: 10,
+            color: REPORT_COLORS.textMuted,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -55 },
           },
         ],
         alignment: 'center',
@@ -589,16 +606,7 @@ function createSectionBreakdownPage(
         text: '',
       },
     ],
-    margin: [0, 20, 0, 10],
-  });
-
-  // OVERALL label below circle
-  content.push({
-    text: 'OVERALL',
-    fontSize: 11,
-    bold: true,
-    color: REPORT_COLORS.textMuted,
-    margin: [60, 0, 0, 30],
+    margin: [0, 20, 0, 25],
   });
 
   // Section Breakdown header - bold with underline
@@ -661,26 +669,47 @@ function createSectionBreakdownPage(
     });
   }
 
-  // General Information section header - simple bold text style matching reference
+  // General Information section header - TEAL BANNER matching Quality Score Dashboard
   content.push({
-    text: 'GENERAL INFORMATION',
-    fontSize: 13,
-    bold: true,
-    color: REPORT_COLORS.primary,
-    margin: [0, 10, 0, 12],
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'GENERAL INFORMATION',
+        fontSize: 12,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [0, 8, 0, 8],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.secondary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => 12,
+    },
+    margin: [0, 15, 0, 12],
   });
 
-  // General info - simple label: value rows matching reference document style
-  const infoItems: Array<{ label: string; value: string }> = [];
+  // General info - table with bordered rows matching reference
+  const infoRows: Content[][] = [];
   
-  infoItems.push({ label: 'Site Name:', value: siteName });
+  infoRows.push([
+    { text: 'Site Name', fontSize: 10, color: REPORT_COLORS.textSecondary },
+    { text: siteName, fontSize: 10, bold: true, color: REPORT_COLORS.textPrimary },
+  ]);
 
   if (inspection.subsectionName) {
-    infoItems.push({ label: 'Subsection:', value: inspection.subsectionName });
+    infoRows.push([
+      { text: 'Subsection', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.subsectionName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
   }
 
   if (clientName) {
-    infoItems.push({ label: 'Client:', value: clientName });
+    infoRows.push([
+      { text: 'Client', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: clientName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
   }
 
   if (inspection.inspectionDate) {
@@ -690,26 +719,43 @@ function createSectionBreakdownPage(
       month: 'long',
       year: 'numeric',
     });
-    infoItems.push({ label: 'Inspection Date:', value: formattedDate });
+    infoRows.push([
+      { text: 'Inspection Date', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: formattedDate, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
   }
 
   if (inspection.inspectorName) {
-    infoItems.push({ label: 'Inspector:', value: inspection.inspectorName });
+    infoRows.push([
+      { text: 'Inspector', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.inspectorName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
   }
 
   if (inspection.templateName) {
-    infoItems.push({ label: 'Template:', value: inspection.templateName });
+    infoRows.push([
+      { text: 'Template', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.templateName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
   }
 
-  // Render each info item as simple text rows
-  infoItems.forEach(item => {
-    content.push({
-      columns: [
-        { text: item.label, width: 110, fontSize: 10, color: REPORT_COLORS.textSecondary },
-        { text: item.value, width: '*', fontSize: 10, color: REPORT_COLORS.textPrimary },
-      ],
-      margin: [0, 4, 0, 4],
-    });
+  content.push({
+    table: {
+      widths: [120, '*'],
+      body: infoRows,
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: (i: number) => (i === 0 || i === 2) ? 0.5 : 0,
+      hLineColor: () => REPORT_COLORS.border,
+      vLineColor: () => REPORT_COLORS.border,
+      paddingTop: () => 10,
+      paddingBottom: () => 10,
+      paddingLeft: () => 12,
+      paddingRight: () => 12,
+      fillColor: (rowIndex: number) => rowIndex % 2 === 0 ? REPORT_COLORS.lightBg : null,
+    },
+    margin: [0, 0, 0, 20],
   });
 
   return content;
