@@ -469,7 +469,7 @@ function createEngineeringCoverPage(
     italics: true,
     color: REPORT_COLORS.textMuted,
     alignment: 'center',
-    margin: [0, 20, 0, 5],
+    margin: [0, 10, 0, 5],
   });
 
   // Confidentiality notice
@@ -478,22 +478,10 @@ function createEngineeringCoverPage(
     fontSize: 8,
     color: REPORT_COLORS.textMuted,
     alignment: 'center',
-    margin: [0, 5, 0, 0],
+    margin: [0, 3, 0, 0],
   });
 
-  // Bottom accent bar
-  content.push({
-    canvas: [{
-      type: 'rect',
-      x: 0,
-      y: 0,
-      w: 595,
-      h: 15,
-      color: REPORT_COLORS.primary,
-    }],
-    absolutePosition: { x: 0, y: 827 },
-  });
-
+  // Page break after cover (TOC is now removed as separate page)
   content.push({ text: '', pageBreak: 'after' });
 
   return content;
@@ -1632,34 +1620,31 @@ export async function generateInspectionReportPdf(
     // Build document content
     const content: Content[] = [];
 
-    // 1. Cover Page
+    // 1. Cover Page (TOC removed - cover page now contains all summary info)
     content.push(...createEngineeringCoverPage(inspection, siteName, clientName, logoDataUrl, accentColor));
 
-    // 2. Table of Contents
-    content.push(...createTableOfContents(inspection, stats));
-
-    // 3. Quality Score Dashboard
+    // 2. Quality Score Dashboard (now page 2, directly after cover)
     content.push(...createQualityDashboard(stats, inspection.qualityRating));
 
-    // 4. General Information
+    // 3. General Information
     content.push(...createGeneralInfoSection(inspection, siteName, clientName));
 
-    // 5. Inspection Sections with Photo Grids
+    // 4. Inspection Sections with Photo Grids
     inspection.sections?.forEach((section, idx) => {
       content.push(...createSectionWithPhotoGrid(section, imageCache, idx));
     });
 
-    // 6. Snags Section
+    // 5. Snags Section
     if (inspection.snags?.length) {
       content.push(...createSnagsSection(inspection.snags, imageCache));
     }
 
-    // 7. Tenant Verification
+    // 6. Tenant Verification
     if (inspection.tenants?.length) {
       content.push(...createTenantSection(inspection.tenants, imageCache));
     }
 
-    // 8. Signatures
+    // 7. Signatures
     if (inspection.signatures?.length) {
       content.push(...createSignaturesSection(inspection.signatures, imageCache));
     }
