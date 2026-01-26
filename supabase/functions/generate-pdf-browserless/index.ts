@@ -609,9 +609,9 @@ Deno.serve(async (req) => {
       console.log(`[Browserless] Debug HTML saved: ${debugPath}`);
     }
 
-    // Call Browserless PDF API with increased timeout for image loading
+    // Call Browserless PDF API with max timeout (60 seconds) for image loading
     // Using networkidle2 (allow 2 connections) instead of networkidle0 for faster completion
-    const browserlessUrl = `https://chrome.browserless.io/pdf?token=${BROWSERLESS_API_KEY}&timeout=120000`;
+    const browserlessUrl = `https://chrome.browserless.io/pdf?token=${BROWSERLESS_API_KEY}&timeout=60`;
     
     const pdfResponse = await fetch(browserlessUrl, {
       method: 'POST',
