@@ -368,7 +368,7 @@ function buildDocDefinition(
     stack: [
       logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE ? {
         image: logoDataUri,
-        width: 180,
+        fit: [75, 100],
         alignment: 'center',
         margin: [0, 30, 0, 25],
       } : { text: '', margin: [0, 60, 0, 0] },
