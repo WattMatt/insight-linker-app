@@ -899,7 +899,7 @@ function createGeneralInfoSection(
 }
 
 // ============================================================================
-// SECTION WITH PHOTO GRID
+// SECTION WITH PHOTO GRID - KEEPS HEADERS WITH CONTENT
 // ============================================================================
 
 function createSectionWithPhotoGrid(
@@ -908,9 +908,10 @@ function createSectionWithPhotoGrid(
   sectionIndex: number
 ): Content[] {
   const content: Content[] = [];
+  const items = section.items || [];
 
-  // Section header with number
-  content.push({
+  // Build section header
+  const sectionHeader = {
     table: {
       widths: ['auto', '*'],
       body: [[
@@ -938,156 +939,203 @@ function createSectionWithPhotoGrid(
         colIndex === 0 ? REPORT_COLORS.primary : REPORT_COLORS.secondary,
     },
     margin: [0, 15, 0, 12],
-  });
+  };
 
-  const items = section.items || [];
-  
-  // Process items - group photos for grid layout
-  items.forEach((item, itemIdx) => {
-    const statusText = typeof item.value === 'boolean'
-      ? (item.value ? 'Pass' : 'Fail')
-      : String(item.value || 'N/A');
-    
-    const statusColor = getStatusColor(statusText);
-    const statusBg = isPassStatus(statusText) ? '#f0fdf4' 
-      : isFailStatus(statusText) ? '#fef2f2' 
-      : '#fffbeb';
-
-    // Item row with status badge
-    content.push({
-      table: {
-        widths: ['*', 80],
-        body: [[
-          {
-            text: item.label,
-            fontSize: 11,
-            bold: true,
-            color: REPORT_COLORS.textPrimary,
-            margin: [0, 0, 0, 0],
-          },
-          {
-            table: {
-              widths: ['*'],
-              body: [[{
-                text: statusText.toUpperCase(),
-                fontSize: 8,
-                bold: true,
-                color: statusColor,
-                alignment: 'center',
-                margin: [0, 3, 0, 3],
-              }]],
-            },
-            layout: {
-              fillColor: () => statusBg,
-              hLineWidth: () => 0,
-              vLineWidth: () => 0,
-            },
-          },
-        ]],
-      },
-      layout: 'noBorders',
-      margin: [0, itemIdx > 0 ? 12 : 0, 0, 4],
-    });
-
-    // Notes if present
-    if (item.notes) {
-      content.push({
-        text: item.notes,
-        fontSize: 9,
-        italics: true,
-        color: REPORT_COLORS.textSecondary,
-        margin: [0, 0, 0, 6],
-      });
-    }
-
-    // Photos in grid layout (2 columns)
-    const photos = item.photos?.filter(Boolean) || [];
-    if (photos.length > 0) {
-      const photoRows: Content[][] = [];
-      
-      for (let i = 0; i < photos.length; i += 2) {
-        const rowPhotos: Content[] = [];
-        
-        // First photo
-        const photo1 = imageCache.get(photos[i]);
-        if (photo1) {
-          rowPhotos.push({
-            stack: [
-              {
-                image: photo1,
-                fit: [230, 180],
-                alignment: 'center',
-              },
-              {
-                text: `Image ${i + 1}`,
-                fontSize: 7,
-                color: REPORT_COLORS.textMuted,
-                alignment: 'center',
-                margin: [0, 3, 0, 0],
-              },
-            ],
-            margin: [0, 0, 5, 0],
-          });
-        }
-        
-        // Second photo (if exists)
-        if (i + 1 < photos.length) {
-          const photo2 = imageCache.get(photos[i + 1]);
-          if (photo2) {
-            rowPhotos.push({
-              stack: [
-                {
-                  image: photo2,
-                  fit: [230, 180],
-                  alignment: 'center',
-                },
-                {
-                  text: `Image ${i + 2}`,
-                  fontSize: 7,
-                  color: REPORT_COLORS.textMuted,
-                  alignment: 'center',
-                  margin: [0, 3, 0, 0],
-                },
-              ],
-              margin: [5, 0, 0, 0],
-            });
-          }
-        } else {
-          rowPhotos.push({ text: '' }); // Empty cell
-        }
-        
-        photoRows.push(rowPhotos);
-      }
-
-      if (photoRows.length > 0) {
-        content.push({
-          table: {
-            widths: ['*', '*'],
-            body: photoRows,
-          },
-          layout: 'noBorders',
-          margin: [0, 5, 0, 10],
-        });
-      }
-    }
-  });
-
-  // Handle empty sections
+  // Handle empty sections - keep header with "no items" message
   if (items.length === 0) {
     content.push({
-      text: 'No items recorded for this section',
-      fontSize: 10,
-      italics: true,
-      color: REPORT_COLORS.textMuted,
-      margin: [0, 10, 0, 20],
+      unbreakable: true,
+      stack: [
+        sectionHeader,
+        {
+          text: 'No items recorded for this section',
+          fontSize: 10,
+          italics: true,
+          color: REPORT_COLORS.textMuted,
+          margin: [0, 10, 0, 20],
+        },
+      ],
+    });
+    return content;
+  }
+
+  // Build first item content to bind with header
+  const firstItem = items[0];
+  const firstItemContent = createInspectionItemContent(firstItem, 0, imageCache);
+
+  // Create unbreakable block with header + first item (prevents orphaned headers)
+  content.push({
+    unbreakable: true,
+    stack: [
+      sectionHeader,
+      firstItemContent,
+    ],
+  });
+
+  // Process remaining items - each as its own unbreakable block
+  for (let i = 1; i < items.length; i++) {
+    const item = items[i];
+    const itemContent = createInspectionItemContent(item, i, imageCache);
+    
+    content.push({
+      unbreakable: true,
+      stack: [itemContent],
     });
   }
 
   return content;
 }
 
+/**
+ * Creates content for a single inspection item with its photos
+ * Returns a stack that can be wrapped in unbreakable
+ */
+function createInspectionItemContent(
+  item: InspectionSection['items'][0],
+  itemIndex: number,
+  imageCache: Map<string, string>
+): Content {
+  const itemStack: Content[] = [];
+
+  const statusText = typeof item.value === 'boolean'
+    ? (item.value ? 'Pass' : 'Fail')
+    : String(item.value || 'N/A');
+  
+  const statusColor = getStatusColor(statusText);
+  const statusBg = isPassStatus(statusText) ? '#f0fdf4' 
+    : isFailStatus(statusText) ? '#fef2f2' 
+    : '#fffbeb';
+
+  // Item header row with status badge
+  itemStack.push({
+    table: {
+      widths: ['*', 80],
+      body: [[
+        {
+          text: item.label,
+          fontSize: 11,
+          bold: true,
+          color: REPORT_COLORS.textPrimary,
+          margin: [0, 0, 0, 0],
+        },
+        {
+          table: {
+            widths: ['*'],
+            body: [[{
+              text: statusText.toUpperCase(),
+              fontSize: 8,
+              bold: true,
+              color: statusColor,
+              alignment: 'center',
+              margin: [0, 3, 0, 3],
+            }]],
+          },
+          layout: {
+            fillColor: () => statusBg,
+            hLineWidth: () => 0,
+            vLineWidth: () => 0,
+          },
+        },
+      ]],
+    },
+    layout: 'noBorders',
+    margin: [0, itemIndex > 0 ? 12 : 0, 0, 4],
+  });
+
+  // Notes if present
+  if (item.notes) {
+    itemStack.push({
+      text: item.notes,
+      fontSize: 9,
+      italics: true,
+      color: REPORT_COLORS.textSecondary,
+      margin: [0, 0, 0, 6],
+    });
+  }
+
+  // Photos in grid layout (2 columns) - kept with item
+  const photos = item.photos?.filter(Boolean) || [];
+  if (photos.length > 0) {
+    const photoRows: Content[][] = [];
+    
+    for (let i = 0; i < photos.length; i += 2) {
+      const rowPhotos: Content[] = [];
+      
+      // First photo
+      const photo1 = imageCache.get(photos[i]);
+      if (photo1) {
+        rowPhotos.push({
+          stack: [
+            {
+              image: photo1,
+              fit: [230, 180],
+              alignment: 'center',
+            },
+            {
+              text: `Photo ${i + 1}`,
+              fontSize: 7,
+              color: REPORT_COLORS.textMuted,
+              alignment: 'center',
+              margin: [0, 3, 0, 0],
+            },
+          ],
+          margin: [0, 0, 5, 0],
+        });
+      } else {
+        rowPhotos.push({ text: '' });
+      }
+      
+      // Second photo (if exists)
+      if (i + 1 < photos.length) {
+        const photo2 = imageCache.get(photos[i + 1]);
+        if (photo2) {
+          rowPhotos.push({
+            stack: [
+              {
+                image: photo2,
+                fit: [230, 180],
+                alignment: 'center',
+              },
+              {
+                text: `Photo ${i + 2}`,
+                fontSize: 7,
+                color: REPORT_COLORS.textMuted,
+                alignment: 'center',
+                margin: [0, 3, 0, 0],
+              },
+            ],
+            margin: [5, 0, 0, 0],
+          });
+        } else {
+          rowPhotos.push({ text: '' });
+        }
+      } else {
+        rowPhotos.push({ text: '' }); // Empty cell for odd number of photos
+      }
+      
+      photoRows.push(rowPhotos);
+    }
+
+    if (photoRows.length > 0) {
+      itemStack.push({
+        table: {
+          widths: ['*', '*'],
+          body: photoRows,
+        },
+        layout: 'noBorders',
+        margin: [0, 5, 0, 10],
+      });
+    }
+  }
+
+  // Add bottom spacing
+  itemStack.push({ text: '', margin: [0, 0, 0, 5] });
+
+  return { stack: itemStack };
+}
+
 // ============================================================================
-// SNAGS SECTION
+// SNAGS SECTION - KEEPS EACH SNAG CARD WITH ITS PHOTOS
 // ============================================================================
 
 function createSnagsSection(
@@ -1099,7 +1147,7 @@ function createSnagsSection(
   const content: Content[] = [];
 
   // Section header
-  content.push({
+  const sectionHeader = {
     table: {
       widths: ['auto', '*'],
       body: [[
@@ -1125,117 +1173,160 @@ function createSnagsSection(
         colIndex === 0 ? REPORT_COLORS.warning : REPORT_COLORS.secondary,
     },
     margin: [0, 20, 0, 15],
+  };
+
+  // Build first snag content to bind with header
+  const firstSnagContent = createSnagCardContent(snags[0], 0, imageCache);
+
+  // Create unbreakable block with header + first snag
+  content.push({
+    unbreakable: true,
+    stack: [sectionHeader, firstSnagContent],
   });
 
-  snags.forEach((snag, idx) => {
-    const riskColor = snag.riskLevel === 'critical' || snag.riskLevel === 'high' 
-      ? REPORT_COLORS.error 
-      : snag.riskLevel === 'medium' 
-      ? REPORT_COLORS.warning 
-      : REPORT_COLORS.textMuted;
-
-    // Snag card
+  // Process remaining snags
+  for (let i = 1; i < snags.length; i++) {
+    const snagContent = createSnagCardContent(snags[i], i, imageCache);
     content.push({
-      table: {
-        widths: ['*'],
-        body: [[{
-          stack: [
-            // Header row
-            {
-              columns: [
-                {
-                  text: `${idx + 1}. ${snag.title}`,
-                  fontSize: 11,
-                  bold: true,
-                  color: REPORT_COLORS.textPrimary,
-                  width: '*',
-                },
-                snag.riskLevel ? {
-                  table: {
-                    widths: ['auto'],
-                    body: [[{
-                      text: snag.riskLevel.toUpperCase(),
-                      fontSize: 7,
-                      bold: true,
-                      color: riskColor,
-                      margin: [6, 2, 6, 2],
-                    }]],
-                  },
-                  layout: {
-                    fillColor: () => riskColor === REPORT_COLORS.error ? '#fef2f2' : '#fffbeb',
-                    hLineWidth: () => 0,
-                    vLineWidth: () => 0,
-                  },
-                  width: 'auto',
-                } : { text: '', width: 0 },
-              ],
-              margin: [0, 0, 0, 5],
-            },
-            // Status
-            {
-              text: `Status: ${snag.status}`,
-              fontSize: 9,
-              color: getStatusColor(snag.status),
-              margin: [0, 0, 0, 5],
-            },
-            // Description
-            snag.description ? {
-              text: snag.description,
-              fontSize: 9,
-              color: REPORT_COLORS.textSecondary,
-              margin: [0, 0, 0, 8],
-            } : { text: '' },
-          ],
-          margin: [10, 10, 10, 10],
-        }]],
-      },
-      layout: {
-        hLineWidth: () => 0.5,
-        vLineWidth: () => 0.5,
-        hLineColor: () => REPORT_COLORS.border,
-        vLineColor: () => REPORT_COLORS.border,
-        fillColor: () => REPORT_COLORS.lightBg,
-      },
-      margin: [0, 0, 0, 10],
+      unbreakable: true,
+      stack: [snagContent],
     });
-
-    // Snag photos (2-column grid)
-    const photos = snag.photos?.filter(Boolean) || [];
-    if (photos.length > 0) {
-      const photoRows: Content[][] = [];
-      for (let i = 0; i < photos.length; i += 2) {
-        const row: Content[] = [];
-        
-        const photo1 = imageCache.get(photos[i]);
-        if (photo1) {
-          row.push({ image: photo1, fit: [230, 160], alignment: 'center' });
-        }
-        
-        if (i + 1 < photos.length) {
-          const photo2 = imageCache.get(photos[i + 1]);
-          if (photo2) {
-            row.push({ image: photo2, fit: [230, 160], alignment: 'center' });
-          }
-        } else {
-          row.push({ text: '' });
-        }
-        
-        photoRows.push(row);
-      }
-
-      content.push({
-        table: { widths: ['*', '*'], body: photoRows },
-        layout: 'noBorders',
-        margin: [0, 0, 0, 15],
-      });
-    }
-  });
+  }
 
   return content;
 }
 
+/**
+ * Creates content for a single snag card with its photos
+ */
+function createSnagCardContent(
+  snag: InspectionSnag,
+  idx: number,
+  imageCache: Map<string, string>
+): Content {
+  const snagStack: Content[] = [];
+
+  const riskColor = snag.riskLevel === 'critical' || snag.riskLevel === 'high' 
+    ? REPORT_COLORS.error 
+    : snag.riskLevel === 'medium' 
+    ? REPORT_COLORS.warning 
+    : REPORT_COLORS.textMuted;
+
+  // Snag card
+  snagStack.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        stack: [
+          // Header row
+          {
+            columns: [
+              {
+                text: `${idx + 1}. ${snag.title}`,
+                fontSize: 11,
+                bold: true,
+                color: REPORT_COLORS.textPrimary,
+                width: '*',
+              },
+              snag.riskLevel ? {
+                table: {
+                  widths: ['auto'],
+                  body: [[{
+                    text: snag.riskLevel.toUpperCase(),
+                    fontSize: 7,
+                    bold: true,
+                    color: riskColor,
+                    margin: [6, 2, 6, 2],
+                  }]],
+                },
+                layout: {
+                  fillColor: () => riskColor === REPORT_COLORS.error ? '#fef2f2' : '#fffbeb',
+                  hLineWidth: () => 0,
+                  vLineWidth: () => 0,
+                },
+                width: 'auto',
+              } : { text: '', width: 0 },
+            ],
+            margin: [0, 0, 0, 5],
+          },
+          // Status
+          {
+            text: `Status: ${snag.status}`,
+            fontSize: 9,
+            color: getStatusColor(snag.status),
+            margin: [0, 0, 0, 5],
+          },
+          // Description
+          snag.description ? {
+            text: snag.description,
+            fontSize: 9,
+            color: REPORT_COLORS.textSecondary,
+            margin: [0, 0, 0, 8],
+          } : { text: '' },
+        ],
+        margin: [10, 10, 10, 10],
+      }]],
+    },
+    layout: {
+      hLineWidth: () => 0.5,
+      vLineWidth: () => 0.5,
+      hLineColor: () => REPORT_COLORS.border,
+      vLineColor: () => REPORT_COLORS.border,
+      fillColor: () => REPORT_COLORS.lightBg,
+    },
+    margin: [0, 0, 0, 10],
+  });
+
+  // Snag photos (2-column grid)
+  const photos = snag.photos?.filter(Boolean) || [];
+  if (photos.length > 0) {
+    const photoRows: Content[][] = [];
+    for (let i = 0; i < photos.length; i += 2) {
+      const row: Content[] = [];
+      
+      const photo1 = imageCache.get(photos[i]);
+      if (photo1) {
+        row.push({
+          stack: [
+            { image: photo1, fit: [230, 160], alignment: 'center' },
+            { text: `Photo ${i + 1}`, fontSize: 7, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+          ],
+        });
+      } else {
+        row.push({ text: '' });
+      }
+      
+      if (i + 1 < photos.length) {
+        const photo2 = imageCache.get(photos[i + 1]);
+        if (photo2) {
+          row.push({
+            stack: [
+              { image: photo2, fit: [230, 160], alignment: 'center' },
+              { text: `Photo ${i + 2}`, fontSize: 7, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            ],
+          });
+        } else {
+          row.push({ text: '' });
+        }
+      } else {
+        row.push({ text: '' });
+      }
+      
+      photoRows.push(row);
+    }
+
+    snagStack.push({
+      table: { widths: ['*', '*'], body: photoRows },
+      layout: 'noBorders',
+      margin: [0, 0, 0, 15],
+    });
+  }
+
+  return { stack: snagStack };
+}
+
 // ============================================================================
-// TENANT SECTION
+// TENANT SECTION - KEEPS EACH TENANT WITH ITS PHOTOS
 // ============================================================================
 
 function createTenantSection(
@@ -1247,7 +1338,7 @@ function createTenantSection(
   const content: Content[] = [];
 
   // Section header
-  content.push({
+  const sectionHeader = {
     table: {
       widths: ['*'],
       body: [[{
@@ -1264,68 +1355,97 @@ function createTenantSection(
       vLineWidth: () => 0,
     },
     margin: [0, 20, 0, 15],
+  };
+
+  // Build first tenant content to bind with header
+  const firstTenantContent = createTenantCardContent(tenants[0], 0, imageCache);
+
+  // Create unbreakable block with header + first tenant
+  content.push({
+    unbreakable: true,
+    stack: [sectionHeader, firstTenantContent],
   });
 
-  tenants.forEach((tenant, idx) => {
-    // Tenant header
+  // Process remaining tenants
+  for (let i = 1; i < tenants.length; i++) {
+    const tenantContent = createTenantCardContent(tenants[i], i, imageCache);
     content.push({
-      text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
-      fontSize: 12,
-      bold: true,
-      color: REPORT_COLORS.primary,
-      margin: [0, idx > 0 ? 15 : 0, 0, 8],
+      unbreakable: true,
+      stack: [tenantContent],
     });
-
-    // Info grid
-    const infoItems: Content[] = [];
-    if (tenant.meterSerialNumber) {
-      infoItems.push({ text: `Meter S/N: ${tenant.meterSerialNumber}`, fontSize: 9 });
-    }
-    if (tenant.breakerSize) {
-      infoItems.push({ text: `Breaker: ${tenant.breakerSize}`, fontSize: 9 });
-    }
-    if (tenant.ctSizeAndRatio) {
-      infoItems.push({ text: `CT Ratio: ${tenant.ctSizeAndRatio}`, fontSize: 9 });
-    }
-
-    if (infoItems.length > 0) {
-      content.push({
-        columns: infoItems.map(item => ({ ...item, width: '*' })),
-        margin: [0, 0, 0, 10],
-      });
-    }
-
-    // Photos in 3-column grid
-    const photoData: Array<{ url: string; label: string }> = [];
-    if (tenant.breakerImage) photoData.push({ url: tenant.breakerImage, label: 'Breaker' });
-    if (tenant.ctRatioImage) photoData.push({ url: tenant.ctRatioImage, label: 'CT Ratio' });
-    if (tenant.meterImage) photoData.push({ url: tenant.meterImage, label: 'Meter' });
-
-    if (photoData.length > 0) {
-      const photoColumns = photoData.map(photo => {
-        const dataUrl = imageCache.get(photo.url);
-        return dataUrl ? {
-          stack: [
-            { image: dataUrl, fit: [150, 140], alignment: 'center' as const },
-            { text: photo.label, fontSize: 8, bold: true, alignment: 'center' as const, margin: [0, 4, 0, 0] },
-          ],
-          width: '*',
-        } : { text: '', width: '*' };
-      });
-
-      content.push({
-        columns: photoColumns,
-        columnGap: 10,
-        margin: [0, 0, 0, 15],
-      });
-    }
-  });
+  }
 
   return content;
 }
 
+/**
+ * Creates content for a single tenant card with their meter photos
+ */
+function createTenantCardContent(
+  tenant: InspectionTenant,
+  idx: number,
+  imageCache: Map<string, string>
+): Content {
+  const tenantStack: Content[] = [];
+
+  // Tenant header
+  tenantStack.push({
+    text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
+    fontSize: 12,
+    bold: true,
+    color: REPORT_COLORS.primary,
+    margin: [0, idx > 0 ? 15 : 0, 0, 8],
+  });
+
+  // Info grid
+  const infoItems: Content[] = [];
+  if (tenant.meterSerialNumber) {
+    infoItems.push({ text: `Meter S/N: ${tenant.meterSerialNumber}`, fontSize: 9 });
+  }
+  if (tenant.breakerSize) {
+    infoItems.push({ text: `Breaker: ${tenant.breakerSize}`, fontSize: 9 });
+  }
+  if (tenant.ctSizeAndRatio) {
+    infoItems.push({ text: `CT Ratio: ${tenant.ctSizeAndRatio}`, fontSize: 9 });
+  }
+
+  if (infoItems.length > 0) {
+    tenantStack.push({
+      columns: infoItems.map(item => ({ ...item, width: '*' })),
+      margin: [0, 0, 0, 10],
+    });
+  }
+
+  // Photos in 3-column grid
+  const photoData: Array<{ url: string; label: string }> = [];
+  if (tenant.breakerImage) photoData.push({ url: tenant.breakerImage, label: 'Breaker' });
+  if (tenant.ctRatioImage) photoData.push({ url: tenant.ctRatioImage, label: 'CT Ratio' });
+  if (tenant.meterImage) photoData.push({ url: tenant.meterImage, label: 'Meter' });
+
+  if (photoData.length > 0) {
+    const photoColumns = photoData.map(photo => {
+      const dataUrl = imageCache.get(photo.url);
+      return dataUrl ? {
+        stack: [
+          { image: dataUrl, fit: [150, 140], alignment: 'center' as const },
+          { text: photo.label, fontSize: 8, bold: true, alignment: 'center' as const, margin: [0, 4, 0, 0] },
+        ],
+        width: '*',
+      } : { text: '', width: '*' };
+    });
+
+    tenantStack.push({
+      columns: photoColumns,
+      columnGap: 10,
+      margin: [0, 0, 0, 15],
+    });
+  }
+
+  return { stack: tenantStack };
+}
+
 // ============================================================================
-// SIGNATURES SECTION
+// SIGNATURES SECTION - KEEPS HEADER WITH SIGNATURES
 // ============================================================================
 
 function createSignaturesSection(
@@ -1337,7 +1457,7 @@ function createSignaturesSection(
   const content: Content[] = [];
 
   // Section header
-  content.push({
+  const sectionHeader = {
     table: {
       widths: ['*'],
       body: [[{
@@ -1354,7 +1474,7 @@ function createSignaturesSection(
       vLineWidth: () => 0,
     },
     margin: [0, 20, 0, 15],
-  });
+  };
 
   const sigColumns: Content[] = signatures.map(sig => {
     const sigContent: Content[] = [
@@ -1394,9 +1514,16 @@ function createSignaturesSection(
     };
   });
 
+  // Keep header and all signatures together
   content.push({
-    columns: sigColumns,
-    margin: [0, 10, 0, 20],
+    unbreakable: true,
+    stack: [
+      sectionHeader,
+      {
+        columns: sigColumns,
+        margin: [0, 10, 0, 20],
+      },
+    ],
   });
 
   return content;
