@@ -1,15 +1,8 @@
 /**
- * PDFMake-based PDF Generator Edge Function
+ * PDFMake PDF Generator - Version 4.0.0 (Complete Rebuild)
  * 
- * Professional Engineering Report Generator for SANS 10142-1 Compliance
- * 
- * Design Features:
- * - Professional cover page with logo, vertical accent bar, and metadata
- * - Quality Score Dashboard with circular compliance indicator
- * - Section breakdown tables with photo grids
- * - Tenant verification with labeled images
- * - Snags section with risk levels
- * - Signature section
+ * Electrical Inspection Report Generator
+ * Clean implementation with verified image rendering
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -19,328 +12,212 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration - Version 3.0.0: Width-based sizing to fix portrait image distortion
-const CONFIG = {
-  VERSION: '3.0.0',  // Width-based sizing - fixes narrow strip issue
-  MAX_IMAGE_SIZE_KB: 400,
-  IMAGE_TRANSFORM_WIDTH: 600,
-  IMAGE_TRANSFORM_QUALITY: 75,
-  LOGO_MAX_SIZE_KB: 600,
-  MAX_IMAGES_PER_REPORT: 30,
-  // Width-only sizing - height auto-calculated to preserve aspect ratio
-  LOGO_WIDTH: 180,
-  LOGO_MAX_HEIGHT: 80,
-  SECTION_PHOTO_WIDTH: 150,    // Consistent width for 3-column grid
-  TENANT_PHOTO_WIDTH: 130,     // 3 per row in tenant section
-  SNAG_PHOTO_WIDTH: 180,       // Larger for evidence visibility
-  SIGNATURE_WIDTH: 140,
-  SIGNATURE_MAX_HEIGHT: 50,
+// ============================================================================
+// CONFIGURATION
+// ============================================================================
+
+const VERSION = '4.0.0';
+
+const IMAGE_CONFIG = {
+  MAX_SIZE_KB: 500,
+  TRANSFORM_WIDTH: 800,
+  TRANSFORM_QUALITY: 80,
 };
 
-// Color palette - professional engineering report
+// Image widths in points (1 point = 1/72 inch)
+const SIZES = {
+  LOGO: 160,
+  PHOTO: 140,          // Section photos
+  TENANT_PHOTO: 120,   // Tenant verification
+  SNAG_PHOTO: 160,     // Issue evidence
+  SIGNATURE: 120,
+};
+
 const COLORS = {
-  primary: '#1e3a5f',
-  secondary: '#0d7377',
-  accent: '#2563eb',
-  success: '#16a34a',
-  warning: '#d97706',
-  error: '#dc2626',
-  lightBg: '#f8fafc',
-  border: '#e2e8f0',
-  textPrimary: '#1e293b',
-  textSecondary: '#475569',
-  textMuted: '#94a3b8',
+  navy: '#1e3a5f',
+  teal: '#0d7377',
+  blue: '#2563eb',
+  green: '#16a34a',
+  amber: '#d97706',
+  red: '#dc2626',
+  slate50: '#f8fafc',
+  slate200: '#e2e8f0',
+  slate700: '#334155',
+  slate500: '#64748b',
+  slate400: '#94a3b8',
   white: '#ffffff',
 };
 
-// Placeholder SVG for failed images
-const PLACEHOLDER_IMAGE = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTgwIiBoZWlnaHQ9IjEzNSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjFmNWY5Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjExIiBmaWxsPSIjOTRhM2I4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+SW1hZ2UgVW5hdmFpbGFibGU8L3RleHQ+PC9zdmc+';
+// ============================================================================
+// SUPABASE CLIENT
+// ============================================================================
 
-// Supabase client singleton
-let supabaseClient: ReturnType<typeof createClient> | null = null;
-
-function getSupabaseClient(): ReturnType<typeof createClient> {
-  if (!supabaseClient) {
-    supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL')!,
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
-    );
-  }
-  return supabaseClient;
+function getSupabase() {
+  return createClient(
+    Deno.env.get('SUPABASE_URL')!,
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+  );
 }
 
 // ============================================================================
 // IMAGE UTILITIES
 // ============================================================================
 
-function arrayBufferToBase64(buffer: ArrayBuffer): string {
-  const uint8Array = new Uint8Array(buffer);
+const PLACEHOLDER = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMTYwIiBoZWlnaHQ9IjEyMCIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj48cmVjdCB3aWR0aD0iMTAwJSIgaGVpZ2h0PSIxMDAlIiBmaWxsPSIjZjFmNWY5Ii8+PHRleHQgeD0iNTAlIiB5PSI1MCUiIGZvbnQtZmFtaWx5PSJzYW5zLXNlcmlmIiBmb250LXNpemU9IjEyIiBmaWxsPSIjOTRhM2I4IiB0ZXh0LWFuY2hvcj0ibWlkZGxlIiBkeT0iLjNlbSI+Tm8gSW1hZ2U8L3RleHQ+PC9zdmc+';
+
+function toBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  let binary = '';
   const chunkSize = 8192;
-  let binaryString = '';
-  for (let i = 0; i < uint8Array.length; i += chunkSize) {
-    const chunk = uint8Array.slice(i, Math.min(i + chunkSize, uint8Array.length));
-    binaryString += String.fromCharCode.apply(null, Array.from(chunk));
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode(...chunk);
   }
-  return btoa(binaryString);
+  return btoa(binary);
 }
 
-function detectImageType(bytes: Uint8Array): string {
+function getMimeType(bytes: Uint8Array): string {
   if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
   if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png';
   if (bytes[0] === 0x47 && bytes[1] === 0x49) return 'image/gif';
-  if (bytes[0] === 0x52 && bytes[1] === 0x49) return 'image/webp';
   return 'image/jpeg';
 }
 
-function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
+function parseStorageUrl(url: string): { bucket: string; path: string } | null {
   try {
-    const urlObj = new URL(url);
-    if (url.includes('/storage/v1/object/public/')) {
-      const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
-      if (pathParts.length === 2) {
-        const filePathWithBucket = pathParts[1];
-        const firstSlashIndex = filePathWithBucket.indexOf('/');
-        if (firstSlashIndex > 0) {
-          return {
-            bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
-            path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
-          };
-        }
-      }
-    }
-    return null;
+    if (!url.includes('/storage/v1/object/public/')) return null;
+    const parts = new URL(url).pathname.split('/storage/v1/object/public/')[1];
+    const slashIdx = parts.indexOf('/');
+    if (slashIdx <= 0) return null;
+    return {
+      bucket: decodeURIComponent(parts.substring(0, slashIdx)),
+      path: decodeURIComponent(parts.substring(slashIdx + 1)),
+    };
   } catch {
     return null;
   }
 }
 
-// Logo URL tracking
-const logoUrls = new Set<string>();
+async function downloadImage(url: string): Promise<string> {
+  if (!url || url === '') return PLACEHOLDER;
+  if (url.startsWith('data:')) return url;
 
-async function downloadImage(url: string, isLogo: boolean = false): Promise<string> {
-  const parsed = parseSupabaseStorageUrl(url);
-  
+  const supabase = getSupabase();
+  const parsed = parseStorageUrl(url);
+
   if (parsed) {
-    const supabase = getSupabaseClient();
-    
-    // For logos, try to get better quality
-    if (isLogo) {
-      console.log(`[Image] Downloading logo...`);
-      try {
-        // First try with transformation for manageable size
-        const { data: signedUrlData } = await supabase.storage
-          .from(parsed.bucket)
-          .createSignedUrl(parsed.path, 120, {
-            transform: { width: 400, quality: 90 }
-          });
-        
-        if (signedUrlData?.signedUrl) {
-          const resp = await fetch(signedUrlData.signedUrl);
-          if (resp.ok) {
-            const buffer = await resp.arrayBuffer();
-            const sizeKB = buffer.byteLength / 1024;
-            const mimeType = detectImageType(new Uint8Array(buffer));
-            const base64 = arrayBufferToBase64(buffer);
-            console.log(`[Image] Logo downloaded: ${Math.round(sizeKB)}KB`);
-            return `data:${mimeType};base64,${base64}`;
-          }
-        }
-        
-        // Fallback to direct download
-        const { data: blob, error } = await supabase.storage
-          .from(parsed.bucket)
-          .download(parsed.path);
-        
-        if (!error && blob) {
-          const buffer = await blob.arrayBuffer();
-          const sizeKB = buffer.byteLength / 1024;
-          console.log(`[Image] Logo (original): ${Math.round(sizeKB)}KB`);
-          
-          if (sizeKB <= CONFIG.LOGO_MAX_SIZE_KB) {
-            const mimeType = detectImageType(new Uint8Array(buffer));
-            const base64 = arrayBufferToBase64(buffer);
-            return `data:${mimeType};base64,${base64}`;
-          }
-        }
-      } catch (err) {
-        console.warn(`[Image] Logo download failed:`, err);
-      }
-      return PLACEHOLDER_IMAGE;
-    }
-    
-    // Standard photos: use transformation for compression
     try {
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      // Try with transformation first
+      const { data: signedData } = await supabase.storage
         .from(parsed.bucket)
-        .createSignedUrl(parsed.path, 60, {
+        .createSignedUrl(parsed.path, 120, {
           transform: {
-            width: CONFIG.IMAGE_TRANSFORM_WIDTH,
-            quality: CONFIG.IMAGE_TRANSFORM_QUALITY,
+            width: IMAGE_CONFIG.TRANSFORM_WIDTH,
+            quality: IMAGE_CONFIG.TRANSFORM_QUALITY,
           }
         });
-      
-      if (!signedUrlError && signedUrlData?.signedUrl) {
-        const response = await fetch(signedUrlData.signedUrl);
-        if (response.ok) {
-          const buffer = await response.arrayBuffer();
+
+      if (signedData?.signedUrl) {
+        const resp = await fetch(signedData.signedUrl);
+        if (resp.ok) {
+          const buffer = await resp.arrayBuffer();
           const sizeKB = buffer.byteLength / 1024;
-          
-          if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
-            const mimeType = detectImageType(new Uint8Array(buffer));
-            const base64 = arrayBufferToBase64(buffer);
-            console.log(`[Image] Photo: ${Math.round(sizeKB)}KB`);
-            return `data:${mimeType};base64,${base64}`;
+          if (sizeKB <= IMAGE_CONFIG.MAX_SIZE_KB) {
+            const bytes = new Uint8Array(buffer);
+            const mime = getMimeType(bytes);
+            const b64 = toBase64(buffer);
+            console.log(`[IMG] Transformed: ${Math.round(sizeKB)}KB`);
+            return `data:${mime};base64,${b64}`;
           }
-          console.warn(`[Image] Photo too large after transform: ${Math.round(sizeKB)}KB`);
         }
       }
-      
+
       // Fallback: direct download
       const { data: blob, error } = await supabase.storage
         .from(parsed.bucket)
         .download(parsed.path);
-      
+
       if (!error && blob) {
         const buffer = await blob.arrayBuffer();
         const sizeKB = buffer.byteLength / 1024;
-        if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
-          const mimeType = detectImageType(new Uint8Array(buffer));
-          const base64 = arrayBufferToBase64(buffer);
-          console.log(`[Image] Photo (original): ${Math.round(sizeKB)}KB`);
-          return `data:${mimeType};base64,${base64}`;
+        if (sizeKB <= IMAGE_CONFIG.MAX_SIZE_KB) {
+          const bytes = new Uint8Array(buffer);
+          const mime = getMimeType(bytes);
+          const b64 = toBase64(buffer);
+          console.log(`[IMG] Direct: ${Math.round(sizeKB)}KB`);
+          return `data:${mime};base64,${b64}`;
         }
-        console.warn(`[Image] Photo too large: ${Math.round(sizeKB)}KB, skipping`);
+        console.warn(`[IMG] Too large: ${Math.round(sizeKB)}KB`);
       }
     } catch (err) {
-      console.warn(`[Image] Photo download error:`, err);
+      console.warn(`[IMG] Download error:`, err);
     }
   }
-  
-  // External URLs
+
+  // External URL
   try {
-    const response = await fetch(url, { signal: AbortSignal.timeout(15000) });
-    if (response.ok) {
-      const buffer = await response.arrayBuffer();
+    const resp = await fetch(url, { signal: AbortSignal.timeout(10000) });
+    if (resp.ok) {
+      const buffer = await resp.arrayBuffer();
       const sizeKB = buffer.byteLength / 1024;
-      if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
-        const mimeType = detectImageType(new Uint8Array(buffer));
-        const base64 = arrayBufferToBase64(buffer);
-        console.log(`[Image] External: ${Math.round(sizeKB)}KB`);
-        return `data:${mimeType};base64,${base64}`;
+      if (sizeKB <= IMAGE_CONFIG.MAX_SIZE_KB) {
+        const bytes = new Uint8Array(buffer);
+        const mime = getMimeType(bytes);
+        const b64 = toBase64(buffer);
+        console.log(`[IMG] External: ${Math.round(sizeKB)}KB`);
+        return `data:${mime};base64,${b64}`;
       }
     }
-  } catch (err) {
-    console.warn(`[Image] External fetch failed:`, err);
+  } catch {
+    // ignore
   }
-  
-  return PLACEHOLDER_IMAGE;
-}
 
-// ============================================================================
-// STATISTICS CALCULATION
-// ============================================================================
-
-interface Stats {
-  totalItems: number;
-  passCount: number;
-  failCount: number;
-  pendingCount: number;
-  passPercentage: number;
-  totalPhotos: number;
-}
-
-function isPassStatus(status: string): boolean {
-  const s = String(status).toLowerCase().trim();
-  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed', 'true'].includes(s);
-}
-
-function isFailStatus(status: string): boolean {
-  const s = String(status).toLowerCase().trim();
-  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical', 'false'].includes(s);
-}
-
-function calculateStats(inspection: any): Stats {
-  let totalItems = 0, passCount = 0, failCount = 0, pendingCount = 0, totalPhotos = 0;
-  
-  inspection.sections?.forEach((section: any) => {
-    section.items?.forEach((item: any) => {
-      totalItems++;
-      const status = String(item.value || item.status || '');
-      if (isPassStatus(status)) passCount++;
-      else if (isFailStatus(status)) failCount++;
-      else pendingCount++;
-      if (item.photos?.length) totalPhotos += item.photos.length;
-    });
-  });
-  
-  inspection.tenants?.forEach((t: any) => {
-    if (t.meterImage) totalPhotos++;
-    if (t.breakerImage) totalPhotos++;
-    if (t.ctRatioImage) totalPhotos++;
-  });
-  
-  inspection.snags?.forEach((s: any) => {
-    if (s.photos?.length) totalPhotos += s.photos.length;
-  });
-  
-  return {
-    totalItems,
-    passCount,
-    failCount,
-    pendingCount,
-    passPercentage: totalItems > 0 ? Math.round((passCount / totalItems) * 100) : 0,
-    totalPhotos,
-  };
-}
-
-// ============================================================================
-// STATUS BADGE GENERATOR
-// ============================================================================
-
-function getStatusBadgeTable(status: string): any {
-  const s = String(status).toLowerCase().trim();
-  let text = status || 'N/A';
-  let textColor = COLORS.textMuted;
-  let bgColor = '#f1f5f9';
-  
-  if (isPassStatus(s)) {
-    text = 'PASS';
-    textColor = COLORS.white;
-    bgColor = COLORS.success;
-  } else if (isFailStatus(s)) {
-    text = 'FAIL';
-    textColor = COLORS.white;
-    bgColor = COLORS.error;
-  } else if (['pending', 'in_progress', 'in progress'].includes(s)) {
-    text = 'PENDING';
-    textColor = COLORS.white;
-    bgColor = COLORS.warning;
-  } else if (['n/a', 'na', 'not applicable'].includes(s)) {
-    text = 'N/A';
-    textColor = COLORS.textMuted;
-    bgColor = '#f1f5f9';
-  }
-  
-  // Return as a mini table for fillColor support
-  return {
-    table: {
-      body: [[{ text, fontSize: 8, bold: true, color: textColor, alignment: 'center', margin: [6, 2, 6, 2] }]],
-    },
-    layout: {
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-      fillColor: () => bgColor,
-      paddingLeft: () => 0,
-      paddingRight: () => 0,
-      paddingTop: () => 0,
-      paddingBottom: () => 0,
-    },
-  };
+  return PLACEHOLDER;
 }
 
 // ============================================================================
 // DOCUMENT BUILDER
 // ============================================================================
+
+interface InspectionData {
+  templateName?: string;
+  inspectorName?: string;
+  inspectionDate?: string;
+  subsectionName?: string;
+  sections?: Array<{
+    title: string;
+    items?: Array<{
+      label: string;
+      value?: string;
+      status?: string;
+      notes?: string;
+      photos?: string[];
+    }>;
+  }>;
+  tenants?: Array<{
+    shopName?: string;
+    shopNumber?: string;
+    meterSerialNumber?: string;
+    breakerSize?: string;
+    ctSizeAndRatio?: string;
+    meterImage?: string;
+    breakerImage?: string;
+    ctRatioImage?: string;
+  }>;
+  snags?: Array<{
+    title: string;
+    description?: string;
+    status?: string;
+    riskLevel?: string;
+    photos?: string[];
+  }>;
+  signatures?: Array<{
+    name: string;
+    role?: string;
+    signedAt?: string;
+    signatureUrl?: string;
+  }>;
+}
 
 function formatDate(d?: string): string {
   if (!d) return 'N/A';
@@ -351,80 +228,130 @@ function formatDate(d?: string): string {
   }
 }
 
-function buildDocDefinition(
-  inspection: any,
+function isPass(s: string): boolean {
+  const val = String(s).toLowerCase().trim();
+  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'complete', 'completed', 'true', 'good'].includes(val);
+}
+
+function isFail(s: string): boolean {
+  const val = String(s).toLowerCase().trim();
+  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical', 'false'].includes(val);
+}
+
+function statusBadge(status: string): any {
+  const s = String(status).toLowerCase().trim();
+  let text = status || 'N/A';
+  let color = COLORS.slate400;
+  let bg = COLORS.slate50;
+
+  if (isPass(s)) {
+    text = 'PASS'; color = COLORS.white; bg = COLORS.green;
+  } else if (isFail(s)) {
+    text = 'FAIL'; color = COLORS.white; bg = COLORS.red;
+  } else if (['pending', 'in_progress', 'in progress'].includes(s)) {
+    text = 'PENDING'; color = COLORS.white; bg = COLORS.amber;
+  }
+
+  return {
+    table: {
+      body: [[{ text, fontSize: 8, bold: true, color, alignment: 'center', margin: [6, 2, 6, 2] }]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      fillColor: () => bg,
+      paddingLeft: () => 0, paddingRight: () => 0,
+      paddingTop: () => 0, paddingBottom: () => 0,
+    },
+  };
+}
+
+function buildDocument(
+  data: InspectionData,
   siteName: string,
-  stats: Stats,
   imageMap: Map<string, string>,
   clientName?: string,
-  logoDataUri?: string,
-  accentColor: string = '#2563eb'
+  logoUri?: string,
+  accentColor = COLORS.blue
 ): any {
-  const getImage = (url?: string): string => {
-    if (!url) return PLACEHOLDER_IMAGE;
+  const img = (url?: string) => {
+    if (!url) return PLACEHOLDER;
     if (url.startsWith('data:')) return url;
-    return imageMap.get(url) || PLACEHOLDER_IMAGE;
+    return imageMap.get(url) || PLACEHOLDER;
   };
+
+  // Calculate stats
+  let totalItems = 0, passCount = 0, failCount = 0, totalPhotos = 0;
+  data.sections?.forEach(sec => {
+    sec.items?.forEach(item => {
+      totalItems++;
+      const val = String(item.value || item.status || '');
+      if (isPass(val)) passCount++;
+      else if (isFail(val)) failCount++;
+      if (item.photos?.length) totalPhotos += item.photos.length;
+    });
+  });
+  data.tenants?.forEach(t => {
+    if (t.meterImage) totalPhotos++;
+    if (t.breakerImage) totalPhotos++;
+    if (t.ctRatioImage) totalPhotos++;
+  });
+  data.snags?.forEach(s => {
+    if (s.photos?.length) totalPhotos += s.photos.length;
+  });
+  const passPercent = totalItems > 0 ? Math.round((passCount / totalItems) * 100) : 0;
 
   const content: any[] = [];
 
-  // ==================== COVER PAGE ====================
-  
-  // Logo at top center - landscape-oriented for company logos
-  content.push({
-    stack: [
-      logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE ? {
-        image: logoDataUri,
-        width: CONFIG.LOGO_WIDTH,
-        maxHeight: CONFIG.LOGO_MAX_HEIGHT,
-        alignment: 'center',
-        margin: [0, 30, 0, 25],
-      } : { text: '', margin: [0, 60, 0, 0] },
-    ],
-  });
+  // ========== COVER PAGE ==========
+  if (logoUri && logoUri !== PLACEHOLDER) {
+    content.push({
+      image: logoUri,
+      width: SIZES.LOGO,
+      alignment: 'center',
+      margin: [0, 40, 0, 30],
+    });
+  } else {
+    content.push({ text: '', margin: [0, 80, 0, 0] });
+  }
 
-  // Main title
   content.push({
-    text: 'INSPECTION REPORT',
-    fontSize: 32,
+    text: 'ELECTRICAL INSPECTION REPORT',
+    fontSize: 28,
     bold: true,
-    color: COLORS.primary,
+    color: COLORS.navy,
     alignment: 'center',
     margin: [0, 20, 0, 15],
   });
 
-  // Site name
   content.push({
     text: siteName.toUpperCase(),
-    fontSize: 20,
+    fontSize: 18,
     bold: true,
     color: accentColor,
     alignment: 'center',
     margin: [0, 0, 0, 8],
   });
 
-  // Subsection name
-  if (inspection.subsectionName) {
+  if (data.subsectionName) {
     content.push({
-      text: inspection.subsectionName.toUpperCase(),
-      fontSize: 14,
-      color: COLORS.secondary,
+      text: data.subsectionName.toUpperCase(),
+      fontSize: 12,
+      color: COLORS.teal,
       alignment: 'center',
-      margin: [0, 0, 0, 40],
+      margin: [0, 0, 0, 50],
     });
   } else {
-    content.push({ text: '', margin: [0, 0, 0, 40] });
+    content.push({ text: '', margin: [0, 50, 0, 0] });
   }
 
-  // Info table - centered with vertical accent bar
-  const infoTableData = [
-    ['Template', inspection.templateName || 'Standard Inspection'],
-    ['Inspector', inspection.inspectorName || 'N/A'],
-    ['Date', formatDate(inspection.inspectionDate)],
+  // Info box
+  const infoRows = [
+    ['Template', data.templateName || 'Standard Inspection'],
+    ['Inspector', data.inspectorName || 'N/A'],
+    ['Date', formatDate(data.inspectionDate)],
   ];
-  if (clientName) {
-    infoTableData.push(['Client', clientName]);
-  }
+  if (clientName) infoRows.push(['Client', clientName]);
 
   content.push({
     columns: [
@@ -432,242 +359,149 @@ function buildDocDefinition(
       {
         width: 'auto',
         table: {
-          widths: [100, 200],
-          body: infoTableData.map(([label, value]) => [
-            { text: label, fontSize: 10, color: COLORS.textSecondary, margin: [10, 8, 5, 8] },
-            { text: value, fontSize: 11, bold: true, color: COLORS.textPrimary, margin: [5, 8, 10, 8] },
+          widths: [90, 180],
+          body: infoRows.map(([label, value]) => [
+            { text: label, fontSize: 10, color: COLORS.slate500, margin: [10, 6] },
+            { text: value, fontSize: 11, bold: true, color: COLORS.slate700, margin: [10, 6] },
           ]),
         },
         layout: {
           hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 1 : 0.5,
-          vLineWidth: (i: number) => (i === 0) ? 4 : (i === 2 ? 1 : 0),
-          hLineColor: () => COLORS.border,
-          vLineColor: (i: number) => (i === 0) ? accentColor : COLORS.border,
-          paddingLeft: () => 0,
-          paddingRight: () => 0,
-          paddingTop: () => 0,
-          paddingBottom: () => 0,
+          vLineWidth: (i: number) => (i === 0) ? 3 : (i === 2 ? 1 : 0),
+          hLineColor: () => COLORS.slate200,
+          vLineColor: (i: number) => (i === 0) ? accentColor : COLORS.slate200,
         },
       },
       { width: '*', text: '' },
     ],
-    margin: [0, 0, 0, 60],
+    margin: [0, 0, 0, 80],
   });
 
-  // Generated timestamp
   content.push({
-    text: `Generated on ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
+    text: `Generated: ${new Date().toLocaleDateString('en-ZA', { year: 'numeric', month: 'long', day: 'numeric' })}`,
     fontSize: 9,
-    color: COLORS.textMuted,
+    color: COLORS.slate400,
     alignment: 'center',
-    margin: [0, 20, 0, 5],
-  });
-
-  content.push({
-    text: 'CONFIDENTIAL - SANS 10142-1 Compliant Document',
-    fontSize: 8,
-    color: COLORS.textMuted,
-    alignment: 'center',
-    margin: [0, 0, 0, 0],
   });
 
   content.push({ text: '', pageBreak: 'after' });
 
-  // ==================== PAGE 2: QUALITY SCORE DASHBOARD ====================
-  
-  const scoreColor = stats.passPercentage >= 80 ? COLORS.success 
-    : stats.passPercentage >= 50 ? COLORS.warning 
-    : COLORS.error;
+  // ========== SUMMARY PAGE ==========
+  const scoreColor = passPercent >= 80 ? COLORS.green : passPercent >= 50 ? COLORS.amber : COLORS.red;
 
   content.push({
-    text: 'Quality Score Dashboard',
-    fontSize: 22,
+    text: 'Inspection Summary',
+    fontSize: 20,
     bold: true,
-    color: COLORS.primary,
-    alignment: 'center',
-    margin: [0, 20, 0, 30],
+    color: COLORS.navy,
+    margin: [0, 20, 0, 25],
   });
 
-  // Large compliance percentage with circular indicator
   content.push({
     columns: [
       { width: '*', text: '' },
       {
         width: 'auto',
         stack: [
-          {
-            canvas: [
-              // Outer circle (background)
-              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 12, lineColor: '#e5e7eb' },
-              // Progress arc
-              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 12, lineColor: scoreColor },
-            ],
-          },
-          {
-            text: `${stats.passPercentage}%`,
-            fontSize: 36,
-            bold: true,
-            color: scoreColor,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -95 },
-          },
-          {
-            text: 'Compliance',
-            fontSize: 11,
-            color: COLORS.textSecondary,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -55 },
-          },
+          { text: `${passPercent}%`, fontSize: 48, bold: true, color: scoreColor, alignment: 'center' },
+          { text: 'Compliance Score', fontSize: 12, color: COLORS.slate500, alignment: 'center', margin: [0, 5, 0, 0] },
         ],
-      },
-      { width: '*', text: '' },
-    ],
-    margin: [0, 0, 0, 40],
-  });
-
-  // KPI Grid - 2x2
-  content.push({
-    columns: [
-      { width: '*', text: '' },
-      {
-        width: 'auto',
-        table: {
-          widths: [120, 120],
-          body: [
-            [
-              {
-                stack: [
-                  { text: String(stats.passCount), fontSize: 32, bold: true, color: COLORS.success, alignment: 'center' },
-                  { text: 'Items Passed', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
-                ],
-                margin: [15, 15],
-                fillColor: '#f0fdf4',
-              },
-              {
-                stack: [
-                  { text: String(stats.failCount), fontSize: 32, bold: true, color: COLORS.error, alignment: 'center' },
-                  { text: 'Items Failed', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
-                ],
-                margin: [15, 15],
-                fillColor: '#fef2f2',
-              },
-            ],
-            [
-              {
-                stack: [
-                  { text: String(stats.pendingCount), fontSize: 32, bold: true, color: COLORS.warning, alignment: 'center' },
-                  { text: 'Pending', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
-                ],
-                margin: [15, 15],
-                fillColor: '#fffbeb',
-              },
-              {
-                stack: [
-                  { text: String(stats.totalPhotos), fontSize: 32, bold: true, color: accentColor, alignment: 'center' },
-                  { text: 'Photos', fontSize: 10, color: COLORS.textSecondary, alignment: 'center' },
-                ],
-                margin: [15, 15],
-                fillColor: '#eff6ff',
-              },
-            ],
-          ],
-        },
-        layout: {
-          hLineWidth: () => 1,
-          vLineWidth: () => 1,
-          hLineColor: () => COLORS.border,
-          vLineColor: () => COLORS.border,
-        },
       },
       { width: '*', text: '' },
     ],
     margin: [0, 0, 0, 30],
   });
 
-  // SANS Notice
+  // Stats grid
   content.push({
-    text: 'This report complies with SANS 10142-1 electrical installation standards',
-    fontSize: 9,
-    color: COLORS.textMuted,
-    alignment: 'center',
-    italics: true,
-    margin: [0, 20, 0, 0],
+    columns: [
+      { width: '*', stack: [
+        { text: String(totalItems), fontSize: 24, bold: true, color: COLORS.navy, alignment: 'center' },
+        { text: 'Total Items', fontSize: 10, color: COLORS.slate500, alignment: 'center' },
+      ]},
+      { width: '*', stack: [
+        { text: String(passCount), fontSize: 24, bold: true, color: COLORS.green, alignment: 'center' },
+        { text: 'Passed', fontSize: 10, color: COLORS.slate500, alignment: 'center' },
+      ]},
+      { width: '*', stack: [
+        { text: String(failCount), fontSize: 24, bold: true, color: COLORS.red, alignment: 'center' },
+        { text: 'Failed', fontSize: 10, color: COLORS.slate500, alignment: 'center' },
+      ]},
+      { width: '*', stack: [
+        { text: String(totalPhotos), fontSize: 24, bold: true, color: COLORS.blue, alignment: 'center' },
+        { text: 'Photos', fontSize: 10, color: COLORS.slate500, alignment: 'center' },
+      ]},
+    ],
+    margin: [0, 0, 0, 30],
   });
 
   content.push({ text: '', pageBreak: 'after' });
 
-  // ==================== INSPECTION SECTIONS ====================
-  
+  // ========== SECTIONS ==========
   content.push({
-    text: 'Inspection Sections',
+    text: 'Inspection Details',
     fontSize: 18,
     bold: true,
-    color: COLORS.primary,
+    color: COLORS.navy,
     margin: [0, 0, 0, 15],
   });
 
-  inspection.sections?.forEach((section: any, sIdx: number) => {
-    // Section header with navy background
+  data.sections?.forEach((section, sIdx) => {
+    // Section header
     content.push({
       table: {
         widths: ['*'],
         body: [[{
-          text: `Section ${sIdx + 1}: ${section.title}`,
+          text: `${sIdx + 1}. ${section.title}`,
           fontSize: 12,
           bold: true,
           color: COLORS.white,
-          margin: [12, 10, 12, 10],
+          margin: [12, 8],
         }]],
       },
       layout: {
         hLineWidth: () => 0,
         vLineWidth: () => 0,
-        fillColor: () => COLORS.primary,
+        fillColor: () => COLORS.navy,
       },
       margin: [0, sIdx > 0 ? 15 : 0, 0, 0],
     });
 
     // Items table
-    const tableBody: any[][] = [
-      [
-        { text: 'Item', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', margin: [8, 8] },
-        { text: 'Status', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', alignment: 'center', margin: [8, 8] },
-        { text: 'Notes', bold: true, fontSize: 9, color: COLORS.textPrimary, fillColor: '#f8fafc', margin: [8, 8] },
-      ],
-    ];
+    const tableBody: any[][] = [[
+      { text: 'Item', bold: true, fontSize: 9, fillColor: COLORS.slate50, margin: [8, 6] },
+      { text: 'Status', bold: true, fontSize: 9, fillColor: COLORS.slate50, alignment: 'center', margin: [8, 6] },
+      { text: 'Notes', bold: true, fontSize: 9, fillColor: COLORS.slate50, margin: [8, 6] },
+    ]];
 
-    section.items?.forEach((item: any) => {
+    section.items?.forEach(item => {
       tableBody.push([
-        { text: item.label || '-', fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
-        { stack: [getStatusBadgeTable(String(item.value || item.status || 'N/A'))], alignment: 'center', margin: [4, 4] },
-        { text: item.notes || '-', fontSize: 8, color: COLORS.textSecondary, margin: [8, 6] },
+        { text: item.label || '-', fontSize: 9, margin: [8, 5] },
+        { stack: [statusBadge(String(item.value || item.status || 'N/A'))], alignment: 'center', margin: [4, 3] },
+        { text: item.notes || '-', fontSize: 8, color: COLORS.slate500, margin: [8, 5] },
       ]);
 
-      // Photos row if present
+      // Photos for this item
       if (item.photos && item.photos.length > 0) {
-        const photoColumns = item.photos.slice(0, 3).map((photo: string, pIdx: number) => ({
+        const photoCols = item.photos.slice(0, 3).map((photo, pIdx) => ({
           stack: [
-            {
-              image: getImage(photo),
-              width: CONFIG.SECTION_PHOTO_WIDTH,
-              alignment: 'center',
-            },
-            { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+            { image: img(photo), width: SIZES.PHOTO, alignment: 'center' },
+            { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.slate400, alignment: 'center', margin: [0, 3, 0, 0] },
           ],
-          margin: [5, 5],
+          width: SIZES.PHOTO + 20,
         }));
 
-        // Pad to 3 columns for consistent layout
-        while (photoColumns.length < 3) {
-          photoColumns.push({ text: '', width: CONFIG.SECTION_PHOTO_WIDTH });
+        // Pad to 3 columns
+        while (photoCols.length < 3) {
+          photoCols.push({ text: '', width: SIZES.PHOTO + 20 } as any);
         }
 
         tableBody.push([{
           colSpan: 3,
-          columns: photoColumns,
-          columnGap: 15,
-          fillColor: '#fafafa',
+          columns: photoCols,
+          columnGap: 10,
           margin: [5, 8, 5, 8],
+          fillColor: '#fafafa',
         }, {}, {}]);
       }
     });
@@ -679,104 +513,98 @@ function buildDocDefinition(
         body: tableBody,
       },
       layout: {
-        hLineWidth: (i: number) => (i <= 1 ? 1 : 0.5),
+        hLineWidth: (i: number) => (i <= 1) ? 1 : 0.5,
         vLineWidth: () => 0.5,
-        hLineColor: () => COLORS.border,
-        vLineColor: () => COLORS.border,
-        paddingLeft: () => 0,
-        paddingRight: () => 0,
-        paddingTop: () => 0,
-        paddingBottom: () => 0,
+        hLineColor: () => COLORS.slate200,
+        vLineColor: () => COLORS.slate200,
       },
       margin: [0, 0, 0, 10],
     });
   });
 
-  // ==================== TENANT VERIFICATION ====================
-  if (inspection.tenants && inspection.tenants.length > 0) {
+  // ========== TENANTS ==========
+  if (data.tenants && data.tenants.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
       text: 'Tenant Verification',
       fontSize: 18,
       bold: true,
-      color: COLORS.primary,
+      color: COLORS.navy,
       margin: [0, 0, 0, 15],
     });
 
-    inspection.tenants.forEach((tenant: any, idx: number) => {
+    data.tenants.forEach((tenant, idx) => {
       // Tenant header
       content.push({
         table: {
           widths: ['*'],
           body: [[{
             stack: [
-              { text: `Tenant ${idx + 1}`, fontSize: 8, color: COLORS.textMuted },
-              { text: tenant.shopName || 'Unknown Tenant', fontSize: 13, bold: true, color: COLORS.textPrimary },
-              tenant.shopNumber ? { text: `Shop Number: ${tenant.shopNumber}`, fontSize: 9, color: COLORS.textSecondary, margin: [0, 2, 0, 0] } : { text: '' },
+              { text: tenant.shopName || 'Unknown Tenant', fontSize: 12, bold: true, color: COLORS.slate700 },
+              tenant.shopNumber ? { text: `Shop: ${tenant.shopNumber}`, fontSize: 9, color: COLORS.slate500, margin: [0, 2, 0, 0] } : { text: '' },
             ],
-            margin: [12, 10],
+            margin: [12, 8],
           }]],
         },
         layout: {
           hLineWidth: () => 1,
           vLineWidth: () => 1,
-          hLineColor: () => COLORS.border,
-          vLineColor: () => COLORS.border,
-          fillColor: () => COLORS.lightBg,
+          hLineColor: () => COLORS.slate200,
+          vLineColor: () => COLORS.slate200,
+          fillColor: () => COLORS.slate50,
         },
         margin: [0, idx > 0 ? 15 : 0, 0, 8],
       });
 
-      // Meter details row
+      // Meter info row
       content.push({
         table: {
           widths: ['33%', '33%', '34%'],
           body: [[
-            { text: `Meter S/N: ${tenant.meterSerialNumber || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
-            { text: `Breaker: ${tenant.breakerSize || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
-            { text: `CT Ratio: ${tenant.ctSizeAndRatio || 'N/A'}`, fontSize: 9, color: COLORS.textPrimary, margin: [8, 6] },
+            { text: `Meter: ${tenant.meterSerialNumber || 'N/A'}`, fontSize: 9, margin: [8, 5] },
+            { text: `Breaker: ${tenant.breakerSize || 'N/A'}`, fontSize: 9, margin: [8, 5] },
+            { text: `CT Ratio: ${tenant.ctSizeAndRatio || 'N/A'}`, fontSize: 9, margin: [8, 5] },
           ]],
         },
         layout: {
           hLineWidth: () => 0.5,
           vLineWidth: () => 0.5,
-          hLineColor: () => COLORS.border,
-          vLineColor: () => COLORS.border,
+          hLineColor: () => COLORS.slate200,
+          vLineColor: () => COLORS.slate200,
         },
         margin: [0, 0, 0, 10],
       });
 
-      // Tenant images
-      // Tenant verification images - portrait orientation for meter/breaker closeups
-      const tenantImages: any[] = [];
+      // Tenant photos
+      const tenantPhotos: any[] = [];
       if (tenant.meterImage) {
-        tenantImages.push({
+        tenantPhotos.push({
           stack: [
-            { image: getImage(tenant.meterImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
-            { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
+            { image: img(tenant.meterImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { text: 'Meter', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
       if (tenant.breakerImage) {
-        tenantImages.push({
+        tenantPhotos.push({
           stack: [
-            { image: getImage(tenant.breakerImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
-            { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
+            { image: img(tenant.breakerImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { text: 'Breaker', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
       if (tenant.ctRatioImage) {
-        tenantImages.push({
+        tenantPhotos.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
-            { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
+            { image: img(tenant.ctRatioImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { text: 'CT Ratio', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
       }
 
-      if (tenantImages.length > 0) {
+      if (tenantPhotos.length > 0) {
         content.push({
-          columns: tenantImages,
+          columns: tenantPhotos,
           columnGap: 20,
           margin: [0, 5, 0, 15],
         });
@@ -784,21 +612,21 @@ function buildDocDefinition(
     });
   }
 
-  // ==================== SNAGS SECTION ====================
-  if (inspection.snags && inspection.snags.length > 0) {
+  // ========== SNAGS ==========
+  if (data.snags && data.snags.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
       text: 'Issues & Snags',
       fontSize: 18,
       bold: true,
-      color: COLORS.primary,
+      color: COLORS.navy,
       margin: [0, 0, 0, 15],
     });
 
-    inspection.snags.forEach((snag: any, idx: number) => {
-      const riskColor = snag.riskLevel === 'high' ? COLORS.error 
-        : snag.riskLevel === 'medium' ? COLORS.warning 
-        : COLORS.textSecondary;
+    data.snags.forEach((snag, idx) => {
+      const riskColor = snag.riskLevel === 'high' ? COLORS.red
+        : snag.riskLevel === 'medium' ? COLORS.amber
+        : COLORS.slate500;
 
       content.push({
         table: {
@@ -807,12 +635,12 @@ function buildDocDefinition(
             stack: [
               {
                 columns: [
-                  { text: `Issue ${idx + 1}: ${snag.title}`, fontSize: 11, bold: true, color: '#92400e', width: '*' },
-                  getStatusBadgeTable(snag.status),
+                  { text: `${idx + 1}. ${snag.title}`, fontSize: 11, bold: true, color: '#92400e', width: '*' },
+                  statusBadge(snag.status || 'open'),
                 ],
               },
-              snag.riskLevel ? { text: `Risk Level: ${snag.riskLevel.toUpperCase()}`, fontSize: 8, bold: true, color: riskColor, margin: [0, 4, 0, 0] } : { text: '' },
-              snag.description ? { text: snag.description, fontSize: 9, color: '#78350f', margin: [0, 6, 0, 0] } : { text: '' },
+              snag.riskLevel ? { text: `Risk: ${snag.riskLevel.toUpperCase()}`, fontSize: 8, bold: true, color: riskColor, margin: [0, 4, 0, 0] } : { text: '' },
+              snag.description ? { text: snag.description, fontSize: 9, color: '#78350f', margin: [0, 5, 0, 0] } : { text: '' },
             ],
             margin: [12, 10],
           }]],
@@ -827,13 +655,13 @@ function buildDocDefinition(
         margin: [0, idx > 0 ? 10 : 0, 0, 8],
       });
 
-      // Snag photos - larger for issue documentation (2-column layout)
+      // Snag photos
       if (snag.photos && snag.photos.length > 0) {
         content.push({
-          columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
+          columns: snag.photos.slice(0, 2).map((photo, pIdx) => ({
             stack: [
-              { image: getImage(photo), width: CONFIG.SNAG_PHOTO_WIDTH, alignment: 'center' },
-              { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
+              { image: img(photo), width: SIZES.SNAG_PHOTO, alignment: 'center' },
+              { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.slate400, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
           columnGap: 20,
@@ -843,73 +671,70 @@ function buildDocDefinition(
     });
   }
 
-  // ==================== SIGNATURES SECTION ====================
-  if (inspection.signatures && inspection.signatures.length > 0) {
+  // ========== SIGNATURES ==========
+  if (data.signatures && data.signatures.length > 0) {
     content.push({ text: '', pageBreak: 'before' });
     content.push({
-      text: 'Signatures & Approvals',
+      text: 'Signatures',
       fontSize: 18,
       bold: true,
-      color: COLORS.primary,
+      color: COLORS.navy,
       margin: [0, 0, 0, 20],
     });
 
-    const sigColumns = inspection.signatures.map((sig: any) => ({
-      stack: [
-        {
-          table: {
-            widths: ['*'],
-            body: [[{
-              stack: [
-                sig.signatureUrl && getImage(sig.signatureUrl) !== PLACEHOLDER_IMAGE ? {
-                  image: getImage(sig.signatureUrl),
-                  width: CONFIG.SIGNATURE_WIDTH,
-                  maxHeight: CONFIG.SIGNATURE_MAX_HEIGHT,
-                  alignment: 'center',
-                  margin: [0, 10, 0, 10],
-                } : { text: '', margin: [0, 40, 0, 0] },
-                { canvas: [{ type: 'line', x1: 20, y1: 0, x2: 150, y2: 0, lineWidth: 1, lineColor: COLORS.border }] },
-                { text: sig.name, fontSize: 11, bold: true, alignment: 'center', margin: [0, 8, 0, 2] },
-                { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.textSecondary, alignment: 'center' },
-                { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
-              ],
-              margin: [10, 10],
-            }]],
-          },
-          layout: {
-            hLineWidth: () => 1,
-            vLineWidth: () => 1,
-            hLineColor: () => COLORS.border,
-            vLineColor: () => COLORS.border,
-          },
-        },
-      ],
-      width: '*',
-    }));
-
     content.push({
-      columns: sigColumns,
+      columns: data.signatures.map(sig => ({
+        stack: [
+          {
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  sig.signatureUrl && img(sig.signatureUrl) !== PLACEHOLDER ? {
+                    image: img(sig.signatureUrl),
+                    width: SIZES.SIGNATURE,
+                    alignment: 'center',
+                    margin: [0, 10, 0, 10],
+                  } : { text: '', margin: [0, 30, 0, 0] },
+                  { canvas: [{ type: 'line', x1: 20, y1: 0, x2: 140, y2: 0, lineWidth: 1, lineColor: COLORS.slate200 }] },
+                  { text: sig.name, fontSize: 11, bold: true, alignment: 'center', margin: [0, 8, 0, 2] },
+                  { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.slate500, alignment: 'center' },
+                  { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
+                ],
+                margin: [10, 10],
+              }]],
+            },
+            layout: {
+              hLineWidth: () => 1,
+              vLineWidth: () => 1,
+              hLineColor: () => COLORS.slate200,
+              vLineColor: () => COLORS.slate200,
+            },
+          },
+        ],
+        width: '*',
+      })),
       columnGap: 20,
-      margin: [0, 10, 0, 0],
     });
   }
 
-  // Build final document definition
+  // Document definition
   return {
     pageSize: 'A4',
     pageMargins: [40, 50, 40, 60],
-    defaultStyle: {
-      font: 'Roboto',
-      fontSize: 10,
-    },
     content,
+    defaultStyle: {
+      font: 'Helvetica',
+      fontSize: 10,
+      color: COLORS.slate700,
+    },
     footer: (currentPage: number, pageCount: number) => ({
       columns: [
-        { text: 'CONFIDENTIAL', fontSize: 7, color: COLORS.textMuted, margin: [40, 0, 0, 0] },
-        { text: `Page ${currentPage} of ${pageCount}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center' },
-        { text: new Date().toISOString().split('T')[0], fontSize: 7, color: COLORS.textMuted, alignment: 'right', margin: [0, 0, 40, 0] },
+        { text: 'CONFIDENTIAL', fontSize: 8, color: COLORS.slate400, margin: [40, 0] },
+        { text: `Page ${currentPage} of ${pageCount}`, fontSize: 8, color: COLORS.slate400, alignment: 'center' },
+        { text: `v${VERSION}`, fontSize: 8, color: COLORS.slate400, alignment: 'right', margin: [0, 0, 40, 0] },
       ],
-      margin: [0, 15, 0, 0],
+      margin: [0, 20],
     }),
   };
 }
@@ -923,192 +748,134 @@ Deno.serve(async (req) => {
     return new Response(null, { headers: corsHeaders });
   }
 
-  const timings: Record<string, number> = {};
-  const startTime = Date.now();
-
   try {
     const body = await req.json();
-    const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = body;
+    const { inspection, siteName, clientName, logoUrl, accentColor } = body;
 
     if (!inspection || !siteName) {
       return new Response(
-        JSON.stringify({ success: false, error: 'Missing required fields: inspection, siteName' }),
+        JSON.stringify({ success: false, error: 'Missing inspection or siteName' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    console.log('[PDFMake] Version:', CONFIG.VERSION);
-    console.log('[PDFMake] Section photo width:', CONFIG.SECTION_PHOTO_WIDTH);
-    console.log('[PDFMake] Logo width:', CONFIG.LOGO_WIDTH);
-    console.log('[PDFMake] Starting report generation...');
-    console.log('[PDFMake] Site:', siteName);
-    console.log('[PDFMake] Subsection:', inspection.subsectionName || 'N/A');
-    console.log('[PDFMake] Sections:', inspection.sections?.length || 0);
-    console.log('[PDFMake] Tenants:', inspection.tenants?.length || 0);
-    console.log('[PDFMake] Snags:', inspection.snags?.length || 0);
-
-    // Calculate stats
-    const stats = calculateStats(inspection);
-    console.log('[PDFMake] Stats:', stats);
+    console.log(`[PDF] Version ${VERSION} - Starting`);
+    console.log(`[PDF] Site: ${siteName}`);
+    console.log(`[PDF] Sections: ${inspection.sections?.length || 0}`);
+    console.log(`[PDF] Tenants: ${inspection.tenants?.length || 0}`);
+    console.log(`[PDF] Snags: ${inspection.snags?.length || 0}`);
 
     // Collect all image URLs
-    const extractStart = Date.now();
-    const imageUrls: string[] = [];
+    const imageUrls = new Set<string>();
     
-    // Logo first (mark as logo for special handling)
-    if (siteLogoUrl && !siteLogoUrl.startsWith('data:')) {
-      imageUrls.push(siteLogoUrl);
-      logoUrls.add(siteLogoUrl);
+    inspection.sections?.forEach((sec: any) => {
+      sec.items?.forEach((item: any) => {
+        item.photos?.forEach((p: string) => p && imageUrls.add(p));
+      });
+    });
+    
+    inspection.tenants?.forEach((t: any) => {
+      if (t.meterImage) imageUrls.add(t.meterImage);
+      if (t.breakerImage) imageUrls.add(t.breakerImage);
+      if (t.ctRatioImage) imageUrls.add(t.ctRatioImage);
+    });
+    
+    inspection.snags?.forEach((s: any) => {
+      s.photos?.forEach((p: string) => p && imageUrls.add(p));
+    });
+    
+    inspection.signatures?.forEach((sig: any) => {
+      if (sig.signatureUrl) imageUrls.add(sig.signatureUrl);
+    });
+
+    console.log(`[PDF] Images to download: ${imageUrls.size}`);
+
+    // Download all images
+    const imageMap = new Map<string, string>();
+    let logoUri = PLACEHOLDER;
+
+    if (logoUrl) {
+      logoUri = await downloadImage(logoUrl);
+      console.log(`[PDF] Logo: ${logoUri !== PLACEHOLDER ? 'OK' : 'Failed'}`);
     }
 
-    // Section photos
-    inspection.sections?.forEach((section: any) => {
-      section.items?.forEach((item: any) => {
-        if (item.photos?.length) {
-          const validPhotos = item.photos
-            .filter((p: string) => p && typeof p === 'string' && !p.startsWith('data:'))
-            .slice(0, 3);
-          imageUrls.push(...validPhotos);
-        }
+    // Download images in parallel batches of 5
+    const urlArray = Array.from(imageUrls);
+    for (let i = 0; i < urlArray.length; i += 5) {
+      const batch = urlArray.slice(i, i + 5);
+      const results = await Promise.all(batch.map(url => downloadImage(url)));
+      batch.forEach((url, idx) => {
+        imageMap.set(url, results[idx]);
+      });
+    }
+
+    console.log(`[PDF] Downloaded: ${imageMap.size} images`);
+
+    // Build document
+    const docDef = buildDocument(
+      inspection,
+      siteName,
+      imageMap,
+      clientName,
+      logoUri,
+      accentColor || COLORS.blue
+    );
+
+    // Generate PDF
+    const pdfMake = await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.min.js');
+    const pdfFonts = await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js');
+    (pdfMake.default as any).vfs = (pdfFonts.default as any).pdfMake.vfs;
+
+    const pdfDoc = (pdfMake.default as any).createPdf(docDef);
+    
+    const pdfBuffer = await new Promise<Uint8Array>((resolve, reject) => {
+      pdfDoc.getBuffer((buffer: Uint8Array) => {
+        resolve(buffer);
       });
     });
 
-    // Tenant images
-    inspection.tenants?.forEach((tenant: any) => {
-      if (tenant.meterImage && !tenant.meterImage.startsWith('data:')) imageUrls.push(tenant.meterImage);
-      if (tenant.breakerImage && !tenant.breakerImage.startsWith('data:')) imageUrls.push(tenant.breakerImage);
-      if (tenant.ctRatioImage && !tenant.ctRatioImage.startsWith('data:')) imageUrls.push(tenant.ctRatioImage);
-    });
-
-    // Snag photos
-    inspection.snags?.forEach((snag: any) => {
-      if (snag.photos?.length) {
-        const validPhotos = snag.photos
-          .filter((p: string) => p && typeof p === 'string' && !p.startsWith('data:'))
-          .slice(0, 2);
-        imageUrls.push(...validPhotos);
-      }
-    });
-
-    // Signature images
-    inspection.signatures?.forEach((sig: any) => {
-      if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        imageUrls.push(sig.signatureUrl);
-      }
-    });
-
-    const uniqueUrls = [...new Set(imageUrls)].slice(0, CONFIG.MAX_IMAGES_PER_REPORT);
-    timings.extract_urls = Date.now() - extractStart;
-    console.log(`[PDFMake] Unique images to process: ${uniqueUrls.length}`);
-
-    // Download all images
-    const downloadStart = Date.now();
-    const imageMap = new Map<string, string>();
-    
-    for (const url of uniqueUrls) {
-      const isLogo = logoUrls.has(url);
-      const dataUri = await downloadImage(url, isLogo);
-      imageMap.set(url, dataUri);
-    }
-    
-    timings.download_images = Date.now() - downloadStart;
-    console.log(`[PDFMake] Downloaded ${imageMap.size} images`);
-
-    // Get logo data URI
-    const logoDataUri = siteLogoUrl 
-      ? (siteLogoUrl.startsWith('data:') ? siteLogoUrl : imageMap.get(siteLogoUrl)) 
-      : undefined;
-
-    // Build document definition
-    const docDefStart = Date.now();
-    const docDefinition = buildDocDefinition(
-      inspection,
-      siteName,
-      stats,
-      imageMap,
-      clientName,
-      logoDataUri,
-      accentColor
-    );
-    timings.build_doc = Date.now() - docDefStart;
-
-    // Import pdfmake dynamically
-    const pdfmakeStart = Date.now();
-    
-    // @ts-ignore - Dynamic import for Deno
-    const pdfMakeModule = await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.min.js?bundle');
-    // @ts-ignore - Dynamic import for fonts
-    const vfsModule = await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js?bundle') as any;
-    
-    const pdfMake = pdfMakeModule.default || pdfMakeModule;
-    pdfMake.vfs = vfsModule?.pdfMake?.vfs || vfsModule?.default?.pdfMake?.vfs || (vfsModule as any)?.vfs || {};
-    
-    timings.load_pdfmake = Date.now() - pdfmakeStart;
-
-    // Generate PDF
-    const generateStart = Date.now();
-    const pdfDoc = pdfMake.createPdf(docDefinition);
-    
-    const pdfBuffer = await new Promise<Uint8Array>((resolve, reject) => {
-      try {
-        pdfDoc.getBuffer((buffer: Uint8Array) => {
-          resolve(buffer);
-        });
-      } catch (error) {
-        reject(error);
-      }
-    });
-    
-    timings.generate_pdf = Date.now() - generateStart;
-    console.log(`[PDFMake] PDF generated: ${Math.round(pdfBuffer.length / 1024)}KB`);
+    console.log(`[PDF] Generated: ${Math.round(pdfBuffer.length / 1024)}KB`);
 
     // Upload to storage
-    const uploadStart = Date.now();
-    const supabase = getSupabaseClient();
-    const filename = `Inspection_Report_${Date.now()}.pdf`;
-    const storagePath = `reports/${filename}`;
+    const supabase = getSupabase();
+    const fileName = `inspection_${Date.now()}.pdf`;
+    const filePath = `reports/${fileName}`;
 
     const { error: uploadError } = await supabase.storage
       .from('documents')
-      .upload(storagePath, pdfBuffer, {
+      .upload(filePath, pdfBuffer, {
         contentType: 'application/pdf',
         upsert: true,
       });
 
     if (uploadError) {
-      console.error('[PDFMake] Upload failed:', uploadError);
+      console.error('[PDF] Upload error:', uploadError);
       return new Response(
         JSON.stringify({ success: false, error: `Upload failed: ${uploadError.message}` }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
-    const { data: urlData } = supabase.storage.from('documents').getPublicUrl(storagePath);
-    timings.upload = Date.now() - uploadStart;
+    const { data: urlData } = supabase.storage
+      .from('documents')
+      .getPublicUrl(filePath);
 
-    const totalTime = Date.now() - startTime;
-    console.log(`[PDFMake] Complete! Total: ${totalTime}ms`, timings);
+    console.log(`[PDF] Complete: ${urlData.publicUrl}`);
 
     return new Response(
       JSON.stringify({
         success: true,
         url: urlData.publicUrl,
-        filename,
-        timings,
-        totalTime,
+        fileName,
+        sizeKB: Math.round(pdfBuffer.length / 1024),
       }),
-      { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
-  } catch (error) {
-    console.error('[PDFMake] Error:', error);
+  } catch (err) {
+    console.error('[PDF] Error:', err);
     return new Response(
-      JSON.stringify({
-        success: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-        timings,
-        totalTime: Date.now() - startTime,
-      }),
+      JSON.stringify({ success: false, error: String(err) }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }
