@@ -127,32 +127,48 @@ interface ImageResult {
   attempts: number;
 }
 
-// Track which URLs are logos (need higher quality)
+// Track which URLs are logos (need NO transformation to preserve quality)
 const logoUrls = new Set<string>();
 
 /**
  * Download image with Supabase Image Transformation for on-the-fly compression
- * Logos get higher quality/resolution to prevent distortion
+ * Logos are downloaded WITHOUT transformation to preserve quality and avoid distortion
  */
 async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | null> {
   const parsed = parseSupabaseStorageUrl(url);
   const isLogo = logoUrls.has(url);
   
-  // Logos need higher quality settings
-  const transformWidth = isLogo ? 300 : CONFIG.IMAGE_TRANSFORM_WIDTH;
-  const transformQuality = isLogo ? 90 : CONFIG.IMAGE_TRANSFORM_QUALITY;
-  
   if (parsed) {
     const supabase = getSupabaseClient();
     
+    // LOGOS: Download without transformation to preserve original quality
+    if (isLogo) {
+      console.log(`[Transform] LOGO: Downloading original (no transformation)`);
+      try {
+        const { data: blob, error } = await supabase.storage
+          .from(parsed.bucket)
+          .download(parsed.path);
+        if (error || !blob) {
+          console.warn(`[Transform] Logo download failed: ${error?.message}`);
+          return null;
+        }
+        const buffer = await blob.arrayBuffer();
+        console.log(`[Transform] Logo downloaded: ${Math.round(buffer.byteLength / 1024)}KB`);
+        return buffer;
+      } catch (err) {
+        console.warn(`[Transform] Logo download exception:`, err);
+        return null;
+      }
+    }
+    
+    // PHOTOS: Use transformation for compression
     try {
-      // Create a signed URL with transformation parameters
       const { data: signedUrlData, error: signedUrlError } = await supabase.storage
         .from(parsed.bucket)
         .createSignedUrl(parsed.path, 60, {
           transform: {
-            width: transformWidth,
-            quality: transformQuality,
+            width: CONFIG.IMAGE_TRANSFORM_WIDTH,
+            quality: CONFIG.IMAGE_TRANSFORM_QUALITY,
           }
         });
       
@@ -166,8 +182,7 @@ async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | nu
         return await blob.arrayBuffer();
       }
       
-      console.log(`[Transform] ${isLogo ? 'LOGO' : 'Photo'}: ${transformWidth}px @ ${transformQuality}%`);
-      
+      console.log(`[Transform] Photo: ${CONFIG.IMAGE_TRANSFORM_WIDTH}px @ ${CONFIG.IMAGE_TRANSFORM_QUALITY}%`);
       
       // Fetch the transformed image
       const controller = new AbortController();
@@ -690,7 +705,7 @@ function generateHTML(
 <body>
   <!-- COVER PAGE -->
   <div class="page" style="display: flex; flex-direction: column; justify-content: center; text-align: center; page-break-after: always;">
-    ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 180px; max-height: 100px; margin: 0 auto 40px;" />` : ''}
+    ${logoDataUri ? `<img src="${logoDataUri}" style="max-width: 200px; max-height: 120px; object-fit: contain; margin: 0 auto 40px;" />` : ''}
     <div style="margin-bottom: 60px;">
       <h1 style="font-size: 36px; font-weight: 700; color: ${accentColor}; margin: 0 0 16px;">INSPECTION REPORT</h1>
       <div style="font-size: 20px; color: #4b5563; margin-bottom: 8px;">${siteName}</div>
