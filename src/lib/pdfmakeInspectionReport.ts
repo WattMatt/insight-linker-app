@@ -436,43 +436,49 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
       vLineWidth: () => 0,
       paddingLeft: () => 12,
     },
-    margin: [0, 0, 0, 25],
+    margin: [0, 0, 0, 20],
   });
 
-  // Large KPI row at top - % COMPLIANCE, ITEMS CHECKED, PHOTOS
+  // Large centered compliance score with ring indicator
   const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
     : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
     : REPORT_COLORS.error;
 
+  // Centered large compliance percentage with circular ring
   content.push({
-    table: {
-      widths: ['*', '*', '*'],
-      body: [[
-        {
-          stack: [
-            { text: stats.passPercentage.toString(), fontSize: 48, bold: true, color: scoreColor, alignment: 'center' },
-            { text: '% COMPLIANCE', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
-          ],
-          margin: [0, 10, 0, 10],
-        },
-        {
-          stack: [
-            { text: stats.totalItems.toString(), fontSize: 48, bold: true, color: REPORT_COLORS.textPrimary, alignment: 'center' },
-            { text: 'ITEMS CHECKED', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
-          ],
-          margin: [0, 10, 0, 10],
-        },
-        {
-          stack: [
-            { text: stats.totalPhotos.toString(), fontSize: 48, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
-            { text: 'PHOTOS', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
-          ],
-          margin: [0, 10, 0, 10],
-        },
-      ]],
-    },
-    layout: 'noBorders',
-    margin: [0, 0, 0, 20],
+    columns: [
+      { width: '*', text: '' },
+      {
+        width: 'auto',
+        stack: [
+          {
+            canvas: [
+              // Outer ring
+              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 10, lineColor: scoreColor },
+            ],
+          },
+          // Percentage inside the ring
+          {
+            text: `${stats.passPercentage}%`,
+            fontSize: 36,
+            bold: true,
+            color: scoreColor,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -95 },
+          },
+          // COMPLIANCE label below number
+          {
+            text: 'COMPLIANCE',
+            fontSize: 9,
+            color: REPORT_COLORS.textMuted,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -55 },
+          },
+        ],
+      },
+      { width: '*', text: '' },
+    ],
+    margin: [0, 10, 0, 15],
   });
 
   // SANS compliance notice - italicized
@@ -482,19 +488,19 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
     italics: true,
     color: REPORT_COLORS.textSecondary,
     alignment: 'center',
-    margin: [0, 0, 0, 8],
+    margin: [0, 10, 0, 6],
   });
 
-  // Confidential notice below SANS text (matching reference)
+  // Confidential notice
   content.push({
     text: 'CONFIDENTIAL - For authorized use only',
     fontSize: 9,
     color: REPORT_COLORS.textMuted,
     alignment: 'center',
-    margin: [0, 0, 0, 40],
+    margin: [0, 0, 0, 25],
   });
 
-  // 2x2 KPI grid - Items Passed, Items Failed, Pending Review, Photos Captured
+  // 2x2 KPI grid - centered with equal spacing
   content.push({
     table: {
       widths: ['*', '*'],
@@ -502,37 +508,37 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
         [
           {
             stack: [
-              { text: stats.passCount.toString(), fontSize: 32, bold: true, color: REPORT_COLORS.success },
-              { text: 'Items Passed', fontSize: 10, color: REPORT_COLORS.textSecondary, margin: [0, 5, 0, 0] },
+              { text: stats.passCount.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
+              { text: 'Items Passed', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
             ],
             fillColor: '#f0fdf4',
-            margin: [20, 20, 20, 20],
+            margin: [15, 18, 15, 18],
           },
           {
             stack: [
-              { text: stats.failCount.toString(), fontSize: 32, bold: true, color: REPORT_COLORS.error },
-              { text: 'Items Failed', fontSize: 10, color: REPORT_COLORS.textSecondary, margin: [0, 5, 0, 0] },
+              { text: stats.failCount.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.error, alignment: 'center' },
+              { text: 'Items Failed', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
             ],
             fillColor: '#fef2f2',
-            margin: [20, 20, 20, 20],
+            margin: [15, 18, 15, 18],
           },
         ],
         [
           {
             stack: [
-              { text: stats.pendingCount.toString(), fontSize: 32, bold: true, color: REPORT_COLORS.warning },
-              { text: 'Pending Review', fontSize: 10, color: REPORT_COLORS.textSecondary, margin: [0, 5, 0, 0] },
+              { text: stats.pendingCount.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.warning, alignment: 'center' },
+              { text: 'Pending Review', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
             ],
             fillColor: '#fffbeb',
-            margin: [20, 20, 20, 20],
+            margin: [15, 18, 15, 18],
           },
           {
             stack: [
-              { text: stats.totalPhotos.toString(), fontSize: 32, bold: true, color: REPORT_COLORS.accent },
-              { text: 'Photos Captured', fontSize: 10, color: REPORT_COLORS.textSecondary, margin: [0, 5, 0, 0] },
+              { text: stats.totalPhotos.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.accent, alignment: 'center' },
+              { text: 'Photos Captured', fontSize: 10, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 5, 0, 0] },
             ],
             fillColor: '#eff6ff',
-            margin: [20, 20, 20, 20],
+            margin: [15, 18, 15, 18],
           },
         ],
       ],
@@ -543,7 +549,7 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
       hLineColor: () => REPORT_COLORS.border,
       vLineColor: () => REPORT_COLORS.border,
     },
-    margin: [40, 0, 40, 0],
+    margin: [30, 0, 30, 0],
   });
 
   // Page break - section breakdown goes on next page
@@ -564,121 +570,113 @@ function createSectionBreakdownPage(
 ): Content[] {
   const content: Content[] = [];
 
-  // Large circular percentage indicator with filled ring background
+  // Compliance score color
   const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
     : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
     : REPORT_COLORS.error;
 
-  // Circle with percentage and OVERALL label INSIDE - matching reference exactly
+  // Two-column layout: Circle on left, Section Breakdown on right
   content.push({
     columns: [
+      // Left column: Large circular compliance indicator
       {
-        width: 180,
+        width: 160,
         stack: [
           {
             canvas: [
-              // Colored ring circle
-              { type: 'ellipse', x: 75, y: 75, r1: 65, r2: 65, lineWidth: 12, lineColor: scoreColor },
+              // Outer ring circle
+              { type: 'ellipse', x: 65, y: 65, r1: 55, r2: 55, lineWidth: 10, lineColor: scoreColor },
             ],
           },
-          // Percentage text centered inside circle
+          // Percentage inside the ring
           {
             text: `${stats.passPercentage}%`,
-            fontSize: 42,
+            fontSize: 32,
             bold: true,
             color: scoreColor,
             alignment: 'center',
-            relativePosition: { x: 0, y: -100 },
+            relativePosition: { x: 0, y: -85 },
           },
-          // OVERALL label inside circle, below percentage
+          // OVERALL label
           {
             text: 'OVERALL',
-            fontSize: 10,
+            fontSize: 9,
             color: REPORT_COLORS.textMuted,
             alignment: 'center',
-            relativePosition: { x: 0, y: -55 },
+            relativePosition: { x: 0, y: -50 },
           },
         ],
-        alignment: 'center',
+        margin: [0, 0, 15, 0],
       },
+      // Right column: Section Breakdown table
       {
         width: '*',
-        text: '',
+        stack: [
+          // Section Breakdown header
+          {
+            text: 'Section Breakdown',
+            fontSize: 13,
+            bold: true,
+            color: REPORT_COLORS.textPrimary,
+            margin: [0, 5, 0, 10],
+          },
+          // Section Breakdown table - compact version
+          stats.sectionStats.length > 0 ? {
+            table: {
+              headerRows: 1,
+              widths: ['*', 35, 30, 30, 40],
+              body: [
+                [
+                  { text: 'Section', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary },
+                  { text: 'Items', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+                  { text: 'Pass', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+                  { text: 'Fail', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+                  { text: 'Score', bold: true, fontSize: 8, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+                ],
+                ...stats.sectionStats.map(section => {
+                  const score = section.totalItems > 0 
+                    ? Math.round((section.passCount / section.totalItems) * 100) 
+                    : 0;
+                  const sectionScoreColor = score >= 80 ? REPORT_COLORS.success 
+                    : score >= 60 ? REPORT_COLORS.warning 
+                    : REPORT_COLORS.error;
+                  return [
+                    { text: section.title, fontSize: 8, color: REPORT_COLORS.textPrimary },
+                    { text: section.totalItems.toString(), fontSize: 8, alignment: 'center' },
+                    { text: section.passCount.toString(), fontSize: 8, color: REPORT_COLORS.success, alignment: 'center' },
+                    { text: section.failCount.toString(), fontSize: 8, color: section.failCount > 0 ? REPORT_COLORS.error : REPORT_COLORS.textMuted, alignment: 'center' },
+                    { text: `${score}%`, fontSize: 8, bold: true, color: sectionScoreColor, alignment: 'center' },
+                  ];
+                }),
+              ],
+            },
+            layout: {
+              hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+              vLineWidth: () => 0,
+              hLineColor: () => REPORT_COLORS.border,
+              fillColor: (rowIndex: number) => rowIndex === 0 ? REPORT_COLORS.lightBg : null,
+              paddingTop: () => 5,
+              paddingBottom: () => 5,
+              paddingLeft: () => 6,
+              paddingRight: () => 6,
+            },
+          } : { text: '' },
+        ],
       },
     ],
-    margin: [0, 20, 0, 25],
+    margin: [0, 10, 0, 25],
   });
 
-  // Section Breakdown header - bold with underline
-  content.push({
-    text: 'Section Breakdown',
-    fontSize: 14,
-    bold: true,
-    color: REPORT_COLORS.textPrimary,
-    margin: [0, 0, 0, 12],
-  });
-
-  // Section Breakdown table
-  if (stats.sectionStats.length > 0) {
-    const breakdownRows: Content[][] = [
-      [
-        { text: 'Section', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary },
-        { text: 'Items', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-        { text: 'Pass', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-        { text: 'Fail', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-        { text: 'Photos', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-        { text: 'Score', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-      ],
-    ];
-
-    stats.sectionStats.forEach(section => {
-      const score = section.totalItems > 0 
-        ? Math.round((section.passCount / section.totalItems) * 100) 
-        : 0;
-      const sectionScoreColor = score >= 80 ? REPORT_COLORS.success 
-        : score >= 60 ? REPORT_COLORS.warning 
-        : REPORT_COLORS.error;
-
-      breakdownRows.push([
-        { text: section.title, fontSize: 9, color: REPORT_COLORS.textPrimary },
-        { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' },
-        { text: section.passCount.toString(), fontSize: 9, color: REPORT_COLORS.success, alignment: 'center' },
-        { text: section.failCount.toString(), fontSize: 9, color: section.failCount > 0 ? REPORT_COLORS.error : REPORT_COLORS.textMuted, alignment: 'center' },
-        { text: section.photoCount.toString(), fontSize: 9, alignment: 'center' },
-        { text: `${score}%`, fontSize: 9, bold: true, color: sectionScoreColor, alignment: 'center' },
-      ]);
-    });
-
-    content.push({
-      table: {
-        headerRows: 1,
-        widths: ['*', 45, 40, 40, 45, 50],
-        body: breakdownRows,
-      },
-      layout: {
-        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
-        vLineWidth: () => 0,
-        hLineColor: () => REPORT_COLORS.border,
-        fillColor: (rowIndex: number) => rowIndex === 0 ? REPORT_COLORS.lightBg : null,
-        paddingTop: () => 8,
-        paddingBottom: () => 8,
-        paddingLeft: () => 10,
-        paddingRight: () => 10,
-      },
-      margin: [0, 0, 0, 25],
-    });
-  }
-
-  // General Information section header - TEAL BANNER matching Quality Score Dashboard
+  // General Information section header - TEAL BANNER
   content.push({
     table: {
       widths: ['*'],
       body: [[{
         text: 'GENERAL INFORMATION',
-        fontSize: 12,
+        fontSize: 11,
         bold: true,
         color: '#FFFFFF',
-        margin: [0, 8, 0, 8],
+        margin: [0, 6, 0, 6],
       }]],
     },
     layout: {
@@ -687,61 +685,60 @@ function createSectionBreakdownPage(
       vLineWidth: () => 0,
       paddingLeft: () => 12,
     },
-    margin: [0, 15, 0, 12],
+    margin: [0, 10, 0, 10],
   });
 
-  // General info - table with bordered rows matching reference
+  // General info - compact table
   const infoRows: Content[][] = [];
   
   infoRows.push([
-    { text: 'Site Name', fontSize: 10, color: REPORT_COLORS.textSecondary },
-    { text: siteName, fontSize: 10, bold: true, color: REPORT_COLORS.textPrimary },
+    { text: 'Site Name', fontSize: 9, color: REPORT_COLORS.textSecondary },
+    { text: siteName, fontSize: 9, bold: true, color: REPORT_COLORS.textPrimary },
   ]);
 
   if (inspection.subsectionName) {
     infoRows.push([
-      { text: 'Subsection', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.subsectionName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+      { text: 'Subsection', fontSize: 9, color: REPORT_COLORS.textSecondary },
+      { text: inspection.subsectionName, fontSize: 9, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   if (clientName) {
     infoRows.push([
-      { text: 'Client', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: clientName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+      { text: 'Client', fontSize: 9, color: REPORT_COLORS.textSecondary },
+      { text: clientName, fontSize: 9, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   if (inspection.inspectionDate) {
     const formattedDate = new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
-      weekday: 'long',
       day: 'numeric',
       month: 'long',
       year: 'numeric',
     });
     infoRows.push([
-      { text: 'Inspection Date', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: formattedDate, fontSize: 10, color: REPORT_COLORS.textPrimary },
+      { text: 'Inspection Date', fontSize: 9, color: REPORT_COLORS.textSecondary },
+      { text: formattedDate, fontSize: 9, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   if (inspection.inspectorName) {
     infoRows.push([
-      { text: 'Inspector', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.inspectorName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+      { text: 'Inspector', fontSize: 9, color: REPORT_COLORS.textSecondary },
+      { text: inspection.inspectorName, fontSize: 9, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   if (inspection.templateName) {
     infoRows.push([
-      { text: 'Template', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.templateName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+      { text: 'Template', fontSize: 9, color: REPORT_COLORS.textSecondary },
+      { text: inspection.templateName, fontSize: 9, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   content.push({
     table: {
-      widths: [120, '*'],
+      widths: [100, '*'],
       body: infoRows,
     },
     layout: {
@@ -749,14 +746,17 @@ function createSectionBreakdownPage(
       vLineWidth: (i: number) => (i === 0 || i === 2) ? 0.5 : 0,
       hLineColor: () => REPORT_COLORS.border,
       vLineColor: () => REPORT_COLORS.border,
-      paddingTop: () => 10,
-      paddingBottom: () => 10,
-      paddingLeft: () => 12,
-      paddingRight: () => 12,
+      paddingTop: () => 7,
+      paddingBottom: () => 7,
+      paddingLeft: () => 10,
+      paddingRight: () => 10,
       fillColor: (rowIndex: number) => rowIndex % 2 === 0 ? REPORT_COLORS.lightBg : null,
     },
-    margin: [0, 0, 0, 20],
+    margin: [0, 0, 0, 15],
   });
+
+  // Page break after Section Breakdown + General Info
+  content.push({ text: '', pageBreak: 'after' });
 
   return content;
 }
@@ -775,25 +775,25 @@ function createSectionWithPhotoGrid(
   const content: Content[] = [];
   const items = section.items || [];
 
-  // Build section header - matching reference with navy number box + teal title bar
+  // Build section header - navy number badge + teal title bar
   const sectionHeader = {
     table: {
-      widths: [35, '*'],
+      widths: [40, '*'],
       body: [[
         {
           text: `${sectionIndex + 1}`,
-          fontSize: 16,
+          fontSize: 14,
           bold: true,
           color: '#FFFFFF',
           alignment: 'center',
-          margin: [0, 8, 0, 8],
+          margin: [0, 7, 0, 7],
         },
         {
           text: section.title.toUpperCase(),
-          fontSize: 11,
+          fontSize: 10,
           bold: true,
           color: '#FFFFFF',
-          margin: [12, 10, 0, 10],
+          margin: [10, 8, 0, 8],
         },
       ]],
     },
@@ -803,7 +803,7 @@ function createSectionWithPhotoGrid(
       fillColor: (rowIndex: number, node: any, colIndex: number) => 
         colIndex === 0 ? REPORT_COLORS.primary : REPORT_COLORS.secondary,
     },
-    margin: [0, 20, 0, 15],
+    margin: [0, 15, 0, 12],
   };
 
   // Handle empty sections - keep header with "no items" message
@@ -871,40 +871,42 @@ function createInspectionItemContent(
     : isFailStatus(statusText) ? '#fef2f2' 
     : '#fffbeb';
 
-  // Item header row with status badge
+  // Item header row with status badge - rounded pill style
   itemStack.push({
     table: {
-      widths: ['*', 80],
+      widths: ['*', 70],
       body: [[
         {
           text: item.label,
-          fontSize: 11,
+          fontSize: 10,
           bold: true,
           color: REPORT_COLORS.textPrimary,
-          margin: [0, 0, 0, 0],
+          margin: [0, 2, 0, 2],
         },
         {
           table: {
             widths: ['*'],
             body: [[{
               text: statusText.toUpperCase(),
-              fontSize: 8,
+              fontSize: 7,
               bold: true,
               color: statusColor,
               alignment: 'center',
-              margin: [0, 3, 0, 3],
+              margin: [4, 4, 4, 4],
             }]],
           },
           layout: {
             fillColor: () => statusBg,
-            hLineWidth: () => 0,
-            vLineWidth: () => 0,
+            hLineWidth: () => 0.5,
+            vLineWidth: () => 0.5,
+            hLineColor: () => statusColor,
+            vLineColor: () => statusColor,
           },
         },
       ]],
     },
     layout: 'noBorders',
-    margin: [0, itemIndex > 0 ? 12 : 0, 0, 4],
+    margin: [0, itemIndex > 0 ? 10 : 0, 0, 3],
   });
 
   // Notes if present
