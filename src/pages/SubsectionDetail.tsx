@@ -2864,7 +2864,7 @@ const SubsectionDetail = () => {
                             disabled={generatingReportForId === id}
                           >
                             <FileText className="h-4 w-4 mr-1" />
-                            {generatingReportForId === id ? 'Generating...' : 'Generate PDF'}
+                            {generatingReportForId === id ? 'Generating...' : 'Generate Report'}
                           </Button>
                         )}
                         <Button
