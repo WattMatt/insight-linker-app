@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { 
-  generateInspectionReportPdf, 
-  generateAndSaveInspectionReportPdfmake,
-  InspectionReportData as PdfmakeInspectionData 
-} from "@/lib/pdfmakeInspectionReport";
+  generatePdfShiftInspectionReport,
+  generateAndSavePdfShiftInspectionReport,
+  InspectionReportData as PdfShiftInspectionData 
+} from "@/lib/pdfshiftInspectionReport";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
@@ -136,8 +136,8 @@ export async function generateAndSaveComprehensiveReport(
       };
     });
 
-    // Build pdfmake inspection data
-    const pdfData: PdfmakeInspectionData = {
+    // Build PDFShift inspection data
+    const pdfData: PdfShiftInspectionData = {
       inspectionId,
       templateName: template.name,
       inspectorName: generalInfo.inspectorName || inspection.inspector_name,
@@ -163,10 +163,10 @@ export async function generateAndSaveComprehensiveReport(
       subsectionName,
     };
 
-    console.log('[ComprehensiveReport] Generating via pdfmake');
+    console.log('[ComprehensiveReport] Generating via PDFShift');
 
-    // Generate and save using pdfmake
-    const result = await generateAndSaveInspectionReportPdfmake({
+    // Generate and save using PDFShift Edge Function
+    const result = await generateAndSavePdfShiftInspectionReport({
       inspection: pdfData,
       siteName,
       clientName,
@@ -190,7 +190,6 @@ export async function generateAndSaveComprehensiveReport(
     return { success: false, error: "Failed to generate report" };
   }
 }
-
 interface Snag {
   id: string;
   title: string;
@@ -320,8 +319,8 @@ export const ComprehensiveInspectionReport = ({
         };
       });
 
-      // Build pdfmake inspection data
-      const pdfData: PdfmakeInspectionData = {
+      // Build PDFShift inspection data
+      const pdfData: PdfShiftInspectionData = {
         inspectionId: inspId || '',
         templateName: template.name,
         inspectorName: generalInfo.inspectorName || inspectionData?.inspector_name,
@@ -347,15 +346,15 @@ export const ComprehensiveInspectionReport = ({
         subsectionName,
       };
 
-      console.log('[ComprehensiveReport] Generating PDF with pdfmake...');
+      console.log('[ComprehensiveReport] Generating PDF with PDFShift...');
       console.log('[ComprehensiveReport] Data:', { 
         sectionsCount: sectionsForPdf.length, 
         snagsCount: snags.length,
         signaturesCount: signatures.length 
       });
 
-      // Generate using pdfmake
-      const result = await generateInspectionReportPdf({
+      // Generate using PDFShift Edge Function
+      const result = await generatePdfShiftInspectionReport({
         inspection: pdfData,
         siteName,
         clientName,

@@ -10,7 +10,7 @@ import { Eye, Camera, X, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import { generateInspectionReportPdf, InspectionReportData } from "@/lib/pdfmakeInspectionReport";
+import { generatePdfShiftInspectionReport, InspectionReportData } from "@/lib/pdfshiftInspectionReport";
 
 interface TemplateSection {
   id: string;
@@ -226,8 +226,8 @@ export const TemplateBasedReport = ({
         inspectionDate: new Date().toISOString(),
       };
 
-      // Generate using pdfmake (client-side)
-      const result = await generateInspectionReportPdf({
+      // Generate using PDFShift (server-side with pre-embedded Base64 images)
+      const result = await generatePdfShiftInspectionReport({
         inspection: inspectionData,
         siteName,
         clientName,

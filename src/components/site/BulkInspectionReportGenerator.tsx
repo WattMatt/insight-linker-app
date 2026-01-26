@@ -20,7 +20,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from "lucide-react";
-import { generateAndSaveInspectionReportPdfmake, InspectionReportData } from "@/lib/pdfmakeInspectionReport";
+import { generateAndSavePdfShiftInspectionReport, InspectionReportData } from "@/lib/pdfshiftInspectionReport";
 
 interface GenerationResult {
   subsectionId: string;
@@ -340,10 +340,10 @@ export function BulkInspectionReportGenerator({
         subsectionName: sub.subsectionName,
       };
 
-      // Generate PDF via pdfmake (client-side)
-      console.log(`[BulkInspection] Generating pdfmake report for ${sub.subsectionName}`);
+      // Generate PDF via PDFShift Edge Function
+      console.log(`[BulkInspection] Generating PDFShift report for ${sub.subsectionName}`);
       
-      const result = await generateAndSaveInspectionReportPdfmake({
+      const result = await generateAndSavePdfShiftInspectionReport({
         inspection: inspectionData,
         siteName,
         clientName,
