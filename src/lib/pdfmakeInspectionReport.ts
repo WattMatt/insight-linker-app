@@ -555,48 +555,63 @@ function createSectionBreakdownPage(
 ): Content[] {
   const content: Content[] = [];
 
-  // Large circular percentage indicator
+  // Large circular percentage indicator with filled ring background
   const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
     : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
     : REPORT_COLORS.error;
 
+  // Circle and percentage - centered design matching reference
   content.push({
-    stack: [
+    columns: [
       {
-        canvas: [
-          // Outer circle - score color ring
-          { type: 'ellipse', x: 80, y: 80, r1: 70, r2: 70, lineWidth: 10, lineColor: scoreColor },
+        width: 180,
+        stack: [
+          {
+            canvas: [
+              // White filled center with colored ring
+              { type: 'ellipse', x: 75, y: 75, r1: 65, r2: 65, color: '#ffffff' },
+              { type: 'ellipse', x: 75, y: 75, r1: 65, r2: 65, lineWidth: 12, lineColor: scoreColor },
+            ],
+          },
+          {
+            text: `${stats.passPercentage}%`,
+            fontSize: 38,
+            bold: true,
+            color: scoreColor,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -95 },
+          },
         ],
+        alignment: 'center',
       },
       {
-        text: `${stats.passPercentage}%`,
-        fontSize: 36,
-        bold: true,
-        color: scoreColor,
-        alignment: 'left',
-        relativePosition: { x: 36, y: -95 },
-      },
-      {
-        text: 'OVERALL',
-        fontSize: 10,
-        color: REPORT_COLORS.textMuted,
-        alignment: 'left',
-        relativePosition: { x: 48, y: -55 },
+        width: '*',
+        text: '',
       },
     ],
-    margin: [0, 20, 0, 40],
+    margin: [0, 20, 0, 10],
   });
 
-  // Section Breakdown header and table
-  if (stats.sectionStats.length > 0) {
-    content.push({
-      text: 'Section Breakdown',
-      fontSize: 13,
-      bold: true,
-      color: REPORT_COLORS.textPrimary,
-      margin: [0, 10, 0, 10],
-    });
+  // OVERALL label below circle
+  content.push({
+    text: 'OVERALL',
+    fontSize: 11,
+    bold: true,
+    color: REPORT_COLORS.textMuted,
+    margin: [60, 0, 0, 30],
+  });
 
+  // Section Breakdown header - bold with underline
+  content.push({
+    text: 'Section Breakdown',
+    fontSize: 14,
+    bold: true,
+    color: REPORT_COLORS.textPrimary,
+    margin: [0, 0, 0, 12],
+  });
+
+  // Section Breakdown table
+  if (stats.sectionStats.length > 0) {
     const breakdownRows: Content[][] = [
       [
         { text: 'Section', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary },
@@ -642,100 +657,59 @@ function createSectionBreakdownPage(
         paddingLeft: () => 10,
         paddingRight: () => 10,
       },
-      margin: [0, 0, 0, 30],
+      margin: [0, 0, 0, 25],
     });
   }
 
-  // General Information section header
+  // General Information section header - simple bold text style matching reference
   content.push({
-    table: {
-      widths: ['*'],
-      body: [[{
-        text: 'GENERAL INFORMATION',
-        fontSize: 12,
-        bold: true,
-        color: '#FFFFFF',
-        margin: [0, 8, 0, 8],
-      }]],
-    },
-    layout: {
-      fillColor: () => REPORT_COLORS.secondary,
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-      paddingLeft: () => 12,
-    },
-    margin: [0, 10, 0, 15],
+    text: 'GENERAL INFORMATION',
+    fontSize: 13,
+    bold: true,
+    color: REPORT_COLORS.primary,
+    margin: [0, 10, 0, 12],
   });
 
-  // General info grid
-  const infoRows: Content[][] = [];
+  // General info - simple label: value rows matching reference document style
+  const infoItems: Array<{ label: string; value: string }> = [];
   
-  infoRows.push([
-    { text: 'Site Name', fontSize: 10, color: REPORT_COLORS.textSecondary },
-    { text: siteName, fontSize: 10, bold: true, color: REPORT_COLORS.textPrimary },
-  ]);
+  infoItems.push({ label: 'Site Name:', value: siteName });
 
   if (inspection.subsectionName) {
-    infoRows.push([
-      { text: 'Subsection', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.subsectionName, fontSize: 10, color: REPORT_COLORS.textPrimary },
-    ]);
+    infoItems.push({ label: 'Subsection:', value: inspection.subsectionName });
   }
 
   if (clientName) {
-    infoRows.push([
-      { text: 'Client', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: clientName, fontSize: 10, color: REPORT_COLORS.textPrimary },
-    ]);
+    infoItems.push({ label: 'Client:', value: clientName });
   }
 
   if (inspection.inspectionDate) {
-    infoRows.push([
-      { text: 'Inspection Date', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { 
-        text: new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
-          weekday: 'long',
-          day: 'numeric',
-          month: 'long',
-          year: 'numeric',
-        }), 
-        fontSize: 10, 
-        color: REPORT_COLORS.textPrimary 
-      },
-    ]);
+    const formattedDate = new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric',
+    });
+    infoItems.push({ label: 'Inspection Date:', value: formattedDate });
   }
 
   if (inspection.inspectorName) {
-    infoRows.push([
-      { text: 'Inspector', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.inspectorName, fontSize: 10, color: REPORT_COLORS.textPrimary },
-    ]);
+    infoItems.push({ label: 'Inspector:', value: inspection.inspectorName });
   }
 
   if (inspection.templateName) {
-    infoRows.push([
-      { text: 'Template', fontSize: 10, color: REPORT_COLORS.textSecondary },
-      { text: inspection.templateName, fontSize: 10, color: REPORT_COLORS.textPrimary },
-    ]);
+    infoItems.push({ label: 'Template:', value: inspection.templateName });
   }
 
-  content.push({
-    table: {
-      widths: [120, '*'],
-      body: infoRows,
-    },
-    layout: {
-      hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 0.5 : 0.25,
-      vLineWidth: (i: number) => (i === 0 || i === 2) ? 0.5 : 0,
-      hLineColor: () => REPORT_COLORS.border,
-      vLineColor: () => REPORT_COLORS.border,
-      paddingTop: () => 8,
-      paddingBottom: () => 8,
-      paddingLeft: () => 10,
-      paddingRight: () => 10,
-      fillColor: (rowIndex: number) => rowIndex % 2 === 0 ? REPORT_COLORS.lightBg : null,
-    },
-    margin: [0, 0, 0, 20],
+  // Render each info item as simple text rows
+  infoItems.forEach(item => {
+    content.push({
+      columns: [
+        { text: item.label, width: 110, fontSize: 10, color: REPORT_COLORS.textSecondary },
+        { text: item.value, width: '*', fontSize: 10, color: REPORT_COLORS.textPrimary },
+      ],
+      margin: [0, 4, 0, 4],
+    });
   });
 
   return content;
