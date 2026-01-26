@@ -256,9 +256,11 @@ function processImageBuffer(buffer: ArrayBuffer, mimeType: string): { base64: st
 /**
  * Process a single image URL to Base64 data URI
  * Uses Supabase Image Transformation for on-the-fly compression
+ * Logos get special treatment - we compress them if needed but NEVER skip
  */
 async function processImage(url: string): Promise<ImageResult> {
   const startTime = Date.now();
+  const isLogo = logoUrls.has(url);
   
   // Skip invalid URLs
   if (!url || typeof url !== 'string') {
@@ -268,24 +270,42 @@ async function processImage(url: string): Promise<ImageResult> {
   // Already a data URI
   if (url.startsWith('data:')) {
     const sizeKB = url.length / 1024;
-    if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
+    // Logos bypass size limit for data URIs
+    if (!isLogo && sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
       return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 0 };
     }
     return { success: true, dataUri: url, originalUrl: url, sizeKB, attempts: 0 };
   }
   
   // Download with transformation (this compresses on-the-fly!)
-  const buffer = await downloadImageWithTransform(url);
+  let buffer = await downloadImageWithTransform(url);
   
   if (!buffer) {
     return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB: 0, attempts: 1 };
   }
   
-  const sizeKB = buffer.byteLength / 1024;
+  let sizeKB = buffer.byteLength / 1024;
   
-  // Skip if still too large after transformation (shouldn't happen often)
-  if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
-    console.log(`[Skip] Transformed image still ${Math.round(sizeKB)}KB, using placeholder`);
+  // LOGOS: If too large, try downloading with transformation instead
+  if (isLogo && sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
+    console.log(`[Logo] Original ${Math.round(sizeKB)}KB too large, applying transformation...`);
+    
+    // Temporarily remove from logoUrls to get transformed version
+    logoUrls.delete(url);
+    const compressedBuffer = await downloadImageWithTransform(url);
+    logoUrls.add(url); // Restore
+    
+    if (compressedBuffer) {
+      buffer = compressedBuffer;
+      sizeKB = buffer.byteLength / 1024;
+      console.log(`[Logo] Compressed to ${Math.round(sizeKB)}KB`);
+    }
+  }
+  
+  // Skip if still too large after transformation (logos get higher limit)
+  const sizeLimit = isLogo ? 500 : CONFIG.MAX_IMAGE_SIZE_KB;
+  if (sizeKB > sizeLimit) {
+    console.log(`[Skip] Image still ${Math.round(sizeKB)}KB > ${sizeLimit}KB limit, using placeholder`);
     return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 1 };
   }
   
@@ -295,7 +315,7 @@ async function processImage(url: string): Promise<ImageResult> {
   const dataUri = `data:${mimeType};base64,${base64}`;
   
   const elapsed = Date.now() - startTime;
-  console.log(`[ProcessImage] ✓ ${Math.round(sizeKB)}KB in ${elapsed}ms`);
+  console.log(`[ProcessImage] ✓ ${isLogo ? 'LOGO' : 'Photo'} ${Math.round(sizeKB)}KB in ${elapsed}ms`);
   
   return { success: true, dataUri, originalUrl: url, sizeKB, attempts: 1 };
 }
