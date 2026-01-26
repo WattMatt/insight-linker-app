@@ -66,6 +66,7 @@ export function DocumentPreviewDialog({
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
+  const isDocx = fileName.toLowerCase().endsWith('.docx');
 
   // Calculate compliance stats
   const complianceStats = complianceChecks ? {
@@ -74,16 +75,26 @@ export function DocumentPreviewDialog({
     percentage: Math.round((Object.values(complianceChecks).filter(Boolean).length / Object.keys(complianceChecks).length) * 100),
   } : null;
 
+  // Handle DOCX files - trigger direct download when dialog opens
+  useEffect(() => {
+    if (open && isDocx && fileUrl) {
+      // Trigger download immediately
+      downloadFile(fileUrl, fileName);
+      // Close dialog and let the download happen
+      onOpenChange(false);
+    }
+  }, [open, isDocx, fileUrl, fileName, onOpenChange]);
+
   // Reset state when dialog opens
   useEffect(() => {
-    if (open) {
+    if (open && !isDocx) {
       setScale(1);
       setRotation(0);
       setPosition({ x: 0, y: 0 });
       setCurrentPage(1);
       setShowCompliancePanel(false);
     }
-  }, [open, fileUrl]);
+  }, [open, fileUrl, isDocx]);
 
   const handleZoomIn = () => setScale(prev => Math.min(prev + 0.25, 4));
   const handleZoomOut = () => setScale(prev => Math.max(prev - 0.25, 0.25));
