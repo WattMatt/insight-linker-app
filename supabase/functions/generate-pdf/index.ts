@@ -356,7 +356,7 @@ function validateBase64Image(dataUri: string): boolean {
 }
 
 // Generate a responsive photo grid - 3 images per row using table layout for PDF reliability
-// Uses EXPLICIT width and height attributes (not just CSS) for PDFShift compatibility
+// Uses NESTED TABLE with fixed cell dimensions - most reliable for PDFShift
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
@@ -380,11 +380,11 @@ function generatePhotoGrid(photos: string[], options?: {
   if (validPhotos.length === 0) return '';
   
   // A4 content width is ~174mm (658px) with 18mm margins
-  // For 3 columns: 200x150px images
-  // For 2 columns: 280x210px images  
-  // For 1 column: 400x300px images
-  const imageWidthPx = perRow === 3 ? 200 : perRow === 2 ? 280 : 400;
-  const imageHeightPx = perRow === 3 ? 150 : perRow === 2 ? 210 : 300;
+  // For 3 columns: 180x135px images (slightly smaller to ensure fit)
+  // For 2 columns: 260x195px images  
+  // For 1 column: 380x285px images
+  const imageWidthPx = perRow === 3 ? 180 : perRow === 2 ? 260 : 380;
+  const imageHeightPx = perRow === 3 ? 135 : perRow === 2 ? 195 : 285;
   
   // Split photos into rows
   const rows: { photo: string; label?: string }[][] = [];
@@ -396,14 +396,21 @@ function generatePhotoGrid(photos: string[], options?: {
     rows.push(rowPhotos);
   }
   
+  // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
   return `
-    <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;">
+    <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `
         <tr>
           ${row.map(item => `
-            <td style="width: ${100 / perRow}%; padding: 8px; vertical-align: top; text-align: center;">
+            <td style="padding: 8px; vertical-align: top; text-align: center;">
               ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 6px; font-weight: 500;">${item.label}</div>` : ''}
-              <div style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; background-image: url('${item.photo}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid #e5e7eb; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
+              <table style="display: inline-table; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" cellpadding="0" cellspacing="0">
+                <tr>
+                  <td style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; text-align: center; vertical-align: middle;">
+                    <img src="${item.photo}" style="max-width: ${imageWidthPx}px; max-height: ${imageHeightPx}px; width: auto; height: auto;" />
+                  </td>
+                </tr>
+              </table>
             </td>
           `).join('')}
         </tr>
@@ -2436,26 +2443,38 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           </div>
           
           ${hasImages ? `
-          <!-- Photo Grid with Labels - 3-column layout with fixed 200x150px photo cards -->
+          <!-- Photo Grid with Labels - 3-column layout using nested table for reliable sizing -->
           <div style="margin-top: 15px;">
-            <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid;">
+            <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid;" cellpadding="0" cellspacing="0">
               <tr>
                 ${tenant.breakerImage && validateBase64Image(tenant.breakerImage) ? `
-                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                <td style="padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Breaker</div>
-                  <div style="width: 200px; height: 150px; background-image: url('${tenant.breakerImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
+                  <table style="display: inline-table; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" cellpadding="0" cellspacing="0">
+                    <tr><td style="width: 180px; height: 135px; text-align: center; vertical-align: middle;">
+                      <img src="${tenant.breakerImage}" style="max-width: 180px; max-height: 135px; width: auto; height: auto;" />
+                    </td></tr>
+                  </table>
                 </td>
                 ` : ''}
                 ${tenant.ctRatioImage && validateBase64Image(tenant.ctRatioImage) ? `
-                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                <td style="padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">CT Ratio</div>
-                  <div style="width: 200px; height: 150px; background-image: url('${tenant.ctRatioImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
+                  <table style="display: inline-table; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" cellpadding="0" cellspacing="0">
+                    <tr><td style="width: 180px; height: 135px; text-align: center; vertical-align: middle;">
+                      <img src="${tenant.ctRatioImage}" style="max-width: 180px; max-height: 135px; width: auto; height: auto;" />
+                    </td></tr>
+                  </table>
                 </td>
                 ` : ''}
                 ${tenant.meterImage && validateBase64Image(tenant.meterImage) ? `
-                <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
+                <td style="padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Meter</div>
-                  <div style="width: 200px; height: 150px; background-image: url('${tenant.meterImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
+                  <table style="display: inline-table; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" cellpadding="0" cellspacing="0">
+                    <tr><td style="width: 180px; height: 135px; text-align: center; vertical-align: middle;">
+                      <img src="${tenant.meterImage}" style="max-width: 180px; max-height: 135px; width: auto; height: auto;" />
+                    </td></tr>
+                  </table>
                 </td>
                 ` : ''}
               </tr>
