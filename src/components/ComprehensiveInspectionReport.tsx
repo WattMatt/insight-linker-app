@@ -269,12 +269,30 @@ export const ComprehensiveInspectionReport = ({
         signatures = sigData || [];
       }
 
-      // Get jsonData from inspection
-      const jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
+      // Get jsonData from inspection - check multiple possible locations
+      let jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
       const generalInfo = jsonData.generalInfo || {};
 
+      console.log('[ComprehensiveReport] inspectionData keys:', Object.keys(inspectionData || {}));
       console.log('[ComprehensiveReport] jsonData keys:', Object.keys(jsonData));
-      console.log('[ComprehensiveReport] Full jsonData:', JSON.stringify(jsonData).substring(0, 500));
+      console.log('[ComprehensiveReport] jsonData is empty?', Object.keys(jsonData).length === 0);
+      
+      // If jsonData is empty but we have an inspection ID, fetch it directly
+      if (Object.keys(jsonData).length === 0 && inspId) {
+        console.log('[ComprehensiveReport] jsonData empty, fetching from DB for inspection:', inspId);
+        const { data: freshInspection } = await supabase
+          .from('inspections')
+          .select('json_data')
+          .eq('id', inspId)
+          .single();
+        
+        if (freshInspection?.json_data) {
+          jsonData = freshInspection.json_data as Record<string, any>;
+          console.log('[ComprehensiveReport] Fetched jsonData keys:', Object.keys(jsonData));
+        }
+      }
+      
+      console.log('[ComprehensiveReport] Sample jsonData:', JSON.stringify(jsonData).substring(0, 500));
 
       // Build sections data from template
       const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections || {});
