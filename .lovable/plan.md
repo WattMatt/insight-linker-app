@@ -1,81 +1,79 @@
 
-# Complete PDF Generation Fix - Version 5.0
+# Fix: PDF Images Not Rendering in pdfmake (Version 5.1)
 
 ## Root Cause Analysis
 
-The Edge Function logs reveal two critical issues:
+After extensive debugging, the issue has been identified:
 
-### Issue 1: "Unknown image format" Error
-When images are downloaded but exceed the 500KB size limit, the code logs `[IMG] Too large: XXKB` but doesn't properly return the PLACEHOLDER. The flow:
-1. Transformation attempted → returns image >500KB 
-2. Direct download attempted → same image >500KB
-3. Logs "Too large" but continues to external fetch
-4. External fetch fails (Supabase URL isn't "external")
-5. Returns PLACEHOLDER... but something in this chain is corrupted
+### The Problem
+The Edge Function successfully downloads 19 images and converts them to Base64, logging "Transformed: XXXkb" for each. The PDF generates at 3.8MB but **no images are visible**.
 
-**The actual bug**: The `toBase64()` function uses `String.fromCharCode(...chunk)` which can fail for certain byte sequences, returning malformed data that isn't a valid Base64 string.
+The root cause is a **pdfmake compatibility issue** in the Deno environment. When using inline data URLs directly in `{image: 'data:...'}` nodes, pdfmake in Deno may not properly process them.
 
-### Issue 2: Font Configuration
-Line 727 still has `font: 'Helvetica'` hardcoded in the document definition, which conflicts with the Roboto-only VFS.
+### Why This Happens
+- pdfmake has two ways to embed images:
+  1. **Inline data URLs**: `{image: 'data:image/jpeg;base64,...'}` - Less reliable in non-browser environments
+  2. **Images dictionary**: Reference by key, define in document's `images` property - More reliable
+- The current code uses inline data URLs which work in browsers but can fail in Deno's Edge Function environment
+- The 3.8MB PDF size suggests content is being generated, but images are silently failing
 
 ---
 
-## Solution: Complete Rebuild with Bullet-Proof Image Handling
+## Solution: Use pdfmake Images Dictionary Pattern
 
 ### Changes Required
 
-#### 1. Fix `toBase64()` Function
-Replace the spread operator approach with a safer chunked buffer concatenation that works reliably for all image data:
+#### 1. Build Images Dictionary During Document Construction
+Instead of passing data URLs inline, create an `images` object in the document definition and reference by key:
 
-```text
-function toBase64(buffer: ArrayBuffer): string {
-  const bytes = new Uint8Array(buffer);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i++) {
-    binary += String.fromCharCode(bytes[i]);
+```typescript
+// In buildDocument function
+const images: Record<string, string> = {};
+let imageIndex = 0;
+
+const getImageKey = (url?: string): string => {
+  if (!url) return 'PLACEHOLDER';
+  if (url.startsWith('data:')) {
+    const key = `img_${imageIndex++}`;
+    images[key] = url;
+    return key;
   }
-  return btoa(binary);
-}
+  const dataUri = imageMap.get(url);
+  if (dataUri && dataUri !== PLACEHOLDER) {
+    const key = `img_${imageIndex++}`;
+    images[key] = dataUri;
+    return key;
+  }
+  return 'PLACEHOLDER';
+};
+
+// Add placeholder to images dictionary
+images['PLACEHOLDER'] = PLACEHOLDER;
 ```
 
-#### 2. Add Explicit Return for "Too Large" Images
-After logging "Too large", immediately return PLACEHOLDER:
-
-```text
-if (sizeKB > IMAGE_CONFIG.MAX_SIZE_KB) {
-  console.warn(`[IMG] Too large: ${Math.round(sizeKB)}KB`);
-  return PLACEHOLDER;  // <-- CRITICAL FIX
-}
+#### 2. Update Image References in Document Content
+Change from:
+```typescript
+{ image: img(photo), width: SIZES.PHOTO }
+```
+To:
+```typescript
+{ image: getImageKey(photo), width: SIZES.PHOTO }
 ```
 
-#### 3. Fix Font in Document Definition
-Change line 727 from `font: 'Helvetica'` to `font: 'Roboto'`:
-
-```text
-defaultStyle: {
-  font: 'Roboto',  // Fixed - was 'Helvetica'
-  fontSize: 10,
-  color: COLORS.slate700,
-},
+#### 3. Add Images Dictionary to Document Definition
+```typescript
+return {
+  pageSize: 'A4',
+  content,
+  images,  // Add the images dictionary
+  defaultStyle: { font: 'Roboto', ... },
+  ...
+};
 ```
 
-#### 4. Add Try-Catch Around Base64 Conversion
-Wrap all base64 operations in try-catch to prevent crashes:
-
-```text
-try {
-  const bytes = new Uint8Array(buffer);
-  const mime = getMimeType(bytes);
-  const b64 = toBase64(buffer);
-  return `data:${mime};base64,${b64}`;
-} catch (e) {
-  console.warn('[IMG] Base64 conversion failed:', e);
-  return PLACEHOLDER;
-}
-```
-
-#### 5. Increase Size Limit for Better Coverage
-Change `MAX_SIZE_KB: 500` to `MAX_SIZE_KB: 800` to allow more images through transformation.
+#### 4. Add Debug Logging
+Log the number of images added to the dictionary and sample keys to verify the mapping is working.
 
 ---
 
@@ -83,28 +81,51 @@ Change `MAX_SIZE_KB: 500` to `MAX_SIZE_KB: 800` to allow more images through tra
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/generate-pdf-pdfmake/index.ts` | Fix toBase64, add explicit returns, fix font, add error handling |
+| `supabase/functions/generate-pdf-pdfmake/index.ts` | Implement images dictionary pattern, update all image references |
 
 ---
 
-## Specific Line Changes
+## Technical Details
 
-| Line | Current | Fixed |
-|------|---------|-------|
-| 21-25 | MAX_SIZE_KB: 500 | MAX_SIZE_KB: 800 |
-| 68-77 | Chunked String.fromCharCode with spread | Character-by-character (safer) |
-| 150-151 | Log only | Log + return PLACEHOLDER |
-| 727 | font: 'Helvetica' | font: 'Roboto' |
+### Before (Current - Broken)
+```typescript
+const img = (url?: string) => {
+  return imageMap.get(url) || PLACEHOLDER;  // Returns full data URL
+};
+
+// Usage
+{ image: img(photo), width: 150 }  // Inline data URL - unreliable in Deno
+```
+
+### After (Fixed)
+```typescript
+const images: Record<string, string> = { PLACEHOLDER };
+let imgIdx = 0;
+
+const imgKey = (url?: string) => {
+  const dataUri = url?.startsWith('data:') ? url : imageMap.get(url);
+  if (dataUri && dataUri !== PLACEHOLDER) {
+    const key = `img${imgIdx++}`;
+    images[key] = dataUri;
+    return key;
+  }
+  return 'PLACEHOLDER';
+};
+
+// Usage
+{ image: imgKey(photo), width: 150 }  // Reference key - reliable
+
+// Document definition
+return { content, images, ... };  // Include images dictionary
+```
 
 ---
 
-## Version Bump
-Update VERSION to '5.0.0' for deployment verification.
-
----
+## Version Update
+Bump VERSION to '5.1.0' for deployment verification.
 
 ## Expected Results
-1. No "Unknown image format" errors
-2. No font errors
-3. All images either render properly OR show placeholder gracefully
-4. PDF generates successfully with all content
+1. All 19 images render correctly in the PDF
+2. Tenant verification photos appear in grid
+3. No "Unknown image format" or silent failures
+4. PDF maintains ~3-4MB size with embedded images
