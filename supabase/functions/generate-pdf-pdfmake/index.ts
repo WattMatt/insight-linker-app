@@ -641,8 +641,7 @@ function buildDocDefinition(
           stack: [
             {
               image: getImage(photo),
-              width: CONFIG.PHOTO_WIDTH,
-              height: CONFIG.PHOTO_HEIGHT,
+              fit: [CONFIG.PHOTO_WIDTH, CONFIG.PHOTO_HEIGHT],
               alignment: 'center',
             },
             { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
@@ -744,7 +743,7 @@ function buildDocDefinition(
       if (tenant.meterImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.meterImage), width: 140, height: 105, alignment: 'center' },
+            { image: getImage(tenant.meterImage), fit: [150, 120], alignment: 'center' },
             { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -752,7 +751,7 @@ function buildDocDefinition(
       if (tenant.breakerImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.breakerImage), width: 140, height: 105, alignment: 'center' },
+            { image: getImage(tenant.breakerImage), fit: [150, 120], alignment: 'center' },
             { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -760,7 +759,7 @@ function buildDocDefinition(
       if (tenant.ctRatioImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), width: 140, height: 105, alignment: 'center' },
+            { image: getImage(tenant.ctRatioImage), fit: [150, 120], alignment: 'center' },
             { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -824,7 +823,7 @@ function buildDocDefinition(
         content.push({
           columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
             stack: [
-              { image: getImage(photo), width: 180, height: 135, alignment: 'center' },
+              { image: getImage(photo), fit: [200, 150], alignment: 'center' },
               { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
@@ -855,8 +854,7 @@ function buildDocDefinition(
               stack: [
                 sig.signatureUrl && getImage(sig.signatureUrl) !== PLACEHOLDER_IMAGE ? {
                   image: getImage(sig.signatureUrl),
-                  width: 140,
-                  height: 60,
+                  fit: [140, 60],
                   alignment: 'center',
                   margin: [0, 10, 0, 10],
                 } : { text: '', margin: [0, 40, 0, 0] },
