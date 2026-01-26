@@ -19,25 +19,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration - Version 2.0.0 for deployment verification
+// Configuration - Version 3.0.0: Width-based sizing to fix portrait image distortion
 const CONFIG = {
-  VERSION: '2.0.0',  // For deployment verification
+  VERSION: '3.0.0',  // Width-based sizing - fixes narrow strip issue
   MAX_IMAGE_SIZE_KB: 400,
   IMAGE_TRANSFORM_WIDTH: 600,
   IMAGE_TRANSFORM_QUALITY: 75,
   LOGO_MAX_SIZE_KB: 600,
   MAX_IMAGES_PER_REPORT: 30,
-  // Professional image dimensions - landscape-oriented for electrical photos
+  // Width-only sizing - height auto-calculated to preserve aspect ratio
   LOGO_WIDTH: 180,
-  LOGO_HEIGHT: 80,
-  SECTION_PHOTO_WIDTH: 160,
-  SECTION_PHOTO_HEIGHT: 120,
-  TENANT_PHOTO_WIDTH: 140,
-  TENANT_PHOTO_HEIGHT: 180,
-  SNAG_PHOTO_WIDTH: 200,
-  SNAG_PHOTO_HEIGHT: 150,
+  LOGO_MAX_HEIGHT: 80,
+  SECTION_PHOTO_WIDTH: 150,    // Consistent width for 3-column grid
+  TENANT_PHOTO_WIDTH: 130,     // 3 per row in tenant section
+  SNAG_PHOTO_WIDTH: 180,       // Larger for evidence visibility
   SIGNATURE_WIDTH: 140,
-  SIGNATURE_HEIGHT: 50,
+  SIGNATURE_MAX_HEIGHT: 50,
 };
 
 // Color palette - professional engineering report
@@ -378,7 +375,8 @@ function buildDocDefinition(
     stack: [
       logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE ? {
         image: logoDataUri,
-        fit: [CONFIG.LOGO_WIDTH, CONFIG.LOGO_HEIGHT],
+        width: CONFIG.LOGO_WIDTH,
+        maxHeight: CONFIG.LOGO_MAX_HEIGHT,
         alignment: 'center',
         margin: [0, 30, 0, 25],
       } : { text: '', margin: [0, 60, 0, 0] },
@@ -651,7 +649,7 @@ function buildDocDefinition(
           stack: [
             {
               image: getImage(photo),
-              fit: [CONFIG.SECTION_PHOTO_WIDTH, CONFIG.SECTION_PHOTO_HEIGHT],
+              width: CONFIG.SECTION_PHOTO_WIDTH,
               alignment: 'center',
             },
             { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
@@ -754,7 +752,7 @@ function buildDocDefinition(
       if (tenant.meterImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.meterImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
+            { image: getImage(tenant.meterImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
             { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -762,7 +760,7 @@ function buildDocDefinition(
       if (tenant.breakerImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.breakerImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
+            { image: getImage(tenant.breakerImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
             { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -770,7 +768,7 @@ function buildDocDefinition(
       if (tenant.ctRatioImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
+            { image: getImage(tenant.ctRatioImage), width: CONFIG.TENANT_PHOTO_WIDTH, alignment: 'center' },
             { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -834,7 +832,7 @@ function buildDocDefinition(
         content.push({
           columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
             stack: [
-              { image: getImage(photo), fit: [CONFIG.SNAG_PHOTO_WIDTH, CONFIG.SNAG_PHOTO_HEIGHT], alignment: 'center' },
+              { image: getImage(photo), width: CONFIG.SNAG_PHOTO_WIDTH, alignment: 'center' },
               { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
@@ -865,7 +863,8 @@ function buildDocDefinition(
               stack: [
                 sig.signatureUrl && getImage(sig.signatureUrl) !== PLACEHOLDER_IMAGE ? {
                   image: getImage(sig.signatureUrl),
-                  fit: [CONFIG.SIGNATURE_WIDTH, CONFIG.SIGNATURE_HEIGHT],
+                  width: CONFIG.SIGNATURE_WIDTH,
+                  maxHeight: CONFIG.SIGNATURE_MAX_HEIGHT,
                   alignment: 'center',
                   margin: [0, 10, 0, 10],
                 } : { text: '', margin: [0, 40, 0, 0] },
@@ -939,8 +938,8 @@ Deno.serve(async (req) => {
     }
 
     console.log('[PDFMake] Version:', CONFIG.VERSION);
-    console.log('[PDFMake] Section photo size:', CONFIG.SECTION_PHOTO_WIDTH, 'x', CONFIG.SECTION_PHOTO_HEIGHT);
-    console.log('[PDFMake] Logo size:', CONFIG.LOGO_WIDTH, 'x', CONFIG.LOGO_HEIGHT);
+    console.log('[PDFMake] Section photo width:', CONFIG.SECTION_PHOTO_WIDTH);
+    console.log('[PDFMake] Logo width:', CONFIG.LOGO_WIDTH);
     console.log('[PDFMake] Starting report generation...');
     console.log('[PDFMake] Site:', siteName);
     console.log('[PDFMake] Subsection:', inspection.subsectionName || 'N/A');
