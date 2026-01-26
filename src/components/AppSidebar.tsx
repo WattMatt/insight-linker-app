@@ -18,7 +18,8 @@ import {
   Lightbulb,
   Shield,
   FileCode,
-  Sparkles
+  Sparkles,
+  BookOpen
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -48,6 +49,7 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "COC Documentation", url: "/coc-documentation", icon: Shield, adminOnly: false },
+  { title: "Development Skills", url: "/development-skills", icon: BookOpen, adminOnly: false },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
 ];

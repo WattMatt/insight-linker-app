@@ -52,6 +52,7 @@ const Install = lazy(() => import("./pages/Install"));
 const PDFTemplateTestDashboard = lazy(() => import("./pages/PDFTemplateTestDashboard"));
 
 const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
+const DevelopmentSkills = lazy(() => import("./pages/DevelopmentSkills"));
 
 // Eagerly load components that appear on every page
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
@@ -361,6 +362,10 @@ const App = () => (
           <Route
             path="/coc-documentation"
             element={<ProtectedRoute><DashboardLayout><COCDocumentation /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
+            path="/development-skills"
+            element={<ProtectedRoute><DashboardLayout><DevelopmentSkills /></DashboardLayout></ProtectedRoute>}
           />
           <Route
             path="/pdf-template-tests"
