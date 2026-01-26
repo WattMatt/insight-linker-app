@@ -297,8 +297,8 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 // ============================================================================
 
 /**
- * Generate inspection report via PDFShift Edge Function
- * Images are pre-embedded as Base64 client-side
+ * Generate inspection report via Google Docs Edge Function
+ * Uses Google Docs API for reliable image embedding, then exports to PDF
  */
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
@@ -306,60 +306,75 @@ export async function generatePdfShiftInspectionReport(
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = options;
   
   try {
-    console.log('[PDFShift] Starting inspection report generation...');
-    console.log('[PDFShift] Sections:', inspection.sections?.length || 0);
-    console.log('[PDFShift] Tenants:', inspection.tenants?.length || 0);
-    console.log('[PDFShift] Snags:', inspection.snags?.length || 0);
+    console.log('[GoogleDocs PDF] Starting inspection report generation...');
+    console.log('[GoogleDocs PDF] Sections:', inspection.sections?.length || 0);
+    console.log('[GoogleDocs PDF] Tenants:', inspection.tenants?.length || 0);
+    console.log('[GoogleDocs PDF] Snags:', inspection.snags?.length || 0);
     
-    // Step 1: Pre-embed all images as Base64 client-side
-    console.log('[PDFShift] Embedding images as Base64...');
-    const processedInspection = await embedAllImages(inspection);
-    
-    // Step 2: Embed logo if provided
-    let logoBase64: string | null = null;
-    if (siteLogoUrl) {
-      logoBase64 = await imageToBase64(siteLogoUrl);
+    // Count total photos
+    let totalPhotos = 0;
+    if (inspection.sections) {
+      for (const section of inspection.sections) {
+        for (const item of section.items) {
+          if (item.photos && item.photos.length > 0) {
+            totalPhotos += item.photos.length;
+            console.log(`[GoogleDocs PDF] Section "${section.title}" item "${item.label}": ${item.photos.length} photos`);
+          }
+        }
+      }
     }
+    console.log('[GoogleDocs PDF] Total photos to embed:', totalPhotos);
     
-    // Step 3: Build payload for Edge Function
+    // Build payload for Edge Function - send raw URLs, Google will fetch them
     const payload = {
-      reportType: 'inspection' as const,
+      inspection: {
+        inspectionId: inspection.inspectionId,
+        templateName: inspection.templateName,
+        inspectorName: inspection.inspectorName,
+        inspectionDate: inspection.inspectionDate,
+        status: inspection.status,
+        qualityRating: inspection.qualityRating,
+        generalInfo: inspection.generalInfo,
+        sections: inspection.sections,
+        tenants: inspection.tenants,
+        snags: inspection.snags,
+        signatures: inspection.signatures,
+        subsectionName: inspection.subsectionName,
+      },
       siteName,
       clientName,
-      clientLogoUrl: logoBase64,
+      siteLogoUrl,
       accentColor,
-      generatedAt: new Date().toLocaleDateString('en-ZA'),
-      inspection: processedInspection,
     };
     
-    console.log('[PDFShift] Calling Edge Function...');
+    console.log('[GoogleDocs PDF] Calling Edge Function...');
     
-    // Step 4: Call Edge Function
-    const { data, error } = await supabase.functions.invoke('generate-pdf', {
+    // Call Google Docs Edge Function
+    const { data, error } = await supabase.functions.invoke('generate-pdf-google', {
       body: payload,
     });
     
     if (error) {
-      console.error('[PDFShift] Edge Function error:', error);
+      console.error('[GoogleDocs PDF] Edge Function error:', error);
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
     
     if (!data?.url) {
-      console.error('[PDFShift] No URL returned from Edge Function');
-      return { success: false, error: 'No PDF URL returned' };
+      console.error('[GoogleDocs PDF] No URL returned from Edge Function');
+      return { success: false, error: data?.error || 'No PDF URL returned' };
     }
     
-    console.log('[PDFShift] PDF generated successfully:', data.url);
+    console.log('[GoogleDocs PDF] PDF generated successfully:', data.url);
     
     return {
       success: true,
       url: data.url,
       filename: data.filename,
-      previewUrl: data.url, // Same URL for preview
+      previewUrl: data.url,
     };
     
   } catch (error) {
-    console.error('[PDFShift] Error generating report:', error);
+    console.error('[GoogleDocs PDF] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
