@@ -789,44 +789,61 @@ Deno.serve(async (req) => {
     // ========== PHASE 4: Call Browserless (no network wait needed!) ==========
     const phase4Start = Date.now();
     
-    // Since all images are now embedded as data URIs, we can use 'load' instead of 'networkidle'
+    // Since all images are now embedded as data URIs, we can use 'domcontentloaded'
     // This is MUCH faster as Chrome doesn't need to wait for external resources
-    const browserlessUrl = `https://chrome.browserless.io/pdf?token=${BROWSERLESS_API_KEY}&timeout=30`;
+    // Increased timeout to 60s to handle larger HTML documents
+    const browserlessUrl = `https://chrome.browserless.io/pdf?token=${BROWSERLESS_API_KEY}&timeout=60000`;
     
-    const pdfResponse = await fetch(browserlessUrl, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Cache-Control': 'no-cache',
-      },
-      body: JSON.stringify({
-        html,
-        options: {
-          format: 'A4',
-          printBackground: true,
-          margin: {
-            top: '15mm',
-            right: '15mm',
-            bottom: '20mm',
-            left: '15mm',
+    // Create abort controller for fetch timeout
+    const fetchController = new AbortController();
+    const fetchTimeout = setTimeout(() => fetchController.abort(), 55000);
+    
+    let pdfResponse: Response;
+    try {
+      pdfResponse = await fetch(browserlessUrl, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cache-Control': 'no-cache',
+        },
+        signal: fetchController.signal,
+        body: JSON.stringify({
+          html,
+          options: {
+            format: 'A4',
+            printBackground: true,
+            margin: {
+              top: '15mm',
+              right: '15mm',
+              bottom: '20mm',
+              left: '15mm',
+            },
+            displayHeaderFooter: true,
+            headerTemplate: '<div></div>',
+            footerTemplate: `
+              <div style="width: 100%; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; padding: 0 15mm;">
+                <span>CONFIDENTIAL</span>
+                <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+                <span>${new Date().toLocaleDateString('en-ZA')}</span>
+              </div>
+            `,
           },
-          displayHeaderFooter: true,
-          headerTemplate: '<div></div>',
-          footerTemplate: `
-            <div style="width: 100%; font-size: 9px; color: #9ca3af; display: flex; justify-content: space-between; padding: 0 15mm;">
-              <span>CONFIDENTIAL</span>
-              <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
-              <span>${new Date().toLocaleDateString('en-ZA')}</span>
-            </div>
-          `,
-        },
-        gotoOptions: {
-          // 'load' is sufficient when all images are embedded
-          waitUntil: 'load',
-          timeout: 20000,
-        },
-      }),
-    });
+          gotoOptions: {
+            // 'domcontentloaded' is fastest - all images are already embedded as data URIs
+            waitUntil: 'domcontentloaded',
+            timeout: 45000,
+          },
+        }),
+      });
+      clearTimeout(fetchTimeout);
+    } catch (fetchError) {
+      clearTimeout(fetchTimeout);
+      timings['browserless_render'] = Date.now() - phase4Start;
+      if (fetchError instanceof Error && fetchError.name === 'AbortError') {
+        throw new Error('Browserless API timed out after 55 seconds');
+      }
+      throw fetchError;
+    }
     timings['browserless_render'] = Date.now() - phase4Start;
 
     if (!pdfResponse.ok) {
