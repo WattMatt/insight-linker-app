@@ -403,11 +403,7 @@ function generatePhotoGrid(photos: string[], options?: {
           ${row.map(item => `
             <td style="width: ${100 / perRow}%; padding: 8px; vertical-align: top; text-align: center;">
               ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 6px; font-weight: 500;">${item.label}</div>` : ''}
-              <img src="${item.photo}" 
-                   width="${imageWidthPx}" 
-                   height="${imageHeightPx}" 
-                   style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" 
-                   alt="${item.label}" />
+              <div style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; background-image: url('${item.photo}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid #e5e7eb; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
             </td>
           `).join('')}
         </tr>
@@ -2447,31 +2443,19 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
                 ${tenant.breakerImage && validateBase64Image(tenant.breakerImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Breaker</div>
-                  <img src="${tenant.breakerImage}" 
-                       width="200" 
-                       height="150" 
-                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
-                       alt="Breaker" />
+                  <div style="width: 200px; height: 150px; background-image: url('${tenant.breakerImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
                 </td>
                 ` : ''}
                 ${tenant.ctRatioImage && validateBase64Image(tenant.ctRatioImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">CT Ratio</div>
-                  <img src="${tenant.ctRatioImage}" 
-                       width="200" 
-                       height="150" 
-                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
-                       alt="CT Ratio" />
+                  <div style="width: 200px; height: 150px; background-image: url('${tenant.ctRatioImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
                 </td>
                 ` : ''}
                 ${tenant.meterImage && validateBase64Image(tenant.meterImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Meter</div>
-                  <img src="${tenant.meterImage}" 
-                       width="200" 
-                       height="150" 
-                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
-                       alt="Meter" />
+                  <div style="width: 200px; height: 150px; background-image: url('${tenant.meterImage}'); background-size: contain; background-repeat: no-repeat; background-position: center; border: 1px solid ${COLORS.border}; border-radius: 4px; background-color: #f9fafb; display: inline-block;"></div>
                 </td>
                 ` : ''}
               </tr>
