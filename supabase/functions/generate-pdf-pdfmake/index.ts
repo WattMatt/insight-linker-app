@@ -26,8 +26,17 @@ const CONFIG = {
   IMAGE_TRANSFORM_QUALITY: 75,
   LOGO_MAX_SIZE_KB: 600,
   MAX_IMAGES_PER_REPORT: 30,
-  PHOTO_WIDTH: 75,
-  PHOTO_HEIGHT: 100,
+  // Context-specific image dimensions per project standards
+  LOGO_WIDTH: 180,
+  LOGO_HEIGHT: 80,
+  SECTION_PHOTO_WIDTH: 160,
+  SECTION_PHOTO_HEIGHT: 120,
+  TENANT_PHOTO_WIDTH: 140,
+  TENANT_PHOTO_HEIGHT: 180,
+  SNAG_PHOTO_WIDTH: 200,
+  SNAG_PHOTO_HEIGHT: 150,
+  SIGNATURE_WIDTH: 140,
+  SIGNATURE_HEIGHT: 50,
 };
 
 // Color palette - professional engineering report
@@ -363,12 +372,12 @@ function buildDocDefinition(
 
   // ==================== COVER PAGE ====================
   
-  // Logo at top center - use stack to avoid empty page issues
+  // Logo at top center - landscape-oriented for company logos
   content.push({
     stack: [
       logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE ? {
         image: logoDataUri,
-        fit: [75, 100],
+        fit: [CONFIG.LOGO_WIDTH, CONFIG.LOGO_HEIGHT],
         alignment: 'center',
         margin: [0, 30, 0, 25],
       } : { text: '', margin: [0, 60, 0, 0] },
@@ -641,7 +650,7 @@ function buildDocDefinition(
           stack: [
             {
               image: getImage(photo),
-              fit: [CONFIG.PHOTO_WIDTH, CONFIG.PHOTO_HEIGHT],
+              fit: [CONFIG.SECTION_PHOTO_WIDTH, CONFIG.SECTION_PHOTO_HEIGHT],
               alignment: 'center',
             },
             { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
@@ -651,13 +660,13 @@ function buildDocDefinition(
 
         // Pad to 3 columns for consistent layout
         while (photoColumns.length < 3) {
-          photoColumns.push({ text: '', width: CONFIG.PHOTO_WIDTH });
+          photoColumns.push({ text: '', width: CONFIG.SECTION_PHOTO_WIDTH });
         }
 
         tableBody.push([{
           colSpan: 3,
           columns: photoColumns,
-          columnGap: 8,
+          columnGap: 15,
           fillColor: '#fafafa',
           margin: [5, 8, 5, 8],
         }, {}, {}]);
@@ -739,11 +748,12 @@ function buildDocDefinition(
       });
 
       // Tenant images
+      // Tenant verification images - portrait orientation for meter/breaker closeups
       const tenantImages: any[] = [];
       if (tenant.meterImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.meterImage), fit: [75, 100], alignment: 'center' },
+            { image: getImage(tenant.meterImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
             { text: 'Meter', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -751,7 +761,7 @@ function buildDocDefinition(
       if (tenant.breakerImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.breakerImage), fit: [75, 100], alignment: 'center' },
+            { image: getImage(tenant.breakerImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
             { text: 'Breaker', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -759,7 +769,7 @@ function buildDocDefinition(
       if (tenant.ctRatioImage) {
         tenantImages.push({
           stack: [
-            { image: getImage(tenant.ctRatioImage), fit: [75, 100], alignment: 'center' },
+            { image: getImage(tenant.ctRatioImage), fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT], alignment: 'center' },
             { text: 'CT Ratio', fontSize: 8, color: COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -768,7 +778,7 @@ function buildDocDefinition(
       if (tenantImages.length > 0) {
         content.push({
           columns: tenantImages,
-          columnGap: 15,
+          columnGap: 20,
           margin: [0, 5, 0, 15],
         });
       }
@@ -818,16 +828,16 @@ function buildDocDefinition(
         margin: [0, idx > 0 ? 10 : 0, 0, 8],
       });
 
-      // Snag photos
+      // Snag photos - larger for issue documentation (2-column layout)
       if (snag.photos && snag.photos.length > 0) {
         content.push({
           columns: snag.photos.slice(0, 2).map((photo: string, pIdx: number) => ({
             stack: [
-              { image: getImage(photo), fit: [75, 100], alignment: 'center' },
+              { image: getImage(photo), fit: [CONFIG.SNAG_PHOTO_WIDTH, CONFIG.SNAG_PHOTO_HEIGHT], alignment: 'center' },
               { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.textMuted, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
-          columnGap: 15,
+          columnGap: 20,
           margin: [0, 0, 0, 15],
         });
       }
@@ -854,7 +864,7 @@ function buildDocDefinition(
               stack: [
                 sig.signatureUrl && getImage(sig.signatureUrl) !== PLACEHOLDER_IMAGE ? {
                   image: getImage(sig.signatureUrl),
-                  fit: [140, 60],
+                  fit: [CONFIG.SIGNATURE_WIDTH, CONFIG.SIGNATURE_HEIGHT],
                   alignment: 'center',
                   margin: [0, 10, 0, 10],
                 } : { text: '', margin: [0, 40, 0, 0] },
