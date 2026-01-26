@@ -481,9 +481,7 @@ function createEngineeringCoverPage(
     margin: [0, 3, 0, 0],
   });
 
-  // Page break after cover (TOC is now removed as separate page)
-  content.push({ text: '', pageBreak: 'after' });
-
+  // No page break - Quality Score Dashboard will continue on same page
   return content;
 }
 
