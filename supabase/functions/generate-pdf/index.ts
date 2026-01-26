@@ -2834,6 +2834,24 @@ Deno.serve(async (req) => {
             subsectionName: flatBody.subsectionName || flatBody.subtitle?.split(' - ')[1],
           };
         }
+        
+        // Debug: Log inspection data structure
+        console.log('[Inspection] Has inspection object:', !!body.inspection);
+        console.log('[Inspection] Sections count:', body.inspection?.sections?.length || 0);
+        if (body.inspection?.sections && body.inspection.sections.length > 0) {
+          const firstSection = body.inspection.sections[0];
+          console.log('[Inspection] First section title:', firstSection.title);
+          console.log('[Inspection] First section items:', firstSection.items?.length || 0);
+          if (firstSection.items && firstSection.items.length > 0) {
+            const firstItem = firstSection.items[0];
+            console.log('[Inspection] First item label:', firstItem.label);
+            console.log('[Inspection] First item photos:', firstItem.photos?.length || 0);
+            if (firstItem.photos && firstItem.photos.length > 0) {
+              console.log('[Inspection] First photo URL (sample):', firstItem.photos[0].substring(0, 100));
+            }
+          }
+        }
+        
         html = await generateInspectionHTML(body);
         break;
       case 'fortress-checklist':

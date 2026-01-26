@@ -298,7 +298,7 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 
 /**
  * Generate inspection report via PDFShift Edge Function
- * Uses PDFShift for HTML-to-PDF conversion with embedded Base64 images
+ * Sends raw image URLs - the edge function handles fetching with service role
  */
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
@@ -311,26 +311,35 @@ export async function generatePdfShiftInspectionReport(
     console.log('[PDFShift] Tenants:', inspection.tenants?.length || 0);
     console.log('[PDFShift] Snags:', inspection.snags?.length || 0);
     
-    // Pre-embed all images as Base64 client-side
-    console.log('[PDFShift] Embedding images as Base64...');
-    const processedInspection = await embedAllImages(inspection);
+    // Count total photos for logging
+    let totalPhotos = 0;
+    if (inspection.sections) {
+      for (const section of inspection.sections) {
+        for (const item of section.items) {
+          if (item.photos && item.photos.length > 0) {
+            totalPhotos += item.photos.length;
+          }
+        }
+      }
+    }
+    console.log('[PDFShift] Total photos to process server-side:', totalPhotos);
     
-    // Build payload for Edge Function - MUST include reportType: 'inspection'
+    // Build payload - send RAW URLs, edge function will fetch with service role
     const payload = {
-      reportType: 'inspection', // Critical: tells edge function which generator to use
+      reportType: 'inspection',
       inspection: {
-        inspectionId: processedInspection.inspectionId,
-        templateName: processedInspection.templateName,
-        inspectorName: processedInspection.inspectorName,
-        inspectionDate: processedInspection.inspectionDate,
-        status: processedInspection.status,
-        qualityRating: processedInspection.qualityRating,
-        generalInfo: processedInspection.generalInfo,
-        sections: processedInspection.sections,
-        tenants: processedInspection.tenants,
-        snags: processedInspection.snags,
-        signatures: processedInspection.signatures,
-        subsectionName: processedInspection.subsectionName,
+        inspectionId: inspection.inspectionId,
+        templateName: inspection.templateName,
+        inspectorName: inspection.inspectorName,
+        inspectionDate: inspection.inspectionDate,
+        status: inspection.status,
+        qualityRating: inspection.qualityRating,
+        generalInfo: inspection.generalInfo,
+        sections: inspection.sections, // Keep original URLs
+        tenants: inspection.tenants,
+        snags: inspection.snags,
+        signatures: inspection.signatures,
+        subsectionName: inspection.subsectionName,
       },
       siteName,
       clientName,
