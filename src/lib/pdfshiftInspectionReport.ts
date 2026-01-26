@@ -1,13 +1,11 @@
 /**
- * PDFShift-based Inspection Report Generator
+ * Google Docs API-based Inspection Report Generator
  * 
- * Uses the server-side Edge Function with PDFShift for HTML-to-PDF conversion.
- * All images are pre-embedded as Base64 data URIs client-side BEFORE sending
- * to the Edge Function. This solves:
- * 1. PDFShift layout/styling excellence (CSS-based)
- * 2. Reliable image rendering (Base64 embedded, no fetch issues)
+ * Uses the server-side Edge Function with Google Docs API for PDF generation.
+ * This solves persistent image rendering issues that occurred with PDFShift,
+ * as Google Docs handles images natively by uploading to Drive and embedding.
  * 
- * This is the PREFERRED method for inspection reports.
+ * This is the PREFERRED method for inspection reports with photographic evidence.
  */
 
 import { supabase } from '@/integrations/supabase/client';
@@ -347,10 +345,10 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[PDFShift] Calling Edge Function...');
+    console.log('[GoogleDocs] Calling Edge Function...');
     
-    // Call PDFShift Edge Function
-    const { data, error } = await supabase.functions.invoke('generate-pdf', {
+    // Call Google Docs Edge Function for reliable image rendering
+    const { data, error } = await supabase.functions.invoke('generate-pdf-google', {
       body: payload,
     });
     
