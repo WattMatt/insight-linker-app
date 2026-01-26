@@ -17,11 +17,13 @@ import {
   XCircle,
   ChevronDown,
   ChevronUp,
-  Shield
+  Shield,
+  FileText
 } from 'lucide-react';
 import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
+import mammoth from 'mammoth';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -62,6 +64,9 @@ export function DocumentPreviewDialog({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCompliancePanel, setShowCompliancePanel] = useState(false);
+  const [docxHtml, setDocxHtml] = useState<string>('');
+  const [docxLoading, setDocxLoading] = useState(false);
+  const [docxError, setDocxError] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
@@ -75,15 +80,47 @@ export function DocumentPreviewDialog({
     percentage: Math.round((Object.values(complianceChecks).filter(Boolean).length / Object.keys(complianceChecks).length) * 100),
   } : null;
 
-  // Handle DOCX files - trigger direct download when dialog opens
+  // Load DOCX file and convert to HTML for preview
   useEffect(() => {
     if (open && isDocx && fileUrl) {
-      // Trigger download immediately
-      downloadFile(fileUrl, fileName);
-      // Close dialog and let the download happen
-      onOpenChange(false);
+      setDocxLoading(true);
+      setDocxError(null);
+      setDocxHtml('');
+      
+      fetch(fileUrl)
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to fetch document');
+          return res.arrayBuffer();
+        })
+        .then(buffer => mammoth.convertToHtml({ arrayBuffer: buffer }))
+        .then(result => {
+          setDocxHtml(result.value);
+          if (result.messages.length > 0) {
+            console.log('[DOCX Preview] Conversion messages:', result.messages);
+          }
+        })
+        .catch(err => {
+          console.error('[DOCX Preview] Error:', err);
+          setDocxError('Failed to load document preview');
+        })
+        .finally(() => setDocxLoading(false));
     }
-  }, [open, isDocx, fileUrl, fileName, onOpenChange]);
+  }, [open, isDocx, fileUrl]);
+
+  // Reset state when dialog opens
+  useEffect(() => {
+    if (open) {
+      setScale(1);
+      setRotation(0);
+      setPosition({ x: 0, y: 0 });
+      setCurrentPage(1);
+      setShowCompliancePanel(false);
+      if (!isDocx) {
+        setDocxHtml('');
+        setDocxError(null);
+      }
+    }
+  }, [open, fileUrl, isDocx]);
 
   // Reset state when dialog opens
   useEffect(() => {
@@ -289,6 +326,69 @@ export function DocumentPreviewDialog({
           }}
           draggable={false}
         />
+      );
+    }
+
+    // DOCX preview using mammoth.js conversion
+    if (isDocx) {
+      if (docxLoading) {
+        return (
+          <div className="flex flex-col items-center justify-center h-64">
+            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+            <p className="text-muted-foreground">Loading document preview...</p>
+          </div>
+        );
+      }
+      
+      if (docxError) {
+        return (
+          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+            <FileText className="h-12 w-12 mb-4 opacity-50" />
+            <p className="mb-4">{docxError}</p>
+            <Button onClick={() => downloadFile(fileUrl, fileName)}>
+              <Download className="h-4 w-4 mr-2" />
+              Download File
+            </Button>
+          </div>
+        );
+      }
+      
+      if (docxHtml) {
+        return (
+          <div 
+            className="docx-preview bg-white p-8 max-w-4xl mx-auto shadow-lg min-h-full"
+            style={{
+              fontFamily: 'Arial, sans-serif',
+              fontSize: '11pt',
+              lineHeight: '1.5',
+            }}
+          >
+            <style>{`
+              .docx-preview h1 { font-size: 24pt; font-weight: bold; color: #1a365d; margin: 16px 0; }
+              .docx-preview h2 { font-size: 18pt; font-weight: bold; color: #2d3748; margin: 14px 0; }
+              .docx-preview h3 { font-size: 14pt; font-weight: bold; color: #4a5568; margin: 12px 0; }
+              .docx-preview p { margin: 8px 0; }
+              .docx-preview table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+              .docx-preview td, .docx-preview th { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+              .docx-preview th { background: #f7fafc; font-weight: bold; }
+              .docx-preview img { max-width: 100%; height: auto; margin: 8px 0; }
+              .docx-preview ul, .docx-preview ol { margin: 8px 0; padding-left: 24px; }
+              .docx-preview li { margin: 4px 0; }
+            `}</style>
+            <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
+          </div>
+        );
+      }
+      
+      return (
+        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+          <FileText className="h-12 w-12 mb-4 opacity-50" />
+          <p className="mb-4">Document preview unavailable</p>
+          <Button onClick={() => downloadFile(fileUrl, fileName)}>
+            <Download className="h-4 w-4 mr-2" />
+            Download File
+          </Button>
+        </div>
       );
     }
 
