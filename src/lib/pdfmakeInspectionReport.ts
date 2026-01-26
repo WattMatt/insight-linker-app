@@ -426,31 +426,36 @@ function createEngineeringCoverPage(
     margin: [50, 0, 50, 40],
   });
 
-  // Quick stats preview (if available)
+  // Quick stats preview (if available) - wrapped in unbreakable to keep numbers with labels
   const stats = calculateStats(inspection);
   if (stats.totalItems > 0) {
     content.push({
-      columns: [
+      unbreakable: true,
+      stack: [
         {
-          stack: [
-            { text: stats.passPercentage.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
-            { text: '% COMPLIANCE', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+          columns: [
+            {
+              stack: [
+                { text: stats.passPercentage.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
+                { text: '% COMPLIANCE', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
+              ],
+              width: '*',
+            },
+            {
+              stack: [
+                { text: stats.totalItems.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.primary, alignment: 'center' },
+                { text: 'ITEMS CHECKED', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
+              ],
+              width: '*',
+            },
+            {
+              stack: [
+                { text: stats.totalPhotos.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.accent, alignment: 'center' },
+                { text: 'PHOTOS', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
+              ],
+              width: '*',
+            },
           ],
-          width: '*',
-        },
-        {
-          stack: [
-            { text: stats.totalItems.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.primary, alignment: 'center' },
-            { text: 'ITEMS CHECKED', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-          ],
-          width: '*',
-        },
-        {
-          stack: [
-            { text: stats.totalPhotos.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.accent, alignment: 'center' },
-            { text: 'PHOTOS', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
-          ],
-          width: '*',
         },
       ],
       margin: [40, 20, 40, 50],
