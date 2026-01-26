@@ -364,8 +364,9 @@ async function buildDocumentContent(
                   location: { index: imageIndex },
                   uri: `https://drive.google.com/uc?id=${fileId}`,
                   objectSize: {
-                    height: { magnitude: 150, unit: 'PT' },
-                    width: { magnitude: 200, unit: 'PT' },
+                    // Explicit sizing: ~4x3 inches (300x225 points)
+                    height: { magnitude: 225, unit: 'PT' },
+                    width: { magnitude: 300, unit: 'PT' },
                   },
                 },
               });
