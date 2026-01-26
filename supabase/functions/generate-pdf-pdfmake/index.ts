@@ -19,9 +19,9 @@ const corsHeaders = {
 const VERSION = '5.0.0';
 
 const IMAGE_CONFIG = {
-  MAX_SIZE_KB: 800,
-  TRANSFORM_WIDTH: 800,
-  TRANSFORM_QUALITY: 80,
+  MAX_SIZE_KB: 1200,        // Increased for large images
+  TRANSFORM_WIDTH: 600,      // Smaller width for better compression
+  TRANSFORM_QUALITY: 60,     // Lower quality to reduce size
 };
 
 // Image widths in points (1 point = 1/72 inch)
