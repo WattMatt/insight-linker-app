@@ -1,81 +1,111 @@
 
+# Definitive PDF Image Fix - Using Width Instead of Fit
 
-# Definitive Fix for PDF Image Rendering
+## Root Cause Discovery
 
-## Root Cause Analysis
+After thorough investigation, I found that:
+1. The Edge Function IS deployed correctly (Version 2.0.0)
+2. The CONFIG values ARE correct (160x120, 180x80, etc.)
+3. Images ARE being downloaded successfully (20 images, 200-400KB each)
 
-After thorough investigation, I've identified why images continue to appear as narrow vertical strips despite code changes:
+**The Real Problem**: The `fit` property in pdfmake preserves aspect ratio but doesn't guarantee a minimum size. When photos are portrait-oriented (taller than wide), `fit: [160, 120]` constrains them to 120px height, making them extremely narrow.
 
-**The Problem**: The deployed Edge Function is **not using the latest code**. Even though the file shows correct `CONFIG` values (`SECTION_PHOTO_WIDTH: 160`, `SECTION_PHOTO_HEIGHT: 120`), the PDF output shows images constrained to the old `75x100` dimensions.
-
-**Evidence**:
-- The parsed PDF shows images rendered as extremely narrow vertical strips
-- The logs show the function executing, but the PDF size remains identical (5573KB) across multiple generations
-- This indicates the deployed function code hasn't changed despite file edits
-
----
-
-## Solution: Complete Edge Function Rewrite and Forced Deployment
-
-I will create a **fresh, complete version** of the Edge Function with all correct image dimensions, ensuring no cached or partial code affects the deployment.
-
-### Image Dimension Standards (per SANS 10142-1 compliance report requirements):
-
-| Image Type | Width | Height | Aspect | Layout Purpose |
-|------------|-------|--------|--------|----------------|
-| **Logo** | 180 | 80 | Landscape | Cover page prominence |
-| **Section Photos** | 160 | 120 | Landscape | 3-column grid for electrical panel shots |
-| **Tenant Images** | 140 | 180 | Portrait | Meter/breaker closeups |
-| **Snag Photos** | 200 | 150 | Landscape | 2-column evidence documentation |
-| **Signatures** | 140 | 50 | Wide | Signature boxes |
+**Example of the issue**:
+- Original photo: 480px wide × 640px tall (portrait, 0.75 aspect ratio)
+- `fit: [160, 120]` → Constrained by height to 120px → Width becomes 90px → Appears as narrow strip
 
 ---
 
-## Implementation Steps
+## Solution: Switch from `fit` to `width` with Max Height
 
-### Step 1: Rewrite CONFIG Block
-Replace the entire CONFIG object with clear, correct values and add a version identifier for debugging:
+The fix is to use `width` as the primary constraint instead of `fit`. This ensures images are always a consistent width, with height automatically calculated.
 
+### Changes Required
+
+| Location | Current | Fixed |
+|----------|---------|-------|
+| Logo (line 381) | `fit: [180, 80]` | `width: 180, maxHeight: 80` |
+| Section Photos (line 654) | `fit: [160, 120]` | `width: 150` |
+| Tenant Images (line 758) | `fit: [140, 180]` | `width: 130` |
+| Snag Photos (line 825) | `fit: [200, 150]` | `width: 180` |
+| Signatures (line 868) | `fit: [140, 50]` | `width: 140, maxHeight: 50` |
+
+---
+
+## Technical Implementation
+
+### Step 1: Update CONFIG with Width-Only Values
 ```text
 const CONFIG = {
-  VERSION: '2.0.0',  // For deployment verification
-  MAX_IMAGE_SIZE_KB: 400,
-  IMAGE_TRANSFORM_WIDTH: 600,
-  IMAGE_TRANSFORM_QUALITY: 75,
-  LOGO_MAX_SIZE_KB: 600,
-  MAX_IMAGES_PER_REPORT: 30,
-  // Professional image dimensions - landscape-oriented for electrical photos
+  VERSION: '3.0.0',  // Version bump for verification
+  // Width-based sizing (height auto-calculated)
   LOGO_WIDTH: 180,
-  LOGO_HEIGHT: 80,
-  SECTION_PHOTO_WIDTH: 160,
-  SECTION_PHOTO_HEIGHT: 120,
-  TENANT_PHOTO_WIDTH: 140,
-  TENANT_PHOTO_HEIGHT: 180,
-  SNAG_PHOTO_WIDTH: 200,
-  SNAG_PHOTO_HEIGHT: 150,
+  SECTION_PHOTO_WIDTH: 150,  // Consistent width for 3-column grid
+  TENANT_PHOTO_WIDTH: 130,   // 3 per row in tenant section  
+  SNAG_PHOTO_WIDTH: 180,     // Larger for evidence
   SIGNATURE_WIDTH: 140,
-  SIGNATURE_HEIGHT: 50,
+  SIGNATURE_MAX_HEIGHT: 50,
 };
 ```
 
-### Step 2: Add Version Logging
-Add console output at the start of execution to verify which version is running:
-
+### Step 2: Update Logo Rendering
 ```text
-console.log('[PDFMake] Version:', CONFIG.VERSION);
-console.log('[PDFMake] Section photo size:', CONFIG.SECTION_PHOTO_WIDTH, 'x', CONFIG.SECTION_PHOTO_HEIGHT);
+// Cover page logo
+{
+  image: logoDataUri,
+  width: CONFIG.LOGO_WIDTH,
+  alignment: 'center',
+  margin: [0, 30, 0, 25],
+}
 ```
 
-### Step 3: Verify All Image References
-Ensure every `fit:` property references `CONFIG` values:
-- Logo: `fit: [CONFIG.LOGO_WIDTH, CONFIG.LOGO_HEIGHT]`
-- Section photos: `fit: [CONFIG.SECTION_PHOTO_WIDTH, CONFIG.SECTION_PHOTO_HEIGHT]`
-- Tenant images: `fit: [CONFIG.TENANT_PHOTO_WIDTH, CONFIG.TENANT_PHOTO_HEIGHT]`
-- Snag photos: `fit: [CONFIG.SNAG_PHOTO_WIDTH, CONFIG.SNAG_PHOTO_HEIGHT]`
-- Signatures: `fit: [CONFIG.SIGNATURE_WIDTH, CONFIG.SIGNATURE_HEIGHT]`
+### Step 3: Update Section Photo Rendering  
+```text
+// Section item photos - 3-column layout
+{
+  image: getImage(photo),
+  width: CONFIG.SECTION_PHOTO_WIDTH,
+  alignment: 'center',
+}
+```
 
-### Step 4: Force Redeploy
-Deploy the Edge Function with explicit verification that the new version is active.
+### Step 4: Update Tenant Image Rendering
+```text
+// Tenant verification images
+{
+  image: getImage(tenant.meterImage),
+  width: CONFIG.TENANT_PHOTO_WIDTH,
+  alignment: 'center',
+}
+```
+
+### Step 5: Update Snag Photo Rendering
+```text
+// Snag evidence photos
+{
+  image: getImage(photo),
+  width: CONFIG.SNAG_PHOTO_WIDTH,
+  alignment: 'center',
+}
+```
+
+---
+
+## Visual Comparison
+
+### Before (using `fit`):
+```text
+Photo (portrait): 480×640px 
+fit: [160, 120] → Constrained by height
+Result: 90×120px → Narrow vertical strip
+```
+
+### After (using `width`):
+```text
+Photo (portrait): 480×640px
+width: 150 → Width is fixed
+Result: 150×200px → Properly sized, readable
+```
 
 ---
 
@@ -83,29 +113,33 @@ Deploy the Edge Function with explicit verification that the new version is acti
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/generate-pdf-pdfmake/index.ts` | Add VERSION to CONFIG, add version logging, verify all fit properties use CONFIG values |
+| `supabase/functions/generate-pdf-pdfmake/index.ts` | Replace all `fit` properties with `width` properties for images |
 
 ---
 
-## Verification Steps
+## Code Locations to Update
 
-After deployment:
-1. Check Edge Function logs for `[PDFMake] Version: 2.0.0`
-2. Check logs for `Section photo size: 160 x 120`
-3. Generate a new report and confirm photos display as landscape-oriented rectangles instead of narrow strips
+1. **Line ~381**: Logo on cover page
+2. **Line ~654**: Section item photos in 3-column grid
+3. **Line ~758**: Tenant verification images (meter, breaker, CT ratio)
+4. **Line ~825**: Snag evidence photos
+5. **Line ~868**: Signature images
 
 ---
 
-## Expected Visual Result
+## Expected Results
 
-### Before (Current):
-- Images appear as narrow vertical strips (~75px wide)
-- Photos are barely visible and details are lost
-- Electrical panel contents cannot be read
+After implementation:
+1. **All photos will have consistent widths** regardless of orientation
+2. **Portrait photos won't become narrow strips** - they'll be properly sized
+3. **Logo will display at 180px wide** with natural height
+4. **3-column photo grids will be evenly spaced** with equal-width images
+5. **Evidence photos will be clearly visible** and readable
 
-### After (Fixed):
-- Section photos display at 160x120 (landscape)
-- Photos show full electrical panel details clearly
-- Logo is prominent at 180x80
-- All images maintain natural aspect ratios
+---
 
+## Verification
+
+After deployment, the Edge Function logs should show:
+- `[PDFMake] Version: 3.0.0`
+- Generated PDF should have properly-sized images at consistent widths
