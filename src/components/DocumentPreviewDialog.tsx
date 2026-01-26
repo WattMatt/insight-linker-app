@@ -355,27 +355,53 @@ export function DocumentPreviewDialog({
       
       if (docxHtml) {
         return (
-          <div 
-            className="docx-preview bg-white p-8 max-w-4xl mx-auto shadow-lg min-h-full"
-            style={{
-              fontFamily: 'Arial, sans-serif',
-              fontSize: '11pt',
-              lineHeight: '1.5',
-            }}
-          >
-            <style>{`
-              .docx-preview h1 { font-size: 24pt; font-weight: bold; color: #1a365d; margin: 16px 0; }
-              .docx-preview h2 { font-size: 18pt; font-weight: bold; color: #2d3748; margin: 14px 0; }
-              .docx-preview h3 { font-size: 14pt; font-weight: bold; color: #4a5568; margin: 12px 0; }
-              .docx-preview p { margin: 8px 0; }
-              .docx-preview table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-              .docx-preview td, .docx-preview th { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
-              .docx-preview th { background: #f7fafc; font-weight: bold; }
-              .docx-preview img { max-width: 100%; height: auto; margin: 8px 0; }
-              .docx-preview ul, .docx-preview ol { margin: 8px 0; padding-left: 24px; }
-              .docx-preview li { margin: 4px 0; }
-            `}</style>
-            <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
+          <div className="flex flex-col h-full">
+            {/* Warning banner about preview limitations */}
+            <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 p-3 flex items-center gap-3">
+              <div className="flex-shrink-0 p-2 bg-amber-100 dark:bg-amber-900/50 rounded-full">
+                <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
+                  Simplified Preview
+                </p>
+                <p className="text-xs text-amber-600 dark:text-amber-400">
+                  This preview shows content only. Download the file to see the full professional layout with headers, page breaks, and formatting.
+                </p>
+              </div>
+              <Button 
+                size="sm" 
+                variant="outline" 
+                className="flex-shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
+                onClick={() => downloadFile(fileUrl, fileName)}
+              >
+                <Download className="h-4 w-4 mr-1" />
+                Download
+              </Button>
+            </div>
+            
+            <div 
+              className="docx-preview bg-white p-8 max-w-4xl mx-auto shadow-lg min-h-full flex-1 overflow-auto"
+              style={{
+                fontFamily: 'Arial, sans-serif',
+                fontSize: '11pt',
+                lineHeight: '1.5',
+              }}
+            >
+              <style>{`
+                .docx-preview h1 { font-size: 24pt; font-weight: bold; color: #1a365d; margin: 16px 0; }
+                .docx-preview h2 { font-size: 18pt; font-weight: bold; color: #2d3748; margin: 14px 0; }
+                .docx-preview h3 { font-size: 14pt; font-weight: bold; color: #4a5568; margin: 12px 0; }
+                .docx-preview p { margin: 8px 0; }
+                .docx-preview table { width: 100%; border-collapse: collapse; margin: 12px 0; }
+                .docx-preview td, .docx-preview th { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
+                .docx-preview th { background: #f7fafc; font-weight: bold; }
+                .docx-preview img { max-width: 100%; height: auto; margin: 8px 0; }
+                .docx-preview ul, .docx-preview ol { margin: 8px 0; padding-left: 24px; }
+                .docx-preview li { margin: 4px 0; }
+              `}</style>
+              <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
+            </div>
           </div>
         );
       }
