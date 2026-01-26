@@ -821,10 +821,24 @@ Deno.serve(async (req) => {
       accentColor || COLORS.blue
     );
 
-    // Generate PDF
+    // Generate PDF - Must explicitly configure Roboto fonts (pdfmake VFS only includes Roboto)
     const pdfMake = await import('https://esm.sh/pdfmake@0.2.10/build/pdfmake.min.js');
     const pdfFonts = await import('https://esm.sh/pdfmake@0.2.10/build/vfs_fonts.js');
     (pdfMake.default as any).vfs = (pdfFonts.default as any).pdfMake.vfs;
+    
+    // Configure fonts - CRITICAL: pdfmake VFS only includes Roboto, not Helvetica
+    (pdfMake.default as any).fonts = {
+      Roboto: {
+        normal: 'Roboto-Regular.ttf',
+        bold: 'Roboto-Medium.ttf',
+        italics: 'Roboto-Italic.ttf',
+        bolditalics: 'Roboto-MediumItalic.ttf'
+      }
+    };
+
+    // Add default font to document definition
+    docDef.defaultStyle = docDef.defaultStyle || {};
+    docDef.defaultStyle.font = 'Roboto';
 
     const pdfDoc = (pdfMake.default as any).createPdf(docDef);
     
