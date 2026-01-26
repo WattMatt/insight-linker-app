@@ -43,6 +43,41 @@ function detectImageType(bytes: Uint8Array): string {
   return 'image/jpeg';
 }
 
+// Recursively list all files in a bucket, including subdirectories
+async function listAllFiles(
+  supabase: any,
+  bucket: string,
+  prefix: string = ''
+): Promise<Array<{ name: string; path: string; metadata?: any }>> {
+  const allFiles: Array<{ name: string; path: string; metadata?: any }> = [];
+  
+  const { data: items, error } = await supabase.storage
+    .from(bucket)
+    .list(prefix, { limit: 1000 });
+  
+  if (error) {
+    console.error(`[batch-compress] Error listing ${prefix}:`, error.message);
+    return allFiles;
+  }
+  
+  for (const item of items || []) {
+    const itemPath = prefix ? `${prefix}/${item.name}` : item.name;
+    
+    // Check if it's a folder (no metadata.mimetype means it's a folder)
+    if (!item.metadata || item.id === null) {
+      // It's a folder, recurse into it
+      console.log(`[batch-compress] Scanning folder: ${itemPath}`);
+      const subFiles = await listAllFiles(supabase, bucket, itemPath);
+      allFiles.push(...subFiles);
+    } else {
+      // It's a file
+      allFiles.push({ name: item.name, path: itemPath, metadata: item.metadata });
+    }
+  }
+  
+  return allFiles;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -61,7 +96,7 @@ Deno.serve(async (req) => {
     } = body;
 
     console.log(`[batch-compress] Starting batch compression`);
-    console.log(`[batch-compress] Bucket: ${bucket}, Prefix: ${prefix || '(root)'}`);
+    console.log(`[batch-compress] Bucket: ${bucket}, Prefix: ${prefix || '(all folders)'}`);
     console.log(`[batch-compress] Settings: ${maxWidth}px, ${quality}% quality, min ${minSizeKB}KB`);
     console.log(`[batch-compress] Mode: ${dryRun ? 'DRY RUN' : 'LIVE'}, Limit: ${limit}`);
 
@@ -70,28 +105,17 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // List files in the bucket/prefix
-    const { data: files, error: listError } = await supabase.storage
-      .from(bucket)
-      .list(prefix, {
-        limit: 1000,
-        sortBy: { column: 'created_at', order: 'desc' },
-      });
-
-    if (listError) {
-      console.error('[batch-compress] List error:', listError.message);
-      return new Response(
-        JSON.stringify({ success: false, error: listError.message }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
+    // Recursively list ALL files in the bucket
+    console.log(`[batch-compress] Scanning bucket recursively...`);
+    const allFiles = await listAllFiles(supabase, bucket, prefix);
+    console.log(`[batch-compress] Found ${allFiles.length} total files in bucket`);
 
     // Filter to only image files that need processing
     const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
-    const imageFiles = (files || []).filter(file => {
+    const imageFiles = allFiles.filter(file => {
       const ext = file.name.split('.').pop()?.toLowerCase();
       const isImage = ext && imageExtensions.includes(ext);
-      const isAlreadyCompressed = file.name.includes('_compressed');
+      const isAlreadyCompressed = file.name.includes('_compressed') || file.path.includes('_compressed');
       return isImage && !isAlreadyCompressed;
     });
 
@@ -107,28 +131,9 @@ Deno.serve(async (req) => {
     const filesToProcess = imageFiles.slice(0, limit);
 
     for (const file of filesToProcess) {
-      const filePath = prefix ? `${prefix}/${file.name}` : file.name;
+      const filePath = file.path; // Already includes the full path from recursive listing
       
       try {
-        // Check file size
-        const { data: metadata, error: metaError } = await supabase.storage
-          .from(bucket)
-          .list(prefix, {
-            limit: 1,
-            search: file.name,
-          });
-
-        if (metaError || !metadata || metadata.length === 0) {
-          processedFiles.push({
-            path: filePath,
-            originalSize: 0,
-            status: 'error',
-            error: 'Could not get metadata',
-          });
-          errors++;
-          continue;
-        }
-
         // Download to check actual size
         const { data: blob, error: downloadError } = await supabase.storage
           .from(bucket)
