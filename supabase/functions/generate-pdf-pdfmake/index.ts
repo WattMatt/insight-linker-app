@@ -361,20 +361,19 @@ function buildDocDefinition(
 
   const content: any[] = [];
 
-  // ==================== PAGE 1: COVER PAGE ====================
+  // ==================== COVER PAGE ====================
   
-  // Logo at top center
-  if (logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE) {
-    content.push({
-      image: logoDataUri,
-      width: 180,
-      alignment: 'center',
-      margin: [0, 40, 0, 30],
-    });
-  } else {
-    // Spacer when no logo
-    content.push({ text: '', margin: [0, 80, 0, 0] });
-  }
+  // Logo at top center - use stack to avoid empty page issues
+  content.push({
+    stack: [
+      logoDataUri && logoDataUri !== PLACEHOLDER_IMAGE ? {
+        image: logoDataUri,
+        width: 180,
+        alignment: 'center',
+        margin: [0, 30, 0, 25],
+      } : { text: '', margin: [0, 60, 0, 0] },
+    ],
+  });
 
   // Main title
   content.push({
