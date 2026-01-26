@@ -6,9 +6,10 @@ import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { Upload, Loader2, Link as LinkIcon, Settings2, FileText, Shield, Eye, UserCog } from "lucide-react";
+import { Upload, Loader2, Link as LinkIcon, Settings2, FileText, Shield, Eye, UserCog, ImageIcon } from "lucide-react";
 import { PDFTemplateManager } from "@/components/settings/PDFTemplateManager";
 import { COCValidationSettings } from "@/components/settings/COCValidationSettings";
+import { ImageCompressionManager } from "@/components/settings/ImageCompressionManager";
 import PortalManagement from "./PortalManagement";
 import Users from "./Users";
 
@@ -173,6 +174,10 @@ const Settings = () => {
             <Shield className="h-4 w-4" />
             COC Validation
           </TabsTrigger>
+          <TabsTrigger value="image-compression" className="flex items-center gap-2">
+            <ImageIcon className="h-4 w-4" />
+            Images
+          </TabsTrigger>
           <TabsTrigger value="users" className="flex items-center gap-2">
             <UserCog className="h-4 w-4" />
             Users
@@ -334,6 +339,10 @@ const Settings = () => {
 
       <TabsContent value="coc-validation">
         <COCValidationSettings />
+      </TabsContent>
+
+      <TabsContent value="image-compression">
+        <ImageCompressionManager />
       </TabsContent>
 
       <TabsContent value="users">

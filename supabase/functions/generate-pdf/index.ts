@@ -2877,6 +2877,37 @@ Deno.serve(async (req) => {
     }
 
     console.log('HTML generated, calling PDFShift API...');
+    console.log('HTML size:', Math.round(html.length / 1024), 'KB');
+    
+    // Debug mode: optionally save HTML to storage for inspection
+    const debugMode = (body as any).debugHtml === true;
+    let debugHtmlUrl: string | undefined;
+    
+    if (debugMode) {
+      const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+      const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+      const debugSupabase = createClient(supabaseUrl, supabaseServiceKey);
+      
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+      const debugPath = `debug/html_${body.reportType}_${timestamp}.html`;
+      
+      const { data: debugUploadData, error: debugError } = await debugSupabase.storage
+        .from('documents')
+        .upload(debugPath, html, {
+          contentType: 'text/html',
+          upsert: false,
+        });
+      
+      if (!debugError) {
+        const { data: debugUrlData } = debugSupabase.storage
+          .from('documents')
+          .getPublicUrl(debugPath);
+        debugHtmlUrl = debugUrlData.publicUrl;
+        console.log('[DEBUG] HTML saved to:', debugHtmlUrl);
+      } else {
+        console.warn('[DEBUG] Failed to save HTML:', debugError.message);
+      }
+    }
 
     // Call PDFShift API
     const pdfResponse = await fetch('https://api.pdfshift.io/v3/convert/pdf', {
@@ -2903,7 +2934,7 @@ Deno.serve(async (req) => {
       const errorText = await pdfResponse.text();
       console.error('PDFShift API error:', pdfResponse.status, errorText);
       return new Response(
-        JSON.stringify({ error: 'PDF generation failed', details: errorText }),
+        JSON.stringify({ error: 'PDF generation failed', details: errorText, debugHtmlUrl }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -2939,7 +2970,7 @@ Deno.serve(async (req) => {
     if (uploadError) {
       console.error('Storage upload error:', uploadError);
       return new Response(
-        JSON.stringify({ error: 'Failed to save PDF to storage', details: uploadError.message }),
+        JSON.stringify({ error: 'Failed to save PDF to storage', details: uploadError.message, debugHtmlUrl }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -2976,6 +3007,7 @@ Deno.serve(async (req) => {
         url: urlData.publicUrl,
         filename,
         storagePath,
+        debugHtmlUrl,
       }),
       { 
         status: 200, 

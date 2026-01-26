@@ -119,12 +119,14 @@ export const useImageUpload = () => {
    * Uploads an image and returns a public URL (doesn't expire)
    * Automatically converts HEIC to JPG
    * Includes retry logic and proper error handling
+   * Optionally triggers server-side compression for optimal PDF generation
    */
   const uploadImage = async (
     file: File,
     bucket: string,
     path: string,
-    retries = 3
+    retries = 3,
+    options?: { skipServerCompression?: boolean }
   ): Promise<UploadResult | null> => {
     setUploading(true);
 
@@ -157,7 +159,7 @@ export const useImageUpload = () => {
             if (error.message.includes('duplicate') || error.message.includes('already exists')) {
               const timestamp = Date.now();
               const newPath = uploadPath.replace(/\.[^.]+$/, `_${timestamp}.jpg`);
-              return uploadImage(file, bucket, newPath, 1); // Don't retry on duplicate
+              return uploadImage(file, bucket, newPath, 1, options); // Don't retry on duplicate
             }
             throw error;
           }
@@ -188,6 +190,12 @@ export const useImageUpload = () => {
           }
           
           console.log('Image uploaded and verified:', { url: publicData.publicUrl, path: storedPath });
+          
+          // Trigger server-side compression for PDF optimization (non-blocking)
+          if (!options?.skipServerCompression && bucket === 'inspection-photos') {
+            triggerServerCompression(storedPath, bucket);
+          }
+          
           setUploading(false);
           return {
             url: publicData.publicUrl,
@@ -223,6 +231,35 @@ export const useImageUpload = () => {
 
     setUploading(false);
     return null;
+  };
+
+  /**
+   * Triggers server-side image compression for optimal PDF generation
+   * This runs in the background and doesn't block the upload
+   */
+  const triggerServerCompression = async (path: string, bucket: string) => {
+    try {
+      // Fire and forget - don't await
+      supabase.functions.invoke('compress-image', {
+        body: {
+          sourcePath: path,
+          bucket,
+          maxWidth: 800,
+          quality: 70
+        }
+      }).then(({ data, error }) => {
+        if (error) {
+          console.warn('[ServerCompression] Failed:', error.message);
+        } else if (data?.success) {
+          console.log(`[ServerCompression] Optimized: ${Math.round(data.originalSize / 1024)}KB → ${Math.round(data.compressedSize / 1024)}KB`);
+        }
+      }).catch(err => {
+        console.warn('[ServerCompression] Error:', err);
+      });
+    } catch (err) {
+      // Silently ignore - this is a background optimization
+      console.warn('[ServerCompression] Trigger failed:', err);
+    }
   };
 
   /**
