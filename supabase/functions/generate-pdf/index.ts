@@ -338,8 +338,25 @@ async function imageToBase64(url: string): Promise<string | null> {
   }
 }
 
+// Validate base64 image data - ensures the data is properly formatted
+function validateBase64Image(dataUri: string): boolean {
+  if (!dataUri || typeof dataUri !== 'string') return false;
+  if (!dataUri.startsWith('data:image/')) return false;
+  
+  const parts = dataUri.split(',');
+  if (parts.length !== 2) return false;
+  
+  const base64 = parts[1];
+  // Check for minimum length (a real image should be at least 100 chars of base64)
+  if (base64.length < 100) return false;
+  // Check for valid Base64 characters (allowing some whitespace which gets stripped)
+  if (!/^[A-Za-z0-9+/=\s]+$/.test(base64)) return false;
+  
+  return true;
+}
+
 // Generate a responsive photo grid - 3 images per row using table layout for PDF reliability
-// Uses explicit pixel widths to ensure proper sizing in PDFShift
+// Uses EXPLICIT width and height attributes (not just CSS) for PDFShift compatibility
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
@@ -351,16 +368,28 @@ function generatePhotoGrid(photos: string[], options?: {
   const labels = options?.labels || [];
   const showLabels = options?.showLabels ?? false;
   
+  // Filter out invalid images before rendering
+  const validPhotos = photos.filter(photo => {
+    if (!validateBase64Image(photo)) {
+      console.warn('[generatePhotoGrid] Skipping invalid base64 image');
+      return false;
+    }
+    return true;
+  });
+  
+  if (validPhotos.length === 0) return '';
+  
   // A4 content width is ~174mm (658px) with 18mm margins
-  // For 3 columns with 8px gaps: (658 - 16) / 3 ≈ 214px per image
-  // Fixed heights prevent portrait images from taking up entire pages
-  const imageWidth = perRow === 3 ? '200px' : perRow === 2 ? '300px' : '400px';
-  const imageHeight = perRow === 3 ? '150px' : perRow === 2 ? '220px' : '300px';
+  // For 3 columns: 200x150px images
+  // For 2 columns: 280x210px images  
+  // For 1 column: 400x300px images
+  const imageWidthPx = perRow === 3 ? 200 : perRow === 2 ? 280 : 400;
+  const imageHeightPx = perRow === 3 ? 150 : perRow === 2 ? 210 : 300;
   
   // Split photos into rows
   const rows: { photo: string; label?: string }[][] = [];
-  for (let i = 0; i < photos.length; i += perRow) {
-    const rowPhotos = photos.slice(i, i + perRow).map((photo, idx) => ({
+  for (let i = 0; i < validPhotos.length; i += perRow) {
+    const rowPhotos = validPhotos.slice(i, i + perRow).map((photo, idx) => ({
       photo,
       label: labels[i + idx] || `Photo ${i + idx + 1}`
     }));
@@ -375,7 +404,9 @@ function generatePhotoGrid(photos: string[], options?: {
             <td style="width: ${100 / perRow}%; padding: 8px; vertical-align: top; text-align: center;">
               ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 6px; font-weight: 500;">${item.label}</div>` : ''}
               <img src="${item.photo}" 
-                   style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" 
+                   width="${imageWidthPx}" 
+                   height="${imageHeightPx}" 
+                   style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" 
                    alt="${item.label}" />
             </td>
           `).join('')}
@@ -421,9 +452,15 @@ async function processInspectionPhotos(inspection: any): Promise<any> {
               
               const optimizedImage = await getOptimizedImageUrl(photoUrl);
               if (optimizedImage) {
-                embeddedPhotos.push(optimizedImage);
-                incrementPhotoCount();
-                processedPhotos++;
+                // Validate the base64 before adding
+                if (validateBase64Image(optimizedImage)) {
+                  embeddedPhotos.push(optimizedImage);
+                  incrementPhotoCount();
+                  processedPhotos++;
+                  console.log(`[processPhotos] ✓ Valid image embedded (${Math.round(optimizedImage.length / 1024)}KB base64)`);
+                } else {
+                  console.warn(`[processPhotos] ✗ Invalid base64 format, skipping`);
+                }
               }
             }
             item.photos = embeddedPhotos;
@@ -2407,27 +2444,33 @@ async function generateInspectionHTML(data: ReportData): Promise<string> {
           <div style="margin-top: 15px;">
             <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid;">
               <tr>
-                ${tenant.breakerImage ? `
+                ${tenant.breakerImage && validateBase64Image(tenant.breakerImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Breaker</div>
                   <img src="${tenant.breakerImage}" 
-                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       width="200" 
+                       height="150" 
+                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
                        alt="Breaker" />
                 </td>
                 ` : ''}
-                ${tenant.ctRatioImage ? `
+                ${tenant.ctRatioImage && validateBase64Image(tenant.ctRatioImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">CT Ratio</div>
                   <img src="${tenant.ctRatioImage}" 
-                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       width="200" 
+                       height="150" 
+                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
                        alt="CT Ratio" />
                 </td>
                 ` : ''}
-                ${tenant.meterImage ? `
+                ${tenant.meterImage && validateBase64Image(tenant.meterImage) ? `
                 <td style="width: 33%; padding: 8px; vertical-align: top; text-align: center;">
                   <div style="font-size: 9pt; color: ${COLORS.textMuted}; margin-bottom: 6px; font-weight: 500;">Meter</div>
                   <img src="${tenant.meterImage}" 
-                       style="max-width: 200px; max-height: 150px; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
+                       width="200" 
+                       height="150" 
+                       style="object-fit: contain; display: block; margin: 0 auto; border: 1px solid ${COLORS.border}; border-radius: 4px; background: #f9fafb;" 
                        alt="Meter" />
                 </td>
                 ` : ''}
