@@ -10,7 +10,7 @@ import { Eye, Camera, X, ImageIcon } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
-import { useUnifiedPdfGeneration, InspectionReportData } from "@/hooks/useUnifiedPdfGeneration";
+import { generateInspectionReportPdf, InspectionReportData } from "@/lib/pdfmakeInspectionReport";
 
 interface TemplateSection {
   id: string;
@@ -70,8 +70,7 @@ export const TemplateBasedReport = ({
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [saving, setSaving] = useState(false);
-
-  const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -193,8 +192,9 @@ export const TemplateBasedReport = ({
   const handlePreviewReport = async () => {
     if (!selectedTemplate) return;
 
+    setIsGenerating(true);
     try {
-      // Build sections data with photos for PDFShift
+      // Build sections data with photos for pdfmake
       const sectionsForPdf = selectedTemplate.sections?.map((section) => ({
         title: section.name,
         items: section.items?.map((item) => {
@@ -214,28 +214,28 @@ export const TemplateBasedReport = ({
         sum + section.items.reduce((itemSum, item) => itemSum + (item.photos?.length || 0), 0), 0
       );
 
-      console.log(`[TemplateBasedReport] Generating report with ${totalPhotos} photos`);
+      console.log(`[TemplateBasedReport] Generating pdfmake report with ${totalPhotos} photos`);
 
-      const reportPayload: InspectionReportData = {
-        reportType: 'inspection',
-        title: selectedTemplate.name,
-        subtitle: `${siteName} - ${subsectionName}`,
-        siteName,
-        clientName,
-        subsectionId,
-        companyLogoUrl: siteLogoUrl,
-        generatedAt: new Date().toISOString(),
+      const inspectionData: InspectionReportData = {
         inspectionId: `template-${selectedTemplate.id}`,
         templateName: selectedTemplate.name,
         status: 'completed',
         sections: sectionsForPdf,
         snags: [], // Template-based reports don't have snags
+        subsectionName,
+        inspectionDate: new Date().toISOString(),
       };
 
-      const result = await generatePdfForPreview(reportPayload);
+      // Generate using pdfmake (client-side)
+      const result = await generateInspectionReportPdf({
+        inspection: inspectionData,
+        siteName,
+        clientName,
+        siteLogoUrl,
+      });
 
-      if (result.success && result.url) {
-        setPreviewUrl(result.url);
+      if (result.success && result.previewUrl) {
+        setPreviewUrl(result.previewUrl);
         setPreviewFileName(`${subsectionName}_${selectedTemplate.name}_Report.pdf`);
         setPreviewOpen(true);
       } else {
@@ -244,6 +244,8 @@ export const TemplateBasedReport = ({
     } catch (error) {
       console.error("Error generating PDF:", error);
       toast.error("Failed to generate report");
+    } finally {
+      setIsGenerating(false);
     }
   };
 

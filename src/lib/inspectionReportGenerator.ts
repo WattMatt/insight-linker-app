@@ -1,9 +1,13 @@
 /**
  * Inspection Report Generator
- * Migrated to use unified PDFShift-based generation via generate-pdf edge function
+ * Now uses client-side pdfmake for 100% reliable, distortion-free photo rendering
  */
 
 import { supabase } from "@/integrations/supabase/client";
+import { 
+  generateAndSaveInspectionReportPdfmake, 
+  InspectionReportData 
+} from "@/lib/pdfmakeInspectionReport";
 
 interface GenerateAndSaveReportOptions {
   inspectionId: string;
@@ -24,7 +28,8 @@ interface GenerateReportResult {
 }
 
 /**
- * Generates a comprehensive inspection report PDF using PDFShift and saves it to the documents folder
+ * Generates a comprehensive inspection report PDF using pdfmake (client-side)
+ * and saves it to the documents folder
  */
 export async function generateAndSaveInspectionReport(
   options: GenerateAndSaveReportOptions
@@ -32,12 +37,6 @@ export async function generateAndSaveInspectionReport(
   const { inspectionId, subsectionId, siteName, subsectionName, clientName, templateId, siteLogoUrl } = options;
 
   try {
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return { success: false, error: "User not authenticated" };
-    }
-
     // Fetch inspection data
     const { data: inspection, error: inspectionError } = await supabase
       .from('inspections')
@@ -103,143 +102,64 @@ export async function generateAndSaveInspectionReport(
             value: itemData.status || itemData.value || 'N/A',
             type: item.type || 'text',
             notes: itemData.notes || '',
-            photos: photos, // Include all photo URLs
+            photos: photos,
           };
         }),
       };
     });
 
-    // Build report data payload
-    const reportData = {
-      reportType: 'inspection' as const,
-      title: template.name || 'Inspection Report',
-      subtitle: `${siteName} - ${subsectionName}`,
+    // Extract tenants if present
+    const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants.map((tenant: any) => ({
+      shopName: tenant.shopName || 'Unknown Tenant',
+      shopNumber: tenant.shopNumber || '',
+      meterSerialNumber: tenant.meterSerialNumber || '',
+      breakerSize: tenant.breakerSize || '',
+      ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+      meterImage: tenant.meterImage || undefined,
+      breakerImage: tenant.breakerImage || undefined,
+      ctRatioImage: tenant.ctRatioImage || undefined,
+    })) : [];
+
+    // Build inspection data for pdfmake
+    const inspectionData: InspectionReportData = {
+      inspectionId,
+      templateName: template.name,
+      inspectorName: generalInfo.inspectorName || inspection.inspector_name,
+      inspectionDate: generalInfo.date || inspection.inspection_date,
+      status: inspection.status,
+      qualityRating: inspection.quality_rating,
+      generalInfo,
+      sections: sectionsForPdf,
+      tenants,
+      snags: snags.map(snag => ({
+        title: snag.title,
+        description: snag.description || undefined,
+        status: snag.status,
+        riskLevel: snag.risk_level || undefined,
+        photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
+      })),
+      signatures: signatures.map(sig => ({
+        name: sig.signer_name,
+        role: sig.signer_type,
+        signatureUrl: sig.signature_data,
+        signedAt: sig.signed_at,
+      })),
+      subsectionName,
+    };
+
+    console.log('[InspectionReport] Generating via pdfmake (client-side)');
+
+    // Generate using pdfmake (client-side)
+    const result = await generateAndSaveInspectionReportPdfmake({
+      inspection: inspectionData,
       siteName,
       clientName,
-      siteId: inspection.site_id,
+      siteLogoUrl,
       subsectionId,
-      companyLogoUrl: siteLogoUrl,
-      generatedAt: new Date().toISOString(),
-      inspection: {
-        inspectionId,
-        templateName: template.name,
-        inspectorName: generalInfo.inspectorName || inspection.inspector_name,
-        inspectionDate: generalInfo.date || inspection.inspection_date,
-        status: inspection.status,
-        qualityRating: inspection.quality_rating,
-        generalInfo,
-        sections: sectionsForPdf,
-        snags: snags.map(snag => ({
-          title: snag.title,
-          description: snag.description,
-          status: snag.status,
-          riskLevel: snag.risk_level,
-          photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
-        })),
-        signatures: signatures.map(sig => ({
-          name: sig.signer_name,
-          role: sig.signer_type,
-          signatureUrl: sig.signature_data,
-          signedAt: sig.signed_at,
-        })),
-        subsectionName,
-      },
-    };
-
-    console.log('[InspectionReport] Generating via PDFShift edge function');
-
-    const { data: result, error } = await supabase.functions.invoke('generate-pdf', {
-      body: reportData,
+      siteId: inspection.site_id,
     });
 
-    if (error) {
-      console.error('PDF generation error:', error);
-      return { success: false, error: error.message || 'Failed to generate PDF' };
-    }
-
-    if (!result?.url) {
-      return { success: false, error: 'No storage URL received from PDF generation' };
-    }
-
-    // The edge function already saves to storage and creates site_documents record
-    // We just need to create/update the subsection_documents record
-    
-    const sanitizedSite = siteName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
-    const sanitizedSubsection = subsectionName.replace(/[^a-zA-Z0-9]/g, '_').substring(0, 30);
-    const dateStr = new Date().toISOString().split('T')[0];
-    const fileName = result.filename || `${sanitizedSite}_${sanitizedSubsection}_Inspection_${dateStr}.pdf`;
-
-    // Find or create "Inspection Reports" category
-    const { data: categories } = await supabase
-      .from("document_categories")
-      .select("id, name")
-      .eq("subsection_id", subsectionId);
-
-    let categoryId = categories?.find(c => c.name === "Inspection Reports")?.id;
-
-    if (!categoryId) {
-      const { data: newCategory, error: categoryError } = await supabase
-        .from("document_categories")
-        .insert({
-          name: "Inspection Reports",
-          subsection_id: subsectionId,
-          order_index: (categories?.length || 0) + 1
-        })
-        .select()
-        .single();
-
-      if (categoryError) {
-        console.warn('Could not create category, report still saved:', categoryError);
-      } else {
-        categoryId = newCategory.id;
-      }
-    }
-
-    // Check for existing document and create/update
-    const { data: existingDoc } = await supabase
-      .from('subsection_documents')
-      .select('id')
-      .eq('subsection_id', subsectionId)
-      .eq('file_name', fileName)
-      .maybeSingle();
-
-    let docId: string;
-    if (existingDoc) {
-      await supabase
-        .from('subsection_documents')
-        .update({
-          file_url: result.url,
-          uploaded_at: new Date().toISOString()
-        })
-        .eq('id', existingDoc.id);
-      docId = existingDoc.id;
-    } else {
-      const { data: docData, error: docError } = await supabase
-        .from('subsection_documents')
-        .insert({
-          subsection_id: subsectionId,
-          category_id: categoryId,
-          file_name: fileName,
-          file_url: result.url,
-          uploaded_by: user.id
-        })
-        .select()
-        .single();
-
-      if (docError) {
-        console.warn('Could not create document record:', docError);
-        docId = '';
-      } else {
-        docId = docData.id;
-      }
-    }
-
-    return {
-      success: true,
-      documentId: docId,
-      fileName,
-      fileUrl: result.url,
-    };
+    return result;
   } catch (error) {
     console.error('Error generating inspection report:', error);
     return { 

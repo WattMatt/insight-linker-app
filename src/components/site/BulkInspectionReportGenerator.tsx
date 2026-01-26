@@ -20,6 +20,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from "lucide-react";
+import { generateAndSaveInspectionReportPdfmake, InspectionReportData } from "@/lib/pdfmakeInspectionReport";
 
 interface GenerationResult {
   subsectionId: string;
@@ -312,105 +313,47 @@ export function BulkInspectionReportGenerator({
         };
       });
 
-      // Build report data
-      const reportData = {
-        reportType: 'inspection' as const,
-        title: template.name || 'Inspection Report',
-        subtitle: `${siteName} - ${sub.subsectionName}`,
-        siteName,
-        clientName,
-        siteId,
-        subsectionId: sub.subsectionId,
-        companyLogoUrl: siteLogoUrl,
-        generatedAt: new Date().toISOString(),
-        inspection: {
-          inspectionId: sub.inspectionId,
-          templateName: template.name,
-          inspectorName: generalInfo.inspectorName || inspection.inspector_name,
-          inspectionDate: generalInfo.date || inspection.inspection_date,
-          status: inspection.status,
-          qualityRating: inspection.quality_rating,
-          generalInfo,
-          sections: sectionsForPdf,
-          tenants: tenantsForPdf, // Include tenants with their images
-          snags: snags.map(snag => ({
-            title: snag.title,
-            description: snag.description,
-            status: snag.status,
-            riskLevel: snag.risk_level,
-            photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
-          })),
-          signatures: signatures.map(sig => ({
-            name: sig.signer_name,
-            role: sig.signer_type,
-            signatureUrl: sig.signature_data,
-            signedAt: sig.signed_at,
-          })),
-          subsectionName: sub.subsectionName,
-        },
+      // Build inspection data for pdfmake
+      const inspectionData: InspectionReportData = {
+        inspectionId: sub.inspectionId,
+        templateName: template.name,
+        inspectorName: generalInfo.inspectorName || inspection.inspector_name,
+        inspectionDate: generalInfo.date || inspection.inspection_date,
+        status: inspection.status,
+        qualityRating: inspection.quality_rating,
+        generalInfo,
+        sections: sectionsForPdf,
+        tenants: tenantsForPdf,
+        snags: snags.map(snag => ({
+          title: snag.title,
+          description: snag.description || undefined,
+          status: snag.status,
+          riskLevel: snag.risk_level || undefined,
+          photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
+        })),
+        signatures: signatures.map(sig => ({
+          name: sig.signer_name,
+          role: sig.signer_type,
+          signatureUrl: sig.signature_data,
+          signedAt: sig.signed_at,
+        })),
+        subsectionName: sub.subsectionName,
       };
 
-      // Generate PDF via edge function
-      const { data: result, error: genError } = await supabase.functions.invoke('generate-pdf', {
-        body: reportData,
+      // Generate PDF via pdfmake (client-side)
+      console.log(`[BulkInspection] Generating pdfmake report for ${sub.subsectionName}`);
+      
+      const result = await generateAndSaveInspectionReportPdfmake({
+        inspection: inspectionData,
+        siteName,
+        clientName,
+        siteLogoUrl,
+        subsectionId: sub.subsectionId,
+        siteId,
       });
 
-      if (genError) {
-        throw new Error(genError.message || 'PDF generation failed');
-      }
-
-      if (!result?.url) {
-        throw new Error('No URL returned from PDF generation');
-      }
-
-      // Save document reference
-      const { data: { user } } = await supabase.auth.getUser();
-      const fileName = result.filename || `${sub.subsectionName}_Inspection_Report.pdf`;
-
-      // Find or create category
-      const { data: categories } = await supabase
-        .from("document_categories")
-        .select("id, name")
-        .eq("subsection_id", sub.subsectionId);
-
-      let categoryId = categories?.find(c => c.name === "Inspection Reports")?.id;
-
-      if (!categoryId) {
-        const { data: newCategory } = await supabase
-          .from("document_categories")
-          .insert({
-            name: "Inspection Reports",
-            subsection_id: sub.subsectionId,
-            order_index: (categories?.length || 0) + 1
-          })
-          .select()
-          .single();
-        if (newCategory) categoryId = newCategory.id;
-      }
-
-      // Upsert document
-      const { data: existingDoc } = await supabase
-        .from('subsection_documents')
-        .select('id')
-        .eq('subsection_id', sub.subsectionId)
-        .ilike('file_name', '%Inspection%Report%')
-        .maybeSingle();
-
-      if (existingDoc) {
-        await supabase
-          .from('subsection_documents')
-          .update({ file_url: result.url, uploaded_at: new Date().toISOString() })
-          .eq('id', existingDoc.id);
-      } else if (user) {
-        await supabase
-          .from('subsection_documents')
-          .insert({
-            subsection_id: sub.subsectionId,
-            category_id: categoryId,
-            file_name: fileName,
-            file_url: result.url,
-            uploaded_by: user.id
-          });
+      if (!result.success) {
+        throw new Error(result.error || 'PDF generation failed');
       }
 
       return {
@@ -419,8 +362,8 @@ export function BulkInspectionReportGenerator({
         inspectionId: sub.inspectionId,
         templateName: template.name,
         status: 'success',
-        fileName,
-        fileUrl: result.url,
+        fileName: result.fileName,
+        fileUrl: result.fileUrl,
         photoCount: totalPhotos,
       };
 
