@@ -106,11 +106,11 @@ export interface GenerateReportResult {
 // IMAGE UTILITIES
 // ============================================================================
 
-// Image compression settings for PDF generation
+// Image compression settings for PDF generation - optimized for quality
 const PDF_IMAGE_CONFIG = {
-  maxWidth: 600,      // Max width in pixels
-  maxHeight: 600,     // Max height in pixels
-  quality: 0.65,      // JPEG quality (0-1)
+  maxWidth: 1200,     // Increased for better quality photos
+  maxHeight: 1200,    // Increased for better quality photos
+  quality: 0.80,      // Higher JPEG quality (0-1)
   format: 'image/jpeg' as const,
 };
 
