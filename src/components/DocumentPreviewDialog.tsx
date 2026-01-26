@@ -23,7 +23,7 @@ import {
 import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
-import mammoth from 'mammoth';
+import { renderAsync } from 'docx-preview';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -64,10 +64,11 @@ export function DocumentPreviewDialog({
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showCompliancePanel, setShowCompliancePanel] = useState(false);
-  const [docxHtml, setDocxHtml] = useState<string>('');
   const [docxLoading, setDocxLoading] = useState(false);
   const [docxError, setDocxError] = useState<string | null>(null);
+  const [docxReady, setDocxReady] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
+  const docxContainerRef = useRef<HTMLDivElement>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
@@ -80,24 +81,46 @@ export function DocumentPreviewDialog({
     percentage: Math.round((Object.values(complianceChecks).filter(Boolean).length / Object.keys(complianceChecks).length) * 100),
   } : null;
 
-  // Load DOCX file and convert to HTML for preview
+  // Load DOCX file and render with docx-preview for true WYSIWYG
   useEffect(() => {
-    if (open && isDocx && fileUrl) {
+    if (open && isDocx && fileUrl && docxContainerRef.current) {
       setDocxLoading(true);
       setDocxError(null);
-      setDocxHtml('');
+      setDocxReady(false);
+      
+      // Clear previous content
+      if (docxContainerRef.current) {
+        docxContainerRef.current.innerHTML = '';
+      }
       
       fetch(fileUrl)
         .then(res => {
           if (!res.ok) throw new Error('Failed to fetch document');
           return res.arrayBuffer();
         })
-        .then(buffer => mammoth.convertToHtml({ arrayBuffer: buffer }))
-        .then(result => {
-          setDocxHtml(result.value);
-          if (result.messages.length > 0) {
-            console.log('[DOCX Preview] Conversion messages:', result.messages);
-          }
+        .then(buffer => {
+          if (!docxContainerRef.current) return;
+          
+          return renderAsync(buffer, docxContainerRef.current, undefined, {
+            className: 'docx-wrapper',
+            inWrapper: true,
+            ignoreWidth: false,
+            ignoreHeight: false,
+            ignoreFonts: false,
+            breakPages: true,
+            ignoreLastRenderedPageBreak: false,
+            experimental: true,
+            trimXmlDeclaration: true,
+            useBase64URL: true,
+            renderHeaders: true,
+            renderFooters: true,
+            renderFootnotes: true,
+            renderEndnotes: true,
+          });
+        })
+        .then(() => {
+          setDocxReady(true);
+          console.log('[DOCX Preview] Rendered successfully with docx-preview');
         })
         .catch(err => {
           console.error('[DOCX Preview] Error:', err);
@@ -116,20 +139,9 @@ export function DocumentPreviewDialog({
       setCurrentPage(1);
       setShowCompliancePanel(false);
       if (!isDocx) {
-        setDocxHtml('');
+        setDocxReady(false);
         setDocxError(null);
       }
-    }
-  }, [open, fileUrl, isDocx]);
-
-  // Reset state when dialog opens
-  useEffect(() => {
-    if (open && !isDocx) {
-      setScale(1);
-      setRotation(0);
-      setPosition({ x: 0, y: 0 });
-      setCurrentPage(1);
-      setShowCompliancePanel(false);
     }
   }, [open, fileUrl, isDocx]);
 
@@ -329,91 +341,79 @@ export function DocumentPreviewDialog({
       );
     }
 
-    // DOCX preview using mammoth.js conversion
+    // DOCX WYSIWYG preview using docx-preview library
     if (isDocx) {
-      if (docxLoading) {
-        return (
-          <div className="flex flex-col items-center justify-center h-64">
-            <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
-            <p className="text-muted-foreground">Loading document preview...</p>
-          </div>
-        );
-      }
-      
-      if (docxError) {
-        return (
-          <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-            <FileText className="h-12 w-12 mb-4 opacity-50" />
-            <p className="mb-4">{docxError}</p>
-            <Button onClick={() => downloadFile(fileUrl, fileName)}>
-              <Download className="h-4 w-4 mr-2" />
-              Download File
-            </Button>
-          </div>
-        );
-      }
-      
-      if (docxHtml) {
-        return (
-          <div className="flex flex-col h-full">
-            {/* Warning banner about preview limitations */}
-            <div className="bg-amber-50 dark:bg-amber-950/30 border-b border-amber-200 dark:border-amber-800 p-3 flex items-center gap-3">
-              <div className="flex-shrink-0 p-2 bg-amber-100 dark:bg-amber-900/50 rounded-full">
-                <FileText className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-              </div>
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-amber-800 dark:text-amber-200">
-                  Simplified Preview
-                </p>
-                <p className="text-xs text-amber-600 dark:text-amber-400">
-                  This preview shows content only. Download the file to see the full professional layout with headers, page breaks, and formatting.
-                </p>
-              </div>
-              <Button 
-                size="sm" 
-                variant="outline" 
-                className="flex-shrink-0 border-amber-300 text-amber-700 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-300"
-                onClick={() => downloadFile(fileUrl, fileName)}
-              >
-                <Download className="h-4 w-4 mr-1" />
-                Download
+      return (
+        <div className="flex flex-col h-full w-full">
+          {/* Loading overlay */}
+          {docxLoading && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/80 z-10">
+              <Loader2 className="h-8 w-8 animate-spin text-primary mb-4" />
+              <p className="text-muted-foreground">Rendering document...</p>
+            </div>
+          )}
+          
+          {/* Error state */}
+          {docxError && !docxLoading && (
+            <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
+              <FileText className="h-12 w-12 mb-4 opacity-50" />
+              <p className="mb-4">{docxError}</p>
+              <Button onClick={() => downloadFile(fileUrl, fileName)}>
+                <Download className="h-4 w-4 mr-2" />
+                Download File
               </Button>
             </div>
-            
-            <div 
-              className="docx-preview bg-white p-8 max-w-4xl mx-auto shadow-lg min-h-full flex-1 overflow-auto"
-              style={{
-                fontFamily: 'Arial, sans-serif',
-                fontSize: '11pt',
-                lineHeight: '1.5',
-              }}
-            >
-              <style>{`
-                .docx-preview h1 { font-size: 24pt; font-weight: bold; color: #1a365d; margin: 16px 0; }
-                .docx-preview h2 { font-size: 18pt; font-weight: bold; color: #2d3748; margin: 14px 0; }
-                .docx-preview h3 { font-size: 14pt; font-weight: bold; color: #4a5568; margin: 12px 0; }
-                .docx-preview p { margin: 8px 0; }
-                .docx-preview table { width: 100%; border-collapse: collapse; margin: 12px 0; }
-                .docx-preview td, .docx-preview th { border: 1px solid #e2e8f0; padding: 8px 12px; text-align: left; }
-                .docx-preview th { background: #f7fafc; font-weight: bold; }
-                .docx-preview img { max-width: 100%; height: auto; margin: 8px 0; }
-                .docx-preview ul, .docx-preview ol { margin: 8px 0; padding-left: 24px; }
-                .docx-preview li { margin: 4px 0; }
-              `}</style>
-              <div dangerouslySetInnerHTML={{ __html: docxHtml }} />
-            </div>
-          </div>
-        );
-      }
-      
-      return (
-        <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-          <FileText className="h-12 w-12 mb-4 opacity-50" />
-          <p className="mb-4">Document preview unavailable</p>
-          <Button onClick={() => downloadFile(fileUrl, fileName)}>
-            <Download className="h-4 w-4 mr-2" />
-            Download File
-          </Button>
+          )}
+          
+          {/* WYSIWYG Document Preview Container */}
+          <div 
+            ref={docxContainerRef}
+            className="docx-wysiwyg-container flex-1 overflow-auto bg-muted/30"
+            style={{
+              minHeight: '500px',
+            }}
+          />
+          
+          {/* Styles for docx-preview library */}
+          <style>{`
+            .docx-wysiwyg-container {
+              display: flex;
+              flex-direction: column;
+              align-items: center;
+              padding: 20px;
+            }
+            .docx-wysiwyg-container .docx-wrapper {
+              background: white;
+              box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+              margin: 0 auto;
+            }
+            .docx-wysiwyg-container .docx-wrapper > section.docx {
+              padding: 72pt 90pt !important;
+              min-height: 11in;
+              box-sizing: border-box;
+              margin-bottom: 20px;
+              border: 1px solid hsl(var(--border));
+              background: white;
+            }
+            .docx-wysiwyg-container table {
+              border-collapse: collapse;
+              width: 100%;
+            }
+            .docx-wysiwyg-container td, 
+            .docx-wysiwyg-container th {
+              border: 1px solid #000;
+              padding: 4px 8px;
+            }
+            .docx-wysiwyg-container img {
+              max-width: 100%;
+              height: auto;
+            }
+            /* Page break styling */
+            .docx-wysiwyg-container .docx-wrapper > section.docx + section.docx {
+              margin-top: 20px;
+              page-break-before: always;
+            }
+          `}</style>
         </div>
       );
     }
