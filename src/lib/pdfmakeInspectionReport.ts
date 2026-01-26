@@ -775,25 +775,25 @@ function createSectionWithPhotoGrid(
   const content: Content[] = [];
   const items = section.items || [];
 
-  // Build section header
+  // Build section header - matching reference with navy number box + teal title bar
   const sectionHeader = {
     table: {
-      widths: ['auto', '*'],
+      widths: [35, '*'],
       body: [[
         {
           text: `${sectionIndex + 1}`,
-          fontSize: 14,
+          fontSize: 16,
           bold: true,
           color: '#FFFFFF',
           alignment: 'center',
-          margin: [8, 6, 8, 6],
+          margin: [0, 8, 0, 8],
         },
         {
           text: section.title.toUpperCase(),
-          fontSize: 12,
+          fontSize: 11,
           bold: true,
           color: '#FFFFFF',
-          margin: [10, 8, 0, 8],
+          margin: [12, 10, 0, 10],
         },
       ]],
     },
@@ -803,7 +803,7 @@ function createSectionWithPhotoGrid(
       fillColor: (rowIndex: number, node: any, colIndex: number) => 
         colIndex === 0 ? REPORT_COLORS.primary : REPORT_COLORS.secondary,
     },
-    margin: [0, 15, 0, 12],
+    margin: [0, 20, 0, 15],
   };
 
   // Handle empty sections - keep header with "no items" message
@@ -918,8 +918,7 @@ function createInspectionItemContent(
     });
   }
 
-  // Photos in grid layout (2 columns) - kept with item
-  // Using larger size (250x200) with subtle border for professional look
+  // Photos in bordered grid layout (2 columns) - matching reference document
   const photos = item.photos?.filter(Boolean) || [];
   if (photos.length > 0) {
     const photoRows: Content[][] = [];
@@ -927,36 +926,25 @@ function createInspectionItemContent(
     for (let i = 0; i < photos.length; i += 2) {
       const rowPhotos: Content[] = [];
       
-      // First photo with border frame
+      // First photo cell with centered image and label
       const photo1 = imageCache.get(photos[i]);
       if (photo1) {
         rowPhotos.push({
-          table: {
-            widths: ['*'],
-            body: [[{
-              stack: [
-                {
-                  image: photo1,
-                  fit: [250, 200],
-                  alignment: 'center',
-                },
-                {
-                  text: `Photo ${i + 1}`,
-                  fontSize: 8,
-                  color: REPORT_COLORS.textSecondary,
-                  alignment: 'center',
-                  margin: [0, 4, 0, 0],
-                },
-              ],
-              margin: [5, 5, 5, 5],
-            }]],
-          },
-          layout: {
-            hLineWidth: () => 0.5,
-            vLineWidth: () => 0.5,
-            hLineColor: () => REPORT_COLORS.border,
-            vLineColor: () => REPORT_COLORS.border,
-          },
+          stack: [
+            {
+              image: photo1,
+              fit: [220, 180],
+              alignment: 'center',
+              margin: [10, 10, 10, 5],
+            },
+            {
+              text: `Photo ${i + 1}`,
+              fontSize: 9,
+              color: REPORT_COLORS.secondary,
+              alignment: 'center',
+              margin: [0, 0, 0, 10],
+            },
+          ],
         });
       } else {
         rowPhotos.push({ text: '' });
@@ -967,32 +955,21 @@ function createInspectionItemContent(
         const photo2 = imageCache.get(photos[i + 1]);
         if (photo2) {
           rowPhotos.push({
-            table: {
-              widths: ['*'],
-              body: [[{
-                stack: [
-                  {
-                    image: photo2,
-                    fit: [250, 200],
-                    alignment: 'center',
-                  },
-                  {
-                    text: `Photo ${i + 2}`,
-                    fontSize: 8,
-                    color: REPORT_COLORS.textSecondary,
-                    alignment: 'center',
-                    margin: [0, 4, 0, 0],
-                  },
-                ],
-                margin: [5, 5, 5, 5],
-              }]],
-            },
-            layout: {
-              hLineWidth: () => 0.5,
-              vLineWidth: () => 0.5,
-              hLineColor: () => REPORT_COLORS.border,
-              vLineColor: () => REPORT_COLORS.border,
-            },
+            stack: [
+              {
+                image: photo2,
+                fit: [220, 180],
+                alignment: 'center',
+                margin: [10, 10, 10, 5],
+              },
+              {
+                text: `Photo ${i + 2}`,
+                fontSize: 9,
+                color: REPORT_COLORS.secondary,
+                alignment: 'center',
+                margin: [0, 0, 0, 10],
+              },
+            ],
           });
         } else {
           rowPhotos.push({ text: '' });
@@ -1005,12 +982,18 @@ function createInspectionItemContent(
     }
 
     if (photoRows.length > 0) {
+      // Wrap photos in bordered table matching reference document
       itemStack.push({
         table: {
           widths: ['*', '*'],
           body: photoRows,
         },
-        layout: 'noBorders',
+        layout: {
+          hLineWidth: () => 0.5,
+          vLineWidth: () => 0.5,
+          hLineColor: () => REPORT_COLORS.border,
+          vLineColor: () => REPORT_COLORS.border,
+        },
         margin: [0, 8, 0, 12],
       });
     }
