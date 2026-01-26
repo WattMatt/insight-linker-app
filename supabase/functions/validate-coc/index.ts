@@ -1314,23 +1314,35 @@ Return ONLY the JSON validation result.`
           }
         }
         
-        // NEW: Auto-fail on earth resistance threshold
+        // Auto-fail on earth resistance threshold - only if actual value exceeds limit
+        // Don't add duplicate "exceeds threshold" error when failure was for other reasons
+        // (e.g., "value not recorded", "Compliant is not a measurement")
         if (validationSettings.auto_fail_earth_resistance_threshold) {
           const earthCheck = validationResult.checks?.find((c: any) => 
-            c.checkId === 'EARTH-001' || c.description?.toLowerCase().includes('earth')
+            c.checkId === 'EARTH-001' || (c.description?.toLowerCase().includes('earth') && c.description?.toLowerCase().includes('resistance'))
           );
+          
           if (earthCheck?.result === 'Fail') {
-            console.log('🚨 AUTO-FAIL: Earth resistance exceeded threshold');
-            if (!validationResult.criticalFailures.some((f: any) => f.clause === 'EARTH-001')) {
-              validationResult.criticalFailures.push({
-                category: 'Safety-Critical',
-                clause: 'EARTH-001',
-                description: 'Earth resistance exceeds threshold',
-                reason: `Earth resistance value exceeds configured maximum of ${validationSettings.earth_continuity_max_ohms}Ω`,
-                immediateAction: 'Verify earth electrode installation and bonding',
-                riskLevel: 'Critical'
-              });
+            // Check if the failure was specifically about a numeric value exceeding threshold
+            const measuredValue = earthCheck.measuredValue || earthCheck.evidence;
+            const numericMatch = measuredValue?.match?.(/(\d+\.?\d*)\s*[ΩO]/i);
+            const measuredOhms = numericMatch ? parseFloat(numericMatch[1]) : null;
+            
+            // Only add threshold-exceeded critical failure if we have a numeric value that actually exceeds it
+            if (measuredOhms !== null && measuredOhms > validationSettings.earth_continuity_max_ohms) {
+              console.log(`🚨 AUTO-FAIL: Earth resistance ${measuredOhms}Ω exceeds threshold ${validationSettings.earth_continuity_max_ohms}Ω`);
+              if (!validationResult.criticalFailures.some((f: any) => f.clause === 'EARTH-001' && f.description?.includes('exceeds threshold'))) {
+                validationResult.criticalFailures.push({
+                  category: 'Safety-Critical',
+                  clause: 'EARTH-001',
+                  description: 'Earth resistance exceeds threshold',
+                  reason: `Measured earth resistance of ${measuredOhms}Ω exceeds configured maximum of ${validationSettings.earth_continuity_max_ohms}Ω`,
+                  immediateAction: 'Verify earth electrode installation and bonding',
+                  riskLevel: 'Critical'
+                });
+              }
             }
+            // The overall status is already set to Fail by the AI for earth-related failures
             validationResult.overallStatus = 'Fail';
           }
         }
