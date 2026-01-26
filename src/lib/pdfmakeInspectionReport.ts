@@ -1,11 +1,13 @@
 /**
  * PDFMAKE-BASED INSPECTION REPORT GENERATOR
  * 
- * Generates professional inspection reports matching the reference layout:
- * - Full-width colored section banners
- * - Item name + Status: Pass/Fail format
- * - Single photo per item, naturally stacked
- * - Clean vertical flow with proper spacing
+ * Professional engineering-style inspection reports with:
+ * - Cover page with company branding
+ * - Table of contents with page numbers
+ * - Quality score dashboard with visual indicators
+ * - Photo grid layouts (2-3 columns)
+ * - SANS-compliant section formatting
+ * - Clean technical layout with clear section headers
  */
 
 import {
@@ -14,14 +16,28 @@ import {
   COLORS,
   CONTENT_WIDTH_PT,
   CoverPageOptions,
+  createCoverPage,
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
+import { mmToPt } from './pdfMakeConfig';
 
 // Type definitions
 type Content = any;
 
-// Section banner color (matching example - teal/dark blue)
-const SECTION_BANNER_COLOR = '#1a7a8a';
+// Engineering report color palette
+const REPORT_COLORS = {
+  primary: '#1e3a5f',      // Navy blue - professional header
+  secondary: '#1a7a8a',    // Teal - section banners
+  accent: '#2563eb',       // Bright blue - highlights
+  success: '#16a34a',      // Green - pass
+  warning: '#d97706',      // Amber - pending
+  error: '#dc2626',        // Red - fail
+  lightBg: '#f8fafc',      // Light gray background
+  border: '#e2e8f0',       // Border color
+  textPrimary: '#1e293b',
+  textSecondary: '#64748b',
+  textMuted: '#94a3b8',
+};
 
 export interface InspectionSection {
   title: string;
@@ -91,9 +107,10 @@ export interface GenerateInspectionReportResult {
   error?: string;
 }
 
-/**
- * Load multiple images in parallel with error handling
- */
+// ============================================================================
+// IMAGE UTILITIES
+// ============================================================================
+
 async function loadImagesAsDataUrls(urls: string[]): Promise<Map<string, string>> {
   const results = new Map<string, string>();
   
@@ -113,13 +130,9 @@ async function loadImagesAsDataUrls(urls: string[]): Promise<Map<string, string>
   return results;
 }
 
-/**
- * Collect all image URLs from inspection data
- */
 function collectImageUrls(inspection: InspectionReportData): string[] {
   const urls: string[] = [];
   
-  // Section item photos
   inspection.sections?.forEach(section => {
     section.items?.forEach(item => {
       if (item.photos?.length) {
@@ -128,381 +141,1228 @@ function collectImageUrls(inspection: InspectionReportData): string[] {
     });
   });
   
-  // Tenant photos
   inspection.tenants?.forEach(tenant => {
     if (tenant.meterImage) urls.push(tenant.meterImage);
     if (tenant.breakerImage) urls.push(tenant.breakerImage);
     if (tenant.ctRatioImage) urls.push(tenant.ctRatioImage);
   });
   
-  // Snag photos
   inspection.snags?.forEach(snag => {
     if (snag.photos?.length) {
       urls.push(...snag.photos.filter(Boolean));
     }
   });
   
-  // Signature images
   inspection.signatures?.forEach(sig => {
     if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
       urls.push(sig.signatureUrl);
     }
   });
   
-  return [...new Set(urls)]; // Deduplicate
+  return [...new Set(urls)];
 }
 
-/**
- * Get status color based on value
- */
+// ============================================================================
+// STATUS UTILITIES
+// ============================================================================
+
 function getStatusColor(status: string): string {
   const statusLower = status.toLowerCase();
   if (['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(statusLower)) {
-    return '#22c55e'; // Green
+    return REPORT_COLORS.success;
   }
   if (['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(statusLower)) {
-    return '#ef4444'; // Red
+    return REPORT_COLORS.error;
   }
   if (['pending', 'in progress', 'partial', 'warning', 'n/a'].includes(statusLower)) {
-    return '#f59e0b'; // Amber
+    return REPORT_COLORS.warning;
   }
-  return COLORS.textMuted;
+  return REPORT_COLORS.textMuted;
 }
 
-/**
- * Create full-width section banner (matching reference)
- * Uses headlineLevel to keep it with following content
- */
-function createSectionBanner(title: string): Content {
+function isPassStatus(status: string): boolean {
+  const statusLower = status.toLowerCase();
+  return ['pass', 'passed', 'yes', 'compliant', 'ok', 'good', 'complete', 'completed'].includes(statusLower);
+}
+
+function isFailStatus(status: string): boolean {
+  const statusLower = status.toLowerCase();
+  return ['fail', 'failed', 'no', 'non-compliant', 'bad', 'critical'].includes(statusLower);
+}
+
+// ============================================================================
+// STATISTICS CALCULATION
+// ============================================================================
+
+interface InspectionStats {
+  totalItems: number;
+  passCount: number;
+  failCount: number;
+  pendingCount: number;
+  passPercentage: number;
+  totalPhotos: number;
+  totalSections: number;
+  sectionStats: Array<{
+    title: string;
+    passCount: number;
+    failCount: number;
+    totalItems: number;
+    photoCount: number;
+  }>;
+}
+
+function calculateStats(inspection: InspectionReportData): InspectionStats {
+  let totalItems = 0;
+  let passCount = 0;
+  let failCount = 0;
+  let pendingCount = 0;
+  let totalPhotos = 0;
+  const sectionStats: InspectionStats['sectionStats'] = [];
+
+  inspection.sections?.forEach(section => {
+    let sectionPass = 0;
+    let sectionFail = 0;
+    let sectionPhotos = 0;
+    
+    section.items?.forEach(item => {
+      totalItems++;
+      const status = typeof item.value === 'boolean'
+        ? (item.value ? 'pass' : 'fail')
+        : String(item.value || '');
+      
+      if (isPassStatus(status)) {
+        passCount++;
+        sectionPass++;
+      } else if (isFailStatus(status)) {
+        failCount++;
+        sectionFail++;
+      } else {
+        pendingCount++;
+      }
+      
+      if (item.photos?.length) {
+        totalPhotos += item.photos.length;
+        sectionPhotos += item.photos.length;
+      }
+    });
+    
+    sectionStats.push({
+      title: section.title,
+      passCount: sectionPass,
+      failCount: sectionFail,
+      totalItems: section.items?.length || 0,
+      photoCount: sectionPhotos,
+    });
+  });
+
+  // Add snag photos
+  inspection.snags?.forEach(snag => {
+    if (snag.photos?.length) {
+      totalPhotos += snag.photos.length;
+    }
+  });
+
+  // Add tenant photos
+  inspection.tenants?.forEach(tenant => {
+    if (tenant.meterImage) totalPhotos++;
+    if (tenant.breakerImage) totalPhotos++;
+    if (tenant.ctRatioImage) totalPhotos++;
+  });
+
   return {
-    table: {
-      widths: ['*'],
-      body: [[{
-        text: title.toUpperCase(),
-        fontSize: 14,
-        bold: true,
-        color: '#FFFFFF',
-        alignment: 'center',
-        margin: [0, 12, 0, 12],
-      }]],
-    },
-    layout: {
-      fillColor: () => SECTION_BANNER_COLOR,
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-    },
-    margin: [0, 20, 0, 15],
-    // Keep header with following content - prevents orphaned headers
-    headlineLevel: 1,
+    totalItems,
+    passCount,
+    failCount,
+    pendingCount,
+    passPercentage: totalItems > 0 ? Math.round((passCount / totalItems) * 100) : 0,
+    totalPhotos,
+    totalSections: inspection.sections?.length || 0,
+    sectionStats,
   };
 }
 
-/**
- * Create inspection section with items and photos - MATCHING REFERENCE LAYOUT
- */
-function createInspectionSection(
-  section: InspectionSection,
-  imageCache: Map<string, string>
+// ============================================================================
+// COVER PAGE (Engineering Style)
+// ============================================================================
+
+function createEngineeringCoverPage(
+  inspection: InspectionReportData,
+  siteName: string,
+  clientName?: string,
+  logoDataUrl?: string | null,
+  accentColor: string = 'blue'
+): Content[] {
+  const formattedDate = inspection.inspectionDate
+    ? new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      })
+    : new Date().toLocaleDateString('en-GB', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+      });
+
+  const content: Content[] = [];
+
+  // Top accent bar
+  content.push({
+    canvas: [{
+      type: 'rect',
+      x: 0,
+      y: 0,
+      w: 595,
+      h: 15,
+      color: REPORT_COLORS.primary,
+    }],
+    absolutePosition: { x: 0, y: 0 },
+  });
+
+  // Logo section
+  if (logoDataUrl) {
+    content.push({
+      image: logoDataUrl,
+      height: 60,
+      alignment: 'center',
+      margin: [0, 50, 0, 20],
+    });
+  } else {
+    content.push({
+      text: '',
+      margin: [0, 60, 0, 0],
+    });
+  }
+
+  // Report type badge
+  content.push({
+    table: {
+      widths: ['auto'],
+      body: [[{
+        text: 'ELECTRICAL INSPECTION REPORT',
+        fontSize: 10,
+        bold: true,
+        color: '#FFFFFF',
+        alignment: 'center',
+        margin: [15, 6, 15, 6],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.secondary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+    },
+    alignment: 'center',
+    margin: [0, 10, 0, 25],
+  });
+
+  // Main title
+  content.push({
+    text: inspection.templateName || 'Inspection Report',
+    fontSize: 28,
+    bold: true,
+    color: REPORT_COLORS.primary,
+    alignment: 'center',
+    margin: [0, 0, 0, 10],
+  });
+
+  // Subtitle (subsection)
+  if (inspection.subsectionName) {
+    content.push({
+      text: inspection.subsectionName,
+      fontSize: 16,
+      color: REPORT_COLORS.textSecondary,
+      alignment: 'center',
+      margin: [0, 0, 0, 40],
+    });
+  }
+
+  // Site info box with left border accent
+  const infoRows: Content[][] = [];
+  
+  infoRows.push([
+    { text: '📍', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
+    { text: 'Site:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+    { text: siteName, fontSize: 11, bold: true, color: REPORT_COLORS.textPrimary },
+  ]);
+
+  if (clientName) {
+    infoRows.push([
+      { text: '🏢', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
+      { text: 'Client:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+      { text: clientName, fontSize: 11, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  if (inspection.inspectorName) {
+    infoRows.push([
+      { text: '👤', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
+      { text: 'Inspector:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+      { text: inspection.inspectorName, fontSize: 11, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  infoRows.push([
+    { text: '📅', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
+    { text: 'Date:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+    { text: formattedDate, fontSize: 11, color: REPORT_COLORS.textPrimary },
+  ]);
+
+  content.push({
+    table: {
+      widths: [25, 50, '*'],
+      body: infoRows,
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: (i: number) => (i === 0 ? 4 : 0),
+      vLineColor: () => REPORT_COLORS.secondary,
+      paddingLeft: () => 12,
+      paddingRight: () => 12,
+      paddingTop: () => 6,
+      paddingBottom: () => 6,
+      fillColor: () => REPORT_COLORS.lightBg,
+    },
+    margin: [50, 0, 50, 40],
+  });
+
+  // Quick stats preview (if available)
+  const stats = calculateStats(inspection);
+  if (stats.totalItems > 0) {
+    content.push({
+      columns: [
+        {
+          stack: [
+            { text: stats.passPercentage.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
+            { text: '% COMPLIANCE', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+          ],
+          width: '*',
+        },
+        {
+          stack: [
+            { text: stats.totalItems.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.primary, alignment: 'center' },
+            { text: 'ITEMS CHECKED', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+          ],
+          width: '*',
+        },
+        {
+          stack: [
+            { text: stats.totalPhotos.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.accent, alignment: 'center' },
+            { text: 'PHOTOS', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+          ],
+          width: '*',
+        },
+      ],
+      margin: [40, 20, 40, 50],
+    });
+  }
+
+  // SANS compliance note
+  content.push({
+    text: 'This inspection is conducted in accordance with SANS 10142-1 requirements',
+    fontSize: 9,
+    italics: true,
+    color: REPORT_COLORS.textMuted,
+    alignment: 'center',
+    margin: [0, 20, 0, 5],
+  });
+
+  // Confidentiality notice
+  content.push({
+    text: 'CONFIDENTIAL - For authorized use only',
+    fontSize: 8,
+    color: REPORT_COLORS.textMuted,
+    alignment: 'center',
+    margin: [0, 5, 0, 0],
+  });
+
+  // Bottom accent bar
+  content.push({
+    canvas: [{
+      type: 'rect',
+      x: 0,
+      y: 0,
+      w: 595,
+      h: 15,
+      color: REPORT_COLORS.primary,
+    }],
+    absolutePosition: { x: 0, y: 827 },
+  });
+
+  content.push({ text: '', pageBreak: 'after' });
+
+  return content;
+}
+
+// ============================================================================
+// TABLE OF CONTENTS
+// ============================================================================
+
+function createTableOfContents(
+  inspection: InspectionReportData,
+  stats: InspectionStats
 ): Content[] {
   const content: Content[] = [];
+
+  // Header
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'TABLE OF CONTENTS',
+        fontSize: 16,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [0, 10, 0, 10],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.primary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => 15,
+    },
+    margin: [0, 0, 0, 20],
+  });
+
+  const tocItems: Array<{ title: string; page: string; level: number }> = [];
   
-  // Build all items first
+  // Standard sections
+  tocItems.push({ title: 'Quality Score Dashboard', page: '2', level: 0 });
+  tocItems.push({ title: 'General Information', page: '2', level: 0 });
+
+  // Dynamic sections based on inspection data
+  let pageNum = 3;
+  inspection.sections?.forEach((section, idx) => {
+    tocItems.push({ title: section.title, page: pageNum.toString(), level: 0 });
+    // Estimate page increment based on items and photos
+    const sectionStats = stats.sectionStats[idx];
+    const itemCount = sectionStats?.totalItems || 0;
+    const photoCount = sectionStats?.photoCount || 0;
+    pageNum += Math.ceil((itemCount + photoCount * 2) / 6) || 1;
+  });
+
+  if (inspection.snags?.length) {
+    tocItems.push({ title: 'Observations & Snag List', page: pageNum.toString(), level: 0 });
+    pageNum++;
+  }
+
+  if (inspection.tenants?.length) {
+    tocItems.push({ title: 'Tenant / Meter Verification', page: pageNum.toString(), level: 0 });
+    pageNum++;
+  }
+
+  if (inspection.signatures?.length) {
+    tocItems.push({ title: 'Sign-Off & Approvals', page: pageNum.toString(), level: 0 });
+  }
+
+  // Build TOC table
+  const tocRows = tocItems.map(item => [{
+    columns: [
+      {
+        text: item.title,
+        fontSize: 11,
+        color: REPORT_COLORS.textPrimary,
+        margin: [item.level * 15, 0, 0, 0],
+      },
+      {
+        text: '.' .repeat(80),
+        fontSize: 8,
+        color: REPORT_COLORS.border,
+        margin: [5, 4, 5, 0],
+      },
+      {
+        text: item.page,
+        fontSize: 11,
+        color: REPORT_COLORS.textSecondary,
+        alignment: 'right',
+        width: 30,
+      },
+    ],
+    margin: [0, 6, 0, 6],
+  }]);
+
+  content.push({
+    stack: tocRows.map(row => row[0]),
+    margin: [0, 0, 0, 30],
+  });
+
+  content.push({ text: '', pageBreak: 'after' });
+
+  return content;
+}
+
+// ============================================================================
+// QUALITY SCORE DASHBOARD
+// ============================================================================
+
+function createQualityDashboard(stats: InspectionStats, qualityRating?: number): Content[] {
+  const content: Content[] = [];
+
+  // Section header
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'QUALITY SCORE DASHBOARD',
+        fontSize: 12,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [0, 8, 0, 8],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.secondary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => 12,
+    },
+    margin: [0, 0, 0, 15],
+  });
+
+  // Main score circle with KPI boxes
+  const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
+    : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
+    : REPORT_COLORS.error;
+
+  content.push({
+    columns: [
+      // Overall score
+      {
+        stack: [
+          {
+            canvas: [
+              // Background circle
+              { type: 'ellipse', x: 60, y: 60, r1: 55, r2: 55, lineWidth: 8, lineColor: REPORT_COLORS.border },
+              // Progress arc (simplified as colored ring)
+              { type: 'ellipse', x: 60, y: 60, r1: 55, r2: 55, lineWidth: 8, lineColor: scoreColor },
+            ],
+          },
+          {
+            text: `${stats.passPercentage}%`,
+            fontSize: 28,
+            bold: true,
+            color: scoreColor,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -75 },
+          },
+          {
+            text: 'OVERALL',
+            fontSize: 8,
+            color: REPORT_COLORS.textMuted,
+            alignment: 'center',
+            relativePosition: { x: 0, y: -52 },
+          },
+        ],
+        width: 140,
+        alignment: 'center',
+      },
+      // KPI grid
+      {
+        table: {
+          widths: ['*', '*'],
+          body: [
+            [
+              {
+                stack: [
+                  { text: stats.passCount.toString(), fontSize: 24, bold: true, color: REPORT_COLORS.success },
+                  { text: 'Items Passed', fontSize: 9, color: REPORT_COLORS.textSecondary },
+                ],
+                fillColor: '#f0fdf4',
+                margin: [12, 10, 12, 10],
+              },
+              {
+                stack: [
+                  { text: stats.failCount.toString(), fontSize: 24, bold: true, color: REPORT_COLORS.error },
+                  { text: 'Items Failed', fontSize: 9, color: REPORT_COLORS.textSecondary },
+                ],
+                fillColor: '#fef2f2',
+                margin: [12, 10, 12, 10],
+              },
+            ],
+            [
+              {
+                stack: [
+                  { text: stats.pendingCount.toString(), fontSize: 24, bold: true, color: REPORT_COLORS.warning },
+                  { text: 'Pending Review', fontSize: 9, color: REPORT_COLORS.textSecondary },
+                ],
+                fillColor: '#fffbeb',
+                margin: [12, 10, 12, 10],
+              },
+              {
+                stack: [
+                  { text: stats.totalPhotos.toString(), fontSize: 24, bold: true, color: REPORT_COLORS.accent },
+                  { text: 'Photos Captured', fontSize: 9, color: REPORT_COLORS.textSecondary },
+                ],
+                fillColor: '#eff6ff',
+                margin: [12, 10, 12, 10],
+              },
+            ],
+          ],
+        },
+        layout: {
+          hLineWidth: () => 1,
+          vLineWidth: () => 1,
+          hLineColor: () => REPORT_COLORS.border,
+          vLineColor: () => REPORT_COLORS.border,
+        },
+        width: '*',
+      },
+    ],
+    margin: [0, 0, 0, 20],
+  });
+
+  // Section breakdown table
+  if (stats.sectionStats.length > 0) {
+    content.push({
+      text: 'Section Breakdown',
+      fontSize: 11,
+      bold: true,
+      color: REPORT_COLORS.textPrimary,
+      margin: [0, 10, 0, 8],
+    });
+
+    const breakdownRows: Content[][] = [
+      [
+        { text: 'Section', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary },
+        { text: 'Items', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+        { text: 'Pass', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+        { text: 'Fail', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+        { text: 'Photos', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+        { text: 'Score', bold: true, fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center' },
+      ],
+    ];
+
+    stats.sectionStats.forEach(section => {
+      const score = section.totalItems > 0 
+        ? Math.round((section.passCount / section.totalItems) * 100) 
+        : 0;
+      const scoreColor = score >= 80 ? REPORT_COLORS.success 
+        : score >= 60 ? REPORT_COLORS.warning 
+        : REPORT_COLORS.error;
+
+      breakdownRows.push([
+        { text: section.title, fontSize: 9, color: REPORT_COLORS.textPrimary },
+        { text: section.totalItems.toString(), fontSize: 9, alignment: 'center' },
+        { text: section.passCount.toString(), fontSize: 9, color: REPORT_COLORS.success, alignment: 'center' },
+        { text: section.failCount.toString(), fontSize: 9, color: section.failCount > 0 ? REPORT_COLORS.error : REPORT_COLORS.textMuted, alignment: 'center' },
+        { text: section.photoCount.toString(), fontSize: 9, alignment: 'center' },
+        { text: `${score}%`, fontSize: 9, bold: true, color: scoreColor, alignment: 'center' },
+      ]);
+    });
+
+    content.push({
+      table: {
+        headerRows: 1,
+        widths: ['*', 45, 40, 40, 45, 50],
+        body: breakdownRows,
+      },
+      layout: {
+        hLineWidth: (i: number, node: any) => (i === 0 || i === 1 || i === node.table.body.length) ? 0.5 : 0.25,
+        vLineWidth: () => 0,
+        hLineColor: () => REPORT_COLORS.border,
+        fillColor: (rowIndex: number) => rowIndex === 0 ? REPORT_COLORS.lightBg : null,
+        paddingTop: () => 6,
+        paddingBottom: () => 6,
+        paddingLeft: () => 8,
+        paddingRight: () => 8,
+      },
+      margin: [0, 0, 0, 20],
+    });
+  }
+
+  return content;
+}
+
+// ============================================================================
+// GENERAL INFO SECTION
+// ============================================================================
+
+function createGeneralInfoSection(
+  inspection: InspectionReportData,
+  siteName: string,
+  clientName?: string
+): Content[] {
+  const content: Content[] = [];
+
+  // Section header
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'GENERAL INFORMATION',
+        fontSize: 12,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [0, 8, 0, 8],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.secondary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      paddingLeft: () => 12,
+    },
+    margin: [0, 10, 0, 15],
+  });
+
+  // Info grid
+  const infoRows: Content[][] = [];
+  
+  infoRows.push([
+    { text: 'Site Name', fontSize: 10, color: REPORT_COLORS.textSecondary },
+    { text: siteName, fontSize: 10, bold: true, color: REPORT_COLORS.textPrimary },
+  ]);
+
+  if (inspection.subsectionName) {
+    infoRows.push([
+      { text: 'Subsection', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.subsectionName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  if (clientName) {
+    infoRows.push([
+      { text: 'Client', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: clientName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  if (inspection.inspectionDate) {
+    infoRows.push([
+      { text: 'Inspection Date', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { 
+        text: new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
+          weekday: 'long',
+          day: 'numeric',
+          month: 'long',
+          year: 'numeric',
+        }), 
+        fontSize: 10, 
+        color: REPORT_COLORS.textPrimary 
+      },
+    ]);
+  }
+
+  if (inspection.inspectorName) {
+    infoRows.push([
+      { text: 'Inspector', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.inspectorName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  if (inspection.templateName) {
+    infoRows.push([
+      { text: 'Template', fontSize: 10, color: REPORT_COLORS.textSecondary },
+      { text: inspection.templateName, fontSize: 10, color: REPORT_COLORS.textPrimary },
+    ]);
+  }
+
+  // Add any custom general info fields
+  if (inspection.generalInfo) {
+    Object.entries(inspection.generalInfo)
+      .filter(([key]) => !['inspectorName', 'date', 'inspectionDate'].includes(key))
+      .forEach(([key, value]) => {
+        if (value) {
+          infoRows.push([
+            { 
+              text: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()), 
+              fontSize: 10, 
+              color: REPORT_COLORS.textSecondary 
+            },
+            { text: String(value), fontSize: 10, color: REPORT_COLORS.textPrimary },
+          ]);
+        }
+      });
+  }
+
+  content.push({
+    table: {
+      widths: [120, '*'],
+      body: infoRows,
+    },
+    layout: {
+      hLineWidth: (i: number, node: any) => (i === 0 || i === node.table.body.length) ? 0.5 : 0.25,
+      vLineWidth: (i: number) => (i === 0 || i === 2) ? 0.5 : 0,
+      hLineColor: () => REPORT_COLORS.border,
+      vLineColor: () => REPORT_COLORS.border,
+      paddingTop: () => 8,
+      paddingBottom: () => 8,
+      paddingLeft: () => 10,
+      paddingRight: () => 10,
+      fillColor: (rowIndex: number) => rowIndex % 2 === 0 ? REPORT_COLORS.lightBg : null,
+    },
+    margin: [0, 0, 0, 20],
+  });
+
+  return content;
+}
+
+// ============================================================================
+// SECTION WITH PHOTO GRID
+// ============================================================================
+
+function createSectionWithPhotoGrid(
+  section: InspectionSection,
+  imageCache: Map<string, string>,
+  sectionIndex: number
+): Content[] {
+  const content: Content[] = [];
+
+  // Section header with number
+  content.push({
+    table: {
+      widths: ['auto', '*'],
+      body: [[
+        {
+          text: `${sectionIndex + 1}`,
+          fontSize: 14,
+          bold: true,
+          color: '#FFFFFF',
+          alignment: 'center',
+          margin: [8, 6, 8, 6],
+        },
+        {
+          text: section.title.toUpperCase(),
+          fontSize: 12,
+          bold: true,
+          color: '#FFFFFF',
+          margin: [10, 8, 0, 8],
+        },
+      ]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      fillColor: (rowIndex: number, node: any, colIndex: number) => 
+        colIndex === 0 ? REPORT_COLORS.primary : REPORT_COLORS.secondary,
+    },
+    margin: [0, 15, 0, 12],
+  });
+
   const items = section.items || [];
   
+  // Process items - group photos for grid layout
   items.forEach((item, itemIdx) => {
     const statusText = typeof item.value === 'boolean'
       ? (item.value ? 'Pass' : 'Fail')
       : String(item.value || 'N/A');
     
     const statusColor = getStatusColor(statusText);
-    
-    // Build item stack
-    const itemStack: Content[] = [];
-    
-    // For the FIRST item, include the section banner inside the unbreakable block
-    if (itemIdx === 0) {
-      itemStack.push(createSectionBanner(section.title));
-    }
-    
-    // Item name (bold, like reference)
-    itemStack.push({
-      text: item.label,
-      fontSize: 12,
-      bold: true,
-      margin: [0, 0, 0, 3],
+    const statusBg = isPassStatus(statusText) ? '#f0fdf4' 
+      : isFailStatus(statusText) ? '#fef2f2' 
+      : '#fffbeb';
+
+    // Item row with status badge
+    content.push({
+      table: {
+        widths: ['*', 80],
+        body: [[
+          {
+            text: item.label,
+            fontSize: 11,
+            bold: true,
+            color: REPORT_COLORS.textPrimary,
+            margin: [0, 0, 0, 0],
+          },
+          {
+            table: {
+              widths: ['*'],
+              body: [[{
+                text: statusText.toUpperCase(),
+                fontSize: 8,
+                bold: true,
+                color: statusColor,
+                alignment: 'center',
+                margin: [0, 3, 0, 3],
+              }]],
+            },
+            layout: {
+              fillColor: () => statusBg,
+              hLineWidth: () => 0,
+              vLineWidth: () => 0,
+            },
+          },
+        ]],
+      },
+      layout: 'noBorders',
+      margin: [0, itemIdx > 0 ? 12 : 0, 0, 4],
     });
-    
-    // Status line - green "Status: Pass" format (indented)
-    itemStack.push({
-      text: `Status: ${statusText}`,
-      fontSize: 10,
-      color: statusColor,
-      margin: [15, 0, 0, 8],
-    });
-    
+
     // Notes if present
     if (item.notes) {
-      itemStack.push({
+      content.push({
         text: item.notes,
         fontSize: 9,
-        color: COLORS.textMuted,
         italics: true,
-        margin: [15, 0, 0, 8],
+        color: REPORT_COLORS.textSecondary,
+        margin: [0, 0, 0, 6],
       });
     }
-    
-    // Photos - single column, stacked vertically like reference
-    // Using fit to maintain aspect ratio
-    item.photos?.forEach((photoUrl) => {
-      const dataUrl = imageCache.get(photoUrl);
-      if (dataUrl) {
-        itemStack.push({
-          image: dataUrl,
-          fit: [350, 280], // Max width 350pt, max height 280pt - maintains aspect ratio
-          alignment: 'left' as const,
+
+    // Photos in grid layout (2 columns)
+    const photos = item.photos?.filter(Boolean) || [];
+    if (photos.length > 0) {
+      const photoRows: Content[][] = [];
+      
+      for (let i = 0; i < photos.length; i += 2) {
+        const rowPhotos: Content[] = [];
+        
+        // First photo
+        const photo1 = imageCache.get(photos[i]);
+        if (photo1) {
+          rowPhotos.push({
+            stack: [
+              {
+                image: photo1,
+                fit: [230, 180],
+                alignment: 'center',
+              },
+              {
+                text: `Image ${i + 1}`,
+                fontSize: 7,
+                color: REPORT_COLORS.textMuted,
+                alignment: 'center',
+                margin: [0, 3, 0, 0],
+              },
+            ],
+            margin: [0, 0, 5, 0],
+          });
+        }
+        
+        // Second photo (if exists)
+        if (i + 1 < photos.length) {
+          const photo2 = imageCache.get(photos[i + 1]);
+          if (photo2) {
+            rowPhotos.push({
+              stack: [
+                {
+                  image: photo2,
+                  fit: [230, 180],
+                  alignment: 'center',
+                },
+                {
+                  text: `Image ${i + 2}`,
+                  fontSize: 7,
+                  color: REPORT_COLORS.textMuted,
+                  alignment: 'center',
+                  margin: [0, 3, 0, 0],
+                },
+              ],
+              margin: [5, 0, 0, 0],
+            });
+          }
+        } else {
+          rowPhotos.push({ text: '' }); // Empty cell
+        }
+        
+        photoRows.push(rowPhotos);
+      }
+
+      if (photoRows.length > 0) {
+        content.push({
+          table: {
+            widths: ['*', '*'],
+            body: photoRows,
+          },
+          layout: 'noBorders',
           margin: [0, 5, 0, 10],
         });
       }
-    });
-    
-    // Wrap item in unbreakable stack (first item includes section banner)
-    content.push({
-      stack: itemStack,
-      unbreakable: true,
-      margin: [0, itemIdx === 0 ? 0 : 8, 0, 12],
-    });
+    }
   });
-  
-  // Handle empty sections - still show the banner
+
+  // Handle empty sections
   if (items.length === 0) {
-    content.push(createSectionBanner(section.title));
     content.push({
-      text: 'No items recorded',
+      text: 'No items recorded for this section',
       fontSize: 10,
-      color: COLORS.textMuted,
       italics: true,
-      margin: [0, 0, 0, 20],
+      color: REPORT_COLORS.textMuted,
+      margin: [0, 10, 0, 20],
     });
   }
-  
+
   return content;
 }
 
-/**
- * Create tenant verification section - matching reference layout
- */
-function createTenantSection(
-  tenants: InspectionTenant[],
-  imageCache: Map<string, string>
-): Content[] {
-  if (!tenants?.length) return [];
-  
-  const content: Content[] = [];
-  content.push(createSectionBanner('Tenants / Meters'));
-  
-  tenants.forEach((tenant, idx) => {
-    const tenantStack: Content[] = [];
-    
-    // Tenant header with number
-    tenantStack.push({
-      text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
-      fontSize: 12,
-      bold: true,
-      margin: [0, 0, 0, 8],
-    });
-    
-    // Info table - Breaker Size, CT Ratio, Meter S/N in stacked format
-    const infoItems: Content[] = [];
-    
-    if (tenant.breakerSize) {
-      infoItems.push({
-        columns: [
-          { text: 'Breaker Size:', fontSize: 10, bold: true, width: 90 },
-          { text: tenant.breakerSize, fontSize: 10, width: '*' },
-        ],
-        margin: [15, 0, 0, 3],
-      });
-    }
-    
-    if (tenant.ctSizeAndRatio) {
-      infoItems.push({
-        columns: [
-          { text: 'CT Ratio:', fontSize: 10, bold: true, width: 90 },
-          { text: tenant.ctSizeAndRatio, fontSize: 10, width: '*' },
-        ],
-        margin: [15, 0, 0, 3],
-      });
-    }
-    
-    if (tenant.meterSerialNumber) {
-      infoItems.push({
-        columns: [
-          { text: 'Meter S/N:', fontSize: 10, bold: true, width: 90 },
-          { text: tenant.meterSerialNumber, fontSize: 10, width: '*' },
-        ],
-        margin: [15, 0, 0, 3],
-      });
-    }
-    
-    tenantStack.push(...infoItems);
-    
-    // Photos in labeled row (Breaker | CT Ratio | Meter)
-    const photoColumns: Content[] = [];
-    
-    if (tenant.breakerImage) {
-      const dataUrl = imageCache.get(tenant.breakerImage);
-      if (dataUrl) {
-        photoColumns.push({
-          stack: [
-            { text: 'Breaker', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
-            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
-          ],
-          width: '*',
-        });
-      }
-    }
-    
-    if (tenant.ctRatioImage) {
-      const dataUrl = imageCache.get(tenant.ctRatioImage);
-      if (dataUrl) {
-        photoColumns.push({
-          stack: [
-            { text: 'CT Ratio', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
-            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
-          ],
-          width: '*',
-        });
-      }
-    }
-    
-    if (tenant.meterImage) {
-      const dataUrl = imageCache.get(tenant.meterImage);
-      if (dataUrl) {
-        photoColumns.push({
-          stack: [
-            { text: 'Meter', fontSize: 9, bold: true, alignment: 'center' as const, margin: [0, 0, 0, 3] },
-            { image: dataUrl, fit: [140, 180], alignment: 'center' as const },
-          ],
-          width: '*',
-        });
-      }
-    }
-    
-    if (photoColumns.length > 0) {
-      tenantStack.push({
-        columns: photoColumns,
-        columnGap: 10,
-        margin: [0, 10, 0, 0],
-      });
-    }
-    
-    content.push({
-      stack: tenantStack,
-      unbreakable: true,
-      margin: [0, idx > 0 ? 15 : 5, 0, 15],
-    });
-  });
-  
-  return content;
-}
+// ============================================================================
+// SNAGS SECTION
+// ============================================================================
 
-/**
- * Create snags section
- */
 function createSnagsSection(
   snags: InspectionSnag[],
   imageCache: Map<string, string>
 ): Content[] {
   if (!snags?.length) return [];
-  
+
   const content: Content[] = [];
-  content.push(createSectionBanner('Observations & Snag List'));
-  
-  snags.forEach((snag, idx) => {
-    const riskColor = snag.riskLevel === 'critical' ? '#ef4444'
-      : snag.riskLevel === 'high' ? '#f59e0b'
-      : snag.riskLevel === 'medium' ? '#eab308'
-      : COLORS.textMuted;
-    
-    const snagStack: Content[] = [];
-    
-    // Title with risk level
-    snagStack.push({
-      columns: [
-        { text: snag.title, fontSize: 11, bold: true, width: '*' },
-        snag.riskLevel ? {
-          text: snag.riskLevel.toUpperCase(),
-          fontSize: 9,
-          color: riskColor,
+
+  // Section header
+  content.push({
+    table: {
+      widths: ['auto', '*'],
+      body: [[
+        {
+          text: '⚠️',
+          fontSize: 14,
+          alignment: 'center',
+          margin: [8, 6, 8, 6],
+        },
+        {
+          text: 'OBSERVATIONS & SNAG LIST',
+          fontSize: 12,
           bold: true,
-          width: 'auto',
-        } : { text: '', width: 0 },
-      ],
-      margin: [0, 0, 0, 3],
+          color: '#FFFFFF',
+          margin: [10, 8, 0, 8],
+        },
+      ]],
+    },
+    layout: {
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+      fillColor: (rowIndex: number, node: any, colIndex: number) => 
+        colIndex === 0 ? REPORT_COLORS.warning : REPORT_COLORS.secondary,
+    },
+    margin: [0, 20, 0, 15],
+  });
+
+  snags.forEach((snag, idx) => {
+    const riskColor = snag.riskLevel === 'critical' || snag.riskLevel === 'high' 
+      ? REPORT_COLORS.error 
+      : snag.riskLevel === 'medium' 
+      ? REPORT_COLORS.warning 
+      : REPORT_COLORS.textMuted;
+
+    // Snag card
+    content.push({
+      table: {
+        widths: ['*'],
+        body: [[{
+          stack: [
+            // Header row
+            {
+              columns: [
+                {
+                  text: `${idx + 1}. ${snag.title}`,
+                  fontSize: 11,
+                  bold: true,
+                  color: REPORT_COLORS.textPrimary,
+                  width: '*',
+                },
+                snag.riskLevel ? {
+                  table: {
+                    widths: ['auto'],
+                    body: [[{
+                      text: snag.riskLevel.toUpperCase(),
+                      fontSize: 7,
+                      bold: true,
+                      color: riskColor,
+                      margin: [6, 2, 6, 2],
+                    }]],
+                  },
+                  layout: {
+                    fillColor: () => riskColor === REPORT_COLORS.error ? '#fef2f2' : '#fffbeb',
+                    hLineWidth: () => 0,
+                    vLineWidth: () => 0,
+                  },
+                  width: 'auto',
+                } : { text: '', width: 0 },
+              ],
+              margin: [0, 0, 0, 5],
+            },
+            // Status
+            {
+              text: `Status: ${snag.status}`,
+              fontSize: 9,
+              color: getStatusColor(snag.status),
+              margin: [0, 0, 0, 5],
+            },
+            // Description
+            snag.description ? {
+              text: snag.description,
+              fontSize: 9,
+              color: REPORT_COLORS.textSecondary,
+              margin: [0, 0, 0, 8],
+            } : { text: '' },
+          ],
+          margin: [10, 10, 10, 10],
+        }]],
+      },
+      layout: {
+        hLineWidth: () => 0.5,
+        vLineWidth: () => 0.5,
+        hLineColor: () => REPORT_COLORS.border,
+        vLineColor: () => REPORT_COLORS.border,
+        fillColor: () => REPORT_COLORS.lightBg,
+      },
+      margin: [0, 0, 0, 10],
     });
-    
-    // Status
-    snagStack.push({
-      text: `Status: ${snag.status}`,
-      fontSize: 10,
-      color: getStatusColor(snag.status),
-      margin: [15, 0, 0, 5],
-    });
-    
-    // Description
-    if (snag.description) {
-      snagStack.push({
-        text: snag.description,
-        fontSize: 9,
-        color: COLORS.textMuted,
-        margin: [15, 0, 0, 8],
+
+    // Snag photos (2-column grid)
+    const photos = snag.photos?.filter(Boolean) || [];
+    if (photos.length > 0) {
+      const photoRows: Content[][] = [];
+      for (let i = 0; i < photos.length; i += 2) {
+        const row: Content[] = [];
+        
+        const photo1 = imageCache.get(photos[i]);
+        if (photo1) {
+          row.push({ image: photo1, fit: [230, 160], alignment: 'center' });
+        }
+        
+        if (i + 1 < photos.length) {
+          const photo2 = imageCache.get(photos[i + 1]);
+          if (photo2) {
+            row.push({ image: photo2, fit: [230, 160], alignment: 'center' });
+          }
+        } else {
+          row.push({ text: '' });
+        }
+        
+        photoRows.push(row);
+      }
+
+      content.push({
+        table: { widths: ['*', '*'], body: photoRows },
+        layout: 'noBorders',
+        margin: [0, 0, 0, 15],
       });
     }
-    
-    // Photos - using fit to maintain aspect ratio
-    snag.photos?.forEach((photoUrl) => {
-      const dataUrl = imageCache.get(photoUrl);
-      if (dataUrl) {
-        snagStack.push({
-          image: dataUrl,
-          fit: [300, 240], // Max width 300pt, max height 240pt
-          alignment: 'left' as const,
-          margin: [0, 5, 0, 8],
-        });
-      }
-    });
-    
-    content.push({
-      stack: snagStack,
-      unbreakable: true,
-      margin: [0, idx > 0 ? 12 : 5, 0, 10],
-    });
   });
-  
+
   return content;
 }
 
-/**
- * Create signatures section
- */
+// ============================================================================
+// TENANT SECTION
+// ============================================================================
+
+function createTenantSection(
+  tenants: InspectionTenant[],
+  imageCache: Map<string, string>
+): Content[] {
+  if (!tenants?.length) return [];
+
+  const content: Content[] = [];
+
+  // Section header
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'TENANT / METER VERIFICATION',
+        fontSize: 12,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [12, 8, 0, 8],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.secondary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+    },
+    margin: [0, 20, 0, 15],
+  });
+
+  tenants.forEach((tenant, idx) => {
+    // Tenant header
+    content.push({
+      text: `${idx + 1}. ${tenant.shopName}${tenant.shopNumber ? ` (${tenant.shopNumber})` : ''}`,
+      fontSize: 12,
+      bold: true,
+      color: REPORT_COLORS.primary,
+      margin: [0, idx > 0 ? 15 : 0, 0, 8],
+    });
+
+    // Info grid
+    const infoItems: Content[] = [];
+    if (tenant.meterSerialNumber) {
+      infoItems.push({ text: `Meter S/N: ${tenant.meterSerialNumber}`, fontSize: 9 });
+    }
+    if (tenant.breakerSize) {
+      infoItems.push({ text: `Breaker: ${tenant.breakerSize}`, fontSize: 9 });
+    }
+    if (tenant.ctSizeAndRatio) {
+      infoItems.push({ text: `CT Ratio: ${tenant.ctSizeAndRatio}`, fontSize: 9 });
+    }
+
+    if (infoItems.length > 0) {
+      content.push({
+        columns: infoItems.map(item => ({ ...item, width: '*' })),
+        margin: [0, 0, 0, 10],
+      });
+    }
+
+    // Photos in 3-column grid
+    const photoData: Array<{ url: string; label: string }> = [];
+    if (tenant.breakerImage) photoData.push({ url: tenant.breakerImage, label: 'Breaker' });
+    if (tenant.ctRatioImage) photoData.push({ url: tenant.ctRatioImage, label: 'CT Ratio' });
+    if (tenant.meterImage) photoData.push({ url: tenant.meterImage, label: 'Meter' });
+
+    if (photoData.length > 0) {
+      const photoColumns = photoData.map(photo => {
+        const dataUrl = imageCache.get(photo.url);
+        return dataUrl ? {
+          stack: [
+            { image: dataUrl, fit: [150, 140], alignment: 'center' as const },
+            { text: photo.label, fontSize: 8, bold: true, alignment: 'center' as const, margin: [0, 4, 0, 0] },
+          ],
+          width: '*',
+        } : { text: '', width: '*' };
+      });
+
+      content.push({
+        columns: photoColumns,
+        columnGap: 10,
+        margin: [0, 0, 0, 15],
+      });
+    }
+  });
+
+  return content;
+}
+
+// ============================================================================
+// SIGNATURES SECTION
+// ============================================================================
+
 function createSignaturesSection(
   signatures: InspectionSignature[],
   imageCache: Map<string, string>
 ): Content[] {
   if (!signatures?.length) return [];
-  
+
   const content: Content[] = [];
-  content.push(createSectionBanner('Sign-Off'));
-  
-  const sigColumns: Content[] = [];
-  
-  signatures.forEach(sig => {
+
+  // Section header
+  content.push({
+    table: {
+      widths: ['*'],
+      body: [[{
+        text: 'SIGN-OFF & APPROVALS',
+        fontSize: 12,
+        bold: true,
+        color: '#FFFFFF',
+        margin: [12, 8, 0, 8],
+      }]],
+    },
+    layout: {
+      fillColor: () => REPORT_COLORS.primary,
+      hLineWidth: () => 0,
+      vLineWidth: () => 0,
+    },
+    margin: [0, 20, 0, 15],
+  });
+
+  const sigColumns: Content[] = signatures.map(sig => {
     const sigContent: Content[] = [
       { text: sig.name, fontSize: 11, bold: true },
-      { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.textMuted },
+      { text: sig.role || 'Signatory', fontSize: 9, color: REPORT_COLORS.textSecondary },
     ];
-    
-    // Add signature image if available
+
+    // Signature image
     if (sig.signatureUrl) {
       const dataUrl = sig.signatureUrl.startsWith('data:') 
         ? sig.signatureUrl 
@@ -517,170 +1377,108 @@ function createSignaturesSection(
         });
       }
     }
-    
+
     if (sig.signedAt) {
       sigContent.push({
         text: `Signed: ${new Date(sig.signedAt).toLocaleDateString('en-GB')}`,
         fontSize: 8,
-        color: COLORS.textMuted,
+        color: REPORT_COLORS.textMuted,
         margin: [0, 5, 0, 0],
       });
     }
-    
-    sigColumns.push({
+
+    return {
       stack: sigContent,
       width: '*',
       margin: [0, 0, 20, 0],
-    });
+    };
   });
-  
+
   content.push({
     columns: sigColumns,
-    margin: [0, 10, 0, 0],
+    margin: [0, 10, 0, 20],
   });
-  
+
   return content;
 }
 
-/**
- * Create general info section - matching reference (stacked key-value pairs)
- */
-function createGeneralInfoSection(
-  inspection: InspectionReportData,
-  siteName: string,
-  clientName?: string
-): Content[] {
-  const content: Content[] = [];
-  
-  content.push(createSectionBanner('General Information'));
-  
-  const infoRows: Array<{ label: string; value: string }> = [];
-  
-  infoRows.push({ label: 'Site Name', value: siteName });
-  if (inspection.subsectionName) {
-    infoRows.push({ label: 'Subsection', value: inspection.subsectionName });
-  }
-  if (clientName) {
-    infoRows.push({ label: 'Client', value: clientName });
-  }
-  if (inspection.inspectionDate) {
-    infoRows.push({ 
-      label: 'Inspection Date', 
-      value: new Date(inspection.inspectionDate).toLocaleDateString('en-GB', {
-        year: 'numeric',
-        month: 'long',
-        day: 'numeric',
-      })
-    });
-  }
-  if (inspection.inspectorName) {
-    infoRows.push({ label: 'Inspector', value: inspection.inspectorName });
-  }
-  
-  // Add any additional general info
-  if (inspection.generalInfo) {
-    Object.entries(inspection.generalInfo)
-      .filter(([key]) => !['inspectorName', 'date', 'inspectionDate'].includes(key))
-      .forEach(([key, value]) => {
-        if (value) {
-          infoRows.push({
-            label: key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase()),
-            value: String(value),
-          });
-        }
-      });
-  }
-  
-  // Render as stacked rows (like reference)
-  infoRows.forEach(row => {
-    content.push({
-      columns: [
-        { text: row.label, fontSize: 11, bold: true, width: 140 },
-        { text: row.value, fontSize: 11, width: '*' },
-      ],
-      margin: [0, 4, 0, 4],
-    });
-  });
-  
-  return content;
-}
+// ============================================================================
+// MAIN GENERATOR
+// ============================================================================
 
-/**
- * Generate inspection report PDF using pdfmake
- */
 export async function generateInspectionReportPdf(
   options: GenerateInspectionReportOptions
 ): Promise<GenerateInspectionReportResult> {
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = 'blue' } = options;
-  
+
   try {
-    console.log('[pdfmake] Starting inspection report generation');
-    
+    console.log('[pdfmake] Starting professional inspection report generation');
+
     // Collect and load all images
     const imageUrls = collectImageUrls(inspection);
     console.log(`[pdfmake] Loading ${imageUrls.length} images...`);
     
     const imageCache = await loadImagesAsDataUrls(imageUrls);
     console.log(`[pdfmake] Loaded ${imageCache.size} images successfully`);
-    
-    // Load logo if provided
+
+    // Load logo
     let logoDataUrl: string | null = null;
     if (siteLogoUrl) {
       logoDataUrl = await loadImageAsDataUrl(siteLogoUrl);
     }
-    
+
+    // Calculate statistics
+    const stats = calculateStats(inspection);
+
     // Build document content
     const content: Content[] = [];
-    
-    // General info section
+
+    // 1. Cover Page
+    content.push(...createEngineeringCoverPage(inspection, siteName, clientName, logoDataUrl, accentColor));
+
+    // 2. Table of Contents
+    content.push(...createTableOfContents(inspection, stats));
+
+    // 3. Quality Score Dashboard
+    content.push(...createQualityDashboard(stats, inspection.qualityRating));
+
+    // 4. General Information
     content.push(...createGeneralInfoSection(inspection, siteName, clientName));
-    
-    // Inspection sections with items and photos
-    inspection.sections?.forEach(section => {
-      content.push(...createInspectionSection(section, imageCache));
+
+    // 5. Inspection Sections with Photo Grids
+    inspection.sections?.forEach((section, idx) => {
+      content.push(...createSectionWithPhotoGrid(section, imageCache, idx));
     });
-    
-    // Snags section
+
+    // 6. Snags Section
     if (inspection.snags?.length) {
       content.push(...createSnagsSection(inspection.snags, imageCache));
     }
-    
-    // Tenant verification section
+
+    // 7. Tenant Verification
     if (inspection.tenants?.length) {
       content.push(...createTenantSection(inspection.tenants, imageCache));
     }
-    
-    // Signatures section
+
+    // 8. Signatures
     if (inspection.signatures?.length) {
       content.push(...createSignaturesSection(inspection.signatures, imageCache));
     }
-    
-    // Cover page options
-    const coverPage: CoverPageOptions = {
-      title: inspection.templateName || 'Inspection Report',
-      subtitle: inspection.subsectionName,
-      siteName,
-      clientName,
-      logoDataUrl,
-      accentColor,
-      reportDate: inspection.inspectionDate ? new Date(inspection.inspectionDate) : new Date(),
-    };
-    
+
     // Generate PDF
     const result = await generateReport({
       type: 'inspection',
       title: inspection.templateName || 'Inspection Report',
       content,
-      coverPage,
       options: {
-        includeCoverPage: true,
+        includeCoverPage: false, // We're using our custom cover page
         logoDataUrl,
         filename: `${siteName}_${inspection.subsectionName || 'Inspection'}_Report.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_'),
       },
     });
-    
-    console.log('[pdfmake] Report generated successfully');
-    
+
+    console.log('[pdfmake] Professional report generated successfully');
+
     return {
       success: true,
       blob: result.blob,
@@ -696,9 +1494,10 @@ export async function generateInspectionReportPdf(
   }
 }
 
-/**
- * Generate and save inspection report to storage
- */
+// ============================================================================
+// SAVE TO STORAGE
+// ============================================================================
+
 export async function generateAndSaveInspectionReportPdfmake(
   options: GenerateInspectionReportOptions & { 
     subsectionId: string;
@@ -711,52 +1510,51 @@ export async function generateAndSaveInspectionReportPdfmake(
   fileUrl?: string;
   error?: string;
 }> {
-  const { subsectionId, siteId } = options;
-  
+  const { subsectionId } = options;
+
   try {
-    // Get current user
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: 'User not authenticated' };
     }
-    
+
     // Generate PDF
     const result = await generateInspectionReportPdf(options);
     if (!result.success || !result.blob) {
       return { success: false, error: result.error || 'Failed to generate PDF' };
     }
-    
+
     // Upload to storage
     const fileName = result.filename || 'Inspection_Report.pdf';
     const storagePath = `inspection-reports/${subsectionId}/${Date.now()}_${fileName}`;
-    
+
     const { error: uploadError } = await supabase.storage
       .from('documents')
       .upload(storagePath, result.blob, {
         contentType: 'application/pdf',
         upsert: true,
       });
-    
+
     if (uploadError) {
       console.error('Upload error:', uploadError);
       return { success: false, error: 'Failed to upload PDF to storage' };
     }
-    
+
     // Get public URL
     const { data: urlData } = supabase.storage
       .from('documents')
       .getPublicUrl(storagePath);
-    
+
     const fileUrl = urlData.publicUrl;
-    
-    // Find or create "Inspection Reports" category
+
+    // Find or create category
     const { data: categories } = await supabase
       .from('document_categories')
       .select('id, name')
       .eq('subsection_id', subsectionId);
-    
+
     let categoryId = categories?.find(c => c.name === 'Inspection Reports')?.id;
-    
+
     if (!categoryId) {
       const { data: newCategory } = await supabase
         .from('document_categories')
@@ -767,12 +1565,12 @@ export async function generateAndSaveInspectionReportPdfmake(
         })
         .select()
         .single();
-      
+
       if (newCategory) {
         categoryId = newCategory.id;
       }
     }
-    
+
     // Create document record
     const { data: docData, error: docError } = await supabase
       .from('subsection_documents')
@@ -785,11 +1583,11 @@ export async function generateAndSaveInspectionReportPdfmake(
       })
       .select()
       .single();
-    
+
     if (docError) {
       console.warn('Could not create document record:', docError);
     }
-    
+
     return {
       success: true,
       documentId: docData?.id,
