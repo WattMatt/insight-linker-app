@@ -1,8 +1,8 @@
 /**
- * PDFMake PDF Generator - Version 5.0.0
+ * PDFMake PDF Generator - Version 5.1.0
  * 
  * Electrical Inspection Report Generator
- * Fixes: toBase64 buffer handling, font config, explicit error returns
+ * Fixes: Uses pdfmake images dictionary pattern for reliable image rendering in Deno
  */
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
@@ -16,7 +16,7 @@ const corsHeaders = {
 // CONFIGURATION
 // ============================================================================
 
-const VERSION = '5.0.0';
+const VERSION = '5.1.0';
 
 const IMAGE_CONFIG = {
   MAX_SIZE_KB: 1200,        // Increased for large images
@@ -278,6 +278,10 @@ function statusBadge(status: string): any {
   };
 }
 
+/**
+ * Build the PDF document definition using images dictionary pattern
+ * This pattern is more reliable in Deno environments than inline data URLs
+ */
 function buildDocument(
   data: InspectionData,
   siteName: string,
@@ -286,11 +290,46 @@ function buildDocument(
   logoUri?: string,
   accentColor = COLORS.blue
 ): any {
-  const img = (url?: string) => {
-    if (!url) return PLACEHOLDER;
-    if (url.startsWith('data:')) return url;
-    return imageMap.get(url) || PLACEHOLDER;
+  // ============================================================================
+  // IMAGES DICTIONARY PATTERN (v5.1 Fix)
+  // Instead of inline data URLs, we use a dictionary and reference by key
+  // ============================================================================
+  const images: Record<string, string> = {
+    PLACEHOLDER: PLACEHOLDER,
   };
+  let imageIndex = 0;
+
+  /**
+   * Get an image key for the images dictionary
+   * Adds the image to the dictionary if not already present
+   */
+  const imgKey = (url?: string): string => {
+    if (!url) return 'PLACEHOLDER';
+    
+    // Handle data URLs directly passed in
+    if (url.startsWith('data:')) {
+      const key = `img_${imageIndex++}`;
+      images[key] = url;
+      return key;
+    }
+    
+    // Look up in imageMap (pre-downloaded images)
+    const dataUri = imageMap.get(url);
+    if (dataUri && dataUri !== PLACEHOLDER) {
+      const key = `img_${imageIndex++}`;
+      images[key] = dataUri;
+      return key;
+    }
+    
+    return 'PLACEHOLDER';
+  };
+
+  // Register logo in images dictionary
+  let logoKey = 'PLACEHOLDER';
+  if (logoUri && logoUri !== PLACEHOLDER) {
+    logoKey = `logo_${imageIndex++}`;
+    images[logoKey] = logoUri;
+  }
 
   // Calculate stats
   let totalItems = 0, passCount = 0, failCount = 0, totalPhotos = 0;
@@ -316,9 +355,9 @@ function buildDocument(
   const content: any[] = [];
 
   // ========== COVER PAGE ==========
-  if (logoUri && logoUri !== PLACEHOLDER) {
+  if (logoKey !== 'PLACEHOLDER') {
     content.push({
-      image: logoUri,
+      image: logoKey,
       width: SIZES.LOGO,
       alignment: 'center',
       margin: [0, 40, 0, 30],
@@ -493,11 +532,11 @@ function buildDocument(
         { text: item.notes || '-', fontSize: 8, color: COLORS.slate500, margin: [8, 5] },
       ]);
 
-      // Photos for this item
+      // Photos for this item - using imgKey() for images dictionary pattern
       if (item.photos && item.photos.length > 0) {
         const photoCols = item.photos.slice(0, 3).map((photo, pIdx) => ({
           stack: [
-            { image: img(photo), width: SIZES.PHOTO, alignment: 'center' },
+            { image: imgKey(photo), width: SIZES.PHOTO, alignment: 'center' },
             { text: `Photo ${pIdx + 1}`, fontSize: 7, color: COLORS.slate400, alignment: 'center', margin: [0, 3, 0, 0] },
           ],
           width: SIZES.PHOTO + 20,
@@ -587,12 +626,12 @@ function buildDocument(
         margin: [0, 0, 0, 10],
       });
 
-      // Tenant photos
+      // Tenant photos - using imgKey() for images dictionary pattern
       const tenantPhotos: any[] = [];
       if (tenant.meterImage) {
         tenantPhotos.push({
           stack: [
-            { image: img(tenant.meterImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { image: imgKey(tenant.meterImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
             { text: 'Meter', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -600,7 +639,7 @@ function buildDocument(
       if (tenant.breakerImage) {
         tenantPhotos.push({
           stack: [
-            { image: img(tenant.breakerImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { image: imgKey(tenant.breakerImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
             { text: 'Breaker', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -608,7 +647,7 @@ function buildDocument(
       if (tenant.ctRatioImage) {
         tenantPhotos.push({
           stack: [
-            { image: img(tenant.ctRatioImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
+            { image: imgKey(tenant.ctRatioImage), width: SIZES.TENANT_PHOTO, alignment: 'center' },
             { text: 'CT Ratio', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
           ],
         });
@@ -667,12 +706,12 @@ function buildDocument(
         margin: [0, idx > 0 ? 10 : 0, 0, 8],
       });
 
-      // Snag photos
+      // Snag photos - using imgKey() for images dictionary pattern
       if (snag.photos && snag.photos.length > 0) {
         content.push({
           columns: snag.photos.slice(0, 2).map((photo, pIdx) => ({
             stack: [
-              { image: img(photo), width: SIZES.SNAG_PHOTO, alignment: 'center' },
+              { image: imgKey(photo), width: SIZES.SNAG_PHOTO, alignment: 'center' },
               { text: `Evidence ${pIdx + 1}`, fontSize: 7, color: COLORS.slate400, alignment: 'center', margin: [0, 3, 0, 0] },
             ],
           })),
@@ -695,46 +734,58 @@ function buildDocument(
     });
 
     content.push({
-      columns: data.signatures.map(sig => ({
-        stack: [
-          {
-            table: {
-              widths: ['*'],
-              body: [[{
-                stack: [
-                  sig.signatureUrl && img(sig.signatureUrl) !== PLACEHOLDER ? {
-                    image: img(sig.signatureUrl),
-                    width: SIZES.SIGNATURE,
-                    alignment: 'center',
-                    margin: [0, 10, 0, 10],
-                  } : { text: '', margin: [0, 30, 0, 0] },
-                  { canvas: [{ type: 'line', x1: 20, y1: 0, x2: 140, y2: 0, lineWidth: 1, lineColor: COLORS.slate200 }] },
-                  { text: sig.name, fontSize: 11, bold: true, alignment: 'center', margin: [0, 8, 0, 2] },
-                  { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.slate500, alignment: 'center' },
-                  { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
-                ],
-                margin: [10, 10],
-              }]],
+      columns: data.signatures.map(sig => {
+        const sigImgKey = imgKey(sig.signatureUrl);
+        return {
+          stack: [
+            {
+              table: {
+                widths: ['*'],
+                body: [[{
+                  stack: [
+                    sigImgKey !== 'PLACEHOLDER' ? {
+                      image: sigImgKey,
+                      width: SIZES.SIGNATURE,
+                      alignment: 'center',
+                      margin: [0, 10, 0, 10],
+                    } : { text: '', margin: [0, 30, 0, 0] },
+                    { canvas: [{ type: 'line', x1: 20, y1: 0, x2: 140, y2: 0, lineWidth: 1, lineColor: COLORS.slate200 }] },
+                    { text: sig.name, fontSize: 11, bold: true, alignment: 'center', margin: [0, 8, 0, 2] },
+                    { text: sig.role || 'Signatory', fontSize: 9, color: COLORS.slate500, alignment: 'center' },
+                    { text: sig.signedAt ? formatDate(sig.signedAt) : 'Pending', fontSize: 8, color: COLORS.slate400, alignment: 'center', margin: [0, 4, 0, 0] },
+                  ],
+                  margin: [10, 10],
+                }]],
+              },
+              layout: {
+                hLineWidth: () => 1,
+                vLineWidth: () => 1,
+                hLineColor: () => COLORS.slate200,
+                vLineColor: () => COLORS.slate200,
+              },
             },
-            layout: {
-              hLineWidth: () => 1,
-              vLineWidth: () => 1,
-              hLineColor: () => COLORS.slate200,
-              vLineColor: () => COLORS.slate200,
-            },
-          },
-        ],
-        width: '*',
-      })),
+          ],
+          width: '*',
+        };
+      }),
       columnGap: 20,
     });
   }
 
-  // Document definition
+  // Log images dictionary stats for debugging
+  const imageCount = Object.keys(images).length - 1; // Subtract placeholder
+  console.log(`[PDF] Images dictionary: ${imageCount} images registered`);
+  if (imageCount > 0) {
+    const sampleKeys = Object.keys(images).slice(0, 5);
+    console.log(`[PDF] Sample keys: ${sampleKeys.join(', ')}`);
+  }
+
+  // Document definition with images dictionary
   return {
     pageSize: 'A4',
     pageMargins: [40, 50, 40, 60],
     content,
+    images, // <-- CRITICAL: Include images dictionary for pdfmake
     defaultStyle: {
       font: 'Roboto',
       fontSize: 10,
