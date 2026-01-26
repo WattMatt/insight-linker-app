@@ -22,13 +22,14 @@ const corsHeaders = {
 
 // Configuration - Optimized for Edge Function CPU limits
 const CONFIG = {
-  MAX_IMAGE_SIZE_KB: 150,       // Skip images larger than this (can't resize in Deno)
+  IMAGE_TRANSFORM_WIDTH: 400,   // Resize images to this width via Supabase Transform
+  IMAGE_TRANSFORM_QUALITY: 60,  // JPEG quality for transformed images
+  MAX_IMAGE_SIZE_KB: 200,       // Skip images larger than this AFTER transformation
   MAX_TOTAL_IMAGES: 12,         // Max images per report to prevent CPU exhaustion
   MAX_RETRY_ATTEMPTS: 1,        // Single retry to save CPU
   RETRY_DELAY_MS: 200,          // Quick retry delay
   PARALLEL_BATCH_SIZE: 3,       // Smaller batches for memory efficiency
-  DOWNLOAD_TIMEOUT_MS: 8000,    // Faster timeout
-  MAX_TOTAL_SIZE_MB: 5,         // Abort if cumulative size exceeds this
+  DOWNLOAD_TIMEOUT_MS: 10000,   // Timeout per image download
 };
 
 // Placeholder for failed images
@@ -52,19 +53,39 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 
 function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
   try {
-    if (!url.includes('/storage/v1/object/public/')) return null;
+    // Handle both public URLs and signed URLs
     const urlObj = new URL(url);
-    const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
-    if (pathParts.length === 2) {
-      const filePathWithBucket = pathParts[1];
-      const firstSlashIndex = filePathWithBucket.indexOf('/');
-      if (firstSlashIndex > 0) {
-        return {
-          bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
-          path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
-        };
+    
+    // Match: /storage/v1/object/public/{bucket}/{path}
+    if (url.includes('/storage/v1/object/public/')) {
+      const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
+      if (pathParts.length === 2) {
+        const filePathWithBucket = pathParts[1];
+        const firstSlashIndex = filePathWithBucket.indexOf('/');
+        if (firstSlashIndex > 0) {
+          return {
+            bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
+            path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
+          };
+        }
       }
     }
+    
+    // Match: /storage/v1/object/sign/{bucket}/{path} (signed URLs)
+    if (url.includes('/storage/v1/object/sign/')) {
+      const pathParts = urlObj.pathname.split('/storage/v1/object/sign/');
+      if (pathParts.length === 2) {
+        const filePathWithBucket = pathParts[1];
+        const firstSlashIndex = filePathWithBucket.indexOf('/');
+        if (firstSlashIndex > 0) {
+          return {
+            bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
+            path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
+          };
+        }
+      }
+    }
+    
     return null;
   } catch {
     return null;
@@ -107,61 +128,87 @@ interface ImageResult {
 }
 
 /**
- * Download image with retry logic
+ * Download image with Supabase Image Transformation for on-the-fly compression
+ * This is the KEY to getting images without hitting size limits!
  */
-async function downloadImageWithRetry(url: string): Promise<ArrayBuffer | null> {
-  for (let attempt = 1; attempt <= CONFIG.MAX_RETRY_ATTEMPTS; attempt++) {
+async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | null> {
+  const parsed = parseSupabaseStorageUrl(url);
+  
+  if (parsed) {
+    // Use Supabase Image Transformation - this compresses on-the-fly!
+    const supabase = getSupabaseClient();
+    
     try {
-      // Check if it's a Supabase storage URL
-      const parsed = parseSupabaseStorageUrl(url);
+      // Create a signed URL with transformation parameters
+      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+        .from(parsed.bucket)
+        .createSignedUrl(parsed.path, 60, {
+          transform: {
+            width: CONFIG.IMAGE_TRANSFORM_WIDTH,
+            quality: CONFIG.IMAGE_TRANSFORM_QUALITY,
+          }
+        });
       
-      if (parsed) {
-        // Use Supabase client for internal storage
-        const supabase = getSupabaseClient();
+      if (signedUrlError) {
+        console.warn(`[Transform] Signed URL failed for ${parsed.path.substring(0, 30)}...: ${signedUrlError.message}`);
+        // Fallback to direct download
         const { data: blob, error } = await supabase.storage
           .from(parsed.bucket)
           .download(parsed.path);
+        if (error || !blob) return null;
+        return await blob.arrayBuffer();
+      }
+      
+      // Fetch the transformed image
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.DOWNLOAD_TIMEOUT_MS);
+      
+      try {
+        const response = await fetch(signedUrlData.signedUrl, { 
+          signal: controller.signal,
+          headers: { 'Accept': 'image/*' }
+        });
+        clearTimeout(timeoutId);
         
-        if (error) {
-          console.warn(`[Download] Attempt ${attempt} failed for ${parsed.path.substring(0, 30)}...: ${error.message}`);
-          if (attempt < CONFIG.MAX_RETRY_ATTEMPTS) {
-            await sleep(CONFIG.RETRY_DELAY_MS * attempt);
-            continue;
-          }
+        if (!response.ok) {
+          console.warn(`[Transform] Fetch failed: HTTP ${response.status}`);
           return null;
         }
         
-        return await blob.arrayBuffer();
-      } else {
-        // External URL - use fetch with timeout
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), CONFIG.DOWNLOAD_TIMEOUT_MS);
-        
-        try {
-          const response = await fetch(url, { 
-            signal: controller.signal,
-            headers: { 'Accept': 'image/*' }
-          });
-          clearTimeout(timeoutId);
-          
-          if (!response.ok) {
-            throw new Error(`HTTP ${response.status}`);
-          }
-          
-          return await response.arrayBuffer();
-        } catch (fetchError) {
-          clearTimeout(timeoutId);
-          throw fetchError;
-        }
+        const buffer = await response.arrayBuffer();
+        console.log(`[Transform] Got ${parsed.path.substring(0, 25)}... → ${Math.round(buffer.byteLength / 1024)}KB`);
+        return buffer;
+      } catch (fetchError) {
+        clearTimeout(timeoutId);
+        console.warn(`[Transform] Fetch error:`, fetchError);
+        return null;
       }
     } catch (err) {
-      console.warn(`[Download] Attempt ${attempt} error: ${err}`);
-      if (attempt < CONFIG.MAX_RETRY_ATTEMPTS) {
-        await sleep(CONFIG.RETRY_DELAY_MS * attempt);
+      console.warn(`[Transform] Error processing ${parsed.path.substring(0, 30)}...:`, err);
+      return null;
+    }
+  } else {
+    // External URL - use direct fetch with timeout
+    try {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), CONFIG.DOWNLOAD_TIMEOUT_MS);
+      
+      const response = await fetch(url, { 
+        signal: controller.signal,
+        headers: { 'Accept': 'image/*' }
+      });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        return null;
       }
+      
+      return await response.arrayBuffer();
+    } catch (err) {
+      console.warn(`[Download] External URL error: ${err}`);
+      return null;
     }
   }
-  return null;
 }
 
 /**
@@ -183,46 +230,47 @@ function processImageBuffer(buffer: ArrayBuffer, mimeType: string): { base64: st
 
 /**
  * Process a single image URL to Base64 data URI
- * Returns placeholder for oversized images to prevent CPU exhaustion
+ * Uses Supabase Image Transformation for on-the-fly compression
  */
 async function processImage(url: string): Promise<ImageResult> {
   const startTime = Date.now();
   
-  // Skip if already a data URI
+  // Skip invalid URLs
   if (!url || typeof url !== 'string') {
     return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB: 0, attempts: 0 };
   }
   
+  // Already a data URI
   if (url.startsWith('data:')) {
     const sizeKB = url.length / 1024;
-    // Skip oversized data URIs too
     if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
       return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 0 };
     }
     return { success: true, dataUri: url, originalUrl: url, sizeKB, attempts: 0 };
   }
   
-  // Download with retry
-  const buffer = await downloadImageWithRetry(url);
+  // Download with transformation (this compresses on-the-fly!)
+  const buffer = await downloadImageWithTransform(url);
   
   if (!buffer) {
-    return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB: 0, attempts: CONFIG.MAX_RETRY_ATTEMPTS };
+    return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB: 0, attempts: 1 };
   }
   
-  // Check size BEFORE base64 conversion (expensive operation)
   const sizeKB = buffer.byteLength / 1024;
+  
+  // Skip if still too large after transformation (shouldn't happen often)
   if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
-    console.log(`[Skip] Downloaded image ${Math.round(sizeKB)}KB too large, using placeholder`);
+    console.log(`[Skip] Transformed image still ${Math.round(sizeKB)}KB, using placeholder`);
     return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 1 };
   }
   
-  // Detect type and convert
+  // Convert to base64
   const mimeType = detectImageType(new Uint8Array(buffer));
   const base64 = arrayBufferToBase64(buffer);
   const dataUri = `data:${mimeType};base64,${base64}`;
   
   const elapsed = Date.now() - startTime;
-  console.log(`[ProcessImage] OK ${Math.round(sizeKB)}KB in ${elapsed}ms`);
+  console.log(`[ProcessImage] ✓ ${Math.round(sizeKB)}KB in ${elapsed}ms`);
   
   return { success: true, dataUri, originalUrl: url, sizeKB, attempts: 1 };
 }
