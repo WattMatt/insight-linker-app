@@ -20,16 +20,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration
+// Configuration - Optimized for Edge Function CPU limits
 const CONFIG = {
-  MAX_IMAGE_WIDTH: 800,      // Max width for embedded images
-  MAX_IMAGE_HEIGHT: 600,     // Max height for embedded images
-  JPEG_QUALITY: 0.75,        // JPEG compression quality
-  MAX_IMAGE_SIZE_KB: 300,    // Max size per image after compression
-  MAX_RETRY_ATTEMPTS: 2,     // Retry attempts for failed downloads
-  RETRY_DELAY_MS: 500,       // Delay between retries
-  PARALLEL_BATCH_SIZE: 5,    // Process images in parallel batches
-  DOWNLOAD_TIMEOUT_MS: 15000, // Timeout per image download
+  MAX_IMAGE_SIZE_KB: 150,       // Skip images larger than this (can't resize in Deno)
+  MAX_TOTAL_IMAGES: 12,         // Max images per report to prevent CPU exhaustion
+  MAX_RETRY_ATTEMPTS: 1,        // Single retry to save CPU
+  RETRY_DELAY_MS: 200,          // Quick retry delay
+  PARALLEL_BATCH_SIZE: 3,       // Smaller batches for memory efficiency
+  DOWNLOAD_TIMEOUT_MS: 8000,    // Faster timeout
+  MAX_TOTAL_SIZE_MB: 5,         // Abort if cumulative size exceeds this
 };
 
 // Placeholder for failed images
@@ -166,28 +165,25 @@ async function downloadImageWithRetry(url: string): Promise<ArrayBuffer | null> 
 }
 
 /**
- * Compress image using Supabase Image Transformation or return as-is if small enough
+ * Check image size and return base64 only if within limits
+ * CRITICAL: Skip large images - Deno cannot resize them!
  */
-async function compressImage(buffer: ArrayBuffer, mimeType: string): Promise<{ base64: string; sizeKB: number }> {
+function processImageBuffer(buffer: ArrayBuffer, mimeType: string): { base64: string | null; sizeKB: number; skipped: boolean } {
   const sizeKB = buffer.byteLength / 1024;
   
-  // If already small enough, use as-is
-  if (sizeKB <= CONFIG.MAX_IMAGE_SIZE_KB) {
-    const base64 = arrayBufferToBase64(buffer);
-    return { base64, sizeKB };
+  // HARD LIMIT: Skip images that are too large
+  if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
+    console.log(`[Skip] Image ${Math.round(sizeKB)}KB exceeds ${CONFIG.MAX_IMAGE_SIZE_KB}KB limit - using placeholder`);
+    return { base64: null, sizeKB, skipped: true };
   }
   
-  // For larger images, we'll encode but note that server-side resize isn't possible in Deno
-  // The client should have already compressed images via the upload pipeline
-  // We'll just cap the base64 if needed
   const base64 = arrayBufferToBase64(buffer);
-  console.log(`[Compress] Image ${Math.round(sizeKB)}KB exceeds target, embedding anyway (pre-compression recommended)`);
-  
-  return { base64, sizeKB };
+  return { base64, sizeKB, skipped: false };
 }
 
 /**
  * Process a single image URL to Base64 data URI
+ * Returns placeholder for oversized images to prevent CPU exhaustion
  */
 async function processImage(url: string): Promise<ImageResult> {
   const startTime = Date.now();
@@ -198,24 +194,35 @@ async function processImage(url: string): Promise<ImageResult> {
   }
   
   if (url.startsWith('data:')) {
-    return { success: true, dataUri: url, originalUrl: url, sizeKB: url.length / 1024, attempts: 0 };
+    const sizeKB = url.length / 1024;
+    // Skip oversized data URIs too
+    if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
+      return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 0 };
+    }
+    return { success: true, dataUri: url, originalUrl: url, sizeKB, attempts: 0 };
   }
   
   // Download with retry
   const buffer = await downloadImageWithRetry(url);
   
   if (!buffer) {
-    console.warn(`[ProcessImage] Failed to download after retries: ${url.substring(0, 50)}...`);
     return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB: 0, attempts: CONFIG.MAX_RETRY_ATTEMPTS };
   }
   
-  // Detect type and compress
+  // Check size BEFORE base64 conversion (expensive operation)
+  const sizeKB = buffer.byteLength / 1024;
+  if (sizeKB > CONFIG.MAX_IMAGE_SIZE_KB) {
+    console.log(`[Skip] Downloaded image ${Math.round(sizeKB)}KB too large, using placeholder`);
+    return { success: false, dataUri: PLACEHOLDER_IMAGE, originalUrl: url, sizeKB, attempts: 1 };
+  }
+  
+  // Detect type and convert
   const mimeType = detectImageType(new Uint8Array(buffer));
-  const { base64, sizeKB } = await compressImage(buffer, mimeType);
+  const base64 = arrayBufferToBase64(buffer);
   const dataUri = `data:${mimeType};base64,${base64}`;
   
   const elapsed = Date.now() - startTime;
-  console.log(`[ProcessImage] Processed in ${elapsed}ms: ${Math.round(sizeKB)}KB`);
+  console.log(`[ProcessImage] OK ${Math.round(sizeKB)}KB in ${elapsed}ms`);
   
   return { success: true, dataUri, originalUrl: url, sizeKB, attempts: 1 };
 }
@@ -251,46 +258,18 @@ async function processImagesInParallel(urls: string[]): Promise<Map<string, stri
 }
 
 /**
- * Extract all image URLs from inspection data
+ * Extract image URLs with STRICT limits to prevent CPU exhaustion
+ * Priority: Logo > Signatures > First few section photos
  */
 function extractAllImageUrls(inspection: InspectionData, siteLogoUrl?: string): string[] {
   const urls: string[] = [];
   
-  // Site logo
+  // Site logo (priority 1)
   if (siteLogoUrl && !siteLogoUrl.startsWith('data:')) {
     urls.push(siteLogoUrl);
   }
   
-  // Section photos
-  if (inspection.sections) {
-    for (const section of inspection.sections) {
-      for (const item of section.items) {
-        if (item.photos) {
-          urls.push(...item.photos.slice(0, 4)); // Limit to 4 per item
-        }
-      }
-    }
-  }
-  
-  // Tenant images
-  if (inspection.tenants) {
-    for (const tenant of inspection.tenants) {
-      if (tenant.meterImage) urls.push(tenant.meterImage);
-      if (tenant.breakerImage) urls.push(tenant.breakerImage);
-      if (tenant.ctRatioImage) urls.push(tenant.ctRatioImage);
-    }
-  }
-  
-  // Snag photos
-  if (inspection.snags) {
-    for (const snag of inspection.snags) {
-      if (snag.photos) {
-        urls.push(...snag.photos.slice(0, 2)); // Limit to 2 per snag
-      }
-    }
-  }
-  
-  // Signatures (small, usually already base64 or small files)
+  // Signatures (priority 2 - usually small)
   if (inspection.signatures) {
     for (const sig of inspection.signatures) {
       if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
@@ -299,7 +278,37 @@ function extractAllImageUrls(inspection: InspectionData, siteLogoUrl?: string): 
     }
   }
   
-  return urls;
+  // Section photos (priority 3 - LIMIT to first 2 per section, max 8 total)
+  let sectionPhotoCount = 0;
+  const MAX_SECTION_PHOTOS = 8;
+  if (inspection.sections) {
+    for (const section of inspection.sections) {
+      for (const item of section.items) {
+        if (item.photos && sectionPhotoCount < MAX_SECTION_PHOTOS) {
+          const remaining = MAX_SECTION_PHOTOS - sectionPhotoCount;
+          const toAdd = item.photos.slice(0, Math.min(2, remaining));
+          urls.push(...toAdd);
+          sectionPhotoCount += toAdd.length;
+        }
+      }
+    }
+  }
+  
+  // Tenant images (priority 4 - only first tenant, meter only)
+  if (inspection.tenants && inspection.tenants.length > 0) {
+    const firstTenant = inspection.tenants[0];
+    if (firstTenant.meterImage) urls.push(firstTenant.meterImage);
+  }
+  
+  // Snag photos - SKIP entirely to save CPU (text descriptions sufficient)
+  
+  // Apply hard cap
+  const capped = urls.slice(0, CONFIG.MAX_TOTAL_IMAGES);
+  if (urls.length > CONFIG.MAX_TOTAL_IMAGES) {
+    console.log(`[ExtractUrls] Capped from ${urls.length} to ${CONFIG.MAX_TOTAL_IMAGES} images`);
+  }
+  
+  return capped;
 }
 
 // ============================================================================
