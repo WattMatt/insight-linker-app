@@ -112,6 +112,9 @@ async function getAccessToken(serviceAccount: ServiceAccount): Promise<string> {
 
 // Create a new Google Doc
 async function createGoogleDoc(accessToken: string, title: string): Promise<string> {
+  console.log('Attempting to create Google Doc with title:', title);
+  console.log('Using access token (first 20 chars):', accessToken.substring(0, 20) + '...');
+  
   const response = await fetch(GOOGLE_DOCS_API, {
     method: 'POST',
     headers: {
@@ -121,8 +124,15 @@ async function createGoogleDoc(accessToken: string, title: string): Promise<stri
     body: JSON.stringify({ title }),
   });
 
+  console.log('Google Docs API response status:', response.status);
+  
   if (!response.ok) {
     const error = await response.text();
+    console.error('Google Docs API error response:', error);
+    console.error('This usually means:');
+    console.error('1. Google Docs API is not enabled in Google Cloud Console');
+    console.error('2. Service account does not have permission to create documents');
+    console.error('3. The access token scope does not include docs permissions');
     throw new Error(`Failed to create doc: ${error}`);
   }
 
