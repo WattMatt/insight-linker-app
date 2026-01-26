@@ -85,9 +85,18 @@ export async function generateAndSaveInspectionReport(
 
     // Build sections data from template - including photos!
     const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections || {});
+    
+    console.log('[InspectionReport] Template sections count:', templateSections.length);
+    console.log('[InspectionReport] jsonData keys:', Object.keys(jsonData));
+    
+    let totalPhotosExtracted = 0;
+    
     const sectionsForPdf = templateSections.map((section: any) => {
       const sectionId = String(section.id ?? '');
       const items = Array.isArray(section.items) ? section.items : Object.values(section.items || {});
+      const sectionData = jsonData[sectionId];
+      
+      console.log(`[InspectionReport] Section "${sectionId}": data exists = ${!!sectionData}, item keys = ${sectionData ? Object.keys(sectionData).join(', ') : 'N/A'}`);
       
       return {
         title: section.name || sectionId,
@@ -97,6 +106,11 @@ export async function generateAndSaveInspectionReport(
           
           // Extract photos array from the item data
           const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
+          
+          if (photos.length > 0) {
+            console.log(`[InspectionReport] Found ${photos.length} photos for ${sectionId}/${itemId}`);
+            totalPhotosExtracted += photos.length;
+          }
           
           return {
             label: item.name || itemId,
@@ -108,6 +122,8 @@ export async function generateAndSaveInspectionReport(
         }),
       };
     });
+    
+    console.log('[InspectionReport] Total photos extracted:', totalPhotosExtracted);
 
     // Extract tenants if present
     const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants.map((tenant: any) => ({
