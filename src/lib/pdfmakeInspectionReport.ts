@@ -419,7 +419,9 @@ function createEngineeringCoverPage(
     margin: [60, 0, 60, 0],
   });
 
-  // No page break - Quality Score Dashboard will continue on same page
+  // Page break after cover page
+  content.push({ text: '', pageBreak: 'after' });
+
   return content;
 }
 
