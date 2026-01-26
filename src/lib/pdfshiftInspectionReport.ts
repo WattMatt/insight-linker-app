@@ -347,10 +347,10 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[Browserless] Calling Edge Function...');
+    console.log('[PDFMake] Calling Edge Function...');
     
-    // Call Browserless Edge Function for Chrome-quality PDF rendering
-    const { data, error } = await supabase.functions.invoke('generate-pdf-browserless', {
+    // Call PDFMake Edge Function for reliable PDF generation
+    const { data, error } = await supabase.functions.invoke('generate-pdf-pdfmake', {
       body: payload,
     });
     
