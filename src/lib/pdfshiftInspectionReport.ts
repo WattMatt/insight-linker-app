@@ -315,8 +315,9 @@ export async function generatePdfShiftInspectionReport(
     console.log('[PDFShift] Embedding images as Base64...');
     const processedInspection = await embedAllImages(inspection);
     
-    // Build payload for Edge Function
+    // Build payload for Edge Function - MUST include reportType: 'inspection'
     const payload = {
+      reportType: 'inspection', // Critical: tells edge function which generator to use
       inspection: {
         inspectionId: processedInspection.inspectionId,
         templateName: processedInspection.templateName,
