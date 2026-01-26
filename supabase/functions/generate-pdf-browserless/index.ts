@@ -71,11 +71,52 @@ function detectImageType(bytes: Uint8Array): string {
   return 'image/jpeg';
 }
 
+/**
+ * Generate a signed URL for Supabase storage images
+ * This allows Browserless/Chrome to fetch images directly without auth issues
+ */
+async function getSignedImageUrl(url: string): Promise<string | null> {
+  if (!url || typeof url !== 'string') return null;
+  if (url.startsWith('data:')) return url;
+  
+  try {
+    const parsed = parseSupabaseStorageUrl(url);
+    
+    if (parsed) {
+      const supabase = getSupabaseClient();
+      
+      // Generate a signed URL valid for 1 hour
+      const { data, error } = await supabase.storage
+        .from(parsed.bucket)
+        .createSignedUrl(parsed.path, 3600);
+      
+      if (error || !data?.signedUrl) {
+        console.warn(`[getSignedImageUrl] Failed to create signed URL: ${error?.message}`);
+        // Fall back to public URL if signing fails
+        return url;
+      }
+      
+      console.log(`[getSignedImageUrl] Created signed URL for: ${parsed.path.substring(0, 40)}...`);
+      return data.signedUrl;
+    }
+    
+    // External URL - return as-is (Chrome can fetch it)
+    return url;
+    
+  } catch (err) {
+    console.warn(`[getSignedImageUrl] Error:`, err);
+    return url; // Return original URL as fallback
+  }
+}
+
+/**
+ * Legacy function for small images like signatures that need base64 embedding
+ */
 async function getImageAsBase64(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url;
   
-  const MAX_SIZE_KB = 500;
+  const MAX_SIZE_KB = 200; // Only for small images like signatures
   
   try {
     const parsed = parseSupabaseStorageUrl(url);
@@ -93,8 +134,10 @@ async function getImageAsBase64(url: string): Promise<string | null> {
       
       const buffer = await blob.arrayBuffer();
       if (buffer.byteLength > MAX_SIZE_KB * 1024) {
-        console.warn(`[getImageAsBase64] Image too large: ${Math.round(buffer.byteLength / 1024)}KB`);
-        return null;
+        console.warn(`[getImageAsBase64] Image too large for base64: ${Math.round(buffer.byteLength / 1024)}KB, using signed URL`);
+        // Return signed URL instead of null for large images
+        const { data } = await supabase.storage.from(parsed.bucket).createSignedUrl(parsed.path, 3600);
+        return data?.signedUrl || null;
       }
       
       const base64 = arrayBufferToBase64(buffer);
@@ -106,7 +149,7 @@ async function getImageAsBase64(url: string): Promise<string | null> {
     const response = await fetch(url, { signal: AbortSignal.timeout(10000) });
     if (!response.ok) return null;
     const buffer = await response.arrayBuffer();
-    if (buffer.byteLength > MAX_SIZE_KB * 1024) return null;
+    if (buffer.byteLength > MAX_SIZE_KB * 1024) return url; // Return original URL for large external images
     
     const base64 = arrayBufferToBase64(buffer);
     const contentType = detectImageType(new Uint8Array(buffer));
@@ -488,20 +531,21 @@ Deno.serve(async (req) => {
       throw new Error('No inspection data provided');
     }
 
-    // Process images - convert to base64 for reliable embedding
+    // Process images - convert to SIGNED URLs for Chrome to fetch directly
+    // This avoids base64 size limits and lets Chrome render images at display size
     const processedInspection = JSON.parse(JSON.stringify(inspection));
     let imageCount = 0;
     
-    // Process section photos
+    // Process section photos - use signed URLs
     if (processedInspection.sections) {
       for (const section of processedInspection.sections) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             const processedPhotos: string[] = [];
             for (const photoUrl of item.photos.slice(0, 4)) {
-              const base64 = await getImageAsBase64(photoUrl);
-              if (base64) {
-                processedPhotos.push(base64);
+              const signedUrl = await getSignedImageUrl(photoUrl);
+              if (signedUrl) {
+                processedPhotos.push(signedUrl);
                 imageCount++;
               }
             }
@@ -511,15 +555,15 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Process snag photos
+    // Process snag photos - use signed URLs
     if (processedInspection.snags) {
       for (const snag of processedInspection.snags) {
         if (snag.photos && snag.photos.length > 0) {
           const processedPhotos: string[] = [];
           for (const photoUrl of snag.photos.slice(0, 2)) {
-            const base64 = await getImageAsBase64(photoUrl);
-            if (base64) {
-              processedPhotos.push(base64);
+            const signedUrl = await getSignedImageUrl(photoUrl);
+            if (signedUrl) {
+              processedPhotos.push(signedUrl);
               imageCount++;
             }
           }
@@ -528,27 +572,27 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Process signatures
+    // Process signatures - these are small, can use base64
     if (processedInspection.signatures) {
       for (const sig of processedInspection.signatures) {
         if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-          const base64 = await getImageAsBase64(sig.signatureUrl);
-          if (base64) {
-            sig.signatureUrl = base64;
+          const base64OrUrl = await getImageAsBase64(sig.signatureUrl);
+          if (base64OrUrl) {
+            sig.signatureUrl = base64OrUrl;
             imageCount++;
           }
         }
       }
     }
 
-    // Process logo
+    // Process logo - can use signed URL
     let processedLogoUrl = siteLogoUrl;
     if (siteLogoUrl && !siteLogoUrl.startsWith('data:')) {
-      const base64Logo = await getImageAsBase64(siteLogoUrl);
-      if (base64Logo) processedLogoUrl = base64Logo;
+      const signedLogo = await getSignedImageUrl(siteLogoUrl);
+      if (signedLogo) processedLogoUrl = signedLogo;
     }
 
-    console.log(`[Browserless] Processed ${imageCount} images`);
+    console.log(`[Browserless] Processed ${imageCount} images (using signed URLs)`);
 
     // Generate HTML
     const html = generateHTML(processedInspection, siteName, clientName, processedLogoUrl, accentColor);
