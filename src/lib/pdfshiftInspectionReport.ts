@@ -359,8 +359,10 @@ export async function generatePdfShiftInspectionReport(
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
     
+    console.log('[PDFShift] Edge Function response:', { success: data?.success, url: data?.url, fileName: data?.fileName });
+    
     if (!data?.url) {
-      console.error('[PDFShift] No URL returned from Edge Function');
+      console.error('[PDFShift] No URL returned from Edge Function:', data);
       return { success: false, error: data?.error || 'No PDF URL returned' };
     }
     
@@ -369,7 +371,7 @@ export async function generatePdfShiftInspectionReport(
     return {
       success: true,
       url: data.url,
-      filename: data.filename,
+      filename: data.fileName || data.filename,  // Handle both cases
       previewUrl: data.url,
     };
     
