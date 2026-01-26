@@ -43,38 +43,50 @@ function detectImageType(bytes: Uint8Array): string {
   return 'image/jpeg';
 }
 
-// Recursively list all files in a bucket, including subdirectories
-async function listAllFiles(
+// List files in a bucket with pagination (non-recursive for speed)
+// Instead of recursing, we use the fact that storage.list returns files directly
+async function listFilesFlat(
   supabase: any,
   bucket: string,
-  prefix: string = ''
-): Promise<Array<{ name: string; path: string; metadata?: any }>> {
-  const allFiles: Array<{ name: string; path: string; metadata?: any }> = [];
+  prefix: string = '',
+  maxDepth: number = 4
+): Promise<Array<{ name: string; path: string; size?: number }>> {
+  const allFiles: Array<{ name: string; path: string; size?: number }> = [];
+  const foldersToScan: Array<{ path: string; depth: number }> = [{ path: prefix, depth: 0 }];
+  let scannedFolders = 0;
+  const MAX_FOLDERS = 100; // Limit to prevent timeout
   
-  const { data: items, error } = await supabase.storage
-    .from(bucket)
-    .list(prefix, { limit: 1000 });
-  
-  if (error) {
-    console.error(`[batch-compress] Error listing ${prefix}:`, error.message);
-    return allFiles;
-  }
-  
-  for (const item of items || []) {
-    const itemPath = prefix ? `${prefix}/${item.name}` : item.name;
+  while (foldersToScan.length > 0 && scannedFolders < MAX_FOLDERS) {
+    const current = foldersToScan.shift()!;
+    scannedFolders++;
     
-    // Check if it's a folder (no metadata.mimetype means it's a folder)
-    if (!item.metadata || item.id === null) {
-      // It's a folder, recurse into it
-      console.log(`[batch-compress] Scanning folder: ${itemPath}`);
-      const subFiles = await listAllFiles(supabase, bucket, itemPath);
-      allFiles.push(...subFiles);
-    } else {
-      // It's a file
-      allFiles.push({ name: item.name, path: itemPath, metadata: item.metadata });
+    const { data: items, error } = await supabase.storage
+      .from(bucket)
+      .list(current.path, { limit: 500 });
+    
+    if (error) {
+      console.error(`[batch-compress] Error listing ${current.path}:`, error.message);
+      continue;
+    }
+    
+    for (const item of items || []) {
+      const itemPath = current.path ? `${current.path}/${item.name}` : item.name;
+      
+      // If it has metadata.size, it's a file
+      if (item.metadata?.size) {
+        allFiles.push({ 
+          name: item.name, 
+          path: itemPath, 
+          size: item.metadata.size 
+        });
+      } else if (current.depth < maxDepth) {
+        // It's a folder, add to scan queue if not too deep
+        foldersToScan.push({ path: itemPath, depth: current.depth + 1 });
+      }
     }
   }
   
+  console.log(`[batch-compress] Scanned ${scannedFolders} folders, found ${allFiles.length} files`);
   return allFiles;
 }
 
@@ -105,21 +117,23 @@ Deno.serve(async (req) => {
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Recursively list ALL files in the bucket
-    console.log(`[batch-compress] Scanning bucket recursively...`);
-    const allFiles = await listAllFiles(supabase, bucket, prefix);
-    console.log(`[batch-compress] Found ${allFiles.length} total files in bucket`);
+    // List files with depth limit to prevent timeout
+    console.log(`[batch-compress] Scanning bucket...`);
+    const allFiles = await listFilesFlat(supabase, bucket, prefix, 5);
+    console.log(`[batch-compress] Found ${allFiles.length} total files`);
 
-    // Filter to only image files that need processing
+    // Filter to only image files that need processing and are large enough
     const imageExtensions = ['jpg', 'jpeg', 'png', 'webp', 'heic'];
     const imageFiles = allFiles.filter(file => {
       const ext = file.name.split('.').pop()?.toLowerCase();
       const isImage = ext && imageExtensions.includes(ext);
       const isAlreadyCompressed = file.name.includes('_compressed') || file.path.includes('_compressed');
-      return isImage && !isAlreadyCompressed;
+      // Use size from metadata if available to skip small files early
+      const isLargeEnough = !file.size || (file.size / 1024) >= minSizeKB;
+      return isImage && !isAlreadyCompressed && isLargeEnough;
     });
 
-    console.log(`[batch-compress] Found ${imageFiles.length} image files to evaluate`);
+    console.log(`[batch-compress] Found ${imageFiles.length} candidate images (>= ${minSizeKB}KB)`);
 
     const processedFiles: ProcessedFile[] = [];
     let compressed = 0;
