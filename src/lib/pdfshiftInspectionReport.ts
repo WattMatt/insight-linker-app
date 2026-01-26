@@ -1,9 +1,11 @@
 /**
- * Google Docs API-based Inspection Report Generator
+ * Browserless.io PDF Generator
  * 
- * Uses the server-side Edge Function with Google Docs API for PDF generation.
- * This solves persistent image rendering issues that occurred with PDFShift,
- * as Google Docs handles images natively by uploading to Drive and embedding.
+ * Uses the server-side Edge Function with Browserless.io (Puppeteer-as-a-service)
+ * for high-fidelity Chrome rendering. This provides:
+ * - Perfect CSS support and rendering
+ * - Reliable image embedding without storage quota issues
+ * - No external storage dependencies (Google Drive)
  * 
  * This is the PREFERRED method for inspection reports with photographic evidence.
  */
@@ -345,10 +347,10 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[GoogleDocs] Calling Edge Function...');
+    console.log('[Browserless] Calling Edge Function...');
     
-    // Call Google Docs Edge Function for reliable image rendering
-    const { data, error } = await supabase.functions.invoke('generate-pdf-google', {
+    // Call Browserless Edge Function for Chrome-quality PDF rendering
+    const { data, error } = await supabase.functions.invoke('generate-pdf-browserless', {
       body: payload,
     });
     
