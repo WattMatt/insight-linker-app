@@ -19,14 +19,15 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration
+// Configuration - Version 2.0.0 for deployment verification
 const CONFIG = {
+  VERSION: '2.0.0',  // For deployment verification
   MAX_IMAGE_SIZE_KB: 400,
   IMAGE_TRANSFORM_WIDTH: 600,
   IMAGE_TRANSFORM_QUALITY: 75,
   LOGO_MAX_SIZE_KB: 600,
   MAX_IMAGES_PER_REPORT: 30,
-  // Context-specific image dimensions per project standards
+  // Professional image dimensions - landscape-oriented for electrical photos
   LOGO_WIDTH: 180,
   LOGO_HEIGHT: 80,
   SECTION_PHOTO_WIDTH: 160,
@@ -937,6 +938,9 @@ Deno.serve(async (req) => {
       );
     }
 
+    console.log('[PDFMake] Version:', CONFIG.VERSION);
+    console.log('[PDFMake] Section photo size:', CONFIG.SECTION_PHOTO_WIDTH, 'x', CONFIG.SECTION_PHOTO_HEIGHT);
+    console.log('[PDFMake] Logo size:', CONFIG.LOGO_WIDTH, 'x', CONFIG.LOGO_HEIGHT);
     console.log('[PDFMake] Starting report generation...');
     console.log('[PDFMake] Site:', siteName);
     console.log('[PDFMake] Subsection:', inspection.subsectionName || 'N/A');
