@@ -127,15 +127,22 @@ interface ImageResult {
   attempts: number;
 }
 
+// Track which URLs are logos (need higher quality)
+const logoUrls = new Set<string>();
+
 /**
  * Download image with Supabase Image Transformation for on-the-fly compression
- * This is the KEY to getting images without hitting size limits!
+ * Logos get higher quality/resolution to prevent distortion
  */
 async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | null> {
   const parsed = parseSupabaseStorageUrl(url);
+  const isLogo = logoUrls.has(url);
+  
+  // Logos need higher quality settings
+  const transformWidth = isLogo ? 300 : CONFIG.IMAGE_TRANSFORM_WIDTH;
+  const transformQuality = isLogo ? 90 : CONFIG.IMAGE_TRANSFORM_QUALITY;
   
   if (parsed) {
-    // Use Supabase Image Transformation - this compresses on-the-fly!
     const supabase = getSupabaseClient();
     
     try {
@@ -144,20 +151,23 @@ async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | nu
         .from(parsed.bucket)
         .createSignedUrl(parsed.path, 60, {
           transform: {
-            width: CONFIG.IMAGE_TRANSFORM_WIDTH,
-            quality: CONFIG.IMAGE_TRANSFORM_QUALITY,
+            width: transformWidth,
+            quality: transformQuality,
           }
         });
       
       if (signedUrlError) {
         console.warn(`[Transform] Signed URL failed for ${parsed.path.substring(0, 30)}...: ${signedUrlError.message}`);
-        // Fallback to direct download
+        // Fallback to direct download (without transformation)
         const { data: blob, error } = await supabase.storage
           .from(parsed.bucket)
           .download(parsed.path);
         if (error || !blob) return null;
         return await blob.arrayBuffer();
       }
+      
+      console.log(`[Transform] ${isLogo ? 'LOGO' : 'Photo'}: ${transformWidth}px @ ${transformQuality}%`);
+      
       
       // Fetch the transformed image
       const controller = new AbortController();
@@ -312,9 +322,14 @@ async function processImagesInParallel(urls: string[]): Promise<Map<string, stri
 function extractAllImageUrls(inspection: InspectionData, siteLogoUrl?: string): string[] {
   const urls: string[] = [];
   
-  // Site logo (priority 1)
+  // Clear previous logo tracking
+  logoUrls.clear();
+  
+  // Site logo (priority 1) - mark as logo for higher quality processing
   if (siteLogoUrl && !siteLogoUrl.startsWith('data:')) {
     urls.push(siteLogoUrl);
+    logoUrls.add(siteLogoUrl); // Mark for high-quality processing
+    console.log(`[ExtractUrls] Logo URL marked for high-quality: ${siteLogoUrl.substring(0, 50)}...`);
   }
   
   // Signatures (priority 2 - usually small)
