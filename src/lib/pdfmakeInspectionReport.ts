@@ -334,151 +334,89 @@ function createEngineeringCoverPage(
     });
   }
 
-  // Report type badge
+  // Main title with dashed border box
   content.push({
     table: {
-      widths: ['auto'],
-      body: [[{
-        text: 'ELECTRICAL INSPECTION REPORT',
-        fontSize: 10,
-        bold: true,
-        color: '#FFFFFF',
-        alignment: 'center',
-        margin: [15, 6, 15, 6],
-      }]],
+      widths: ['*'],
+      body: [[
+        {
+          stack: [
+            {
+              text: inspection.templateName || 'Inspection Report',
+              fontSize: 28,
+              bold: true,
+              color: REPORT_COLORS.primary,
+              alignment: 'center',
+              margin: [0, 15, 0, 10],
+            },
+            {
+              text: inspection.subsectionName || '',
+              fontSize: 16,
+              color: REPORT_COLORS.secondary,
+              alignment: 'center',
+              margin: [0, 0, 0, 15],
+            },
+          ],
+        },
+      ]],
     },
     layout: {
-      fillColor: () => REPORT_COLORS.secondary,
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
+      hLineWidth: () => 1,
+      vLineWidth: () => 1,
+      hLineColor: () => REPORT_COLORS.border,
+      vLineColor: () => REPORT_COLORS.border,
+      hLineStyle: () => ({ dash: { length: 3, space: 2 } }),
+      vLineStyle: () => ({ dash: { length: 3, space: 2 } }),
+      paddingLeft: () => 20,
+      paddingRight: () => 20,
+      paddingTop: () => 10,
+      paddingBottom: () => 10,
     },
-    alignment: 'center',
-    margin: [0, 10, 0, 25],
+    margin: [40, 20, 40, 50],
   });
 
-  // Main title
-  content.push({
-    text: inspection.templateName || 'Inspection Report',
-    fontSize: 28,
-    bold: true,
-    color: REPORT_COLORS.primary,
-    alignment: 'center',
-    margin: [0, 0, 0, 10],
-  });
-
-  // Subtitle (subsection)
-  if (inspection.subsectionName) {
-    content.push({
-      text: inspection.subsectionName,
-      fontSize: 16,
-      color: REPORT_COLORS.textSecondary,
-      alignment: 'center',
-      margin: [0, 0, 0, 40],
-    });
-  }
-
-  // Site info box with left border accent
+  // Site info box with prominent left border accent (no emojis)
   const infoRows: Content[][] = [];
   
   infoRows.push([
-    { text: '📍', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
-    { text: 'Site:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+    { text: 'Site:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 70 },
     { text: siteName, fontSize: 11, bold: true, color: REPORT_COLORS.textPrimary },
   ]);
 
   if (clientName) {
     infoRows.push([
-      { text: '🏢', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
-      { text: 'Client:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+      { text: 'Client:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 70 },
       { text: clientName, fontSize: 11, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   if (inspection.inspectorName) {
     infoRows.push([
-      { text: '👤', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
-      { text: 'Inspector:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+      { text: 'Inspector:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 70 },
       { text: inspection.inspectorName, fontSize: 11, color: REPORT_COLORS.textPrimary },
     ]);
   }
 
   infoRows.push([
-    { text: '📅', fontSize: 12, width: 25, margin: [0, 2, 0, 0] },
-    { text: 'Date:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 50 },
+    { text: 'Date:', fontSize: 10, color: REPORT_COLORS.textSecondary, width: 70 },
     { text: formattedDate, fontSize: 11, color: REPORT_COLORS.textPrimary },
   ]);
 
   content.push({
     table: {
-      widths: [25, 50, '*'],
+      widths: [70, '*'],
       body: infoRows,
     },
     layout: {
       hLineWidth: () => 0,
       vLineWidth: (i: number) => (i === 0 ? 4 : 0),
       vLineColor: () => REPORT_COLORS.secondary,
-      paddingLeft: () => 12,
+      paddingLeft: () => 15,
       paddingRight: () => 12,
-      paddingTop: () => 6,
-      paddingBottom: () => 6,
-      fillColor: () => REPORT_COLORS.lightBg,
+      paddingTop: () => 8,
+      paddingBottom: () => 8,
     },
-    margin: [50, 0, 50, 40],
-  });
-
-  // Quick stats preview (if available) - wrapped in unbreakable to keep numbers with labels
-  const stats = calculateStats(inspection);
-  if (stats.totalItems > 0) {
-    content.push({
-      unbreakable: true,
-      stack: [
-        {
-          columns: [
-            {
-              stack: [
-                { text: stats.passPercentage.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.success, alignment: 'center' },
-                { text: '% COMPLIANCE', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
-              ],
-              width: '*',
-            },
-            {
-              stack: [
-                { text: stats.totalItems.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.primary, alignment: 'center' },
-                { text: 'ITEMS CHECKED', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
-              ],
-              width: '*',
-            },
-            {
-              stack: [
-                { text: stats.totalPhotos.toString(), fontSize: 36, bold: true, color: REPORT_COLORS.accent, alignment: 'center' },
-                { text: 'PHOTOS', fontSize: 9, color: REPORT_COLORS.textSecondary, alignment: 'center', margin: [0, 4, 0, 0] },
-              ],
-              width: '*',
-            },
-          ],
-        },
-      ],
-      margin: [40, 20, 40, 50],
-    });
-  }
-
-  // SANS compliance note
-  content.push({
-    text: 'This inspection is conducted in accordance with SANS 10142-1 requirements',
-    fontSize: 9,
-    italics: true,
-    color: REPORT_COLORS.textMuted,
-    alignment: 'center',
-    margin: [0, 10, 0, 5],
-  });
-
-  // Confidentiality notice
-  content.push({
-    text: 'CONFIDENTIAL - For authorized use only',
-    fontSize: 8,
-    color: REPORT_COLORS.textMuted,
-    alignment: 'center',
-    margin: [0, 3, 0, 0],
+    margin: [60, 0, 60, 0],
   });
 
   // No page break - Quality Score Dashboard will continue on same page
