@@ -68,3 +68,12 @@ verify_jwt = true
 
 [functions.batch-compress-images]
 verify_jwt = true
+
+[functions.generate-docx-report]
+verify_jwt = false
+
+[functions.generate-pdf-google]
+verify_jwt = false
+
+[functions.oauth-token]
+verify_jwt = false
