@@ -81,7 +81,21 @@ interface InspectionPayload {
 
 // Maximum images to process to avoid CPU limits
 const MAX_TOTAL_IMAGES = 15;
-const MAX_PHOTOS_PER_ITEM = 2;
+const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
+
+/**
+ * Image size specifications - matched to template layout dimensions
+ * A4 content width: 794px - 48px padding = 746px
+ * Photo grid padding: 28px total = 718px usable
+ */
+const IMAGE_SPECS = {
+  logo: { width: 180, height: 100, quality: 80 },
+  photo_2col: { width: 320, height: 180, quality: 75 },  // 718px / 2 - gap
+  photo_3col: { width: 200, height: 150, quality: 75 },  // 718px / 3 - gap
+  signature: { width: 400, height: 150, quality: 85 },
+};
+
+type ImageType = keyof typeof IMAGE_SPECS;
 
 /**
  * Convert ArrayBuffer to base64 string safely (without stack overflow)
@@ -102,23 +116,28 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 
 /**
  * Build Supabase Image Transformation URL for compression
- * Uses Supabase's built-in image CDN to resize and compress images
+ * Uses template-matched dimensions for each image type
  */
-function buildTransformUrl(bucket: string, filePath: string, width = 400, quality = 60): string {
-  // Supabase Image Transformation endpoint
-  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${width}&quality=${quality}`;
+function buildTransformUrl(bucket: string, filePath: string, imageType: ImageType): string {
+  const spec = IMAGE_SPECS[imageType];
+  // Supabase Image Transformation endpoint with resize=contain for aspect ratio preservation
+  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
 }
 
 /**
  * Download image and convert to base64 data URI
  * Uses Supabase Image Transformation for compression before embedding
+ * Image type determines the target dimensions for template-matched sizing
  */
-async function imageToBase64(url: string): Promise<string | null> {
+async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already base64
   
+  const spec = IMAGE_SPECS[imageType];
+  const maxSizeKB = imageType === 'logo' ? 100 : 200; // Smaller limit for logos
+  
   try {
-    console.log(`[ImagePipeline] Processing: ${url.substring(0, 60)}...`);
+    console.log(`[ImagePipeline] Processing (${imageType}): ${url.substring(0, 60)}...`);
     
     // Check if this is a Supabase storage URL
     if (url.includes('supabase') && url.includes('/storage/')) {
@@ -129,9 +148,9 @@ async function imageToBase64(url: string): Promise<string | null> {
         const [, bucket, filePath] = pathMatch;
         const decodedPath = decodeURIComponent(filePath);
         
-        // Try Supabase Image Transformation first (compressed)
-        const transformUrl = buildTransformUrl(bucket, decodedPath, 400, 60);
-        console.log(`[ImagePipeline] Trying transform: ${transformUrl.substring(0, 80)}...`);
+        // Try Supabase Image Transformation first (compressed to template dimensions)
+        const transformUrl = buildTransformUrl(bucket, decodedPath, imageType);
+        console.log(`[ImagePipeline] Transform (${spec.width}x${spec.height} @${spec.quality}%): ${transformUrl.substring(0, 80)}...`);
         
         try {
           const controller = new AbortController();
@@ -146,14 +165,14 @@ async function imageToBase64(url: string): Promise<string | null> {
           if (transformResponse.ok) {
             const buffer = await transformResponse.arrayBuffer();
             
-            if (buffer.byteLength > 0 && buffer.byteLength <= 300 * 1024) {
+            if (buffer.byteLength > 0 && buffer.byteLength <= maxSizeKB * 1024) {
               const base64 = arrayBufferToBase64(buffer);
               const contentType = transformResponse.headers.get('content-type') || 'image/jpeg';
-              console.log(`[ImagePipeline] ✓ Transformed (${Math.round(buffer.byteLength / 1024)}KB)`);
+              console.log(`[ImagePipeline] ✓ Transformed ${imageType} (${Math.round(buffer.byteLength / 1024)}KB)`);
               return `data:${contentType};base64,${base64}`;
-            } else if (buffer.byteLength > 300 * 1024) {
-              console.warn(`[ImagePipeline] Transform still large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
-              return null;
+            } else if (buffer.byteLength > maxSizeKB * 1024) {
+              console.warn(`[ImagePipeline] Transform still large (${Math.round(buffer.byteLength / 1024)}KB > ${maxSizeKB}KB limit)`);
+              // Don't return null - fall back to direct download
             }
           } else {
             console.warn(`[ImagePipeline] Transform failed (${transformResponse.status}), falling back to storage download`);
@@ -173,8 +192,8 @@ async function imageToBase64(url: string): Promise<string | null> {
         } else if (data) {
           const buffer = await data.arrayBuffer();
           
-          // Skip very large images (>500KB) even after download
-          if (buffer.byteLength > 500 * 1024) {
+          // Skip very large images (>300KB for direct downloads)
+          if (buffer.byteLength > 300 * 1024) {
             console.warn(`[ImagePipeline] Original too large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
             return null;
           }
@@ -205,7 +224,7 @@ async function imageToBase64(url: string): Promise<string | null> {
     const buffer = await response.arrayBuffer();
     
     // Skip very large images
-    if (buffer.byteLength > 500 * 1024) {
+    if (buffer.byteLength > 300 * 1024) {
       console.warn(`[ImagePipeline] Skipping large image (${Math.round(buffer.byteLength / 1024)}KB)`);
       return null;
     }
@@ -224,27 +243,41 @@ async function imageToBase64(url: string): Promise<string | null> {
 }
 
 /**
+ * Image request with type information for template-matched sizing
+ */
+interface ImageRequest {
+  url: string;
+  type: ImageType;
+}
+
+/**
  * Process images SEQUENTIALLY to avoid CPU overload
- * Also limits total images to stay within edge function resource limits
+ * Uses template-matched sizing based on image type
  */
 async function processAllImages(
   payload: InspectionPayload
 ): Promise<Map<string, string>> {
   const imageMap = new Map<string, string>();
-  const urls: string[] = [];
+  const requests: ImageRequest[] = [];
   
-  // Prioritize: 1) Logo 2) First photo of each item
-  if (payload.siteLogoUrl) urls.push(payload.siteLogoUrl);
+  // Prioritize: 1) Logo (special sizing)
+  if (payload.siteLogoUrl) {
+    requests.push({ url: payload.siteLogoUrl, type: 'logo' });
+  }
   
-  // Collect limited photos from sections (max 2 per item)
+  // Collect photos from sections with appropriate sizing
+  // Determine photo type based on count per item
   if (payload.inspection.sections) {
     for (const section of payload.inspection.sections) {
       for (const item of section.items) {
         if (item.photos) {
           const limitedPhotos = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
+          // Use 3-column sizing if 3+ photos, otherwise 2-column
+          const photoType: ImageType = limitedPhotos.length >= 3 ? 'photo_3col' : 'photo_2col';
+          
           for (const photo of limitedPhotos) {
-            if (photo && urls.length < MAX_TOTAL_IMAGES) {
-              urls.push(photo);
+            if (photo && requests.length < MAX_TOTAL_IMAGES) {
+              requests.push({ url: photo, type: photoType });
             }
           }
         }
@@ -252,39 +285,39 @@ async function processAllImages(
     }
   }
   
-  // Snag photos (limited)
+  // Snag photos (use 2-column sizing)
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
-      if (snag.photos && snag.photos[0] && urls.length < MAX_TOTAL_IMAGES) {
-        urls.push(snag.photos[0]);
+      if (snag.photos && snag.photos[0] && requests.length < MAX_TOTAL_IMAGES) {
+        requests.push({ url: snag.photos[0], type: 'photo_2col' });
       }
     }
   }
   
-  // Signatures
+  // Signatures (special sizing)
   if (payload.inspection.signatures) {
     for (const sig of payload.inspection.signatures) {
-      if (sig.signatureUrl && urls.length < MAX_TOTAL_IMAGES) {
-        urls.push(sig.signatureUrl);
+      if (sig.signatureUrl && requests.length < MAX_TOTAL_IMAGES) {
+        requests.push({ url: sig.signatureUrl, type: 'signature' });
       }
     }
   }
   
-  console.log(`[ImagePipeline] Processing ${urls.length} images (max ${MAX_TOTAL_IMAGES})...`);
+  console.log(`[ImagePipeline] Processing ${requests.length} images (max ${MAX_TOTAL_IMAGES})...`);
   
   // Process SEQUENTIALLY to avoid CPU spikes
-  for (const url of urls) {
+  for (const req of requests) {
     try {
-      const base64 = await imageToBase64(url);
+      const base64 = await imageToBase64(req.url, req.type);
       if (base64) {
-        imageMap.set(url, base64);
+        imageMap.set(req.url, base64);
       }
     } catch (e) {
-      console.warn(`[ImagePipeline] Failed: ${url.substring(0, 40)}...`);
+      console.warn(`[ImagePipeline] Failed: ${req.url.substring(0, 40)}...`);
     }
   }
   
-  console.log(`[ImagePipeline] ✓ Processed ${imageMap.size}/${urls.length} images`);
+  console.log(`[ImagePipeline] ✓ Processed ${imageMap.size}/${requests.length} images`);
   return imageMap;
 }
 
@@ -636,6 +669,10 @@ function buildSectionPagesHTML(
     
     section.items.forEach((item, itemIdx) => {
       const photos = (item.photos || []).filter(p => p);
+      
+      // Choose grid layout based on photo count: 3+ photos = 3-column, else 2-column
+      const gridClass = photos.length >= 3 ? 'photo-grid-3' : 'photo-grid-2';
+      
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
         return base64 ? `
@@ -653,7 +690,7 @@ function buildSectionPagesHTML(
             ${getStatusBadge(item.value)}
           </div>
           ${item.notes ? `<div class="item-notes">${item.notes}</div>` : ''}
-          ${photoHtml ? `<div class="photo-grid">${photoHtml}</div>` : ''}
+          ${photoHtml ? `<div class="${gridClass}">${photoHtml}</div>` : ''}
         </div>
       `;
     });
@@ -1065,10 +1102,21 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    .photo-grid {
+    /* Photo Grid - 2 Column Layout (1-2 photos) */
+    .photo-grid-2 {
       display: grid;
       grid-template-columns: repeat(2, 1fr);
       gap: 12px;
+      padding: 12px 14px;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+    }
+    
+    /* Photo Grid - 3 Column Layout (3+ photos) */
+    .photo-grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 10px;
       padding: 12px 14px;
       background: white;
       border-top: 1px solid #e5e7eb;
@@ -1078,12 +1126,22 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    .photo-item img {
-      max-width: 100%;
-      max-height: 150px;
+    /* 2-column photo sizing - 320px optimized to 280px rendered */
+    .photo-grid-2 .photo-item img {
+      width: 280px;
+      height: 150px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: contain;
+      object-fit: cover;
+    }
+    
+    /* 3-column photo sizing - 200px optimized to 180px rendered */
+    .photo-grid-3 .photo-item img {
+      width: 180px;
+      height: 120px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      object-fit: cover;
     }
     
     .photo-label {
