@@ -352,7 +352,7 @@ export async function generatePdfShiftInspectionReport(
     
     console.log('[InspectionPDF] Calling generate-inspection-pdf Edge Function...');
     
-    // Call NEW Edge Function for HTML + Browserless PDF generation
+    // Call Edge Function for HTML + Browserless PDF generation
     const { data, error } = await supabase.functions.invoke('generate-inspection-pdf', {
       body: payload,
     });
