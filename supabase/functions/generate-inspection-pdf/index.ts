@@ -288,6 +288,21 @@ async function processAllImages(
     }
   }
   
+  // Tenant images (meterImage, breakerImage, ctRatioImage) - use 3-column sizing
+  if (payload.inspection.tenants) {
+    for (const tenant of payload.inspection.tenants) {
+      if (tenant.meterImage && requests.length < MAX_TOTAL_IMAGES) {
+        requests.push({ url: tenant.meterImage, type: 'photo_3col' });
+      }
+      if (tenant.breakerImage && requests.length < MAX_TOTAL_IMAGES) {
+        requests.push({ url: tenant.breakerImage, type: 'photo_3col' });
+      }
+      if (tenant.ctRatioImage && requests.length < MAX_TOTAL_IMAGES) {
+        requests.push({ url: tenant.ctRatioImage, type: 'photo_3col' });
+      }
+    }
+  }
+  
   // Snag photos (use 2-column sizing)
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
@@ -681,6 +696,103 @@ function buildSectionPagesHTML(
       </div>
     `;
   });
+  
+  return html;
+}
+
+/**
+ * Build Tenants Section Page
+ */
+function buildTenantsPageHTML(
+  payload: InspectionPayload,
+  imageMap: Map<string, string>,
+  sectionNumber: number
+): string {
+  const tenants = payload.inspection.tenants || [];
+  
+  if (tenants.length === 0) {
+    return '';
+  }
+  
+  let html = `
+    <div class="section-container">
+      <div class="section-header-bar">
+        <span class="section-number">${sectionNumber}</span>
+        <span class="section-name">TENANT INFORMATION</span>
+      </div>
+      
+      <div class="section-content">
+  `;
+  
+  tenants.forEach((tenant, idx) => {
+    const meterBase64 = getImage(tenant.meterImage, imageMap);
+    const breakerBase64 = getImage(tenant.breakerImage, imageMap);
+    const ctRatioBase64 = getImage(tenant.ctRatioImage, imageMap);
+    
+    const hasImages = meterBase64 || breakerBase64 || ctRatioBase64;
+    
+    html += `
+      <div class="tenant-card">
+        <div class="tenant-header">
+          <span class="tenant-name">${tenant.shopName || 'Tenant ' + (idx + 1)}</span>
+          ${tenant.shopNumber ? `<span class="tenant-number">Shop: ${tenant.shopNumber}</span>` : ''}
+        </div>
+        
+        <div class="tenant-details">
+          <table class="tenant-table">
+            <tbody>
+              ${tenant.meterSerialNumber ? `
+                <tr>
+                  <td class="detail-label">Meter Serial Number</td>
+                  <td class="detail-value">${tenant.meterSerialNumber}</td>
+                </tr>
+              ` : ''}
+              ${tenant.breakerSize ? `
+                <tr>
+                  <td class="detail-label">Breaker Size</td>
+                  <td class="detail-value">${tenant.breakerSize}</td>
+                </tr>
+              ` : ''}
+              ${tenant.ctSizeAndRatio ? `
+                <tr>
+                  <td class="detail-label">CT Size and Ratio</td>
+                  <td class="detail-value">${tenant.ctSizeAndRatio}</td>
+                </tr>
+              ` : ''}
+            </tbody>
+          </table>
+        </div>
+        
+        ${hasImages ? `
+          <div class="tenant-images">
+            ${meterBase64 ? `
+              <div class="tenant-image-item">
+                <img src="${meterBase64}" alt="Meter Image">
+                <span class="photo-label">Meter</span>
+              </div>
+            ` : ''}
+            ${breakerBase64 ? `
+              <div class="tenant-image-item">
+                <img src="${breakerBase64}" alt="Breaker Image">
+                <span class="photo-label">Breaker</span>
+              </div>
+            ` : ''}
+            ${ctRatioBase64 ? `
+              <div class="tenant-image-item">
+                <img src="${ctRatioBase64}" alt="CT Ratio Image">
+                <span class="photo-label">CT Ratio</span>
+              </div>
+            ` : ''}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  });
+  
+  html += `
+      </div>
+    </div>
+  `;
   
   return html;
 }
@@ -1134,12 +1246,98 @@ function buildCompleteHTML(
       color: #6b7280;
       margin-top: 4px;
     }
+    
+    /* Tenant Card Styles */
+    .tenant-card {
+      margin-bottom: 20px;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      overflow: hidden;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    
+    .tenant-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 12px 16px;
+      background: linear-gradient(135deg, #1a365d 0%, #2d4a7c 100%);
+      color: white;
+    }
+    
+    .tenant-name {
+      font-weight: 600;
+      font-size: 11pt;
+    }
+    
+    .tenant-number {
+      font-size: 9pt;
+      opacity: 0.9;
+    }
+    
+    .tenant-details {
+      padding: 12px 16px;
+      background: #f9fafb;
+    }
+    
+    .tenant-table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+    
+    .tenant-table td {
+      padding: 6px 0;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 9pt;
+    }
+    
+    .tenant-table tr:last-child td {
+      border-bottom: none;
+    }
+    
+    .detail-label {
+      font-weight: 500;
+      color: #4b5563;
+      width: 40%;
+    }
+    
+    .detail-value {
+      color: #1f2937;
+    }
+    
+    .tenant-images {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 12px;
+      padding: 12px 16px;
+      background: white;
+      border-top: 1px solid #e5e7eb;
+    }
+    
+    .tenant-image-item {
+      text-align: center;
+    }
+    
+    .tenant-image-item img {
+      width: 180px;
+      height: 120px;
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      object-fit: cover;
+    }
   `;
+  
+  const tenants = payload.inspection.tenants || [];
+  const hasTenants = tenants.length > 0;
   
   const coverPage = buildCoverPageHTML(payload, imageMap, totalPages);
   const dashboardPage = buildDashboardHTML(payload, stats, 2, totalPages);
   const breakdownPage = buildBreakdownHTML(payload, stats, sectionBreakdown, 3, totalPages);
   const sectionPages = buildSectionPagesHTML(payload, imageMap, 4, totalPages);
+  
+  // Add tenants page after all sections if there are tenants
+  const tenantsPage = hasTenants ? buildTenantsPageHTML(payload, imageMap, sections.length + 1) : '';
   
   return `
     <!DOCTYPE html>
@@ -1153,6 +1351,7 @@ function buildCompleteHTML(
       ${dashboardPage}
       ${breakdownPage}
       ${sectionPages}
+      ${tenantsPage}
     </body>
     </html>
   `;
