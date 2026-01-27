@@ -88,14 +88,14 @@ const MAX_TOTAL_IMAGES = 40;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
- * Image size specifications - matched to template layout dimensions
- * A4 content width: 794px - 48px padding = 746px
- * Photo grid padding: 28px total = 718px usable
+ * Image size specifications - matched to DOCX generator dimensions
+ * These are the EXACT values used by the Low Voltage Line Shop Board Audit
+ * The transform API crops/scales to these dimensions server-side
  */
 const IMAGE_SPECS = {
   logo: { width: 180, height: 100, quality: 80 },
-  photo_2col: { width: 320, height: 180, quality: 75 },  // 718px / 2 - gap
-  photo_3col: { width: 200, height: 150, quality: 75 },  // 718px / 3 - gap
+  photo_2col: { width: 240, height: 180, quality: 75 },  // Matches DOCX: 240x180
+  photo_3col: { width: 180, height: 135, quality: 75 },  // Proportional 4:3 for 3-col
   signature: { width: 400, height: 150, quality: 85 },
 };
 
@@ -1399,24 +1399,24 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* 2-column photo sizing - full width within grid cell, responsive height */
+    /* 2-column photo sizing - FIXED dimensions matching DOCX generator */
     .photo-grid-2 .photo-item img {
-      width: 100%;
-      max-width: 340px;
-      height: 200px;
+      width: 240px;
+      height: 180px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: cover;
+      object-fit: contain;
+      background: #f9fafb;
     }
     
-    /* 3-column photo sizing - full width within grid cell */
+    /* 3-column photo sizing - FIXED dimensions matching DOCX proportions */
     .photo-grid-3 .photo-item img {
-      width: 100%;
-      max-width: 220px;
-      height: 160px;
+      width: 180px;
+      height: 135px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: cover;
+      object-fit: contain;
+      background: #f9fafb;
     }
     
     .photo-label {
@@ -1499,12 +1499,12 @@ function buildCompleteHTML(
     }
     
     .tenant-image-item img {
-      width: 100%;
-      max-width: 220px;
-      height: 160px;
+      width: 180px;
+      height: 135px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: cover;
+      object-fit: contain;
+      background: #f9fafb;
     }
   `;
   
