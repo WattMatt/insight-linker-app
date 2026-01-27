@@ -88,18 +88,20 @@ const MAX_TOTAL_IMAGES = 40;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
- * Image size specifications - OPTIMIZED FOR PDF EMBEDDING WITH SUPABASE TRANSFORMS
+ * Image size specifications - ALIGNED WITH DOCX GENERATOR STANDARD
  * 
  * Uses Supabase Render API for server-side compression before embedding:
  * - /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
  * 
- * UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
- * - Quality 60-65% is optimal for PDFs (minimal visible difference, 50-70% size reduction)
- * - Server compresses before embedding to reduce PDF file size
+ * DOCX STANDARD (Low Voltage Line Shop Board Audit):
+ * - 2-column photo grid layout
+ * - 240×180px display dimensions with preserved aspect ratios
+ * - Server transforms at 400px width / 75% quality for optimal file size
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint, good quality
-  photo: { maxWidth: 240, quality: 60 },      // All photos: 3-col grid (240px fits 3 across A4)
+  logo: { maxWidth: 200, quality: 80 },       // Logo: per DOCX standard
+  photo_2col: { maxWidth: 400, quality: 75 }, // 2-col photos: server transform size
+  photo_3col: { maxWidth: 280, quality: 75 }, // 3-col tenant photos: smaller grid
   signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
 };
 
@@ -336,7 +338,7 @@ async function downloadImageViaRenderAPI(
  * Uses Direct Render API (matching DOCX generator) for Supabase images
  * Falls back to direct fetch for external URLs
  */
-async function imageToBase64(url: string, imageType: ImageType = 'photo'): Promise<string | null> {
+async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already base64
   
@@ -442,7 +444,7 @@ async function processAllImages(
           
           for (const photo of limitedPhotos) {
             if (photo && requests.length < MAX_TOTAL_IMAGES) {
-              requests.push({ url: photo, type: 'photo' });
+              requests.push({ url: photo, type: 'photo_2col' });
             }
           }
         }
@@ -450,26 +452,26 @@ async function processAllImages(
     }
   }
   
-  // Tenant images (meterImage, breakerImage, ctRatioImage) - use unified 3-column sizing
+  // Tenant images (meterImage, breakerImage, ctRatioImage) - use 3-column sizing
   if (payload.inspection.tenants) {
     for (const tenant of payload.inspection.tenants) {
       if (tenant.meterImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.meterImage, type: 'photo' });
+        requests.push({ url: tenant.meterImage, type: 'photo_3col' });
       }
       if (tenant.breakerImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.breakerImage, type: 'photo' });
+        requests.push({ url: tenant.breakerImage, type: 'photo_3col' });
       }
       if (tenant.ctRatioImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.ctRatioImage, type: 'photo' });
+        requests.push({ url: tenant.ctRatioImage, type: 'photo_3col' });
       }
     }
   }
   
-  // Snag photos - use unified 3-column sizing
+  // Snag photos - use 2-column sizing (matching inspection items)
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
       if (snag.photos && snag.photos[0] && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: snag.photos[0], type: 'photo' });
+        requests.push({ url: snag.photos[0], type: 'photo_2col' });
       }
     }
   }
@@ -828,8 +830,8 @@ function buildSectionPagesHTML(
     section.items.forEach((item, itemIdx) => {
       const photos = (item.photos || []).filter(p => p);
       
-      // UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
-      const gridClass = 'photo-grid-3';
+      // DOCX STANDARD: 2-column photo grid with preserved aspect ratios
+      const gridClass = 'photo-grid-2';
       
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
@@ -1368,8 +1370,20 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* UNIFIED 3-COLUMN PHOTO GRID - Consistent spacing for all images
-       All photos rendered in 3-adjacent layout per PDF_LAYOUT_STANDARDS.md */
+    /* DOCX STANDARD: 2-COLUMN PHOTO GRID - Matches Low Voltage Line Shop Board Audit
+       Photos rendered at 240×180px with preserved aspect ratios */
+    .photo-grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 14px;
+      background: #f9fafb;
+      border-top: 1px solid #e5e7eb;
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    
+    /* 3-COLUMN PHOTO GRID - For tenant verification images only */
     .photo-grid-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1377,10 +1391,6 @@ function buildCompleteHTML(
       padding: 14px;
       background: #f9fafb;
       border-top: 1px solid #e5e7eb;
-    }
-    
-    /* Photo grid content integrity - prevents split across pages (PDF_LAYOUT_STANDARDS.md) */
-    .photo-grid-3 {
       break-inside: avoid;
       page-break-inside: avoid;
     }
@@ -1389,12 +1399,22 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* Unified photo sizing - Server compresses to 240px via Supabase Render API
-       Fixed dimensions ensure consistent 3-column layout across all photos */
+    /* 2-COL PHOTO SIZING - DOCX Standard: 240×180px with aspect ratio preserved */
+    .photo-grid-2 .photo-item img {
+      width: 240px;
+      height: 180px;
+      object-fit: contain;  /* Preserve aspect ratio - matches DOCX */
+      border: 1px solid #e5e7eb;
+      border-radius: 4px;
+      background: #ffffff;
+    }
+    
+    /* 3-COL PHOTO SIZING - Tenant verification: smaller footprint */
     .photo-grid-3 .photo-item img {
       width: 100%;
-      height: 140px;
-      object-fit: cover;
+      max-width: 180px;
+      height: 135px;
+      object-fit: contain;  /* Preserve aspect ratio */
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       background: #ffffff;
