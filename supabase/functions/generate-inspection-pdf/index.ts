@@ -88,15 +88,20 @@ const MAX_TOTAL_IMAGES = 40;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
- * Image size specifications - ALIGNED WITH DOCX GENERATOR APPROACH
- * Uses SINGLE maxWidth parameter to let server preserve aspect ratio automatically
- * This matches the exact approach in generate-docx-report/index.ts (line 253)
+ * Image size specifications - OPTIMIZED FOR PDF EMBEDDING WITH SUPABASE TRANSFORMS
+ * 
+ * Uses Supabase Render API for server-side compression before embedding:
+ * - /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
+ * 
+ * Quality settings optimized for PDF embedding:
+ * - 60-70% JPEG quality is optimal for PDFs (barely visible difference, 50-70% size reduction)
+ * - Higher quality for logos/signatures since they're smaller and more important
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 200, quality: 80 },       // Logo: preserve quality, reasonable max
-  photo_2col: { maxWidth: 400, quality: 75 }, // Matches DOCX MAX_IMAGE_WIDTH = 400
-  photo_3col: { maxWidth: 300, quality: 75 }, // Smaller for 3-col grid
-  signature: { maxWidth: 400, quality: 85 },  // Signatures need clarity
+  logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint, good quality
+  photo_2col: { maxWidth: 400, quality: 65 }, // 2-col photos: aggressive compression
+  photo_3col: { maxWidth: 280, quality: 60 }, // 3-col photos: max compression (small display)
+  signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
 };
 
 type ImageType = keyof typeof IMAGE_SPECS;
