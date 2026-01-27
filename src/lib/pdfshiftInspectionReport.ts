@@ -75,6 +75,8 @@ export interface GeneratePdfShiftReportOptions {
   clientName?: string;
   siteLogoUrl?: string | null;
   accentColor?: string;
+  // For document persistence (server-side)
+  subsectionId?: string;
 }
 
 export interface GenerateDocxReportResult {
@@ -307,13 +309,16 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
 ): Promise<GenerateDocxReportResult> {
-  const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = options;
+  const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb', subsectionId } = options;
   
   try {
     console.log('[InspectionPDF] Starting HTML+Browserless generation...');
     console.log('[InspectionPDF] Sections:', inspection.sections?.length || 0);
     console.log('[InspectionPDF] Tenants:', inspection.tenants?.length || 0);
     console.log('[InspectionPDF] Snags:', inspection.snags?.length || 0);
+    
+    // Get current user for document ownership
+    const { data: { user } } = await supabase.auth.getUser();
     
     // Count total photos for logging
     let totalPhotos = 0;
@@ -329,6 +334,7 @@ export async function generatePdfShiftInspectionReport(
     console.log('[InspectionPDF] Total photos:', totalPhotos);
     
     // Build payload - send raw URLs, edge function handles image processing
+    // Include subsectionId and userId for server-side document persistence
     const payload = {
       inspection: {
         inspectionId: inspection.inspectionId,
@@ -348,6 +354,8 @@ export async function generatePdfShiftInspectionReport(
       clientName,
       siteLogoUrl,
       accentColor,
+      subsectionId,
+      userId: user?.id,
     };
     
     console.log('[InspectionPDF] Calling generate-inspection-pdf Edge Function...');
@@ -407,7 +415,7 @@ export async function generateAndSavePdfShiftInspectionReport(
   fileUrl?: string;
   error?: string;
 }> {
-  const { subsectionId, siteId } = options;
+  const { subsectionId } = options;
   
   try {
     const { data: { user } } = await supabase.auth.getUser();
@@ -415,72 +423,23 @@ export async function generateAndSavePdfShiftInspectionReport(
       return { success: false, error: 'User not authenticated' };
     }
     
-    // Generate PDF via Edge Function (which also saves to storage)
-    const result = await generatePdfShiftInspectionReport(options);
+    // Generate PDF via Edge Function
+    // The Edge Function now handles document persistence server-side
+    // This ensures the document is saved even if the client connection times out
+    const result = await generatePdfShiftInspectionReport({
+      ...options,
+      subsectionId, // Pass to Edge Function for server-side persistence
+    });
     
     if (!result.success || !result.url) {
       return { success: false, error: result.error || 'Failed to generate PDF' };
     }
     
-    // The Edge Function already creates the document record for site-level reports
-    // For subsection-level, we need to find or create an "Inspection Reports" category first
-    let categoryId: string | undefined;
-    
-    // Try to find existing category
-    const { data: existingCategory } = await supabase
-      .from('document_categories')
-      .select('id')
-      .eq('subsection_id', subsectionId)
-      .eq('name', 'Inspection Reports')
-      .maybeSingle();
-    
-    if (existingCategory) {
-      categoryId = existingCategory.id;
-    } else {
-      // Create the category
-      const { data: newCategory } = await supabase
-        .from('document_categories')
-        .insert({
-          subsection_id: subsectionId,
-          name: 'Inspection Reports',
-          order_index: 0,
-        })
-        .select('id')
-        .single();
-      categoryId = newCategory?.id;
-    }
-    
-    if (categoryId) {
-      // Use .docx extension for document record
-      const docFileName = result.filename || 'Inspection_Report.docx';
-      
-      const { data: docData, error: docError } = await supabase
-        .from('subsection_documents')
-        .insert({
-          subsection_id: subsectionId,
-          category_id: categoryId,
-          file_name: docFileName,
-          file_url: result.url,
-          uploaded_by: user.id,
-        })
-        .select('id')
-        .single();
-      
-      if (docError) {
-        console.warn('[PDFShift] Failed to create document record:', docError);
-      }
-      
-      return {
-        success: true,
-        documentId: docData?.id,
-        fileName: result.filename,
-        fileUrl: result.url,
-      };
-    }
-    
-    // Category creation failed but PDF was generated
+    // The Edge Function handles document record creation server-side
+    // Return the result directly
     return {
       success: true,
+      documentId: (result as any).documentId, // If Edge Function returns it
       fileName: result.filename,
       fileUrl: result.url,
     };
