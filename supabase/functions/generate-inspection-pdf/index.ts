@@ -721,12 +721,13 @@ function buildCompleteHTML(
       min-height: 297mm;
       padding: 0;
       position: relative;
-      page-break-after: always;
+      page-break-inside: avoid;
       background: white;
     }
     
-    .page:last-child {
-      page-break-after: auto;
+    .page.dashboard,
+    .page.breakdown {
+      page-break-before: always;
     }
     
     /* Header Bar */
