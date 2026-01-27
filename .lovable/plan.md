@@ -1,131 +1,152 @@
 
-# Plan: Align PDF Image Pipeline with DOCX Generator Standard
+# Plan: Align PDF Generator with PDF_LAYOUT_STANDARDS.md
 
-## Problem Analysis
+## Summary
 
-The PDF generator and DOCX generator use **fundamentally different approaches** for server-side image handling:
-
-### Current PDF Pipeline Issues
-1. Uses `createSignedUrl` SDK with transform object
-2. Server transforms images to a fixed width
-3. CSS then forces images into fixed pixel boxes (240x180, 180x135)
-4. Result: Images may appear distorted because server-resized images are then CSS-forced into different aspect ratios
-
-### DOCX Pipeline (The Standard)
-1. Uses the **direct Render API** endpoint (`/storage/v1/render/image/public/...`)
-2. Passes only `width` and `quality` as query parameters
-3. Server automatically preserves original aspect ratio
-4. Native binary (`Uint8Array`) is embedded directly
+The current `generate-inspection-pdf` implementation is **largely compliant** with the layout standards. However, there are a few discrepancies that need to be corrected to ensure full alignment and prevent potential layout issues (orphaned photo grids, split tables).
 
 ---
 
-## Solution: Refactor PDF to Use Direct Render API
+## Discrepancies to Fix
 
-Modify the PDF generator to use the exact same server-side transformation approach as the DOCX generator.
+### 1. Browserless Margin Configuration (Critical)
 
-### Technical Changes
-
-#### 1. Add Direct Render API Function (New)
-
+**Standard Requires:**
 ```typescript
-// New function matching DOCX generator's approach
-async function downloadImageViaRenderAPI(
-  bucket: string,
-  filePath: string,
-  maxWidth: number,
-  quality: number = 75
-): Promise<ArrayBuffer | null> {
-  // Construct transform URL exactly like DOCX generator
-  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
-  
-  try {
-    const response = await fetch(transformUrl);
-    if (response.ok) {
-      return await response.arrayBuffer();
-    }
-  } catch {
-    // Fallback to direct download
-  }
-  
-  // Fallback: download without transformation
-  const supabase = getSupabaseClient();
-  const { data: blob, error } = await supabase.storage
-    .from(bucket)
-    .download(filePath);
-  if (error || !blob) return null;
-  return await blob.arrayBuffer();
+margin: {
+  top: '20mm',
+  bottom: '20mm',
+  left: '10mm',
+  right: '10mm'
 }
 ```
 
-#### 2. Update IMAGE_SPECS to Use Single maxWidth
-
+**Current Implementation (Line 1553):**
 ```typescript
-// Change from width/height pairs to single maxWidth (matching DOCX)
-const IMAGE_SPECS = {
-  logo: { maxWidth: 200, quality: 80 },       // DOCX uses 200
-  photo_2col: { maxWidth: 400, quality: 75 }, // DOCX uses MAX_IMAGE_WIDTH = 400
-  photo_3col: { maxWidth: 300, quality: 75 }, // Smaller for 3-col grid
-  signature: { maxWidth: 400, quality: 85 },
-};
+margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' }
 ```
 
-#### 3. Refactor `imageToBase64` Function
+**Issue:** Top and side margins set to `0mm` means CSS `@page` margins are handling it alone. This can cause conflicts when Browserless applies its own logic. The standard mandates explicit Browserless margins to sync with CSS.
 
-Replace the `createSignedUrl` approach with direct Render API:
+---
 
-```typescript
-async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
-  // ... existing validation ...
-  
-  const parsed = parseSupabaseStorageUrl(url);
-  
-  if (parsed) {
-    const spec = IMAGE_SPECS[imageType];
-    
-    // Use Direct Render API (matching DOCX generator)
-    const buffer = await downloadImageViaRenderAPI(
-      parsed.bucket,
-      parsed.path,
-      spec.maxWidth,
-      spec.quality
-    );
-    
-    if (buffer && buffer.byteLength > 0) {
-      const bytes = new Uint8Array(buffer);
-      const mimeType = detectImageType(bytes);
-      const base64 = arrayBufferToBase64(buffer);
-      return `data:${mimeType};base64,${base64}`;
-    }
-  }
-  
-  // ... fallback for non-Supabase URLs ...
+### 2. Photo Grid Content Integrity (Missing Rule)
+
+**Standard Requires:**
+```css
+.photo-grid {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 ```
 
-#### 4. Update CSS to Preserve Aspect Ratio
+**Current Implementation:** Only `.inspection-item` and `.tenant-card` have `break-inside: avoid`. The photo grid containers (`.photo-grid-2`, `.photo-grid-3`) are missing this rule.
 
-Change CSS from fixed dimensions with `object-fit: contain` to flexible sizing:
+**Risk:** A photo grid could be split across pages, leaving orphaned photos.
+
+---
+
+### 3. Table Container Integrity (Missing Rule)
+
+**Standard Requires:**
+```css
+.table-container {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+```
+
+**Current Implementation:** The `.breakdown-table` and `.info-table` do not have `break-inside: avoid`.
+
+**Risk:** Tables could break mid-row across pages.
+
+---
+
+## Technical Changes
+
+### File: `supabase/functions/generate-inspection-pdf/index.ts`
+
+#### Change 1: Update Browserless Margin Configuration
+
+**Location:** Line 1553
+
+```typescript
+// BEFORE
+margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' },
+
+// AFTER (aligned with PDF_LAYOUT_STANDARDS.md)
+margin: {
+  top: '20mm',
+  bottom: '20mm', 
+  left: '10mm',
+  right: '10mm'
+},
+```
+
+#### Change 2: Add Photo Grid Content Integrity Rules
+
+**Location:** After line 1380 (in CSS section)
 
 ```css
-/* 2-column photos - let aspect ratio flow naturally */
-.photo-grid-2 .photo-item img {
-  width: 100%;
-  max-width: 300px;
-  height: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-}
-
-/* 3-column/Tenant photos */
-.photo-grid-3 .photo-item img,
-.tenant-image-item img {
-  width: 100%;
-  max-width: 200px;
-  height: auto;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
+/* Photo grid content integrity - prevents split across pages */
+.photo-grid-2,
+.photo-grid-3 {
+  break-inside: avoid;
+  page-break-inside: avoid;
 }
 ```
+
+#### Change 3: Add Table Container Content Integrity Rules
+
+**Location:** After the `.breakdown-table` and `.info-table` definitions
+
+```css
+/* Table content integrity - prevents split across pages */
+.breakdown-table,
+.info-table,
+.tenant-table {
+  break-inside: avoid;
+  page-break-inside: avoid;
+}
+```
+
+---
+
+## Updated CSS Structure (Summary)
+
+```text
++----------------------------------------------+
+| @page { margin: 20mm 10mm 20mm 10mm }        |  <-- CSS defines page margins
++----------------------------------------------+
+| .page.cover { page-break-before: avoid }     |  <-- No break before cover
++----------------------------------------------+
+| .page.dashboard,                             |
+| .page.breakdown { page-break-before: always }|  <-- New pages for fixed sections
++----------------------------------------------+
+| .section-container { page-break-before: always }
+| .section-container:first-child { page-break-before: auto }
++----------------------------------------------+
+| Content Integrity:                           |
+| - .inspection-item { break-inside: avoid }   |
+| - .photo-grid-2, .photo-grid-3 { break-inside: avoid }  <-- NEW
+| - .tenant-card { break-inside: avoid }       |
+| - .breakdown-table, .info-table { break-inside: avoid } <-- NEW
++----------------------------------------------+
+| Browserless margins sync:                    |
+| { top: '20mm', bottom: '20mm',              |
+|   left: '10mm', right: '10mm' }              |  <-- FIXED
++----------------------------------------------+
+```
+
+---
+
+## Expected Outcome
+
+1. **No blank pages** - Page break rules are correctly applied
+2. **No orphaned photos** - Photo grids cannot split across pages
+3. **No split tables** - Tables remain intact on a single page
+4. **Consistent margins** - CSS and Browserless margins are synchronized
+5. **Full SANS 10142-1 compliance** - Professional document formatting
 
 ---
 
@@ -133,13 +154,5 @@ Change CSS from fixed dimensions with `object-fit: contain` to flexible sizing:
 
 | File | Changes |
 |------|---------|
-| `supabase/functions/generate-inspection-pdf/index.ts` | Refactor image pipeline to use Direct Render API, update IMAGE_SPECS, update CSS |
+| `supabase/functions/generate-inspection-pdf/index.ts` | Update Browserless margins, add content integrity CSS rules |
 
----
-
-## Expected Outcome
-
-- Images will be transformed server-side using the **exact same API** as the Low Voltage Line Shop Board Audit
-- Aspect ratios will be preserved automatically by Supabase
-- CSS will no longer force images into fixed dimensions that may distort them
-- Visual output will match the DOCX reference document
