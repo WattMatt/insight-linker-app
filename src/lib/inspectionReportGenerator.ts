@@ -126,6 +126,13 @@ export async function generateAndSaveInspectionReport(
     console.log('[InspectionReport] Total photos extracted:', totalPhotosExtracted);
 
     // Extract tenants if present
+    console.log('[InspectionReport] Checking jsonData.tenants:', {
+      isArray: Array.isArray(jsonData.tenants),
+      type: typeof jsonData.tenants,
+      length: jsonData.tenants?.length,
+      keys: Object.keys(jsonData || {}),
+    });
+    
     const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants.map((tenant: any) => ({
       shopName: tenant.shopName || 'Unknown Tenant',
       shopNumber: tenant.shopNumber || '',
@@ -136,6 +143,11 @@ export async function generateAndSaveInspectionReport(
       breakerImage: tenant.breakerImage || undefined,
       ctRatioImage: tenant.ctRatioImage || undefined,
     })) : [];
+    
+    console.log('[InspectionReport] Extracted tenants:', tenants.length);
+    if (tenants.length > 0) {
+      console.log('[InspectionReport] First tenant sample:', tenants[0]);
+    }
 
     // Build inspection data for pdfmake
     const inspectionData: InspectionReportData = {

@@ -1708,6 +1708,21 @@ Deno.serve(async (req: Request) => {
     
     console.log('[GenerateInspectionPDF] Inspection:', payload.inspection.inspectionId);
     console.log('[GenerateInspectionPDF] Sections:', payload.inspection.sections?.length || 0);
+    console.log('[GenerateInspectionPDF] Tenants:', payload.inspection.tenants?.length || 0);
+    console.log('[GenerateInspectionPDF] Snags:', payload.inspection.snags?.length || 0);
+    
+    // Log tenant data to verify it's reaching the edge function
+    if (payload.inspection.tenants && payload.inspection.tenants.length > 0) {
+      const firstTenant = payload.inspection.tenants[0];
+      console.log('[GenerateInspectionPDF] First tenant sample:', {
+        shopName: firstTenant.shopName,
+        shopNumber: firstTenant.shopNumber,
+        meterSerialNumber: firstTenant.meterSerialNumber,
+        hasMeterImage: !!firstTenant.meterImage,
+        hasBreakerImage: !!firstTenant.breakerImage,
+        hasCTRatioImage: !!firstTenant.ctRatioImage,
+      });
+    }
     
     // Phase 1: Process all images
     const imageMap = await processAllImages(payload);
