@@ -125,26 +125,40 @@ export async function generateAndSaveInspectionReport(
     
     console.log('[InspectionReport] Total photos extracted:', totalPhotosExtracted);
 
-    // Extract tenants if present
-    console.log('[InspectionReport] Checking jsonData.tenants:', {
-      isArray: Array.isArray(jsonData.tenants),
-      type: typeof jsonData.tenants,
-      length: jsonData.tenants?.length,
-      keys: Object.keys(jsonData || {}),
-    });
+    // Extract tenants - jsonData.tenants is stored as an ARRAY, not an object map
+    // Support both array format (from InspectionDetail) and object format (legacy)
+    const rawTenants = jsonData.tenants;
+    let tenants: any[] = [];
     
-    const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants.map((tenant: any) => ({
-      shopName: tenant.shopName || 'Unknown Tenant',
-      shopNumber: tenant.shopNumber || '',
-      meterSerialNumber: tenant.meterSerialNumber || '',
-      breakerSize: tenant.breakerSize || '',
-      ctSizeAndRatio: tenant.ctSizeAndRatio || '',
-      meterImage: tenant.meterImage || undefined,
-      breakerImage: tenant.breakerImage || undefined,
-      ctRatioImage: tenant.ctRatioImage || undefined,
-    })) : [];
+    if (Array.isArray(rawTenants) && rawTenants.length > 0) {
+      // Tenants stored as array - direct extraction
+      console.log('[InspectionReport] Extracting tenants from array:', rawTenants.length);
+      tenants = rawTenants.map((tenant: any, idx: number) => ({
+        shopName: tenant.shopName || `Tenant ${idx + 1}`,
+        shopNumber: tenant.shopNumber || '',
+        meterSerialNumber: tenant.meterSerialNumber || '',
+        breakerSize: tenant.breakerSize || '',
+        ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+        meterImage: tenant.meterImage || undefined,
+        breakerImage: tenant.breakerImage || undefined,
+        ctRatioImage: tenant.ctRatioImage || undefined,
+      }));
+    } else if (rawTenants && typeof rawTenants === 'object') {
+      // Legacy: tenants stored as object map
+      console.log('[InspectionReport] Extracting tenants from object map');
+      tenants = Object.values(rawTenants).map((tenant: any, idx: number) => ({
+        shopName: tenant.shopName || `Tenant ${idx + 1}`,
+        shopNumber: tenant.shopNumber || '',
+        meterSerialNumber: tenant.meterSerialNumber || '',
+        breakerSize: tenant.breakerSize || '',
+        ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+        meterImage: tenant.meterImage || undefined,
+        breakerImage: tenant.breakerImage || undefined,
+        ctRatioImage: tenant.ctRatioImage || undefined,
+      }));
+    }
     
-    console.log('[InspectionReport] Extracted tenants:', tenants.length);
+    console.log('[InspectionReport] Final tenants for PDF:', tenants.length);
     if (tenants.length > 0) {
       console.log('[InspectionReport] First tenant sample:', tenants[0]);
     }
