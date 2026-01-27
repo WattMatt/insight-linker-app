@@ -1399,19 +1399,21 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* 2-column photo sizing - 320px optimized to 280px rendered */
+    /* 2-column photo sizing - full width within grid cell, responsive height */
     .photo-grid-2 .photo-item img {
-      width: 280px;
-      height: 150px;
+      width: 100%;
+      max-width: 340px;
+      height: 200px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       object-fit: cover;
     }
     
-    /* 3-column photo sizing - 200px optimized to 180px rendered */
+    /* 3-column photo sizing - full width within grid cell */
     .photo-grid-3 .photo-item img {
-      width: 180px;
-      height: 120px;
+      width: 100%;
+      max-width: 220px;
+      height: 160px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       object-fit: cover;
@@ -1497,8 +1499,9 @@ function buildCompleteHTML(
     }
     
     .tenant-image-item img {
-      width: 180px;
-      height: 120px;
+      width: 100%;
+      max-width: 220px;
+      height: 160px;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       object-fit: cover;
