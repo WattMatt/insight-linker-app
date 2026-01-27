@@ -1,155 +1,191 @@
 
+# Complete PDF Generation System Rebuild
 
-# Pivot: Convert Reports to Word (DOCX) Format
+## Problem Summary
 
-## Overview
+After a full day of attempts, the inspection report generation has consistently failed to produce output matching your reference document. The issues stem from:
 
-Replace the problematic `pdfmake` PDF generation with reliable **Word document (.docx)** generation using the `docx` library. This solves image rendering issues and provides editable reports.
+1. **Image Rendering Failures**: Both pdfmake and DOCX generators have produced inconsistent results with images
+2. **Template Mismatch**: The generated output structure doesn't match your reference document
+3. **Architecture Complexity**: Multiple overlapping generators (pdfmake, DOCX, Browserless, Google Docs, PDFShift) have created confusion
+
+## Fresh Start Architecture
+
+We will build a completely new system with two components:
+
+```text
++------------------+        +---------------------+        +------------------+
+|  CLIENT SIDE     |   -->  |   HTML TEMPLATE     |   -->  |  BROWSERLESS     |
+|  Data Collector  |        |   (Complete HTML)   |        |  PDF Renderer    |
++------------------+        +---------------------+        +------------------+
+       |                            |                            |
+   Collect data              Build pixel-perfect           Headless Chrome
+   + pre-fetch               HTML matching reference       renders to PDF
+   images as base64          document exactly
+```
+
+### Why HTML + Browserless?
+
+| Approach | Image Support | Layout Control | Reliability |
+|----------|---------------|----------------|-------------|
+| pdfmake  | Poor in Deno  | Programmatic   | Unreliable  |
+| DOCX     | Requires preview lib | Limited | Moderate  |
+| pdf-lib  | Manual positioning | Very limited | Good |
+| **HTML + Browserless** | Native `<img>` tags | Full CSS | Excellent |
+
+You already have the `BROWSERLESS_API_KEY` configured. Browserless renders HTML in a real Chrome browser, so CSS/HTML layouts work exactly as designed.
 
 ---
 
-## Why This Is Better
+## Reference Document Structure (Exact Match Target)
 
-| Aspect | PDF (Current) | Word (Proposed) |
-|--------|---------------|-----------------|
-| Image Embedding | Unreliable in Deno | Native support |
-| Editability | Read-only | Fully editable |
-| Library Stability | pdfmake Deno issues | docx well-tested |
-| User Experience | Fixed format | Can modify/annotate |
-| File Size | Large with Base64 | Efficient compression |
+Based on your uploaded reference document, the PDF must have this exact structure:
+
+### Page 1: Cover Page
+- Full-width navy header bar with template name (white text)
+- Centered logo below header
+- Large template title (dark blue, centered)
+- Subsection name below title (teal/gray)
+- Metadata table with teal left border:
+  - Site: [value]
+  - Client: [value]
+  - Inspector: [value]
+  - Date: [value]
+- Footer: "CONFIDENTIAL - For authorized use only" | "Page 1 of X" | Date
+
+### Page 2: Quality Score Dashboard
+- Navy header bar + teal "QUALITY SCORE DASHBOARD" banner
+- Three large statistics in a row:
+  - % COMPLIANCE (green number)
+  - ITEMS CHECKED (dark blue number)
+  - PHOTOS (dark blue number)
+- SANS 10142-1 notice (italic, centered)
+- 2x2 grid of colored stat cards:
+  - Items Passed (green background)
+  - Items Failed (red background)
+  - Pending Review (amber background)
+  - Photos Captured (blue background)
+
+### Page 3: Section Breakdown + General Info
+- Navy header bar
+- Large circular progress indicator (77% OVERALL)
+- "Section Breakdown" table:
+  | Section | Items | Pass | Fail | Photos | Score |
+  - Pass/Fail numbers colored (green/red)
+  - Score percentage colored based on value
+- "GENERAL INFORMATION" teal banner
+- Info table with alternating row backgrounds
+
+### Pages 4+: Section Content
+- Teal section header with number: "1  SECTION NAME"
+- For each item:
+  - Item label (left) with PASS/FAIL/N/A badge (right, colored background)
+  - Photo grid in bordered container (2 columns max)
+  - "Photo 1", "Photo 2" labels below each image
 
 ---
 
 ## Implementation Plan
 
-### Phase 1: Create Word Generation Edge Function
+### Phase 1: Create HTML Template Engine
 
-Create `supabase/functions/generate-docx-report/index.ts`:
+**New File**: `supabase/functions/generate-inspection-pdf/index.ts`
+
+This replaces all existing PDF generation for inspections. The function will:
+
+1. Accept the exact same payload structure as current generators
+2. Pre-download all images using the Supabase service role client
+3. Build a complete, self-contained HTML document with embedded base64 images
+4. Send to Browserless for PDF conversion
+5. Upload result to Supabase Storage
+6. Return download URL
+
+Key HTML template sections:
+- `buildCoverPageHTML()` - Exact match to reference page 1
+- `buildDashboardHTML()` - Exact match to reference page 2
+- `buildBreakdownHTML()` - Exact match to reference page 3
+- `buildSectionHTML()` - Exact match to reference pages 4+
+- CSS using `@page` rules for proper A4 sizing and page breaks
+
+### Phase 2: Robust Image Pipeline
+
+The image handler will:
+1. Collect all unique image URLs from the payload
+2. Download in parallel batches (5 concurrent)
+3. Use Supabase Image Transformation for compression (400px, 75% quality)
+4. Convert to base64 data URIs
+5. Embed directly in `<img>` tags (no external references)
 
 ```text
-┌─────────────────────────────────────────────────────────┐
-│  generate-docx-report Edge Function                     │
-├─────────────────────────────────────────────────────────┤
-│  1. Receive inspection data (same payload as PDF)       │
-│  2. Download images → ArrayBuffer (no Base64 needed)    │
-│  3. Build Word document with docx library               │
-│  4. Upload .docx to Supabase Storage                    │
-│  5. Return download URL                                 │
-└─────────────────────────────────────────────────────────┘
+Image Pipeline:
+  URL -> Supabase Transform -> Download -> Base64 -> Embed in HTML
 ```
 
-**Document Structure:**
-- **Cover Page**: Title, site name, client logo, date
-- **Table of Contents**: Auto-generated by Word
-- **Executive Summary**: Inspection overview, quality score
-- **Section Pages**: Each template section with items and photos
-- **Tenant Verification**: Photo grid with meter/breaker images
-- **Snags/Issues**: List with evidence photos
-- **Signatures**: Digital signature images
+### Phase 3: Update Client-Side Caller
 
-### Phase 2: Image Handling (Simplified)
+**Modified File**: `src/lib/pdfshiftInspectionReport.ts`
 
-The `docx` library accepts images as `Buffer` directly - no Base64 conversion needed:
+Update to call the new `generate-inspection-pdf` function instead of the DOCX generator.
 
-```typescript
-// Much simpler than pdfmake
-import { ImageRun } from "docx";
+### Phase 4: Cleanup Legacy Functions
 
-const imageBuffer = await downloadImageAsBuffer(url);
-new ImageRun({
-  data: imageBuffer,
-  transformation: { width: 200, height: 150 },
-  type: "jpg",
-});
-```
-
-### Phase 3: Update Client-Side Trigger
-
-Modify `src/lib/pdfshiftInspectionReport.ts` to call the new function:
-
-```typescript
-// Change from
-await supabase.functions.invoke('generate-pdf-pdfmake', { body: data });
-
-// To
-await supabase.functions.invoke('generate-docx-report', { body: data });
-```
-
-Also rename the function to reflect DOCX output (optional).
-
-### Phase 4: UI Updates
-
-- Change button text from "Download PDF" to "Download Report"
-- Update file extension handling for `.docx`
-- Add MIME type `application/vnd.openxmlformats-officedocument.wordprocessingml.document`
+After verification, mark these as deprecated:
+- `generate-pdf-pdfmake`
+- `generate-docx-report` (for inspections)
 
 ---
 
-## Technical Details
+## Technical Specifications
 
-### Dependencies
+### HTML Page Structure
 
-The `docx` library will be imported via esm.sh in the Edge Function:
-
-```typescript
-import { 
-  Document, 
-  Packer, 
-  Paragraph, 
-  TextRun, 
-  ImageRun,
-  Table, 
-  TableRow, 
-  TableCell,
-  Header,
-  Footer,
-  PageBreak,
-  HeadingLevel,
-} from "https://esm.sh/docx@8.5.0";
+```html
+<!DOCTYPE html>
+<html>
+<head>
+  <style>
+    @page { size: A4; margin: 0; }
+    body { font-family: 'Segoe UI', Roboto, sans-serif; }
+    .page { width: 210mm; height: 297mm; page-break-after: always; }
+    .header-bar { background: #1a365d; color: white; padding: 12px 20px; }
+    .section-banner { background: #0d7377; color: white; padding: 10px 20px; }
+    .pass-badge { background: #dcfce7; color: #16a34a; padding: 4px 12px; }
+    .fail-badge { background: #fef2f2; color: #dc2626; padding: 4px 12px; }
+    /* ... complete CSS matching reference ... */
+  </style>
+</head>
+<body>
+  <!-- Page 1: Cover -->
+  <div class="page cover">...</div>
+  <!-- Page 2: Dashboard -->
+  <div class="page dashboard">...</div>
+  <!-- Page 3: Breakdown -->
+  <div class="page breakdown">...</div>
+  <!-- Pages 4+: Sections -->
+  <div class="page section">...</div>
+</body>
+</html>
 ```
 
-### Document Builder Structure
+### Browserless API Call
 
 ```typescript
-const doc = new Document({
-  sections: [{
-    properties: { page: { size: { width: 12240, height: 15840 } } }, // A4
-    headers: { default: new Header({ children: [/* logo */] }) },
-    footers: { default: new Footer({ children: [/* page number */] }) },
-    children: [
-      // Cover page content
-      ...buildCoverPage(data),
-      new PageBreak(),
-      // Sections
-      ...buildSections(data.sections, imageBuffers),
-      // Tenants
-      ...buildTenantGrid(data.tenants, imageBuffers),
-      // Snags
-      ...buildSnagsList(data.snags, imageBuffers),
-      // Signatures
-      ...buildSignatures(data.signatures, imageBuffers),
-    ],
-  }],
+const response = await fetch('https://chrome.browserless.io/pdf', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+    'Authorization': `Basic ${btoa(BROWSERLESS_API_KEY + ':')}`,
+  },
+  body: JSON.stringify({
+    html: completeHTML,
+    options: {
+      format: 'A4',
+      printBackground: true,
+      margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
+      displayHeaderFooter: false,
+    },
+  }),
 });
-
-// Generate buffer and upload
-const buffer = await Packer.toBuffer(doc);
-```
-
-### Image Download (Simplified)
-
-```typescript
-async function downloadImageAsBuffer(url: string): Promise<Uint8Array | null> {
-  const parsed = parseStorageUrl(url);
-  if (!parsed) return null;
-  
-  const { data, error } = await supabase.storage
-    .from(parsed.bucket)
-    .download(parsed.path);
-  
-  if (error || !data) return null;
-  return new Uint8Array(await data.arrayBuffer());
-}
 ```
 
 ---
@@ -158,28 +194,35 @@ async function downloadImageAsBuffer(url: string): Promise<Uint8Array | null> {
 
 | File | Action | Description |
 |------|--------|-------------|
-| `supabase/functions/generate-docx-report/index.ts` | **Create** | New Word generation Edge Function |
-| `supabase/config.toml` | **Modify** | Add new function configuration |
-| `src/lib/pdfshiftInspectionReport.ts` | **Modify** | Call new DOCX function |
-| `src/lib/inspectionReportGenerator.ts` | **Modify** | Update function reference |
+| `supabase/functions/generate-inspection-pdf/index.ts` | **CREATE** | New HTML-to-PDF generator |
+| `supabase/config.toml` | **MODIFY** | Add new function config |
+| `src/lib/pdfshiftInspectionReport.ts` | **MODIFY** | Call new function |
+| `src/components/ComprehensiveInspectionReport.tsx` | **MINOR** | Ensure correct payload |
 
 ---
 
-## Expected Results
+## Testing Strategy
 
-1. **Reliable Image Rendering**: All 19+ photos appear correctly
-2. **Smaller File Size**: DOCX compression is more efficient
-3. **Editable Reports**: Clients can annotate/modify
-4. **Consistent Layout**: Word handles formatting better
-5. **Cross-Platform**: Opens in Word, Google Docs, LibreOffice
+1. Deploy new Edge Function
+2. Generate a test report using existing inspection data
+3. Compare output visually against reference document
+4. Verify all images render correctly
+5. Check page breaks and layout consistency
+6. Validate footer pagination
 
 ---
 
-## Migration Path
+## Timeline Estimate
 
-1. Deploy new `generate-docx-report` function
-2. Test with current inspection data
-3. Verify all images render correctly
-4. Switch client-side to use new function
-5. (Optional) Keep PDF function as fallback
+- Phase 1 (HTML Template): Core implementation
+- Phase 2 (Image Pipeline): Using proven patterns from existing code
+- Phase 3 (Integration): Minimal changes
+- Phase 4 (Testing): Visual verification
 
+---
+
+## Risk Mitigation
+
+- **Browserless Timeout**: Set generous timeouts, use efficient HTML
+- **Large Reports**: Implement chunked image processing
+- **Fallback**: Keep existing generators as backup during transition
