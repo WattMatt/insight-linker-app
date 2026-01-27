@@ -301,8 +301,8 @@ async function embedAllImages(inspection: InspectionReportData): Promise<Inspect
 // ============================================================================
 
 /**
- * Generate inspection report as Word document via DOCX Edge Function
- * Sends raw image URLs - the edge function handles fetching with service role
+ * Generate inspection report as PDF via HTML + Browserless Edge Function
+ * Complete rebuild using pixel-perfect HTML templates rendered in headless Chrome
  */
 export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
@@ -310,10 +310,10 @@ export async function generatePdfShiftInspectionReport(
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb' } = options;
   
   try {
-    console.log('[DOCX] Starting inspection report generation...');
-    console.log('[DOCX] Sections:', inspection.sections?.length || 0);
-    console.log('[DOCX] Tenants:', inspection.tenants?.length || 0);
-    console.log('[DOCX] Snags:', inspection.snags?.length || 0);
+    console.log('[InspectionPDF] Starting HTML+Browserless generation...');
+    console.log('[InspectionPDF] Sections:', inspection.sections?.length || 0);
+    console.log('[InspectionPDF] Tenants:', inspection.tenants?.length || 0);
+    console.log('[InspectionPDF] Snags:', inspection.snags?.length || 0);
     
     // Count total photos for logging
     let totalPhotos = 0;
@@ -326,11 +326,10 @@ export async function generatePdfShiftInspectionReport(
         }
       }
     }
-    console.log('[DOCX] Total photos to process server-side:', totalPhotos);
+    console.log('[InspectionPDF] Total photos:', totalPhotos);
     
-    // Build payload - send RAW URLs, edge function will fetch with service role
+    // Build payload - send raw URLs, edge function handles image processing
     const payload = {
-      reportType: 'inspection',
       inspection: {
         inspectionId: inspection.inspectionId,
         templateName: inspection.templateName,
@@ -351,36 +350,40 @@ export async function generatePdfShiftInspectionReport(
       accentColor,
     };
     
-    console.log('[DOCX] Calling Edge Function...');
+    console.log('[InspectionPDF] Calling generate-inspection-pdf Edge Function...');
     
-    // Call DOCX Edge Function for reliable Word document generation
-    const { data, error } = await supabase.functions.invoke('generate-docx-report', {
+    // Call NEW Edge Function for HTML + Browserless PDF generation
+    const { data, error } = await supabase.functions.invoke('generate-inspection-pdf', {
       body: payload,
     });
     
     if (error) {
-      console.error('[DOCX] Edge Function error:', error);
-      return { success: false, error: error.message || 'Failed to generate document' };
+      console.error('[InspectionPDF] Edge Function error:', error);
+      return { success: false, error: error.message || 'Failed to generate PDF' };
     }
     
-    console.log('[DOCX] Edge Function response:', { success: data?.success, url: data?.url, fileName: data?.fileName });
+    console.log('[InspectionPDF] Edge Function response:', { 
+      success: data?.success, 
+      url: data?.url, 
+      fileName: data?.fileName 
+    });
     
     if (!data?.url) {
-      console.error('[DOCX] No URL returned from Edge Function:', data);
-      return { success: false, error: data?.error || 'No document URL returned' };
+      console.error('[InspectionPDF] No URL returned:', data);
+      return { success: false, error: data?.error || 'No PDF URL returned' };
     }
     
-    console.log('[DOCX] Document generated successfully:', data.url);
+    console.log('[InspectionPDF] ✓ PDF generated successfully:', data.url);
     
     return {
       success: true,
       url: data.url,
-      filename: data.fileName || data.filename,
+      filename: data.fileName,
       previewUrl: data.url,
     };
     
   } catch (error) {
-    console.error('[DOCX] Error generating report:', error);
+    console.error('[InspectionPDF] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

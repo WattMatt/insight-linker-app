@@ -77,3 +77,6 @@ verify_jwt = false
 
 [functions.oauth-token]
 verify_jwt = false
+
+[functions.generate-inspection-pdf]
+verify_jwt = false
