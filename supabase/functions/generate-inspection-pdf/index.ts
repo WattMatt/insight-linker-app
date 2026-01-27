@@ -1051,6 +1051,8 @@ function buildCompleteHTML(
       border: 1px solid #e5e7eb;
       border-radius: 6px;
       overflow: hidden;
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .item-header {
