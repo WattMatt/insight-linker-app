@@ -83,7 +83,8 @@ interface InspectionPayload {
 // ============================================================================
 
 // Maximum images to process to avoid CPU limits
-const MAX_TOTAL_IMAGES = 15;
+// Increased to 40 to support EMB inspections with many tenants and section photos
+const MAX_TOTAL_IMAGES = 40;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
@@ -120,11 +121,14 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 /**
  * Build Supabase Image Transformation URL for compression
  * Uses template-matched dimensions for each image type
+ * IMPORTANT: filePath must be properly encoded for URL usage
  */
 function buildTransformUrl(bucket: string, filePath: string, imageType: ImageType): string {
   const spec = IMAGE_SPECS[imageType];
+  // Encode each path segment separately to preserve slashes but encode special chars
+  const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
   // Supabase Image Transformation endpoint with resize=contain for aspect ratio preservation
-  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
+  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${encodedPath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
 }
 
 /**
@@ -186,17 +190,18 @@ async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): 
         
         // Fallback: Direct storage download via service role
         const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        console.log(`[ImagePipeline] Downloading original: ${decodedPath.substring(0, 50)}...`);
+        console.log(`[ImagePipeline] Downloading original from bucket "${bucket}": ${decodedPath.substring(0, 60)}...`);
         
         const { data, error } = await supabase.storage.from(bucket).download(decodedPath);
         
         if (error) {
-          console.error(`[ImagePipeline] Storage error:`, error.message);
+          // Log the full error object for debugging
+          console.error(`[ImagePipeline] Storage error:`, JSON.stringify(error));
         } else if (data) {
           const buffer = await data.arrayBuffer();
           
-          // Skip very large images (>300KB for direct downloads)
-          if (buffer.byteLength > 300 * 1024) {
+          // Increase limit to 500KB for direct downloads since we can handle it
+          if (buffer.byteLength > 500 * 1024) {
             console.warn(`[ImagePipeline] Original too large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
             return null;
           }
