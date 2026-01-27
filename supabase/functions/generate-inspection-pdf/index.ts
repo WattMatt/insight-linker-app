@@ -84,23 +84,20 @@ interface InspectionPayload {
 
 // Maximum images to process to avoid CPU limits
 // Increased to 40 to support EMB inspections with many tenants and section photos
-const MAX_TOTAL_IMAGES = 40;
+// Maximum images to process to avoid CPU limits
+// Increased to 100 to support larger inspection reports
+// Maximum images to process to avoid CPU limits
+// Increased to 150 to support large comprehensive inspection reports
+const MAX_TOTAL_IMAGES = 150;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
  * Image size specifications - UNIFIED 3-COLUMN GRID STANDARD
- * 
- * Uses Supabase Render API for server-side compression before embedding:
- * - /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
- * 
- * UNIFIED APPROACH (Applied to ALL reports):
- * - 3-column photo grid layout for consistent "three adjacent" spacing
- * - Server transforms at 240px width / 60% quality for optimal PDF file size
- * - object-fit: cover ensures uniform visual appearance
+ * ... (unchanged comments)
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint
-  photo: { maxWidth: 240, quality: 60 },      // All photos: unified 3-col sizing
+  logo: { maxWidth: 300, quality: 80 },       // Logo: higher res for cover page
+  photo: { maxWidth: 500, quality: 70 },      // All photos: 500px width for sharp 3-col print
   signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
 };
 
@@ -123,7 +120,7 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
   try {
     const urlObj = new URL(url);
-    
+
     // Match: /storage/v1/object/public/{bucket}/{path}
     if (url.includes('/storage/v1/object/public/')) {
       const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
@@ -138,7 +135,7 @@ function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } 
         }
       }
     }
-    
+
     // Match: /storage/v1/object/sign/{bucket}/{path} (signed URLs)
     if (url.includes('/storage/v1/object/sign/')) {
       const pathParts = urlObj.pathname.split('/storage/v1/object/sign/');
@@ -153,7 +150,7 @@ function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } 
         }
       }
     }
-    
+
     return null;
   } catch {
     return null;
@@ -168,12 +165,12 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   const bytes = new Uint8Array(buffer);
   const chunkSize = 8192; // Process 8KB chunks at a time
   let binary = '';
-  
+
   for (let i = 0; i < bytes.length; i += chunkSize) {
     const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
     binary += String.fromCharCode.apply(null, Array.from(chunk));
   }
-  
+
   return btoa(binary);
 }
 
@@ -189,51 +186,44 @@ function detectImageType(bytes: Uint8Array): string {
 }
 
 /**
- * Download image using Direct Render API - ALIGNED WITH DOCX GENERATOR
- * This is the EXACT same approach used in generate-docx-report/index.ts (line 253)
- * Uses /storage/v1/render/image/public/ endpoint with width and quality params
- * Server automatically preserves aspect ratio when only width is specified
- */
-
-/**
  * Search for alternative file in the same directory when exact file not found
  * This handles cases where files were re-uploaded with different naming patterns
  */
 async function findAlternativeFile(bucket: string, filePath: string): Promise<string | null> {
   const supabase = getSupabaseClient();
-  
+
   // Extract directory path (everything up to the last segment)
   const pathParts = filePath.split('/');
   const fileName = pathParts.pop() || '';
   const dirPath = pathParts.join('/');
-  
+
   if (!dirPath) return null;
-  
+
   console.log(`[ImagePipeline] Searching for alternative in: ${dirPath}/`);
-  
+
   try {
     // List files in the directory
     const { data: files, error } = await supabase.storage
       .from(bucket)
       .list(dirPath, { limit: 10 });
-    
+
     if (error || !files || files.length === 0) {
       console.warn(`[ImagePipeline] No files found in directory: ${dirPath}`);
       return null;
     }
-    
+
     // Filter for image files only
-    const imageFiles = files.filter(f => 
-      f.name && 
-      !f.name.startsWith('.') && 
+    const imageFiles = files.filter(f =>
+      f.name &&
+      !f.name.startsWith('.') &&
       (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg') || f.name.endsWith('.png') || f.name.endsWith('.webp'))
     );
-    
+
     if (imageFiles.length === 0) {
       console.warn(`[ImagePipeline] No image files found in: ${dirPath}`);
       return null;
     }
-    
+
     // Sort by name (most recent by timestamp pattern) and take the first one
     const sortedFiles = imageFiles.sort((a, b) => {
       // Try to extract timestamp from filename for sorting
@@ -244,10 +234,10 @@ async function findAlternativeFile(bucket: string, filePath: string): Promise<st
       }
       return a.name.localeCompare(b.name);
     });
-    
+
     const alternativeFile = sortedFiles[0];
     const alternativePath = `${dirPath}/${alternativeFile.name}`;
-    
+
     console.log(`[ImagePipeline] ✓ Found alternative: ${alternativeFile.name}`);
     return alternativePath;
   } catch (err) {
@@ -268,36 +258,36 @@ async function downloadImageViaRenderAPI(
 ): Promise<ArrayBuffer | null> {
   // Construct transform URL exactly like DOCX generator (line 253)
   const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
-  
+
   try {
     console.log(`[ImagePipeline] Render API: width=${maxWidth}, quality=${quality}`);
-    
+
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
-    
+
     const response = await fetch(transformUrl, {
       signal: controller.signal,
       headers: { 'Accept': 'image/*' }
     });
     clearTimeout(timeoutId);
-    
+
     if (response.ok) {
       const buffer = await response.arrayBuffer();
       console.log(`[ImagePipeline] ✓ Render API success: ${Math.round(buffer.byteLength / 1024)}KB`);
       return buffer;
     }
-    
+
     console.warn(`[ImagePipeline] Render API failed: HTTP ${response.status}`);
   } catch (err) {
     console.warn(`[ImagePipeline] Render API error:`, err);
   }
-  
+
   // Fallback: Try alternative file in same directory
   const alternativePath = await findAlternativeFile(bucket, filePath);
   if (alternativePath && alternativePath !== filePath) {
     console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
     const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?width=${maxWidth}&quality=${quality}`;
-    
+
     try {
       const altResponse = await fetch(altUrl);
       if (altResponse.ok) {
@@ -309,29 +299,24 @@ async function downloadImageViaRenderAPI(
       // Fall through to direct download
     }
   }
-  
+
   // Final fallback: Direct download without transformation
   console.log(`[ImagePipeline] Falling back to direct download...`);
   const supabase = getSupabaseClient();
   const { data: blob, error } = await supabase.storage
     .from(bucket)
     .download(filePath);
-  
+
   if (error || !blob) {
     console.error(`[ImagePipeline] Direct download also failed: ${error?.message}`);
     return null;
   }
-  
+
   const buffer = await blob.arrayBuffer();
   console.log(`[ImagePipeline] ✓ Direct download: ${Math.round(buffer.byteLength / 1024)}KB`);
   return buffer;
 }
 
-/**
- * Download image and convert to base64 data URI
- * Uses createSignedUrl with transform options for Supabase images
- * Falls back to direct fetch for external URLs
- */
 /**
  * Download image and convert to base64 data URI
  * Uses Direct Render API (matching DOCX generator) for Supabase images
@@ -340,16 +325,16 @@ async function downloadImageViaRenderAPI(
 async function imageToBase64(url: string, imageType: ImageType = 'photo'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already base64
-  
+
   const spec = IMAGE_SPECS[imageType];
   const maxSizeKB = imageType === 'logo' ? 150 : 300;
-  
+
   try {
     console.log(`[ImagePipeline] Processing (${imageType}): ${url.substring(0, 60)}...`);
-    
+
     // Check if this is a Supabase storage URL
     const parsed = parseSupabaseStorageUrl(url);
-    
+
     if (parsed) {
       // Use Direct Render API - MATCHES DOCX GENERATOR APPROACH
       const buffer = await downloadImageViaRenderAPI(
@@ -358,52 +343,52 @@ async function imageToBase64(url: string, imageType: ImageType = 'photo'): Promi
         spec.maxWidth,
         spec.quality
       );
-      
+
       if (buffer && buffer.byteLength > 0) {
         if (buffer.byteLength > maxSizeKB * 1024) {
           console.warn(`[ImagePipeline] Image still large after transform (${Math.round(buffer.byteLength / 1024)}KB), but continuing...`);
         }
-        
+
         const bytes = new Uint8Array(buffer);
         const mimeType = detectImageType(bytes);
         const base64 = arrayBufferToBase64(buffer);
         console.log(`[ImagePipeline] ✓ OK (${Math.round(buffer.byteLength / 1024)}KB, ${mimeType})`);
         return `data:${mimeType};base64,${base64}`;
       }
-      
+
       console.warn(`[ImagePipeline] ✗ Failed to download from Supabase storage`);
       return null;
     }
-    
+
     // Fallback: Direct fetch for non-Supabase URLs
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
-    
-    const response = await fetch(url, { 
+
+    const response = await fetch(url, {
       signal: controller.signal,
       headers: { 'Accept': 'image/*' }
     });
     clearTimeout(timeout);
-    
+
     if (!response.ok) {
       console.error(`[ImagePipeline] Fetch failed: ${response.status}`);
       return null;
     }
-    
+
     const buffer = await response.arrayBuffer();
-    
+
     // Skip very large images
     if (buffer.byteLength > 500 * 1024) {
       console.warn(`[ImagePipeline] Skipping large external image (${Math.round(buffer.byteLength / 1024)}KB)`);
       return null;
     }
-    
+
     const base64 = arrayBufferToBase64(buffer);
     const contentType = response.headers.get('content-type') || 'image/jpeg';
-    
+
     console.log(`[ImagePipeline] ✓ OK via fetch (${Math.round(buffer.byteLength / 1024)}KB)`);
     return `data:${contentType};base64,${base64}`;
-    
+
   } catch (error) {
     const errMsg = error instanceof Error ? error.message : 'Unknown error';
     console.error(`[ImagePipeline] Error: ${errMsg}`);
@@ -418,77 +403,79 @@ interface ImageRequest {
   url: string;
   type: ImageType;
 }
-
-/**
- * Process images SEQUENTIALLY to avoid CPU overload
- * Uses template-matched sizing based on image type
- */
 async function processAllImages(
   payload: InspectionPayload
 ): Promise<Map<string, string>> {
   const imageMap = new Map<string, string>();
   const requests: ImageRequest[] = [];
-  
+
+  // Helper to add request if not already data URI and under limit
+  const addRequest = (url: string, type: ImageType) => {
+    if (!url) return;
+
+    // If already data URI, we don't need to fetch it
+    // The getImage function will handle it directly
+    if (url.startsWith('data:')) return;
+
+    if (requests.length < MAX_TOTAL_IMAGES) {
+      requests.push({ url, type });
+    }
+  };
+
   // Prioritize: 1) Logo (special sizing)
   if (payload.siteLogoUrl) {
-    requests.push({ url: payload.siteLogoUrl, type: 'logo' });
+    addRequest(payload.siteLogoUrl, 'logo');
   }
-  
+
   // Collect photos from sections - ALL use unified 3-column sizing
   if (payload.inspection.sections) {
     for (const section of payload.inspection.sections) {
       for (const item of section.items) {
         if (item.photos) {
           const limitedPhotos = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
-          
           for (const photo of limitedPhotos) {
-            if (photo && requests.length < MAX_TOTAL_IMAGES) {
-              requests.push({ url: photo, type: 'photo' });
-            }
+            addRequest(photo, 'photo');
           }
         }
       }
     }
   }
-  
+
   // Tenant images (meterImage, breakerImage, ctRatioImage) - unified 3-column sizing
   if (payload.inspection.tenants) {
     for (const tenant of payload.inspection.tenants) {
-      if (tenant.meterImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.meterImage, type: 'photo' });
-      }
-      if (tenant.breakerImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.breakerImage, type: 'photo' });
-      }
-      if (tenant.ctRatioImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.ctRatioImage, type: 'photo' });
-      }
+      if (tenant.meterImage) addRequest(tenant.meterImage, 'photo');
+      if (tenant.breakerImage) addRequest(tenant.breakerImage, 'photo');
+      if (tenant.ctRatioImage) addRequest(tenant.ctRatioImage, 'photo');
     }
   }
-  
+
   // Snag photos - unified 3-column sizing
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
-      if (snag.photos && snag.photos[0] && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: snag.photos[0], type: 'photo' });
+      if (snag.photos && snag.photos[0]) {
+        addRequest(snag.photos[0], 'photo');
       }
     }
   }
-  
+
   // Signatures (special sizing)
   if (payload.inspection.signatures) {
     for (const sig of payload.inspection.signatures) {
-      if (sig.signatureUrl && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: sig.signatureUrl, type: 'signature' });
+      if (sig.signatureUrl) {
+        addRequest(sig.signatureUrl, 'signature');
       }
     }
   }
-  
+
   console.log(`[ImagePipeline] Processing ${requests.length} images (max ${MAX_TOTAL_IMAGES})...`);
-  
+
   // Process SEQUENTIALLY to avoid CPU spikes
   for (const req of requests) {
     try {
+      // Check for duplicates to avoid re-fetching
+      if (imageMap.has(req.url)) continue;
+
       const base64 = await imageToBase64(req.url, req.type);
       if (base64) {
         imageMap.set(req.url, base64);
@@ -497,11 +484,10 @@ async function processAllImages(
       console.warn(`[ImagePipeline] Failed: ${req.url.substring(0, 40)}...`);
     }
   }
-  
+
   console.log(`[ImagePipeline] ✓ Processed ${imageMap.size}/${requests.length} images`);
   return imageMap;
 }
-
 // ============================================================================
 // HTML TEMPLATE BUILDERS
 // ============================================================================
@@ -539,12 +525,12 @@ function calculateStats(sections: InspectionSection[]) {
   let failed = 0;
   let pending = 0;
   let totalPhotos = 0;
-  
+
   for (const section of sections) {
     for (const item of section.items) {
       totalItems++;
       const value = String(item.value || '').toLowerCase();
-      
+
       if (value === 'pass' || value === 'compliant' || value === 'yes' || value === 'true') {
         passed++;
       } else if (value === 'fail' || value === 'non-compliant' || value === 'no' || value === 'false') {
@@ -554,15 +540,15 @@ function calculateStats(sections: InspectionSection[]) {
       } else {
         pending++;
       }
-      
+
       if (item.photos) {
         totalPhotos += item.photos.length;
       }
     }
   }
-  
+
   const compliance = totalItems > 0 ? Math.round((passed / (passed + failed || 1)) * 100) : 0;
-  
+
   return { totalItems, passed, failed, pending, totalPhotos, compliance };
 }
 
@@ -575,7 +561,7 @@ function calculateSectionBreakdown(sections: InspectionSection[]) {
     let pass = 0;
     let fail = 0;
     let photos = 0;
-    
+
     for (const item of section.items) {
       const value = String(item.value || '').toLowerCase();
       if (value === 'pass' || value === 'compliant' || value === 'yes' || value === 'true') {
@@ -585,9 +571,9 @@ function calculateSectionBreakdown(sections: InspectionSection[]) {
       }
       if (item.photos) photos += item.photos.length;
     }
-    
+
     const score = items > 0 ? Math.round((pass / (pass + fail || 1)) * 100) : 100;
-    
+
     return { title: section.title, items, pass, fail, photos, score };
   });
 }
@@ -597,7 +583,7 @@ function calculateSectionBreakdown(sections: InspectionSection[]) {
  */
 function getStatusBadge(value: string | boolean | number): string {
   const v = String(value || '').toLowerCase();
-  
+
   if (v === 'pass' || v === 'compliant' || v === 'yes' || v === 'true') {
     return '<span class="badge pass">PASS</span>';
   } else if (v === 'fail' || v === 'non-compliant' || v === 'no' || v === 'false') {
@@ -620,7 +606,7 @@ function buildCoverPageHTML(
   const { inspection, siteName, clientName, siteLogoUrl } = payload;
   const logoBase64 = getImage(siteLogoUrl, imageMap);
   const date = formatDate(inspection.inspectionDate);
-  
+
   return `
     <div class="page cover">
       <div class="header-bar">
@@ -666,7 +652,7 @@ function buildDashboardHTML(
   totalPages: number
 ): string {
   const date = formatDate(payload.inspection.inspectionDate);
-  
+
   return `
     <div class="page dashboard">
       <div class="header-bar">
@@ -730,7 +716,7 @@ function buildBreakdownHTML(
 ): string {
   const date = formatDate(payload.inspection.inspectionDate);
   const generalInfo = payload.inspection.generalInfo || {};
-  
+
   const breakdownRows = sectionBreakdown.map(s => `
     <tr>
       <td>${s.title}</td>
@@ -741,7 +727,7 @@ function buildBreakdownHTML(
       <td class="center ${s.score >= 80 ? 'green-text' : s.score >= 50 ? 'amber-text' : 'red-text'}">${s.score}%</td>
     </tr>
   `).join('');
-  
+
   // Build general info rows
   const infoEntries = Object.entries(generalInfo).filter(([_, v]) => v);
   const infoRows = infoEntries.map(([key, value], idx) => `
@@ -750,7 +736,7 @@ function buildBreakdownHTML(
       <td class="info-value">${value}</td>
     </tr>
   `).join('');
-  
+
   return `
     <div class="page breakdown">
       <div class="header-bar">
@@ -811,7 +797,7 @@ function buildSectionPagesHTML(
 ): string {
   const sections = payload.inspection.sections || [];
   let html = '';
-  
+
   // Content flows naturally - no fixed page wrappers for sections
   // Page breaks are handled via CSS (section headers force new pages)
   sections.forEach((section, sectionIdx) => {
@@ -825,13 +811,13 @@ function buildSectionPagesHTML(
         
         <div class="section-content">
     `;
-    
+
     section.items.forEach((item, itemIdx) => {
       const photos = (item.photos || []).filter(p => p);
-      
+
       // UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
       const gridClass = 'photo-grid-3';
-      
+
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
         return base64 ? `
@@ -841,7 +827,7 @@ function buildSectionPagesHTML(
           </div>
         ` : '';
       }).join('') : '';
-      
+
       html += `
         <div class="inspection-item">
           <div class="item-header">
@@ -853,13 +839,13 @@ function buildSectionPagesHTML(
         </div>
       `;
     });
-    
+
     html += `
         </div>
       </div>
     `;
   });
-  
+
   return html;
 }
 
@@ -872,11 +858,11 @@ function buildTenantsPageHTML(
   sectionNumber: number
 ): string {
   const tenants = payload.inspection.tenants || [];
-  
+
   if (tenants.length === 0) {
     return '';
   }
-  
+
   let html = `
     <div class="section-container">
       <div class="section-header-bar">
@@ -886,14 +872,14 @@ function buildTenantsPageHTML(
       
       <div class="section-content">
   `;
-  
+
   tenants.forEach((tenant, idx) => {
     const meterBase64 = getImage(tenant.meterImage, imageMap);
     const breakerBase64 = getImage(tenant.breakerImage, imageMap);
     const ctRatioBase64 = getImage(tenant.ctRatioImage, imageMap);
-    
+
     const hasImages = meterBase64 || breakerBase64 || ctRatioBase64;
-    
+
     html += `
       <div class="tenant-card">
         <div class="tenant-header">
@@ -951,12 +937,12 @@ function buildTenantsPageHTML(
       </div>
     `;
   });
-  
+
   html += `
       </div>
     </div>
   `;
-  
+
   return html;
 }
 
@@ -970,10 +956,10 @@ function buildCompleteHTML(
   const sections = payload.inspection.sections || [];
   const stats = calculateStats(sections);
   const sectionBreakdown = calculateSectionBreakdown(sections);
-  
+
   // Calculate total pages: Cover + Dashboard + Breakdown + one per section
   const totalPages = 3 + sections.length;
-  
+
   const css = `
     @page { 
       size: A4; 
@@ -1485,18 +1471,18 @@ function buildCompleteHTML(
       border-radius: 4px;
     }
   `;
-  
+
   const tenants = payload.inspection.tenants || [];
   const hasTenants = tenants.length > 0;
-  
+
   const coverPage = buildCoverPageHTML(payload, imageMap, totalPages);
   const dashboardPage = buildDashboardHTML(payload, stats, 2, totalPages);
   const breakdownPage = buildBreakdownHTML(payload, stats, sectionBreakdown, 3, totalPages);
   const sectionPages = buildSectionPagesHTML(payload, imageMap, 4, totalPages);
-  
+
   // Add tenants page after all sections if there are tenants
   const tenantsPage = hasTenants ? buildTenantsPageHTML(payload, imageMap, sections.length + 1) : '';
-  
+
   return `
     <!DOCTYPE html>
     <html>
@@ -1522,7 +1508,7 @@ function buildCompleteHTML(
 async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
   console.log('[Browserless] Sending HTML for PDF conversion...');
   console.log('[Browserless] HTML size:', Math.round(html.length / 1024), 'KB');
-  
+
   // Dynamic footer template with page numbers
   const footerTemplate = `
     <div style="width: 100%; font-size: 8px; font-family: Arial, sans-serif; display: flex; justify-content: space-between; padding: 0 24px; color: #6b7280;">
@@ -1531,7 +1517,7 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       <span>${new Date().toLocaleDateString('en-ZA')}</span>
     </div>
   `;
-  
+
   const response = await fetch('https://chrome.browserless.io/pdf', {
     method: 'POST',
     headers: {
@@ -1556,16 +1542,16 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       },
     }),
   });
-  
+
   if (!response.ok) {
     const errorText = await response.text();
     console.error('[Browserless] Error:', response.status, errorText);
     throw new Error(`Browserless failed: ${response.status} - ${errorText}`);
   }
-  
+
   const pdfBuffer = await response.arrayBuffer();
   console.log('[Browserless] ✓ PDF generated:', Math.round(pdfBuffer.byteLength / 1024), 'KB');
-  
+
   return pdfBuffer;
 }
 
@@ -1578,25 +1564,25 @@ async function uploadToStorage(
   fileName: string
 ): Promise<string> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  
+
   const path = `inspection-reports/${fileName}`;
-  
+
   const { error } = await supabase.storage
     .from('documents')
     .upload(path, pdfBuffer, {
       contentType: 'application/pdf',
       upsert: true,
     });
-  
+
   if (error) {
     console.error('[Storage] Upload error:', error);
     throw new Error(`Storage upload failed: ${error.message}`);
   }
-  
+
   const { data: urlData } = supabase.storage
     .from('documents')
     .getPublicUrl(path);
-  
+
   console.log('[Storage] ✓ Uploaded:', urlData.publicUrl);
   return urlData.publicUrl;
 }
@@ -1612,18 +1598,18 @@ async function saveDocumentRecord(
   userId?: string
 ): Promise<string | null> {
   const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-  
+
   try {
     // Find or create "Inspection Reports" category
     let categoryId: string | undefined;
-    
+
     const { data: existingCategory } = await supabase
       .from('document_categories')
       .select('id')
       .eq('subsection_id', subsectionId)
       .eq('name', 'Inspection Reports')
       .maybeSingle();
-    
+
     if (existingCategory) {
       categoryId = existingCategory.id;
     } else {
@@ -1638,12 +1624,12 @@ async function saveDocumentRecord(
         .single();
       categoryId = newCategory?.id;
     }
-    
+
     if (!categoryId) {
       console.warn('[Document] Could not create/find category');
       return null;
     }
-    
+
     // Insert document record
     const { data: docData, error: docError } = await supabase
       .from('subsection_documents')
@@ -1656,12 +1642,12 @@ async function saveDocumentRecord(
       })
       .select('id')
       .single();
-    
+
     if (docError) {
       console.warn('[Document] Insert error:', docError.message);
       return null;
     }
-    
+
     console.log('[Document] ✓ Saved record:', docData.id);
     return docData.id;
   } catch (err) {
@@ -1679,24 +1665,24 @@ Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-  
+
   try {
     console.log('[GenerateInspectionPDF] Starting...');
-    
+
     const payload: InspectionPayload = await req.json();
-    
+
     if (!payload.inspection) {
       return new Response(
         JSON.stringify({ success: false, error: 'Missing inspection data' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
-    
+
     console.log('[GenerateInspectionPDF] Inspection:', payload.inspection.inspectionId);
     console.log('[GenerateInspectionPDF] Sections:', payload.inspection.sections?.length || 0);
     console.log('[GenerateInspectionPDF] Tenants:', payload.inspection.tenants?.length || 0);
     console.log('[GenerateInspectionPDF] Snags:', payload.inspection.snags?.length || 0);
-    
+
     // Log tenant data to verify it's reaching the edge function
     if (payload.inspection.tenants && payload.inspection.tenants.length > 0) {
       const firstTenant = payload.inspection.tenants[0];
@@ -1709,25 +1695,25 @@ Deno.serve(async (req: Request) => {
         hasCTRatioImage: !!firstTenant.ctRatioImage,
       });
     }
-    
+
     // Phase 1: Process all images
     const imageMap = await processAllImages(payload);
-    
+
     // Phase 2: Build complete HTML
     const html = buildCompleteHTML(payload, imageMap);
-    
+
     // Phase 3: Convert to PDF via Browserless
     const pdfBuffer = await generatePdfWithBrowserless(html);
-    
+
     // Phase 4: Upload to storage
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
     const safeName = (payload.inspection.subsectionName || payload.siteName || 'report')
       .replace(/[^a-zA-Z0-9]/g, '_')
       .substring(0, 50);
     const fileName = `${safeName}_${timestamp}.pdf`;
-    
+
     const publicUrl = await uploadToStorage(pdfBuffer, fileName);
-    
+
     // Phase 5: Save document record (server-side to survive client timeout)
     let documentId: string | null = null;
     if (payload.subsectionId) {
@@ -1738,9 +1724,9 @@ Deno.serve(async (req: Request) => {
         payload.userId
       );
     }
-    
+
     console.log('[GenerateInspectionPDF] ✓ Complete');
-    
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -1750,10 +1736,10 @@ Deno.serve(async (req: Request) => {
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
-    
+
   } catch (error) {
     console.error('[GenerateInspectionPDF] Error:', error);
-    
+
     return new Response(
       JSON.stringify({
         success: false,

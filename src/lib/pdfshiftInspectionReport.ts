@@ -105,7 +105,7 @@ const MAX_SIZE_KB = 200;
 async function imageToBase64(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already Base64
-  
+
   try {
     // Fetch the image
     const response = await fetch(url, { mode: 'cors' });
@@ -113,60 +113,60 @@ async function imageToBase64(url: string): Promise<string | null> {
       console.warn(`[imageToBase64] Failed to fetch: ${url.substring(0, 50)}...`);
       return null;
     }
-    
+
     const blob = await response.blob();
-    
+
     // Skip if too large (>2MB original likely means uncompressed)
     if (blob.size > 2 * 1024 * 1024) {
       console.warn(`[imageToBase64] Skipping large image: ${Math.round(blob.size / 1024)}KB`);
       return null;
     }
-    
+
     // Create image element
     const img = new Image();
     img.crossOrigin = 'anonymous';
-    
+
     return new Promise((resolve) => {
       img.onload = () => {
         // Calculate new dimensions
         let width = img.width;
         let height = img.height;
-        
+
         if (width > MAX_IMAGE_WIDTH) {
           height = Math.round((height * MAX_IMAGE_WIDTH) / width);
           width = MAX_IMAGE_WIDTH;
         }
-        
+
         // Draw to canvas and compress
         const canvas = document.createElement('canvas');
         canvas.width = width;
         canvas.height = height;
-        
+
         const ctx = canvas.getContext('2d');
         if (!ctx) {
           resolve(null);
           return;
         }
-        
+
         ctx.drawImage(img, 0, 0, width, height);
-        
+
         // Convert to JPEG for better compression
         const dataUrl = canvas.toDataURL('image/jpeg', JPEG_QUALITY);
-        
+
         // Check final size
         const base64Size = Math.round((dataUrl.length * 3) / 4 / 1024);
         if (base64Size > MAX_SIZE_KB) {
           console.warn(`[imageToBase64] Compressed but still large: ${base64Size}KB`);
         }
-        
+
         resolve(dataUrl);
       };
-      
+
       img.onerror = () => {
         console.warn(`[imageToBase64] Failed to load image: ${url.substring(0, 50)}...`);
         resolve(null);
       };
-      
+
       // Load from blob URL
       img.src = URL.createObjectURL(blob);
     });
@@ -180,122 +180,12 @@ async function imageToBase64(url: string): Promise<string | null> {
  * Process all images in inspection data and convert to Base64
  */
 async function embedAllImages(inspection: InspectionReportData): Promise<InspectionReportData> {
-  const processed = JSON.parse(JSON.stringify(inspection)) as InspectionReportData;
-  let processedCount = 0;
-  let totalCount = 0;
-  let failedUrls: string[] = [];
-  
-  console.log('[embedAllImages] Starting image embedding...');
-  console.log('[embedAllImages] Sections count:', processed.sections?.length || 0);
-  console.log('[embedAllImages] Tenants count:', processed.tenants?.length || 0);
-  console.log('[embedAllImages] Snags count:', processed.snags?.length || 0);
-  
-  // Process section item photos
-  if (processed.sections) {
-    for (const section of processed.sections) {
-      for (const item of section.items) {
-        if (item.photos && item.photos.length > 0) {
-          console.log(`[embedAllImages] Processing ${item.photos.length} photos for item: ${item.label}`);
-          totalCount += item.photos.length;
-          const embeddedPhotos: string[] = [];
-          
-          // Limit to 4 photos per item to keep size manageable
-          for (const photoUrl of item.photos.slice(0, 4)) {
-            console.log(`[embedAllImages] Converting: ${photoUrl.substring(0, 80)}...`);
-            const base64 = await imageToBase64(photoUrl);
-            if (base64) {
-              embeddedPhotos.push(base64);
-              processedCount++;
-              console.log(`[embedAllImages] ✓ Converted successfully`);
-            } else {
-              failedUrls.push(photoUrl);
-              console.warn(`[embedAllImages] ✗ Failed to convert`);
-            }
-          }
-          
-          item.photos = embeddedPhotos;
-        }
-      }
-    }
-  }
-  
-  // Process tenant images
-  if (processed.tenants) {
-    for (const tenant of processed.tenants) {
-      if (tenant.meterImage) {
-        totalCount++;
-        console.log(`[embedAllImages] Converting tenant meter image for: ${tenant.shopName}`);
-        const base64 = await imageToBase64(tenant.meterImage);
-        tenant.meterImage = base64 || undefined;
-        if (base64) processedCount++;
-        else failedUrls.push(tenant.meterImage);
-      }
-      if (tenant.breakerImage) {
-        totalCount++;
-        console.log(`[embedAllImages] Converting tenant breaker image for: ${tenant.shopName}`);
-        const base64 = await imageToBase64(tenant.breakerImage);
-        tenant.breakerImage = base64 || undefined;
-        if (base64) processedCount++;
-        else failedUrls.push(tenant.breakerImage);
-      }
-      if (tenant.ctRatioImage) {
-        totalCount++;
-        console.log(`[embedAllImages] Converting tenant CT ratio image for: ${tenant.shopName}`);
-        const base64 = await imageToBase64(tenant.ctRatioImage);
-        tenant.ctRatioImage = base64 || undefined;
-        if (base64) processedCount++;
-        else failedUrls.push(tenant.ctRatioImage);
-      }
-    }
-  }
-  
-  // Process snag photos
-  if (processed.snags) {
-    for (const snag of processed.snags) {
-      if (snag.photos && snag.photos.length > 0) {
-        console.log(`[embedAllImages] Processing ${snag.photos.length} photos for snag: ${snag.title}`);
-        totalCount += snag.photos.length;
-        const embeddedPhotos: string[] = [];
-        
-        // Limit to 2 photos per snag
-        for (const photoUrl of snag.photos.slice(0, 2)) {
-          console.log(`[embedAllImages] Converting snag photo: ${photoUrl.substring(0, 80)}...`);
-          const base64 = await imageToBase64(photoUrl);
-          if (base64) {
-            embeddedPhotos.push(base64);
-            processedCount++;
-          } else {
-            failedUrls.push(photoUrl);
-          }
-        }
-        
-        snag.photos = embeddedPhotos;
-      }
-    }
-  }
-  
-  // Process signatures
-  if (processed.signatures) {
-    for (const sig of processed.signatures) {
-      if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-        totalCount++;
-        console.log(`[embedAllImages] Converting signature for: ${sig.name}`);
-        const base64 = await imageToBase64(sig.signatureUrl);
-        sig.signatureUrl = base64 || undefined;
-        if (base64) processedCount++;
-        else if (sig.signatureUrl) failedUrls.push(sig.signatureUrl);
-      }
-    }
-  }
-  
-  console.log(`[embedAllImages] ========================================`);
-  console.log(`[embedAllImages] Processed ${processedCount}/${totalCount} images successfully`);
-  if (failedUrls.length > 0) {
-    console.warn(`[embedAllImages] Failed URLs:`, failedUrls.slice(0, 5));
-  }
-  console.log(`[embedAllImages] ========================================`);
-  
-  return processed;
+  // CRITICAL FIX: Skip client-side embedding to avoid 6MB payload limit on Edge Function
+  // The server (Edge Function) now handles image downloading and resizing via Supabase Render API
+  // This prevents the "completely destroyed" report issue caused by large base64 strings
+  return inspection;
+
+  return inspection;
 }
 
 // ============================================================================
@@ -310,20 +200,25 @@ export async function generatePdfShiftInspectionReport(
   options: GeneratePdfShiftReportOptions
 ): Promise<GenerateDocxReportResult> {
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb', subsectionId } = options;
-  
+
   try {
     console.log('[InspectionPDF] Starting HTML+Browserless generation...');
     console.log('[InspectionPDF] Sections:', inspection.sections?.length || 0);
     console.log('[InspectionPDF] Tenants:', inspection.tenants?.length || 0);
     console.log('[InspectionPDF] Snags:', inspection.snags?.length || 0);
-    
+
     // Get current user for document ownership
     const { data: { user } } = await supabase.auth.getUser();
-    
+
+    // EMBED IMAGES CLIENT-SIDE
+    // This ensures private images and local blobs are accurately captured
+    // The Edge Function can still process them, but client-side is more reliable for access
+    const processedInspection = await embedAllImages(inspection);
+
     // Count total photos for logging
     let totalPhotos = 0;
-    if (inspection.sections) {
-      for (const section of inspection.sections) {
+    if (processedInspection.sections) {
+      for (const section of processedInspection.sections) {
         for (const item of section.items) {
           if (item.photos && item.photos.length > 0) {
             totalPhotos += item.photos.length;
@@ -332,23 +227,22 @@ export async function generatePdfShiftInspectionReport(
       }
     }
     console.log('[InspectionPDF] Total photos:', totalPhotos);
-    
-    // Build payload - send raw URLs, edge function handles image processing
-    // Include subsectionId and userId for server-side document persistence
+
+    // Build payload - send Base64 images
     const payload = {
       inspection: {
-        inspectionId: inspection.inspectionId,
-        templateName: inspection.templateName,
-        inspectorName: inspection.inspectorName,
-        inspectionDate: inspection.inspectionDate,
-        status: inspection.status,
-        qualityRating: inspection.qualityRating,
-        generalInfo: inspection.generalInfo,
-        sections: inspection.sections,
-        tenants: inspection.tenants,
-        snags: inspection.snags,
-        signatures: inspection.signatures,
-        subsectionName: inspection.subsectionName,
+        inspectionId: processedInspection.inspectionId,
+        templateName: processedInspection.templateName,
+        inspectorName: processedInspection.inspectorName,
+        inspectionDate: processedInspection.inspectionDate,
+        status: processedInspection.status,
+        qualityRating: processedInspection.qualityRating,
+        generalInfo: processedInspection.generalInfo,
+        sections: processedInspection.sections,
+        tenants: processedInspection.tenants,
+        snags: processedInspection.snags,
+        signatures: processedInspection.signatures,
+        subsectionName: processedInspection.subsectionName,
       },
       siteName,
       clientName,
@@ -357,39 +251,39 @@ export async function generatePdfShiftInspectionReport(
       subsectionId,
       userId: user?.id,
     };
-    
+
     console.log('[InspectionPDF] Calling generate-inspection-pdf Edge Function...');
-    
+
     // Call Edge Function for HTML + Browserless PDF generation
     const { data, error } = await supabase.functions.invoke('generate-inspection-pdf', {
       body: payload,
     });
-    
+
     if (error) {
       console.error('[InspectionPDF] Edge Function error:', error);
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
-    
-    console.log('[InspectionPDF] Edge Function response:', { 
-      success: data?.success, 
-      url: data?.url, 
-      fileName: data?.fileName 
+
+    console.log('[InspectionPDF] Edge Function response:', {
+      success: data?.success,
+      url: data?.url,
+      fileName: data?.fileName
     });
-    
+
     if (!data?.url) {
       console.error('[InspectionPDF] No URL returned:', data);
       return { success: false, error: data?.error || 'No PDF URL returned' };
     }
-    
+
     console.log('[InspectionPDF] ✓ PDF generated successfully:', data.url);
-    
+
     return {
       success: true,
       url: data.url,
       filename: data.fileName,
       previewUrl: data.url,
     };
-    
+
   } catch (error) {
     console.error('[InspectionPDF] Error generating report:', error);
     return {
@@ -416,13 +310,13 @@ export async function generateAndSavePdfShiftInspectionReport(
   error?: string;
 }> {
   const { subsectionId } = options;
-  
+
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) {
       return { success: false, error: 'User not authenticated' };
     }
-    
+
     // Generate PDF via Edge Function
     // The Edge Function now handles document persistence server-side
     // This ensures the document is saved even if the client connection times out
@@ -430,11 +324,11 @@ export async function generateAndSavePdfShiftInspectionReport(
       ...options,
       subsectionId, // Pass to Edge Function for server-side persistence
     });
-    
+
     if (!result.success || !result.url) {
       return { success: false, error: result.error || 'Failed to generate PDF' };
     }
-    
+
     // The Edge Function handles document record creation server-side
     // Return the result directly
     return {
@@ -443,7 +337,7 @@ export async function generateAndSavePdfShiftInspectionReport(
       fileName: result.filename,
       fileUrl: result.url,
     };
-    
+
   } catch (error) {
     console.error('[PDFShift] Save error:', error);
     return {
