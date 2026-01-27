@@ -1,228 +1,147 @@
 
-# Complete PDF Generation System Rebuild
 
-## Problem Summary
+# 3-Column Photo Grid Support with Template-First Sizing
 
-After a full day of attempts, the inspection report generation has consistently failed to produce output matching your reference document. The issues stem from:
+## Current State
 
-1. **Image Rendering Failures**: Both pdfmake and DOCX generators have produced inconsistent results with images
-2. **Template Mismatch**: The generated output structure doesn't match your reference document
-3. **Architecture Complexity**: Multiple overlapping generators (pdfmake, DOCX, Browserless, Google Docs, PDFShift) have created confusion
+The HTML template currently uses a **fixed 2-column grid** for all photo layouts:
 
-## Fresh Start Architecture
-
-We will build a completely new system with two components:
-
-```text
-+------------------+        +---------------------+        +------------------+
-|  CLIENT SIDE     |   -->  |   HTML TEMPLATE     |   -->  |  BROWSERLESS     |
-|  Data Collector  |        |   (Complete HTML)   |        |  PDF Renderer    |
-+------------------+        +---------------------+        +------------------+
-       |                            |                            |
-   Collect data              Build pixel-perfect           Headless Chrome
-   + pre-fetch               HTML matching reference       renders to PDF
-   images as base64          document exactly
+```css
+.photo-grid {
+  grid-template-columns: repeat(2, 1fr);  /* Always 2 columns */
+}
 ```
 
-### Why HTML + Browserless?
+Images are compressed to 400px @ 60% quality - which is arbitrary and not matched to template dimensions.
 
-| Approach | Image Support | Layout Control | Reliability |
-|----------|---------------|----------------|-------------|
-| pdfmake  | Poor in Deno  | Programmatic   | Unreliable  |
-| DOCX     | Requires preview lib | Limited | Moderate  |
-| pdf-lib  | Manual positioning | Very limited | Good |
-| **HTML + Browserless** | Native `<img>` tags | Full CSS | Excellent |
+## What You Need
 
-You already have the `BROWSERLESS_API_KEY` configured. Browserless renders HTML in a real Chrome browser, so CSS/HTML layouts work exactly as designed.
+Support for **2-column AND 3-column photo grids** with images sized exactly for their container.
 
----
+## Template Layout Calculations
 
-## Reference Document Structure (Exact Match Target)
+### A4 Content Width
+- A4 page: 210mm = ~794px at 96 DPI
+- Content padding: 24px each side = 48px total
+- Available width: 794px - 48px = **746px**
+- Photo grid padding: 14px each side = 28px
+- Usable photo area: 746px - 28px = **718px**
 
-Based on your uploaded reference document, the PDF must have this exact structure:
+### Photo Sizing Per Layout
 
-### Page 1: Cover Page
-- Full-width navy header bar with template name (white text)
-- Centered logo below header
-- Large template title (dark blue, centered)
-- Subsection name below title (teal/gray)
-- Metadata table with teal left border:
-  - Site: [value]
-  - Client: [value]
-  - Inspector: [value]
-  - Date: [value]
-- Footer: "CONFIDENTIAL - For authorized use only" | "Page 1 of X" | Date
-
-### Page 2: Quality Score Dashboard
-- Navy header bar + teal "QUALITY SCORE DASHBOARD" banner
-- Three large statistics in a row:
-  - % COMPLIANCE (green number)
-  - ITEMS CHECKED (dark blue number)
-  - PHOTOS (dark blue number)
-- SANS 10142-1 notice (italic, centered)
-- 2x2 grid of colored stat cards:
-  - Items Passed (green background)
-  - Items Failed (red background)
-  - Pending Review (amber background)
-  - Photos Captured (blue background)
-
-### Page 3: Section Breakdown + General Info
-- Navy header bar
-- Large circular progress indicator (77% OVERALL)
-- "Section Breakdown" table:
-  | Section | Items | Pass | Fail | Photos | Score |
-  - Pass/Fail numbers colored (green/red)
-  - Score percentage colored based on value
-- "GENERAL INFORMATION" teal banner
-- Info table with alternating row backgrounds
-
-### Pages 4+: Section Content
-- Teal section header with number: "1  SECTION NAME"
-- For each item:
-  - Item label (left) with PASS/FAIL/N/A badge (right, colored background)
-  - Photo grid in bordered container (2 columns max)
-  - "Photo 1", "Photo 2" labels below each image
-
----
+| Layout | Column Width | Optimal Image Size | Quality |
+|--------|--------------|-------------------|---------|
+| 2-column | 718px / 2 - gap = ~340px | **320 x 180px** | 75% |
+| 3-column | 718px / 3 - gap = ~225px | **200 x 150px** | 75% |
+| Logo | Fixed | **180 x 100px** | 80% |
 
 ## Implementation Plan
 
-### Phase 1: Create HTML Template Engine
+### Phase 1: Add IMAGE_SPECS Constants
 
-**New File**: `supabase/functions/generate-inspection-pdf/index.ts`
-
-This replaces all existing PDF generation for inspections. The function will:
-
-1. Accept the exact same payload structure as current generators
-2. Pre-download all images using the Supabase service role client
-3. Build a complete, self-contained HTML document with embedded base64 images
-4. Send to Browserless for PDF conversion
-5. Upload result to Supabase Storage
-6. Return download URL
-
-Key HTML template sections:
-- `buildCoverPageHTML()` - Exact match to reference page 1
-- `buildDashboardHTML()` - Exact match to reference page 2
-- `buildBreakdownHTML()` - Exact match to reference page 3
-- `buildSectionHTML()` - Exact match to reference pages 4+
-- CSS using `@page` rules for proper A4 sizing and page breaks
-
-### Phase 2: Robust Image Pipeline
-
-The image handler will:
-1. Collect all unique image URLs from the payload
-2. Download in parallel batches (5 concurrent)
-3. Use Supabase Image Transformation for compression (400px, 75% quality)
-4. Convert to base64 data URIs
-5. Embed directly in `<img>` tags (no external references)
-
-```text
-Image Pipeline:
-  URL -> Supabase Transform -> Download -> Base64 -> Embed in HTML
-```
-
-### Phase 3: Update Client-Side Caller
-
-**Modified File**: `src/lib/pdfshiftInspectionReport.ts`
-
-Update to call the new `generate-inspection-pdf` function instead of the DOCX generator.
-
-### Phase 4: Cleanup Legacy Functions
-
-After verification, mark these as deprecated:
-- `generate-pdf-pdfmake`
-- `generate-docx-report` (for inspections)
-
----
-
-## Technical Specifications
-
-### HTML Page Structure
-
-```html
-<!DOCTYPE html>
-<html>
-<head>
-  <style>
-    @page { size: A4; margin: 0; }
-    body { font-family: 'Segoe UI', Roboto, sans-serif; }
-    .page { width: 210mm; height: 297mm; page-break-after: always; }
-    .header-bar { background: #1a365d; color: white; padding: 12px 20px; }
-    .section-banner { background: #0d7377; color: white; padding: 10px 20px; }
-    .pass-badge { background: #dcfce7; color: #16a34a; padding: 4px 12px; }
-    .fail-badge { background: #fef2f2; color: #dc2626; padding: 4px 12px; }
-    /* ... complete CSS matching reference ... */
-  </style>
-</head>
-<body>
-  <!-- Page 1: Cover -->
-  <div class="page cover">...</div>
-  <!-- Page 2: Dashboard -->
-  <div class="page dashboard">...</div>
-  <!-- Page 3: Breakdown -->
-  <div class="page breakdown">...</div>
-  <!-- Pages 4+: Sections -->
-  <div class="page section">...</div>
-</body>
-</html>
-```
-
-### Browserless API Call
+Define explicit sizing for each image context:
 
 ```typescript
-const response = await fetch('https://chrome.browserless.io/pdf', {
-  method: 'POST',
-  headers: {
-    'Content-Type': 'application/json',
-    'Authorization': `Basic ${btoa(BROWSERLESS_API_KEY + ':')}`,
-  },
-  body: JSON.stringify({
-    html: completeHTML,
-    options: {
-      format: 'A4',
-      printBackground: true,
-      margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
-      displayHeaderFooter: false,
-    },
-  }),
-});
+const IMAGE_SPECS = {
+  logo: { width: 180, height: 100, quality: 80 },
+  photo_2col: { width: 320, height: 180, quality: 75 },
+  photo_3col: { width: 200, height: 150, quality: 75 },
+};
 ```
 
----
+### Phase 2: Add Dynamic Grid Classes
 
-## Files to Create/Modify
+Update CSS to support both layouts:
 
-| File | Action | Description |
-|------|--------|-------------|
-| `supabase/functions/generate-inspection-pdf/index.ts` | **CREATE** | New HTML-to-PDF generator |
-| `supabase/config.toml` | **MODIFY** | Add new function config |
-| `src/lib/pdfshiftInspectionReport.ts` | **MODIFY** | Call new function |
-| `src/components/ComprehensiveInspectionReport.tsx` | **MINOR** | Ensure correct payload |
+```css
+.photo-grid-2 {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+}
 
----
+.photo-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+}
 
-## Testing Strategy
+.photo-grid-2 .photo-item img {
+  width: 280px;
+  height: 150px;
+  object-fit: cover;
+}
 
-1. Deploy new Edge Function
-2. Generate a test report using existing inspection data
-3. Compare output visually against reference document
-4. Verify all images render correctly
-5. Check page breaks and layout consistency
-6. Validate footer pagination
+.photo-grid-3 .photo-item img {
+  width: 180px;
+  height: 120px;
+  object-fit: cover;
+}
+```
 
----
+### Phase 3: Update Image Collection Logic
 
-## Timeline Estimate
+Modify the image pipeline to:
+1. Detect the grid layout (2 or 3 columns based on photo count or data flag)
+2. Apply correct compression size based on target layout
+3. Track image type in the collection process
 
-- Phase 1 (HTML Template): Core implementation
-- Phase 2 (Image Pipeline): Using proven patterns from existing code
-- Phase 3 (Integration): Minimal changes
-- Phase 4 (Testing): Visual verification
+```typescript
+interface ImageRequest {
+  url: string;
+  type: 'logo' | 'photo_2col' | 'photo_3col';
+}
 
----
+function buildTransformUrl(bucket: string, filePath: string, imageType: keyof typeof IMAGE_SPECS): string {
+  const spec = IMAGE_SPECS[imageType];
+  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
+}
+```
 
-## Risk Mitigation
+### Phase 4: Update Section Renderer
 
-- **Browserless Timeout**: Set generous timeouts, use efficient HTML
-- **Large Reports**: Implement chunked image processing
-- **Fallback**: Keep existing generators as backup during transition
+Modify `buildSectionPagesHTML` to choose grid class based on photo count:
+
+```typescript
+// Choose grid layout based on photo count
+const gridClass = photos.length >= 3 ? 'photo-grid-3' : 'photo-grid-2';
+
+html += `<div class="${gridClass}">${photoHtml}</div>`;
+```
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `supabase/functions/generate-inspection-pdf/index.ts` | Add IMAGE_SPECS, update CSS with 2-col and 3-col grids, update buildTransformUrl to accept image type, update section renderer to pick grid class |
+
+## Visual Result
+
+**2-Column Layout** (1-2 photos):
+```text
++-------------------+    +-------------------+
+|                   |    |                   |
+|   Photo 1 (320px) |    |   Photo 2 (320px) |
+|                   |    |                   |
++-------------------+    +-------------------+
+      Photo 1                  Photo 2
+```
+
+**3-Column Layout** (3+ photos):
+```text
++-------------+    +-------------+    +-------------+
+|             |    |             |    |             |
+| Photo (200) |    | Photo (200) |    | Photo (200) |
+|             |    |             |    |             |
++-------------+    +-------------+    +-------------+
+    Photo 1            Photo 2            Photo 3
+```
+
+## Benefits
+
+1. **Optimised file sizes**: Images compressed to exact template dimensions
+2. **Faster processing**: Smaller downloads = less memory pressure
+3. **Pixel-perfect rendering**: No browser scaling artifacts
+4. **Flexible layouts**: Automatic 2 or 3 column based on photo count
+5. **SANS compliance**: Clean professional documentation layout
+
