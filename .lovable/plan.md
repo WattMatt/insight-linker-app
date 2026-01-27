@@ -1,147 +1,149 @@
 
 
-# 3-Column Photo Grid Support with Template-First Sizing
+# Fix Page Break Issues & Duplicate Footers
 
-## Current State
+## Problems Identified
 
-The HTML template currently uses a **fixed 2-column grid** for all photo layouts:
+1. **Duplicate footers** on every page (static HTML + Browserless template)
+2. **Inconsistent page counts** ("Page X of 11" vs "Page X of 9")
+3. **Content bleeding** without proper header spacing
+4. **CSS @page margin:0** conflicting with Browserless margin settings
 
-```css
-.photo-grid {
-  grid-template-columns: repeat(2, 1fr);  /* Always 2 columns */
-}
-```
+## Solution Overview
 
-Images are compressed to 400px @ 60% quality - which is arbitrary and not matched to template dimensions.
+Remove all static footers from the HTML and rely solely on Browserless's dynamic header/footer templates. Fix the CSS @page rule to work with Browserless margins.
 
-## What You Need
-
-Support for **2-column AND 3-column photo grids** with images sized exactly for their container.
-
-## Template Layout Calculations
-
-### A4 Content Width
-- A4 page: 210mm = ~794px at 96 DPI
-- Content padding: 24px each side = 48px total
-- Available width: 794px - 48px = **746px**
-- Photo grid padding: 14px each side = 28px
-- Usable photo area: 746px - 28px = **718px**
-
-### Photo Sizing Per Layout
-
-| Layout | Column Width | Optimal Image Size | Quality |
-|--------|--------------|-------------------|---------|
-| 2-column | 718px / 2 - gap = ~340px | **320 x 180px** | 75% |
-| 3-column | 718px / 3 - gap = ~225px | **200 x 150px** | 75% |
-| Logo | Fixed | **180 x 100px** | 80% |
+---
 
 ## Implementation Plan
 
-### Phase 1: Add IMAGE_SPECS Constants
+### Step 1: Remove All Static HTML Footers
 
-Define explicit sizing for each image context:
+Delete the `.footer` div from all page builder functions:
 
-```typescript
-const IMAGE_SPECS = {
-  logo: { width: 180, height: 100, quality: 80 },
-  photo_2col: { width: 320, height: 180, quality: 75 },
-  photo_3col: { width: 200, height: 150, quality: 75 },
-};
+| Function | Lines to Remove |
+|----------|-----------------|
+| `buildCoverPageHTML` | Lines 475-479 |
+| `buildDashboardHTML` | Lines 543-547 |
+| `buildBreakdownHTML` | Lines 631-635 |
+
+Also remove the `.footer` CSS class definition (lines 774-786).
+
+### Step 2: Fix CSS @page Rule
+
+Change:
+```css
+@page { 
+  size: A4; 
+  margin: 0; 
+}
 ```
 
-### Phase 2: Add Dynamic Grid Classes
+To:
+```css
+@page { 
+  size: A4; 
+  margin: 20mm 0 15mm 0;
+}
+```
 
-Update CSS to support both layouts:
+This ensures consistent margins are applied within the CSS itself, not conflicting with Browserless.
+
+### Step 3: Add Top Padding to Body/Content
+
+Add padding to the body or a wrapper to create consistent "header distance":
 
 ```css
-.photo-grid-2 {
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 12px;
-}
-
-.photo-grid-3 {
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 10px;
-}
-
-.photo-grid-2 .photo-item img {
-  width: 280px;
-  height: 150px;
-  object-fit: cover;
-}
-
-.photo-grid-3 .photo-item img {
-  width: 180px;
-  height: 120px;
-  object-fit: cover;
+body {
+  padding-top: 15mm;
 }
 ```
 
-### Phase 3: Update Image Collection Logic
+This ensures all pages have content starting below the top margin zone.
 
-Modify the image pipeline to:
-1. Detect the grid layout (2 or 3 columns based on photo count or data flag)
-2. Apply correct compression size based on target layout
-3. Track image type in the collection process
+### Step 4: Fix Flowing Section Header Distance
+
+Update `.section-container` to have proper top spacing:
+
+```css
+.section-container {
+  page-break-before: always;
+  padding-top: 0; /* margin handled by @page */
+}
+
+.section-container:first-child {
+  page-break-before: auto;
+}
+```
+
+The padding is no longer needed because `@page` margins handle it.
+
+### Step 5: Update Browserless Options
+
+Ensure margins align with CSS:
 
 ```typescript
-interface ImageRequest {
-  url: string;
-  type: 'logo' | 'photo_2col' | 'photo_3col';
-}
-
-function buildTransformUrl(bucket: string, filePath: string, imageType: keyof typeof IMAGE_SPECS): string {
-  const spec = IMAGE_SPECS[imageType];
-  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
-}
+margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
 ```
 
-### Phase 4: Update Section Renderer
+Since `@page` now handles margins, Browserless shouldn't double-apply them.
 
-Modify `buildSectionPagesHTML` to choose grid class based on photo count:
+Alternatively, keep Browserless margins and remove `@page { margin: 0 }`:
 
 ```typescript
-// Choose grid layout based on photo count
-const gridClass = photos.length >= 3 ? 'photo-grid-3' : 'photo-grid-2';
-
-html += `<div class="${gridClass}">${photoHtml}</div>`;
+margin: { top: '20mm', right: '10mm', bottom: '20mm', left: '10mm' },
 ```
 
-## Files to Modify
+---
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-inspection-pdf/index.ts` | Add IMAGE_SPECS, update CSS with 2-col and 3-col grids, update buildTransformUrl to accept image type, update section renderer to pick grid class |
+## Technical Details
 
-## Visual Result
+### File to Modify
+`supabase/functions/generate-inspection-pdf/index.ts`
 
-**2-Column Layout** (1-2 photos):
+### Changes Summary
+
+| Section | Change |
+|---------|--------|
+| CSS `@page` rule (line 719-721) | Add proper margins: `margin: 20mm 10mm 20mm 10mm` |
+| CSS `.footer` class (lines 774-786) | Remove entirely |
+| Cover page (lines 475-479) | Remove static footer div |
+| Dashboard page (lines 543-547) | Remove static footer div |
+| Breakdown page (lines 631-635) | Remove static footer div |
+| `.section-container` (lines 1012-1020) | Remove extra padding-top (margins handled by @page) |
+| Browserless options (line 1217) | Set `margin: { top: '0mm', bottom: '20mm' }` to let @page handle top and Browserless handle footer space |
+
+### Expected Result
+
+After these changes:
+- **Single footer** per page from Browserless template
+- **Accurate page numbering** (dynamic "Page X of Y")
+- **Consistent 20mm top margin** on every page
+- **No duplicate dates** or conflicting information
+- **Professional header distance** before content starts
+
+---
+
+## Visual Comparison
+
+**Before:**
 ```text
-+-------------------+    +-------------------+
-|                   |    |                   |
-|   Photo 1 (320px) |    |   Photo 2 (320px) |
-|                   |    |                   |
-+-------------------+    +-------------------+
-      Photo 1                  Photo 2
++------------------------+
+| Content starts here    |  ← Too close to top
+| ...                    |
+| Footer: Page 1 of 11   |  ← Static HTML footer
+| Footer: Page 1 of 9    |  ← Browserless footer (duplicate!)
++------------------------+
 ```
 
-**3-Column Layout** (3+ photos):
+**After:**
 ```text
-+-------------+    +-------------+    +-------------+
-|             |    |             |    |             |
-| Photo (200) |    | Photo (200) |    | Photo (200) |
-|             |    |             |    |             |
-+-------------+    +-------------+    +-------------+
-    Photo 1            Photo 2            Photo 3
++------------------------+
+|                        |  ← 20mm margin
+| Content starts here    |
+| ...                    |
+|                        |
+| Page 1 of 9 | Date     |  ← Single Browserless footer
++------------------------+
 ```
-
-## Benefits
-
-1. **Optimised file sizes**: Images compressed to exact template dimensions
-2. **Faster processing**: Smaller downloads = less memory pressure
-3. **Pixel-perfect rendering**: No browser scaling artifacts
-4. **Flexible layouts**: Automatic 2 or 3 column based on photo count
-5. **SANS compliance**: Clean professional documentation layout
 
