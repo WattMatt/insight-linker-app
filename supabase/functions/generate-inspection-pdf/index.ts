@@ -79,7 +79,7 @@ interface InspectionPayload {
 }
 
 // ============================================================================
-// IMAGE PROCESSING PIPELINE - Refactored to use Signed URLs with Transform
+// IMAGE PROCESSING PIPELINE - Aligned with DOCX Generator (Direct Render API)
 // ============================================================================
 
 // Maximum images to process to avoid CPU limits
@@ -88,15 +88,15 @@ const MAX_TOTAL_IMAGES = 40;
 const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column grid
 
 /**
- * Image size specifications - matched to DOCX generator dimensions
- * These are the EXACT values used by the Low Voltage Line Shop Board Audit
- * The transform API crops/scales to these dimensions server-side
+ * Image size specifications - ALIGNED WITH DOCX GENERATOR APPROACH
+ * Uses SINGLE maxWidth parameter to let server preserve aspect ratio automatically
+ * This matches the exact approach in generate-docx-report/index.ts (line 253)
  */
 const IMAGE_SPECS = {
-  logo: { width: 180, height: 100, quality: 80 },
-  photo_2col: { width: 240, height: 180, quality: 75 },  // Matches DOCX: 240x180
-  photo_3col: { width: 180, height: 135, quality: 75 },  // Proportional 4:3 for 3-col
-  signature: { width: 400, height: 150, quality: 85 },
+  logo: { maxWidth: 200, quality: 80 },       // Logo: preserve quality, reasonable max
+  photo_2col: { maxWidth: 400, quality: 75 }, // Matches DOCX MAX_IMAGE_WIDTH = 400
+  photo_3col: { maxWidth: 300, quality: 75 }, // Smaller for 3-col grid
+  signature: { maxWidth: 400, quality: 85 },  // Signatures need clarity
 };
 
 type ImageType = keyof typeof IMAGE_SPECS;
@@ -184,9 +184,12 @@ function detectImageType(bytes: Uint8Array): string {
 }
 
 /**
- * Download image using createSignedUrl with transform options
- * This is the proven method that works reliably in Edge Functions
+ * Download image using Direct Render API - ALIGNED WITH DOCX GENERATOR
+ * This is the EXACT same approach used in generate-docx-report/index.ts (line 253)
+ * Uses /storage/v1/render/image/public/ endpoint with width and quality params
+ * Server automatically preserves aspect ratio when only width is specified
  */
+
 /**
  * Search for alternative file in the same directory when exact file not found
  * This handles cases where files were re-uploaded with different naming patterns
@@ -248,109 +251,85 @@ async function findAlternativeFile(bucket: string, filePath: string): Promise<st
   }
 }
 
-async function downloadImageWithSignedUrl(
-  bucket: string, 
-  filePath: string, 
-  imageType: ImageType
+/**
+ * Download image via Direct Render API - MATCHES DOCX GENERATOR EXACTLY
+ * Constructs URL: /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
+ */
+async function downloadImageViaRenderAPI(
+  bucket: string,
+  filePath: string,
+  maxWidth: number,
+  quality: number = 75
 ): Promise<ArrayBuffer | null> {
-  const supabase = getSupabaseClient();
-  const spec = IMAGE_SPECS[imageType];
+  // Construct transform URL exactly like DOCX generator (line 253)
+  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
   
-  // For logos, download without transformation to preserve quality
-  if (imageType === 'logo') {
-    console.log(`[ImagePipeline] LOGO: Downloading original (no transformation)`);
-    try {
-      const { data: blob, error } = await supabase.storage
-        .from(bucket)
-        .download(filePath);
-      if (error || !blob) {
-        console.warn(`[ImagePipeline] Logo download failed: ${error?.message}`);
-        return null;
-      }
-      const buffer = await blob.arrayBuffer();
-      console.log(`[ImagePipeline] ✓ Logo downloaded: ${Math.round(buffer.byteLength / 1024)}KB`);
-      return buffer;
-    } catch (err) {
-      console.warn(`[ImagePipeline] Logo download exception:`, err);
-      return null;
-    }
-  }
-  
-  // For photos: Use createSignedUrl with transform options
   try {
-    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(filePath, 60, {
-        transform: {
-          width: spec.width,
-          quality: spec.quality,
-        }
-      });
+    console.log(`[ImagePipeline] Render API: width=${maxWidth}, quality=${quality}`);
     
-    if (signedUrlError) {
-      console.warn(`[ImagePipeline] Signed URL failed for ${filePath.substring(0, 40)}...: ${signedUrlError.message}`);
-      
-      // NEW: Search for alternative file in the same directory
-      const alternativePath = await findAlternativeFile(bucket, filePath);
-      
-      if (alternativePath) {
-        console.log(`[ImagePipeline] Trying alternative file: ${alternativePath.substring(0, 50)}...`);
-        // Recursively try with the alternative path
-        return await downloadImageWithSignedUrl(bucket, alternativePath, imageType);
-      }
-      
-      // Fallback to direct download (without transformation)
-      console.log(`[ImagePipeline] Falling back to direct download for: ${filePath.substring(0, 40)}...`);
-      const { data: blob, error } = await supabase.storage
-        .from(bucket)
-        .download(filePath);
-      if (error || !blob) {
-        console.error(`[ImagePipeline] Direct download also failed: ${error?.message}`);
-        return null;
-      }
-      return await blob.arrayBuffer();
-    }
-    
-    console.log(`[ImagePipeline] Photo transform: ${spec.width}px @ ${spec.quality}%`);
-    
-    // Fetch the transformed image using the signed URL
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
     
-    try {
-      const response = await fetch(signedUrlData.signedUrl, { 
-        signal: controller.signal,
-        headers: { 'Accept': 'image/*' }
-      });
-      clearTimeout(timeoutId);
-      
-      if (!response.ok) {
-        console.warn(`[ImagePipeline] Fetch signed URL failed: HTTP ${response.status}`);
-        // Fallback to direct download
-        const { data: blob, error } = await supabase.storage
-          .from(bucket)
-          .download(filePath);
-        if (error || !blob) return null;
-        return await blob.arrayBuffer();
-      }
-      
+    const response = await fetch(transformUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'image/*' }
+    });
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
       const buffer = await response.arrayBuffer();
-      console.log(`[ImagePipeline] ✓ Transformed ${filePath.substring(0, 30)}... → ${Math.round(buffer.byteLength / 1024)}KB`);
+      console.log(`[ImagePipeline] ✓ Render API success: ${Math.round(buffer.byteLength / 1024)}KB`);
       return buffer;
-    } catch (fetchError) {
-      clearTimeout(timeoutId);
-      console.warn(`[ImagePipeline] Fetch error:`, fetchError);
-      return null;
     }
+    
+    console.warn(`[ImagePipeline] Render API failed: HTTP ${response.status}`);
   } catch (err) {
-    console.warn(`[ImagePipeline] Error processing ${filePath.substring(0, 40)}...:`, err);
+    console.warn(`[ImagePipeline] Render API error:`, err);
+  }
+  
+  // Fallback: Try alternative file in same directory
+  const alternativePath = await findAlternativeFile(bucket, filePath);
+  if (alternativePath && alternativePath !== filePath) {
+    console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
+    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?width=${maxWidth}&quality=${quality}`;
+    
+    try {
+      const altResponse = await fetch(altUrl);
+      if (altResponse.ok) {
+        const buffer = await altResponse.arrayBuffer();
+        console.log(`[ImagePipeline] ✓ Alternative success: ${Math.round(buffer.byteLength / 1024)}KB`);
+        return buffer;
+      }
+    } catch {
+      // Fall through to direct download
+    }
+  }
+  
+  // Final fallback: Direct download without transformation
+  console.log(`[ImagePipeline] Falling back to direct download...`);
+  const supabase = getSupabaseClient();
+  const { data: blob, error } = await supabase.storage
+    .from(bucket)
+    .download(filePath);
+  
+  if (error || !blob) {
+    console.error(`[ImagePipeline] Direct download also failed: ${error?.message}`);
     return null;
   }
+  
+  const buffer = await blob.arrayBuffer();
+  console.log(`[ImagePipeline] ✓ Direct download: ${Math.round(buffer.byteLength / 1024)}KB`);
+  return buffer;
 }
 
 /**
  * Download image and convert to base64 data URI
  * Uses createSignedUrl with transform options for Supabase images
+ * Falls back to direct fetch for external URLs
+ */
+/**
+ * Download image and convert to base64 data URI
+ * Uses Direct Render API (matching DOCX generator) for Supabase images
  * Falls back to direct fetch for external URLs
  */
 async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
@@ -367,8 +346,13 @@ async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): 
     const parsed = parseSupabaseStorageUrl(url);
     
     if (parsed) {
-      // Use the proven signed URL approach for Supabase storage
-      const buffer = await downloadImageWithSignedUrl(parsed.bucket, parsed.path, imageType);
+      // Use Direct Render API - MATCHES DOCX GENERATOR APPROACH
+      const buffer = await downloadImageViaRenderAPI(
+        parsed.bucket,
+        parsed.path,
+        spec.maxWidth,
+        spec.quality
+      );
       
       if (buffer && buffer.byteLength > 0) {
         if (buffer.byteLength > maxSizeKB * 1024) {
@@ -1399,24 +1383,25 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* 2-column photo sizing - FIXED dimensions matching DOCX generator */
+    /* 2-column photo sizing - ASPECT RATIO PRESERVED (matching DOCX approach)
+       Server resizes to maxWidth=400, aspect ratio preserved automatically.
+       CSS uses max-width + height:auto to let natural dimensions flow. */
     .photo-grid-2 .photo-item img {
-      width: 240px;
-      height: 180px;
+      width: 100%;
+      max-width: 300px;
+      height: auto;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: contain;
-      background: #f9fafb;
     }
     
-    /* 3-column photo sizing - FIXED dimensions matching DOCX proportions */
+    /* 3-column photo sizing - ASPECT RATIO PRESERVED (matching DOCX approach)
+       Server resizes to maxWidth=300, aspect ratio preserved automatically. */
     .photo-grid-3 .photo-item img {
-      width: 180px;
-      height: 135px;
+      width: 100%;
+      max-width: 200px;
+      height: auto;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: contain;
-      background: #f9fafb;
     }
     
     .photo-label {
@@ -1498,13 +1483,13 @@ function buildCompleteHTML(
       text-align: center;
     }
     
+    /* Tenant image sizing - ASPECT RATIO PRESERVED (matching DOCX approach) */
     .tenant-image-item img {
-      width: 180px;
-      height: 135px;
+      width: 100%;
+      max-width: 200px;
+      height: auto;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      object-fit: contain;
-      background: #f9fafb;
     }
   `;
   
