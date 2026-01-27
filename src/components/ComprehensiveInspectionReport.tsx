@@ -116,25 +116,44 @@ export async function generateAndSaveComprehensiveReport(
       };
     });
 
-    // Extract tenant data from jsonData or template
-    const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
-    const tenantsData = jsonData.tenants || {};
+    // Extract tenant data - jsonData.tenants is stored as an ARRAY, not an object map
+    // Support both array format (from InspectionDetail) and object format (legacy)
+    const rawTenants = jsonData.tenants;
+    let tenantsForPdf: any[] = [];
     
-    const tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
-      const tenantId = String(tenant.id ?? idx);
-      const tenantData = tenantsData[tenantId] || {};
-      
-      return {
-        shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
-        shopNumber: tenant.shopNumber,
-        meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber,
-        breakerSize: tenantData.breakerSize || tenant.breakerSize,
-        ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio,
-        meterImage: tenantData.meterImage,
-        breakerImage: tenantData.breakerImage,
-        ctRatioImage: tenantData.ctRatioImage,
-      };
-    });
+    if (Array.isArray(rawTenants) && rawTenants.length > 0) {
+      // Tenants stored as array - direct extraction
+      console.log('[ComprehensiveReport] Extracting tenants from array:', rawTenants.length);
+      tenantsForPdf = rawTenants.map((tenant: any, idx: number) => ({
+        shopName: tenant.shopName || `Tenant ${idx + 1}`,
+        shopNumber: tenant.shopNumber || '',
+        meterSerialNumber: tenant.meterSerialNumber || '',
+        breakerSize: tenant.breakerSize || '',
+        ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+        meterImage: tenant.meterImage || undefined,
+        breakerImage: tenant.breakerImage || undefined,
+        ctRatioImage: tenant.ctRatioImage || undefined,
+      }));
+    } else if (rawTenants && typeof rawTenants === 'object') {
+      // Legacy: tenants stored as object map
+      const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
+      tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
+        const tenantId = String(tenant.id ?? idx);
+        const tenantData = rawTenants[tenantId] || {};
+        return {
+          shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
+          shopNumber: tenant.shopNumber || '',
+          meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber || '',
+          breakerSize: tenantData.breakerSize || tenant.breakerSize || '',
+          ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio || '',
+          meterImage: tenantData.meterImage,
+          breakerImage: tenantData.breakerImage,
+          ctRatioImage: tenantData.ctRatioImage,
+        };
+      });
+    }
+    
+    console.log('[ComprehensiveReport] Tenants for PDF:', tenantsForPdf.length);
 
     // Build PDFShift inspection data
     const pdfData: PdfShiftInspectionData = {
@@ -333,25 +352,43 @@ export const ComprehensiveInspectionReport = ({
       
       console.log(`[ComprehensiveReport] Total photos found across all sections: ${totalPhotosFound}`);
 
-      // Extract tenant data from jsonData or template
-      const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
-      const tenantsData = jsonData.tenants || {};
+      // Extract tenant data - jsonData.tenants is stored as an ARRAY, not an object map
+      const rawTenants = jsonData.tenants;
+      let tenantsForPdf: any[] = [];
       
-      const tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
-        const tenantId = String(tenant.id ?? idx);
-        const tenantData = tenantsData[tenantId] || {};
-        
-        return {
-          shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
-          shopNumber: tenant.shopNumber,
-          meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber,
-          breakerSize: tenantData.breakerSize || tenant.breakerSize,
-          ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio,
-          meterImage: tenantData.meterImage,
-          breakerImage: tenantData.breakerImage,
-          ctRatioImage: tenantData.ctRatioImage,
-        };
-      });
+      if (Array.isArray(rawTenants) && rawTenants.length > 0) {
+        // Tenants stored as array - direct extraction
+        console.log('[ComprehensiveReport] Preview: Extracting tenants from array:', rawTenants.length);
+        tenantsForPdf = rawTenants.map((tenant: any, idx: number) => ({
+          shopName: tenant.shopName || `Tenant ${idx + 1}`,
+          shopNumber: tenant.shopNumber || '',
+          meterSerialNumber: tenant.meterSerialNumber || '',
+          breakerSize: tenant.breakerSize || '',
+          ctSizeAndRatio: tenant.ctSizeAndRatio || '',
+          meterImage: tenant.meterImage || undefined,
+          breakerImage: tenant.breakerImage || undefined,
+          ctRatioImage: tenant.ctRatioImage || undefined,
+        }));
+      } else if (rawTenants && typeof rawTenants === 'object') {
+        // Legacy: tenants stored as object map
+        const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
+        tenantsForPdf = templateTenants.map((tenant: any, idx: number) => {
+          const tenantId = String(tenant.id ?? idx);
+          const tenantData = rawTenants[tenantId] || {};
+          return {
+            shopName: tenant.shopName || tenant.name || `Tenant ${idx + 1}`,
+            shopNumber: tenant.shopNumber || '',
+            meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber || '',
+            breakerSize: tenantData.breakerSize || tenant.breakerSize || '',
+            ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio || '',
+            meterImage: tenantData.meterImage,
+            breakerImage: tenantData.breakerImage,
+            ctRatioImage: tenantData.ctRatioImage,
+          };
+        });
+      }
+      
+      console.log('[ComprehensiveReport] Preview: Tenants for PDF:', tenantsForPdf.length);
 
       // Build PDFShift inspection data
       const pdfData: PdfShiftInspectionData = {
