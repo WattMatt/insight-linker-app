@@ -1212,7 +1212,7 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       options: {
         format: 'A4',
         printBackground: true,
-        margin: { top: '0mm', right: '0mm', bottom: '15mm', left: '0mm' },
+        margin: { top: '20mm', right: '0mm', bottom: '15mm', left: '0mm' },
         displayHeaderFooter: true,
         headerTemplate: '<span></span>',
         footerTemplate: footerTemplate,
