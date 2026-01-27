@@ -1,132 +1,96 @@
 
-# Remove Blank Pages from PDF Report
+# Plan: Fix EMB Report Content Population
 
-## Problem Identified
+## Problem Summary
+The Electrical Main Board (EMB) inspection report is generating with the correct **structure** but missing **content** (photos and tenant details). Analysis shows:
 
-The PDF has unnecessary blank pages at positions 2, 4, and 6 because:
+1. **Image Pipeline Failure**: All 15+ images fail to download in the Edge Function
+   - Transform API returns 400 errors
+   - Direct storage download fails with `StorageUnknownError`
+   
+2. **Tenant Section Empty**: Shows "Tenant 1" but no details or photos because image loading fails
 
-1. **Fixed pages** (Cover, Dashboard, Breakdown) use `.page` class with `page-break-after: always`
-2. **Flowing sections** use `.section-container` with `page-break-before: always`
-3. These **double page-break rules** combined with the CSS `@page { margin: 20mm 10mm 20mm 10mm }` create blank intermediate pages
+3. **Section Photos Missing**: Status badges appear (PASS/FAIL) but photos are not rendered
 
-```text
-Current flow causing blank pages:
-┌─────────────┐    ┌───────────┐    ┌─────────────┐
-│ Cover Page  │ -> │ BLANK     │ -> │ Dashboard   │
-│ (break-after)│    │ (unwanted)│    │ (break-after)│
-└─────────────┘    └───────────┘    └─────────────┘
-                        ↓
-              ┌───────────┐    ┌─────────────┐
-              │ BLANK     │ -> │ Breakdown   │
-              │ (unwanted)│    │ (break-after)│
-              └───────────┘    └─────────────┘
-```
-
----
+## Root Cause
+The `generate-inspection-pdf` Edge Function uses an incorrect image download strategy:
+- Uses raw transform URL (`/storage/v1/render/image/public/...`) which fails
+- Creates a new Supabase client for each image (inefficient)
+- The working `generate-pdf-browserless` function uses `createSignedUrl` with `transform` options
 
 ## Solution
 
-Remove the conflict by using ONLY one page-break method. Since the `@page` margins now handle layout, we'll remove `page-break-after` from fixed pages and rely on section containers to force breaks only when needed.
+### 1. Refactor Image Pipeline to Use Signed URLs
+Replace the current broken approach with the proven pattern from `generate-pdf-browserless`:
 
----
+```text
+Current (Broken):
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Build raw transform URL                                  │
+│ 2. Fetch transform URL → 400 Error                         │
+│ 3. Create new Supabase client                              │
+│ 4. Call storage.download() → StorageUnknownError           │
+│ 5. Image fails                                              │
+└─────────────────────────────────────────────────────────────┘
 
-## Implementation Plan
-
-### Step 1: Remove `page-break-after` from `.page` class
-
-Update the CSS for `.page`:
-
-**Before:**
-```css
-.page {
-  width: 210mm;
-  min-height: 297mm;
-  padding: 0;
-  position: relative;
-  page-break-after: always;
-  background: white;
-}
-
-.page:last-child {
-  page-break-after: auto;
-}
+Fixed (Working):
+┌─────────────────────────────────────────────────────────────┐
+│ 1. Parse Supabase URL to get bucket + path                  │
+│ 2. Use singleton Supabase client                           │
+│ 3. Call createSignedUrl() with transform options           │
+│ 4. Fetch signed URL with compression                        │
+│ 5. Fallback to direct download if needed                   │
+│ 6. Image succeeds                                           │
+└─────────────────────────────────────────────────────────────┘
 ```
 
-**After:**
-```css
-.page {
-  width: 210mm;
-  min-height: 297mm;
-  padding: 0;
-  position: relative;
-  page-break-inside: avoid;
-  background: white;
-}
+### 2. Implementation Changes
+
+**File: `supabase/functions/generate-inspection-pdf/index.ts`**
+
+a) **Add singleton Supabase client pattern**:
+   - Move client creation to module level with lazy initialization
+   - Reuse across all image downloads
+
+b) **Replace `buildTransformUrl` with `createSignedUrl` approach**:
+   - Use `storage.createSignedUrl()` with `transform` options for photos
+   - Use direct `storage.download()` for logos
+   - Add proper fallback chain
+
+c) **Fix URL parsing**:
+   - Use the proven `parseSupabaseStorageUrl` function from `generate-pdf-browserless`
+   - Properly handle public and signed URL formats
+
+d) **Improve logging**:
+   - Add success/failure counts per image type
+   - Log transformed URL for debugging
+
+### 3. Technical Changes
+
+```text
+Files to Modify:
+├── supabase/functions/generate-inspection-pdf/index.ts
+│   ├── Add getSupabaseClient() singleton function
+│   ├── Add parseSupabaseStorageUrl() utility function  
+│   ├── Rewrite imageToBase64() to use signed URL approach
+│   ├── Remove buildTransformUrl() function (unused)
+│   └── Keep IMAGE_SPECS for dimension reference
 ```
 
-The `page-break-after` rule is removed entirely; each page's content will fill its space naturally and the `@page` margins handle separation.
-
-### Step 2: Add `page-break-before` to non-first `.page` elements
-
-To ensure Dashboard and Breakdown still start on new pages, add CSS:
-
-```css
-.page.dashboard,
-.page.breakdown {
-  page-break-before: always;
-}
-```
-
-This forces only these specific pages to start fresh, without creating trailing blank pages.
-
-### Step 3: Keep `.section-container` logic unchanged
-
-The existing rules work correctly for flowing section content:
-
-```css
-.section-container {
-  page-break-before: always;
-}
-
-.section-container:first-child {
-  page-break-before: auto;
-}
-```
-
-The `:first-child` selector prevents a break before the first section since it immediately follows Breakdown.
-
----
-
-## Technical Summary
-
-| CSS Class | Current Issue | Fix |
-|-----------|--------------|-----|
-| `.page` | `page-break-after: always` creates trailing blanks | Remove `page-break-after`, keep `page-break-inside: avoid` |
-| `.page.dashboard`, `.page.breakdown` | Need to start on new pages | Add `page-break-before: always` |
-| `.page:last-child` | No longer needed | Remove entirely |
-| `.section-container` | Works correctly | No change |
-| `.section-container:first-child` | Works correctly | No change |
-
----
-
-## File to Modify
-
-`supabase/functions/generate-inspection-pdf/index.ts`
-
-### Lines to Change
-
-| Section | Line Range | Change |
-|---------|------------|--------|
-| `.page` CSS rule | ~718-726 | Remove `page-break-after: always` |
-| `.page:last-child` rule | ~728-730 | Remove entirely |
-| New CSS after `.page` | After ~726 | Add `.page.dashboard, .page.breakdown { page-break-before: always; }` |
-
----
-
-## Expected Result
-
+### 4. Verification Steps
 After implementation:
-- **14 pages reduced to 11** (or correct count without blanks)
-- Cover → Dashboard → Breakdown → Sections flow without intermediate empty pages
-- Page numbering "Page X of Y" will be accurate
-- Professional layout maintained with consistent margins
+1. Generate an EMB inspection report
+2. Verify section photos appear in the PDF
+3. Verify tenant cards show all details (Shop Number, Meter Serial, Breaker Size, CT Ratio)
+4. Verify tenant images (Meter, Breaker, CT Ratio) appear in 3-column grid
+5. Check Edge Function logs show `✓ Processed X/Y images` with X > 0
+
+### 5. Expected Outcome
+- All section item photos will render in the report
+- Tenant Information section will display complete cards with:
+  - Shop name and number
+  - Meter serial number
+  - Breaker size  
+  - CT Size and Ratio
+  - Verification photos (Meter, Breaker, CT Ratio)
+- Quality Score Dashboard will show accurate photo count
