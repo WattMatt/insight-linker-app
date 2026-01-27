@@ -79,7 +79,7 @@ interface InspectionPayload {
 }
 
 // ============================================================================
-// IMAGE PROCESSING PIPELINE
+// IMAGE PROCESSING PIPELINE - Refactored to use Signed URLs with Transform
 // ============================================================================
 
 // Maximum images to process to avoid CPU limits
@@ -101,6 +101,60 @@ const IMAGE_SPECS = {
 
 type ImageType = keyof typeof IMAGE_SPECS;
 
+// Singleton Supabase client for efficient image processing
+let supabaseClient: ReturnType<typeof createClient> | null = null;
+
+function getSupabaseClient(): ReturnType<typeof createClient> {
+  if (!supabaseClient) {
+    supabaseClient = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  }
+  return supabaseClient;
+}
+
+/**
+ * Parse Supabase storage URL to extract bucket and file path
+ * Handles both public URLs and signed URLs
+ */
+function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
+  try {
+    const urlObj = new URL(url);
+    
+    // Match: /storage/v1/object/public/{bucket}/{path}
+    if (url.includes('/storage/v1/object/public/')) {
+      const pathParts = urlObj.pathname.split('/storage/v1/object/public/');
+      if (pathParts.length === 2) {
+        const filePathWithBucket = pathParts[1];
+        const firstSlashIndex = filePathWithBucket.indexOf('/');
+        if (firstSlashIndex > 0) {
+          return {
+            bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
+            path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
+          };
+        }
+      }
+    }
+    
+    // Match: /storage/v1/object/sign/{bucket}/{path} (signed URLs)
+    if (url.includes('/storage/v1/object/sign/')) {
+      const pathParts = urlObj.pathname.split('/storage/v1/object/sign/');
+      if (pathParts.length === 2) {
+        const filePathWithBucket = pathParts[1];
+        const firstSlashIndex = filePathWithBucket.indexOf('/');
+        if (firstSlashIndex > 0) {
+          return {
+            bucket: decodeURIComponent(filePathWithBucket.substring(0, firstSlashIndex)),
+            path: decodeURIComponent(filePathWithBucket.substring(firstSlashIndex + 1)),
+          };
+        }
+      }
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
 /**
  * Convert ArrayBuffer to base64 string safely (without stack overflow)
  * Uses chunked processing to avoid call stack issues with large buffers
@@ -119,99 +173,146 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
- * Build Supabase Image Transformation URL for compression
- * Uses template-matched dimensions for each image type
- * IMPORTANT: filePath must be properly encoded for URL usage
+ * Detect image MIME type from first bytes
  */
-function buildTransformUrl(bucket: string, filePath: string, imageType: ImageType): string {
+function detectImageType(bytes: Uint8Array): string {
+  if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
+  if (bytes[0] === 0x89 && bytes[1] === 0x50) return 'image/png';
+  if (bytes[0] === 0x47 && bytes[1] === 0x49) return 'image/gif';
+  if (bytes[0] === 0x52 && bytes[1] === 0x49) return 'image/webp';
+  return 'image/jpeg';
+}
+
+/**
+ * Download image using createSignedUrl with transform options
+ * This is the proven method that works reliably in Edge Functions
+ */
+async function downloadImageWithSignedUrl(
+  bucket: string, 
+  filePath: string, 
+  imageType: ImageType
+): Promise<ArrayBuffer | null> {
+  const supabase = getSupabaseClient();
   const spec = IMAGE_SPECS[imageType];
-  // Encode each path segment separately to preserve slashes but encode special chars
-  const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
-  // Supabase Image Transformation endpoint with resize=contain for aspect ratio preservation
-  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${encodedPath}?width=${spec.width}&height=${spec.height}&quality=${spec.quality}&resize=contain`;
+  
+  // For logos, download without transformation to preserve quality
+  if (imageType === 'logo') {
+    console.log(`[ImagePipeline] LOGO: Downloading original (no transformation)`);
+    try {
+      const { data: blob, error } = await supabase.storage
+        .from(bucket)
+        .download(filePath);
+      if (error || !blob) {
+        console.warn(`[ImagePipeline] Logo download failed: ${error?.message}`);
+        return null;
+      }
+      const buffer = await blob.arrayBuffer();
+      console.log(`[ImagePipeline] ✓ Logo downloaded: ${Math.round(buffer.byteLength / 1024)}KB`);
+      return buffer;
+    } catch (err) {
+      console.warn(`[ImagePipeline] Logo download exception:`, err);
+      return null;
+    }
+  }
+  
+  // For photos: Use createSignedUrl with transform options
+  try {
+    const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+      .from(bucket)
+      .createSignedUrl(filePath, 60, {
+        transform: {
+          width: spec.width,
+          quality: spec.quality,
+        }
+      });
+    
+    if (signedUrlError) {
+      console.warn(`[ImagePipeline] Signed URL failed for ${filePath.substring(0, 40)}...: ${signedUrlError.message}`);
+      // Fallback to direct download (without transformation)
+      console.log(`[ImagePipeline] Falling back to direct download for: ${filePath.substring(0, 40)}...`);
+      const { data: blob, error } = await supabase.storage
+        .from(bucket)
+        .download(filePath);
+      if (error || !blob) {
+        console.error(`[ImagePipeline] Direct download also failed: ${error?.message}`);
+        return null;
+      }
+      return await blob.arrayBuffer();
+    }
+    
+    console.log(`[ImagePipeline] Photo transform: ${spec.width}px @ ${spec.quality}%`);
+    
+    // Fetch the transformed image using the signed URL
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    
+    try {
+      const response = await fetch(signedUrlData.signedUrl, { 
+        signal: controller.signal,
+        headers: { 'Accept': 'image/*' }
+      });
+      clearTimeout(timeoutId);
+      
+      if (!response.ok) {
+        console.warn(`[ImagePipeline] Fetch signed URL failed: HTTP ${response.status}`);
+        // Fallback to direct download
+        const { data: blob, error } = await supabase.storage
+          .from(bucket)
+          .download(filePath);
+        if (error || !blob) return null;
+        return await blob.arrayBuffer();
+      }
+      
+      const buffer = await response.arrayBuffer();
+      console.log(`[ImagePipeline] ✓ Transformed ${filePath.substring(0, 30)}... → ${Math.round(buffer.byteLength / 1024)}KB`);
+      return buffer;
+    } catch (fetchError) {
+      clearTimeout(timeoutId);
+      console.warn(`[ImagePipeline] Fetch error:`, fetchError);
+      return null;
+    }
+  } catch (err) {
+    console.warn(`[ImagePipeline] Error processing ${filePath.substring(0, 40)}...:`, err);
+    return null;
+  }
 }
 
 /**
  * Download image and convert to base64 data URI
- * Uses Supabase Image Transformation for compression before embedding
- * Image type determines the target dimensions for template-matched sizing
+ * Uses createSignedUrl with transform options for Supabase images
+ * Falls back to direct fetch for external URLs
  */
 async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already base64
   
   const spec = IMAGE_SPECS[imageType];
-  const maxSizeKB = imageType === 'logo' ? 100 : 200; // Smaller limit for logos
+  const maxSizeKB = imageType === 'logo' ? 150 : 300;
   
   try {
     console.log(`[ImagePipeline] Processing (${imageType}): ${url.substring(0, 60)}...`);
     
     // Check if this is a Supabase storage URL
-    if (url.includes('supabase') && url.includes('/storage/')) {
-      const urlObj = new URL(url);
-      const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/);
+    const parsed = parseSupabaseStorageUrl(url);
+    
+    if (parsed) {
+      // Use the proven signed URL approach for Supabase storage
+      const buffer = await downloadImageWithSignedUrl(parsed.bucket, parsed.path, imageType);
       
-      if (pathMatch) {
-        const [, bucket, filePath] = pathMatch;
-        const decodedPath = decodeURIComponent(filePath);
-        
-        // Try Supabase Image Transformation first (compressed to template dimensions)
-        const transformUrl = buildTransformUrl(bucket, decodedPath, imageType);
-        console.log(`[ImagePipeline] Transform (${spec.width}x${spec.height} @${spec.quality}%): ${transformUrl.substring(0, 80)}...`);
-        
-        try {
-          const controller = new AbortController();
-          const timeout = setTimeout(() => controller.abort(), 12000);
-          
-          const transformResponse = await fetch(transformUrl, {
-            signal: controller.signal,
-            headers: { 'Accept': 'image/*' }
-          });
-          clearTimeout(timeout);
-          
-          if (transformResponse.ok) {
-            const buffer = await transformResponse.arrayBuffer();
-            
-            if (buffer.byteLength > 0 && buffer.byteLength <= maxSizeKB * 1024) {
-              const base64 = arrayBufferToBase64(buffer);
-              const contentType = transformResponse.headers.get('content-type') || 'image/jpeg';
-              console.log(`[ImagePipeline] ✓ Transformed ${imageType} (${Math.round(buffer.byteLength / 1024)}KB)`);
-              return `data:${contentType};base64,${base64}`;
-            } else if (buffer.byteLength > maxSizeKB * 1024) {
-              console.warn(`[ImagePipeline] Transform still large (${Math.round(buffer.byteLength / 1024)}KB > ${maxSizeKB}KB limit)`);
-              // Don't return null - fall back to direct download
-            }
-          } else {
-            console.warn(`[ImagePipeline] Transform failed (${transformResponse.status}), falling back to storage download`);
-          }
-        } catch (transformError) {
-          console.warn(`[ImagePipeline] Transform error, falling back to storage download`);
+      if (buffer && buffer.byteLength > 0) {
+        if (buffer.byteLength > maxSizeKB * 1024) {
+          console.warn(`[ImagePipeline] Image still large after transform (${Math.round(buffer.byteLength / 1024)}KB), but continuing...`);
         }
         
-        // Fallback: Direct storage download via service role
-        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
-        console.log(`[ImagePipeline] Downloading original from bucket "${bucket}": ${decodedPath.substring(0, 60)}...`);
-        
-        const { data, error } = await supabase.storage.from(bucket).download(decodedPath);
-        
-        if (error) {
-          // Log the full error object for debugging
-          console.error(`[ImagePipeline] Storage error:`, JSON.stringify(error));
-        } else if (data) {
-          const buffer = await data.arrayBuffer();
-          
-          // Increase limit to 500KB for direct downloads since we can handle it
-          if (buffer.byteLength > 500 * 1024) {
-            console.warn(`[ImagePipeline] Original too large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
-            return null;
-          }
-          
-          const base64 = arrayBufferToBase64(buffer);
-          const mimeType = data.type || 'image/jpeg';
-          console.log(`[ImagePipeline] ✓ Original (${Math.round(buffer.byteLength / 1024)}KB)`);
-          return `data:${mimeType};base64,${base64}`;
-        }
+        const bytes = new Uint8Array(buffer);
+        const mimeType = detectImageType(bytes);
+        const base64 = arrayBufferToBase64(buffer);
+        console.log(`[ImagePipeline] ✓ OK (${Math.round(buffer.byteLength / 1024)}KB, ${mimeType})`);
+        return `data:${mimeType};base64,${base64}`;
       }
+      
+      console.warn(`[ImagePipeline] ✗ Failed to download from Supabase storage`);
+      return null;
     }
     
     // Fallback: Direct fetch for non-Supabase URLs
@@ -232,8 +333,8 @@ async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): 
     const buffer = await response.arrayBuffer();
     
     // Skip very large images
-    if (buffer.byteLength > 300 * 1024) {
-      console.warn(`[ImagePipeline] Skipping large image (${Math.round(buffer.byteLength / 1024)}KB)`);
+    if (buffer.byteLength > 500 * 1024) {
+      console.warn(`[ImagePipeline] Skipping large external image (${Math.round(buffer.byteLength / 1024)}KB)`);
       return null;
     }
     
