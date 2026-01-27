@@ -471,12 +471,6 @@ function buildCoverPageHTML(
           </div>
         </div>
       </div>
-      
-      <div class="footer">
-        <span>CONFIDENTIAL - For authorized use only</span>
-        <span>Page 1 of ${totalPages}</span>
-        <span>${date}</span>
-      </div>
     </div>
   `;
 }
@@ -538,12 +532,6 @@ function buildDashboardHTML(
             <div class="stat-card-label">Photos Captured</div>
           </div>
         </div>
-      </div>
-      
-      <div class="footer">
-        <span>CONFIDENTIAL - For authorized use only</span>
-        <span>Page ${currentPage} of ${totalPages}</span>
-        <span>${date}</span>
       </div>
     </div>
   `;
@@ -626,12 +614,6 @@ function buildBreakdownHTML(
             <tbody>${infoRows}</tbody>
           </table>
         ` : ''}
-      </div>
-      
-      <div class="footer">
-        <span>CONFIDENTIAL - For authorized use only</span>
-        <span>Page ${currentPage} of ${totalPages}</span>
-        <span>${date}</span>
       </div>
     </div>
   `;
@@ -717,7 +699,7 @@ function buildCompleteHTML(
   const css = `
     @page { 
       size: A4; 
-      margin: 0; 
+      margin: 20mm 10mm 20mm 10mm;
     }
     
     * {
@@ -768,21 +750,6 @@ function buildCompleteHTML(
     
     .info-banner {
       margin-top: 20px;
-    }
-    
-    /* Footer */
-    .footer {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
-      display: flex;
-      justify-content: space-between;
-      padding: 10px 24px;
-      font-size: 8pt;
-      color: #6b7280;
-      border-top: 1px solid #e5e7eb;
-      background: white;
     }
     
     /* Cover Page */
@@ -1011,12 +978,10 @@ function buildCompleteHTML(
     /* Section Container - flows across pages */
     .section-container {
       page-break-before: always;
-      padding-top: 20px;
     }
     
     .section-container:first-child {
       page-break-before: auto;
-      padding-top: 0;
     }
     
     .section-header-bar {
@@ -1214,11 +1179,11 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       options: {
         format: 'A4',
         printBackground: true,
-        margin: { top: '20mm', right: '0mm', bottom: '15mm', left: '0mm' },
+        margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' },
         displayHeaderFooter: true,
         headerTemplate: '<span></span>',
         footerTemplate: footerTemplate,
-        preferCSSPageSize: false,
+        preferCSSPageSize: true,
       },
     }),
   });
