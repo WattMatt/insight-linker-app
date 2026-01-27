@@ -64,42 +64,45 @@ function getSupabaseClient(): ReturnType<typeof createClient> {
 }
 
 // ============================================================================
-// IMAGE HANDLING - Strict Size Control for PDFShift 250MB Limit
+// IMAGE HANDLING - Direct Render API (Aligned with generate-inspection-pdf)
 // ============================================================================
-// PROBLEM: Legacy uncompressed images (15MB+) cause 384MB+ documents.
-// Supabase Image Transformation requires Pro plan and may not work.
+// UNIFIED APPROACH: Uses Supabase Direct Render API for server-side compression
+// This matches the working generate-inspection-pdf implementation exactly.
 // 
-// SOLUTION: Aggressively limit photo count and use smaller signed URLs.
-// For legacy sites with many large photos, we skip photos entirely and
-// provide a "photos available in system" note instead.
-// 
-// This ensures reliable PDF generation within the 250MB limit.
+// URL Pattern: /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
 
-const MAX_PHOTOS_PER_ITEM = 2;   // Reduced from 6 - only show key photos
-const MAX_TOTAL_PHOTOS = 20;    // Reduced from 60 - prevents size explosion
-const MAX_SNAG_PHOTOS = 1;      // Only 1 photo per snag
-const PHOTO_SIZE_ESTIMATE_KB = 2000; // Assume worst case 2MB per legacy photo
-const MAX_TOTAL_SIZE_MB = 100;  // Target max 100MB for photos (leave room for HTML)
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
 
-// Track global photo count and estimated size
+/**
+ * IMAGE_SPECS - UNIFIED 3-COLUMN GRID STANDARD
+ * Matches generate-inspection-pdf/index.ts (lines 101-105)
+ * All reports use consistent sizing for uniform PDF appearance
+ */
+const IMAGE_SPECS = {
+  logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint
+  photo: { maxWidth: 240, quality: 60 },      // All photos: unified 3-col sizing
+  signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
+};
+
+type ImageType = keyof typeof IMAGE_SPECS;
+
+const MAX_PHOTOS_PER_ITEM = 3;   // Support up to 3 photos per item for 3-column grid
+const MAX_TOTAL_PHOTOS = 30;    // Increased limit with smaller compressed images
+const MAX_SNAG_PHOTOS = 2;      // 2 photos per snag for 3-column
+
+// Track global photo count
 let globalPhotoCount = 0;
-let estimatedTotalSizeKB = 0;
 
 function resetPhotoCount() {
   globalPhotoCount = 0;
-  estimatedTotalSizeKB = 0;
 }
 
 function canAddPhoto(): boolean {
-  // Check both count limit and estimated size limit
-  const withinCount = globalPhotoCount < MAX_TOTAL_PHOTOS;
-  const withinSize = estimatedTotalSizeKB < (MAX_TOTAL_SIZE_MB * 1024);
-  return withinCount && withinSize;
+  return globalPhotoCount < MAX_TOTAL_PHOTOS;
 }
 
 function incrementPhotoCount() {
   globalPhotoCount++;
-  estimatedTotalSizeKB += PHOTO_SIZE_ESTIMATE_KB;
 }
 
 // Extract pattern from filename for matching alternatives
@@ -157,21 +160,6 @@ async function findMatchingFile(bucket: string, path: string): Promise<string | 
   }
 }
 
-// Compress image to target size using fetch + resize
-// This ensures ALL images are properly sized regardless of Supabase plan
-async function compressImage(imageData: ArrayBuffer, targetWidth: number = 400, quality: number = 0.6): Promise<string | null> {
-  try {
-    // For Edge Functions, we can't use Canvas API, so we return the original
-    // but with size limits enforced. The CSS will handle display sizing.
-    const base64 = arrayBufferToBase64(imageData);
-    const contentType = detectImageType(new Uint8Array(imageData));
-    return `data:${contentType};base64,${base64}`;
-  } catch (err) {
-    console.warn('[compressImage] Error:', err);
-    return null;
-  }
-}
-
 // Detect image type from magic bytes
 function detectImageType(bytes: Uint8Array): string {
   if (bytes[0] === 0xFF && bytes[1] === 0xD8) return 'image/jpeg';
@@ -181,14 +169,86 @@ function detectImageType(bytes: Uint8Array): string {
   return 'image/jpeg';
 }
 
-// Generate optimized image - tries transformation first, falls back to download + embed
-// This ensures reliable rendering with controlled file sizes
-const MAX_IMAGE_SIZE_KB = 100; // Target ~100KB per image
-const MAX_ORIGINAL_SIZE_KB = 500; // Skip images larger than 500KB original
+/**
+ * Download image via Direct Render API - MATCHES generate-inspection-pdf EXACTLY
+ * Constructs URL: /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
+ */
+async function downloadImageViaRenderAPI(
+  bucket: string,
+  filePath: string,
+  maxWidth: number,
+  quality: number = 75
+): Promise<ArrayBuffer | null> {
+  // Construct transform URL exactly like generate-inspection-pdf
+  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
+  
+  try {
+    console.log(`[ImagePipeline] Render API: width=${maxWidth}, quality=${quality}`);
+    
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 12000);
+    
+    const response = await fetch(transformUrl, {
+      signal: controller.signal,
+      headers: { 'Accept': 'image/*' }
+    });
+    clearTimeout(timeoutId);
+    
+    if (response.ok) {
+      const buffer = await response.arrayBuffer();
+      console.log(`[ImagePipeline] ✓ Render API success: ${Math.round(buffer.byteLength / 1024)}KB`);
+      return buffer;
+    }
+    
+    console.warn(`[ImagePipeline] Render API failed: HTTP ${response.status}`);
+  } catch (err) {
+    console.warn(`[ImagePipeline] Render API error:`, err);
+  }
+  
+  // Fallback: Try alternative file in same directory
+  const alternativePath = await findMatchingFile(bucket, filePath);
+  if (alternativePath && alternativePath !== filePath) {
+    console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
+    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?width=${maxWidth}&quality=${quality}`;
+    
+    try {
+      const altResponse = await fetch(altUrl);
+      if (altResponse.ok) {
+        const buffer = await altResponse.arrayBuffer();
+        console.log(`[ImagePipeline] ✓ Alternative success: ${Math.round(buffer.byteLength / 1024)}KB`);
+        return buffer;
+      }
+    } catch {
+      // Fall through to direct download
+    }
+  }
+  
+  // Final fallback: Direct download without transformation
+  console.log(`[ImagePipeline] Falling back to direct download...`);
+  const supabase = getSupabaseClient();
+  const { data: blob, error } = await supabase.storage
+    .from(bucket)
+    .download(filePath);
+  
+  if (error || !blob) {
+    console.error(`[ImagePipeline] Direct download also failed: ${error?.message}`);
+    return null;
+  }
+  
+  const buffer = await blob.arrayBuffer();
+  console.log(`[ImagePipeline] ✓ Direct download: ${Math.round(buffer.byteLength / 1024)}KB`);
+  return buffer;
+}
 
-async function getOptimizedImageUrl(url: string): Promise<string | null> {
+/**
+ * Download and convert image to base64 - Uses Direct Render API
+ * Matches generate-inspection-pdf implementation
+ */
+async function getOptimizedImageUrl(url: string, imageType: ImageType = 'photo'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already embedded
+  
+  const spec = IMAGE_SPECS[imageType];
   
   try {
     const parsed = parseSupabaseStorageUrl(url);
@@ -200,85 +260,39 @@ async function getOptimizedImageUrl(url: string): Promise<string | null> {
         if (!response.ok) return null;
         const buffer = await response.arrayBuffer();
         
-        // Skip if too large
-        if (buffer.byteLength > MAX_ORIGINAL_SIZE_KB * 1024) {
+        // Skip if too large (500KB limit for external)
+        if (buffer.byteLength > 500 * 1024) {
           console.warn(`[getOptimizedImage] Skipping oversized external image: ${Math.round(buffer.byteLength / 1024)}KB`);
           return null;
         }
         
-        return compressImage(buffer);
+        const base64 = arrayBufferToBase64(buffer);
+        const bytes = new Uint8Array(buffer);
+        const mimeType = detectImageType(bytes);
+        return `data:${mimeType};base64,${base64}`;
       } catch {
         return null;
       }
     }
     
-    const supabase = getSupabaseClient();
-    let finalPath = parsed.path;
-    
-    // Check if file exists, if not try fallback
-    const { data: existsData } = await supabase.storage.from(parsed.bucket).list(
-      parsed.path.substring(0, parsed.path.lastIndexOf('/')),
-      { limit: 1, search: parsed.path.substring(parsed.path.lastIndexOf('/') + 1) }
+    // Use Direct Render API - MATCHES generate-inspection-pdf APPROACH
+    const buffer = await downloadImageViaRenderAPI(
+      parsed.bucket,
+      parsed.path,
+      spec.maxWidth,
+      spec.quality
     );
     
-    if (!existsData || existsData.length === 0) {
-      const altPath = await findMatchingFile(parsed.bucket, parsed.path);
-      if (altPath) {
-        finalPath = altPath;
-      } else {
-        console.warn(`[getOptimizedImage] File not found: ${parsed.path}`);
-        return null;
-      }
+    if (buffer && buffer.byteLength > 0) {
+      const bytes = new Uint8Array(buffer);
+      const mimeType = detectImageType(bytes);
+      const base64 = arrayBufferToBase64(buffer);
+      console.log(`[getOptimizedImage] ✓ OK (${Math.round(buffer.byteLength / 1024)}KB, ${mimeType})`);
+      return `data:${mimeType};base64,${base64}`;
     }
     
-    // Try with image transformation first (requires Supabase Pro)
-    // Using 400px width, 60% quality for ~50KB target
-    const { data: transformedUrl, error: transformError } = await supabase.storage
-      .from(parsed.bucket)
-      .createSignedUrl(finalPath, 3600, {
-        transform: {
-          width: 400,  // 400px source for ~220px display
-          quality: 60, // Aggressive compression
-        }
-      });
-    
-    if (!transformError && transformedUrl?.signedUrl) {
-      // Transformation worked - fetch the transformed image and embed as base64
-      try {
-        const response = await fetch(transformedUrl.signedUrl, { signal: AbortSignal.timeout(15000) });
-        if (response.ok) {
-          const buffer = await response.arrayBuffer();
-          console.log(`[getOptimizedImage] Transformed image size: ${Math.round(buffer.byteLength / 1024)}KB`);
-          return compressImage(buffer);
-        }
-      } catch (fetchErr) {
-        console.warn(`[getOptimizedImage] Failed to fetch transformed URL:`, fetchErr);
-      }
-    }
-    
-    // Fallback: Download original and embed (with size limits)
-    console.warn(`[getOptimizedImage] Transform failed, downloading original for: ${finalPath.substring(0, 40)}...`);
-    
-    const { data: blob, error: downloadError } = await supabase.storage
-      .from(parsed.bucket)
-      .download(finalPath);
-    
-    if (downloadError || !blob) {
-      console.warn(`[getOptimizedImage] Download failed:`, downloadError?.message);
-      return null;
-    }
-    
-    const buffer = await blob.arrayBuffer();
-    const sizeKB = Math.round(buffer.byteLength / 1024);
-    
-    // Skip if original is too large (would bloat PDF)
-    if (buffer.byteLength > MAX_ORIGINAL_SIZE_KB * 1024) {
-      console.warn(`[getOptimizedImage] Skipping oversized image: ${sizeKB}KB (max ${MAX_ORIGINAL_SIZE_KB}KB)`);
-      return null;
-    }
-    
-    console.log(`[getOptimizedImage] Embedded original image: ${sizeKB}KB`);
-    return compressImage(buffer);
+    console.warn(`[getOptimizedImage] ✗ Failed to download from Supabase storage`);
+    return null;
     
   } catch (err) {
     console.warn(`[getOptimizedImage] Error:`, err);
@@ -358,6 +372,7 @@ function validateBase64Image(dataUri: string): boolean {
 // Generate a responsive photo grid - UNIFIED 3-COLUMN STANDARD
 // Uses NESTED TABLE with fixed cell dimensions - most reliable for PDFShift
 // All reports use consistent 3-adjacent spacing with object-fit: cover
+// Matches generate-inspection-pdf CSS: width: 100%; height: 140px; object-fit: cover
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
@@ -381,8 +396,7 @@ function generatePhotoGrid(photos: string[], options?: {
   
   if (validPhotos.length === 0) return '';
   
-  // A4 content width is ~174mm (658px) with 18mm margins
-  // UNIFIED 3-COLUMN: 180x140px images with object-fit: cover
+  // UNIFIED 3-COLUMN GRID: 180x140px with object-fit: cover (matches generate-inspection-pdf)
   const imageWidthPx = 180;
   const imageHeightPx = 140;
   
@@ -397,7 +411,7 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
-  // object-fit: cover ensures uniform appearance (crops to fit)
+  // object-fit: cover ensures uniform appearance (crops to fit) - matches generate-inspection-pdf
   return `
     <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `

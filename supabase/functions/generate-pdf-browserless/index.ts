@@ -20,16 +20,29 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-// Configuration - Optimized for Edge Function CPU limits
+// Configuration - ALIGNED WITH generate-inspection-pdf
+// Uses Direct Render API and unified IMAGE_SPECS
 const CONFIG = {
-  IMAGE_TRANSFORM_WIDTH: 400,   // Resize images to this width via Supabase Transform
-  IMAGE_TRANSFORM_QUALITY: 60,  // JPEG quality for transformed images
-  MAX_IMAGE_SIZE_KB: 200,       // Skip images larger than this AFTER transformation
-  MAX_TOTAL_IMAGES: 12,         // Max images per report to prevent CPU exhaustion
+  IMAGE_TRANSFORM_WIDTH: 240,   // UNIFIED: 240px for 3-column grid (matches generate-inspection-pdf)
+  IMAGE_TRANSFORM_QUALITY: 60,  // UNIFIED: 60% quality for consistent sizing
+  MAX_IMAGE_SIZE_KB: 300,       // Slightly higher limit with better compression
+  MAX_TOTAL_IMAGES: 30,         // More images possible with smaller size
   MAX_RETRY_ATTEMPTS: 1,        // Single retry to save CPU
   RETRY_DELAY_MS: 200,          // Quick retry delay
   PARALLEL_BATCH_SIZE: 3,       // Smaller batches for memory efficiency
-  DOWNLOAD_TIMEOUT_MS: 10000,   // Timeout per image download
+  DOWNLOAD_TIMEOUT_MS: 12000,   // Timeout per image download (matches generate-inspection-pdf)
+};
+
+const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
+
+/**
+ * IMAGE_SPECS - UNIFIED 3-COLUMN GRID STANDARD
+ * Matches generate-inspection-pdf/index.ts exactly
+ */
+const IMAGE_SPECS = {
+  logo: { maxWidth: 180, quality: 75 },
+  photo: { maxWidth: 240, quality: 60 },
+  signature: { maxWidth: 350, quality: 80 },
 };
 
 // Placeholder for failed images
@@ -131,8 +144,9 @@ interface ImageResult {
 const logoUrls = new Set<string>();
 
 /**
- * Download image with Supabase Image Transformation for on-the-fly compression
- * Logos are downloaded WITHOUT transformation to preserve quality and avoid distortion
+ * Download image via Direct Render API - ALIGNED WITH generate-inspection-pdf
+ * Uses URL: /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
+ * Logos get special treatment with no transformation to preserve quality
  */
 async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | null> {
   const parsed = parseSupabaseStorageUrl(url);
@@ -141,75 +155,55 @@ async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | nu
   if (parsed) {
     const supabase = getSupabaseClient();
     
+    // Get specs based on image type
+    const specs = isLogo ? IMAGE_SPECS.logo : IMAGE_SPECS.photo;
+    
     // LOGOS: Download without transformation to preserve original quality
     if (isLogo) {
-      console.log(`[Transform] LOGO: Downloading original (no transformation)`);
-      try {
-        const { data: blob, error } = await supabase.storage
-          .from(parsed.bucket)
-          .download(parsed.path);
-        if (error || !blob) {
-          console.warn(`[Transform] Logo download failed: ${error?.message}`);
-          return null;
-        }
-        const buffer = await blob.arrayBuffer();
-        console.log(`[Transform] Logo downloaded: ${Math.round(buffer.byteLength / 1024)}KB`);
-        return buffer;
-      } catch (err) {
-        console.warn(`[Transform] Logo download exception:`, err);
-        return null;
-      }
+      console.log(`[Transform] LOGO: Using Render API at ${specs.maxWidth}px`);
+    } else {
+      console.log(`[Transform] Photo: Render API ${specs.maxWidth}px @ ${specs.quality}%`);
     }
     
-    // PHOTOS: Use transformation for compression
+    // Use Direct Render API - MATCHES generate-inspection-pdf EXACTLY
+    const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${parsed.bucket}/${parsed.path}?width=${specs.maxWidth}&quality=${specs.quality}`;
+    
     try {
-      const { data: signedUrlData, error: signedUrlError } = await supabase.storage
-        .from(parsed.bucket)
-        .createSignedUrl(parsed.path, 60, {
-          transform: {
-            width: CONFIG.IMAGE_TRANSFORM_WIDTH,
-            quality: CONFIG.IMAGE_TRANSFORM_QUALITY,
-          }
-        });
-      
-      if (signedUrlError) {
-        console.warn(`[Transform] Signed URL failed for ${parsed.path.substring(0, 30)}...: ${signedUrlError.message}`);
-        // Fallback to direct download (without transformation)
-        const { data: blob, error } = await supabase.storage
-          .from(parsed.bucket)
-          .download(parsed.path);
-        if (error || !blob) return null;
-        return await blob.arrayBuffer();
-      }
-      
-      console.log(`[Transform] Photo: ${CONFIG.IMAGE_TRANSFORM_WIDTH}px @ ${CONFIG.IMAGE_TRANSFORM_QUALITY}%`);
-      
-      // Fetch the transformed image
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), CONFIG.DOWNLOAD_TIMEOUT_MS);
       
-      try {
-        const response = await fetch(signedUrlData.signedUrl, { 
-          signal: controller.signal,
-          headers: { 'Accept': 'image/*' }
-        });
-        clearTimeout(timeoutId);
-        
-        if (!response.ok) {
-          console.warn(`[Transform] Fetch failed: HTTP ${response.status}`);
-          return null;
-        }
-        
+      const response = await fetch(transformUrl, {
+        signal: controller.signal,
+        headers: { 'Accept': 'image/*' }
+      });
+      clearTimeout(timeoutId);
+      
+      if (response.ok) {
         const buffer = await response.arrayBuffer();
-        console.log(`[Transform] Got ${parsed.path.substring(0, 25)}... → ${Math.round(buffer.byteLength / 1024)}KB`);
+        console.log(`[Transform] ✓ Render API success: ${Math.round(buffer.byteLength / 1024)}KB`);
         return buffer;
-      } catch (fetchError) {
-        clearTimeout(timeoutId);
-        console.warn(`[Transform] Fetch error:`, fetchError);
+      }
+      
+      console.warn(`[Transform] Render API failed: HTTP ${response.status}`);
+    } catch (err) {
+      console.warn(`[Transform] Render API error:`, err);
+    }
+    
+    // Fallback: Direct download without transformation
+    console.log(`[Transform] Falling back to direct download...`);
+    try {
+      const { data: blob, error } = await supabase.storage
+        .from(parsed.bucket)
+        .download(parsed.path);
+      if (error || !blob) {
+        console.warn(`[Transform] Direct download failed: ${error?.message}`);
         return null;
       }
+      const buffer = await blob.arrayBuffer();
+      console.log(`[Transform] ✓ Direct download: ${Math.round(buffer.byteLength / 1024)}KB`);
+      return buffer;
     } catch (err) {
-      console.warn(`[Transform] Error processing ${parsed.path.substring(0, 30)}...:`, err);
+      console.warn(`[Transform] Download exception:`, err);
       return null;
     }
   } else {
@@ -554,10 +548,10 @@ function generateHTML(
                 ${item.photos && item.photos.length > 0 ? `
                   <tr>
                     <td colspan="3" style="padding: 12px; background: #fafafa;">
-                      <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                        ${item.photos.slice(0, 4).map(photo => `
+                      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                        ${item.photos.slice(0, 3).map(photo => `
                           <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #f9fafb;">
-                            <img src="${getImage(photo)}" style="width: 180px; height: 135px; object-fit: contain; display: block;" loading="eager" />
+                            <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" loading="eager" />
                           </div>
                         `).join('')}
                       </div>
@@ -600,22 +594,22 @@ function generateHTML(
               </tr>
             </table>
             ${(tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage) ? `
-              <div style="display: flex; gap: 12px; flex-wrap: wrap;">
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
                 ${tenant.meterImage ? `
-                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px;">
-                    <img src="${getImage(tenant.meterImage)}" style="width: 140px; height: 105px; object-fit: contain; display: block;" />
+                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
+                    <img src="${getImage(tenant.meterImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Meter</div>
                   </div>
                 ` : ''}
                 ${tenant.breakerImage ? `
-                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px;">
-                    <img src="${getImage(tenant.breakerImage)}" style="width: 140px; height: 105px; object-fit: contain; display: block;" />
+                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
+                    <img src="${getImage(tenant.breakerImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Breaker</div>
                   </div>
                 ` : ''}
                 ${tenant.ctRatioImage ? `
-                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px;">
-                    <img src="${getImage(tenant.ctRatioImage)}" style="width: 140px; height: 105px; object-fit: contain; display: block;" />
+                  <div style="text-align: center; background: #f9fafb; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
+                    <img src="${getImage(tenant.ctRatioImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">CT Ratio</div>
                   </div>
                 ` : ''}
@@ -649,10 +643,10 @@ function generateHTML(
             </div>
             ${snag.description ? `<p style="font-size: 11px; color: #78350f; margin: 8px 0 0;">${snag.description}</p>` : ''}
             ${snag.photos && snag.photos.length > 0 ? `
-              <div style="display: flex; gap: 8px; margin-top: 12px;">
-                ${snag.photos.slice(0, 2).map(photo => `
-                  <div style="background: #fffbeb; border-radius: 4px; border: 1px solid #fcd34d; padding: 4px;">
-                    <img src="${getImage(photo)}" style="width: 160px; height: 120px; object-fit: contain; display: block;" loading="eager" />
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px;">
+                ${snag.photos.slice(0, 3).map(photo => `
+                  <div style="background: #fffbeb; border-radius: 4px; border: 1px solid #fcd34d; padding: 4px; overflow: hidden;">
+                    <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" loading="eager" />
                   </div>
                 `).join('')}
               </div>
