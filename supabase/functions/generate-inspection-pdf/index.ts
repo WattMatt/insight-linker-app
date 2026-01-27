@@ -717,17 +717,20 @@ function buildCompleteHTML(
     }
     
     .page {
-      width: 210mm;
-      min-height: 297mm;
+      width: 100%;
       padding: 0;
       position: relative;
-      page-break-inside: avoid;
       background: white;
     }
     
     .page.dashboard,
-    .page.breakdown {
+    .page.breakdown,
+    .page.cover ~ .page {
       page-break-before: always;
+    }
+    
+    .page.cover {
+      page-break-before: avoid;
     }
     
     /* Header Bar */
