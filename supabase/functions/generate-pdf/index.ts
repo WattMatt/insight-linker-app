@@ -355,8 +355,9 @@ function validateBase64Image(dataUri: string): boolean {
   return true;
 }
 
-// Generate a responsive photo grid - 3 images per row using table layout for PDF reliability
+// Generate a responsive photo grid - UNIFIED 3-COLUMN STANDARD
 // Uses NESTED TABLE with fixed cell dimensions - most reliable for PDFShift
+// All reports use consistent 3-adjacent spacing with object-fit: cover
 function generatePhotoGrid(photos: string[], options?: { 
   perRow?: number; 
   labels?: string[];
@@ -364,7 +365,8 @@ function generatePhotoGrid(photos: string[], options?: {
 }): string {
   if (!photos || photos.length === 0) return '';
   
-  const perRow = options?.perRow || 3;
+  // UNIFIED STANDARD: Always use 3 columns for consistent spacing
+  const perRow = 3;
   const labels = options?.labels || [];
   const showLabels = options?.showLabels ?? false;
   
@@ -380,13 +382,11 @@ function generatePhotoGrid(photos: string[], options?: {
   if (validPhotos.length === 0) return '';
   
   // A4 content width is ~174mm (658px) with 18mm margins
-  // For 3 columns: 180x135px images (slightly smaller to ensure fit)
-  // For 2 columns: 260x195px images  
-  // For 1 column: 380x285px images
-  const imageWidthPx = perRow === 3 ? 180 : perRow === 2 ? 260 : 380;
-  const imageHeightPx = perRow === 3 ? 135 : perRow === 2 ? 195 : 285;
+  // UNIFIED 3-COLUMN: 180x140px images with object-fit: cover
+  const imageWidthPx = 180;
+  const imageHeightPx = 140;
   
-  // Split photos into rows
+  // Split photos into rows of 3
   const rows: { photo: string; label?: string }[][] = [];
   for (let i = 0; i < validPhotos.length; i += perRow) {
     const rowPhotos = validPhotos.slice(i, i + perRow).map((photo, idx) => ({
@@ -397,20 +397,17 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
+  // object-fit: cover ensures uniform appearance (crops to fit)
   return `
     <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `
         <tr>
           ${row.map(item => `
-            <td style="padding: 8px; vertical-align: top; text-align: center;">
-              ${showLabels ? `<div style="font-size: 9pt; color: #6b7280; margin-bottom: 6px; font-weight: 500;">${item.label}</div>` : ''}
-              <table style="display: inline-table; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb;" cellpadding="0" cellspacing="0">
-                <tr>
-                  <td style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; text-align: center; vertical-align: middle;">
-                    <img src="${item.photo}" style="max-width: ${imageWidthPx}px; max-height: ${imageHeightPx}px; width: auto; height: auto;" />
-                  </td>
-                </tr>
-              </table>
+            <td style="padding: 6px; vertical-align: top; text-align: center; width: 33.33%;">
+              ${showLabels ? `<div style="font-size: 8pt; color: #6b7280; margin-bottom: 4px; font-weight: 500;">${item.label}</div>` : ''}
+              <div style="display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb; overflow: hidden;">
+                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: cover; display: block;" />
+              </div>
             </td>
           `).join('')}
         </tr>
