@@ -101,8 +101,17 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
 }
 
 /**
+ * Build Supabase Image Transformation URL for compression
+ * Uses Supabase's built-in image CDN to resize and compress images
+ */
+function buildTransformUrl(bucket: string, filePath: string, width = 400, quality = 60): string {
+  // Supabase Image Transformation endpoint
+  return `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${width}&quality=${quality}`;
+}
+
+/**
  * Download image and convert to base64 data URI
- * Uses Supabase service role for authenticated access
+ * Uses Supabase Image Transformation for compression before embedding
  */
 async function imageToBase64(url: string): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
@@ -110,9 +119,6 @@ async function imageToBase64(url: string): Promise<string | null> {
   
   try {
     console.log(`[ImagePipeline] Processing: ${url.substring(0, 60)}...`);
-    
-    // Create service role client for storage access
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Check if this is a Supabase storage URL
     if (url.includes('supabase') && url.includes('/storage/')) {
@@ -123,7 +129,42 @@ async function imageToBase64(url: string): Promise<string | null> {
         const [, bucket, filePath] = pathMatch;
         const decodedPath = decodeURIComponent(filePath);
         
-        console.log(`[ImagePipeline] Downloading: ${decodedPath.substring(0, 50)}...`);
+        // Try Supabase Image Transformation first (compressed)
+        const transformUrl = buildTransformUrl(bucket, decodedPath, 400, 60);
+        console.log(`[ImagePipeline] Trying transform: ${transformUrl.substring(0, 80)}...`);
+        
+        try {
+          const controller = new AbortController();
+          const timeout = setTimeout(() => controller.abort(), 12000);
+          
+          const transformResponse = await fetch(transformUrl, {
+            signal: controller.signal,
+            headers: { 'Accept': 'image/*' }
+          });
+          clearTimeout(timeout);
+          
+          if (transformResponse.ok) {
+            const buffer = await transformResponse.arrayBuffer();
+            
+            if (buffer.byteLength > 0 && buffer.byteLength <= 300 * 1024) {
+              const base64 = arrayBufferToBase64(buffer);
+              const contentType = transformResponse.headers.get('content-type') || 'image/jpeg';
+              console.log(`[ImagePipeline] ✓ Transformed (${Math.round(buffer.byteLength / 1024)}KB)`);
+              return `data:${contentType};base64,${base64}`;
+            } else if (buffer.byteLength > 300 * 1024) {
+              console.warn(`[ImagePipeline] Transform still large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
+              return null;
+            }
+          } else {
+            console.warn(`[ImagePipeline] Transform failed (${transformResponse.status}), falling back to storage download`);
+          }
+        } catch (transformError) {
+          console.warn(`[ImagePipeline] Transform error, falling back to storage download`);
+        }
+        
+        // Fallback: Direct storage download via service role
+        const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+        console.log(`[ImagePipeline] Downloading original: ${decodedPath.substring(0, 50)}...`);
         
         const { data, error } = await supabase.storage.from(bucket).download(decodedPath);
         
@@ -132,21 +173,21 @@ async function imageToBase64(url: string): Promise<string | null> {
         } else if (data) {
           const buffer = await data.arrayBuffer();
           
-          // Skip very large images (>500KB)
+          // Skip very large images (>500KB) even after download
           if (buffer.byteLength > 500 * 1024) {
-            console.warn(`[ImagePipeline] Skipping large image (${Math.round(buffer.byteLength / 1024)}KB)`);
+            console.warn(`[ImagePipeline] Original too large (${Math.round(buffer.byteLength / 1024)}KB), skipping`);
             return null;
           }
           
           const base64 = arrayBufferToBase64(buffer);
           const mimeType = data.type || 'image/jpeg';
-          console.log(`[ImagePipeline] ✓ OK (${Math.round(buffer.byteLength / 1024)}KB)`);
+          console.log(`[ImagePipeline] ✓ Original (${Math.round(buffer.byteLength / 1024)}KB)`);
           return `data:${mimeType};base64,${base64}`;
         }
       }
     }
     
-    // Fallback: Direct fetch with timeout
+    // Fallback: Direct fetch for non-Supabase URLs
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10000);
     
