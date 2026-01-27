@@ -187,6 +187,67 @@ function detectImageType(bytes: Uint8Array): string {
  * Download image using createSignedUrl with transform options
  * This is the proven method that works reliably in Edge Functions
  */
+/**
+ * Search for alternative file in the same directory when exact file not found
+ * This handles cases where files were re-uploaded with different naming patterns
+ */
+async function findAlternativeFile(bucket: string, filePath: string): Promise<string | null> {
+  const supabase = getSupabaseClient();
+  
+  // Extract directory path (everything up to the last segment)
+  const pathParts = filePath.split('/');
+  const fileName = pathParts.pop() || '';
+  const dirPath = pathParts.join('/');
+  
+  if (!dirPath) return null;
+  
+  console.log(`[ImagePipeline] Searching for alternative in: ${dirPath}/`);
+  
+  try {
+    // List files in the directory
+    const { data: files, error } = await supabase.storage
+      .from(bucket)
+      .list(dirPath, { limit: 10 });
+    
+    if (error || !files || files.length === 0) {
+      console.warn(`[ImagePipeline] No files found in directory: ${dirPath}`);
+      return null;
+    }
+    
+    // Filter for image files only
+    const imageFiles = files.filter(f => 
+      f.name && 
+      !f.name.startsWith('.') && 
+      (f.name.endsWith('.jpg') || f.name.endsWith('.jpeg') || f.name.endsWith('.png') || f.name.endsWith('.webp'))
+    );
+    
+    if (imageFiles.length === 0) {
+      console.warn(`[ImagePipeline] No image files found in: ${dirPath}`);
+      return null;
+    }
+    
+    // Sort by name (most recent by timestamp pattern) and take the first one
+    const sortedFiles = imageFiles.sort((a, b) => {
+      // Try to extract timestamp from filename for sorting
+      const aMatch = a.name.match(/(\d{13})/) || a.name.match(/(\d{10})/);
+      const bMatch = b.name.match(/(\d{13})/) || b.name.match(/(\d{10})/);
+      if (aMatch && bMatch) {
+        return Number(bMatch[1]) - Number(aMatch[1]); // Descending (newest first)
+      }
+      return a.name.localeCompare(b.name);
+    });
+    
+    const alternativeFile = sortedFiles[0];
+    const alternativePath = `${dirPath}/${alternativeFile.name}`;
+    
+    console.log(`[ImagePipeline] ✓ Found alternative: ${alternativeFile.name}`);
+    return alternativePath;
+  } catch (err) {
+    console.warn(`[ImagePipeline] Error searching for alternative:`, err);
+    return null;
+  }
+}
+
 async function downloadImageWithSignedUrl(
   bucket: string, 
   filePath: string, 
@@ -228,6 +289,16 @@ async function downloadImageWithSignedUrl(
     
     if (signedUrlError) {
       console.warn(`[ImagePipeline] Signed URL failed for ${filePath.substring(0, 40)}...: ${signedUrlError.message}`);
+      
+      // NEW: Search for alternative file in the same directory
+      const alternativePath = await findAlternativeFile(bucket, filePath);
+      
+      if (alternativePath) {
+        console.log(`[ImagePipeline] Trying alternative file: ${alternativePath.substring(0, 50)}...`);
+        // Recursively try with the alternative path
+        return await downloadImageWithSignedUrl(bucket, alternativePath, imageType);
+      }
+      
       // Fallback to direct download (without transformation)
       console.log(`[ImagePipeline] Falling back to direct download for: ${filePath.substring(0, 40)}...`);
       const { data: blob, error } = await supabase.storage
