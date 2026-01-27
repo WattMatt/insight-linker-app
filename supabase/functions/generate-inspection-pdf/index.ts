@@ -1247,6 +1247,14 @@ function buildCompleteHTML(
       font-size: 9pt;
     }
     
+    /* Table content integrity - prevents split across pages (PDF_LAYOUT_STANDARDS.md) */
+    .breakdown-table,
+    .info-table,
+    .tenant-table {
+      break-inside: avoid;
+      page-break-inside: avoid;
+    }
+    
     .alt-row { background: #f9fafb; }
     
     .info-label {
@@ -1377,6 +1385,13 @@ function buildCompleteHTML(
       padding: 12px 14px;
       background: white;
       border-top: 1px solid #e5e7eb;
+    }
+    
+    /* Photo grid content integrity - prevents split across pages (PDF_LAYOUT_STANDARDS.md) */
+    .photo-grid-2,
+    .photo-grid-3 {
+      break-inside: avoid;
+      page-break-inside: avoid;
     }
     
     .photo-item {
@@ -1550,7 +1565,12 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       options: {
         format: 'A4',
         printBackground: true,
-        margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' },
+        margin: {
+          top: '20mm',
+          bottom: '20mm',
+          left: '10mm',
+          right: '10mm'
+        },
         displayHeaderFooter: true,
         headerTemplate: '<span></span>',
         footerTemplate: footerTemplate,
