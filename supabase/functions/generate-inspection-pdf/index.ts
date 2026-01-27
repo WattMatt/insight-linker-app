@@ -1011,10 +1011,12 @@ function buildCompleteHTML(
     /* Section Container - flows across pages */
     .section-container {
       page-break-before: always;
+      padding-top: 20px;
     }
     
     .section-container:first-child {
       page-break-before: auto;
+      padding-top: 0;
     }
     
     .section-header-bar {
