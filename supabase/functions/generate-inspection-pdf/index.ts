@@ -79,6 +79,27 @@ interface InspectionPayload {
 // IMAGE PROCESSING PIPELINE
 // ============================================================================
 
+// Maximum images to process to avoid CPU limits
+const MAX_TOTAL_IMAGES = 15;
+const MAX_PHOTOS_PER_ITEM = 2;
+
+/**
+ * Convert ArrayBuffer to base64 string safely (without stack overflow)
+ * Uses chunked processing to avoid call stack issues with large buffers
+ */
+function arrayBufferToBase64(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer);
+  const chunkSize = 8192; // Process 8KB chunks at a time
+  let binary = '';
+  
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    const chunk = bytes.subarray(i, Math.min(i + chunkSize, bytes.length));
+    binary += String.fromCharCode.apply(null, Array.from(chunk));
+  }
+  
+  return btoa(binary);
+}
+
 /**
  * Download image and convert to base64 data URI
  * Uses Supabase service role for authenticated access
@@ -88,14 +109,13 @@ async function imageToBase64(url: string): Promise<string | null> {
   if (url.startsWith('data:')) return url; // Already base64
   
   try {
-    console.log(`[ImagePipeline] Processing: ${url.substring(0, 80)}...`);
+    console.log(`[ImagePipeline] Processing: ${url.substring(0, 60)}...`);
     
     // Create service role client for storage access
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
     
     // Check if this is a Supabase storage URL
     if (url.includes('supabase') && url.includes('/storage/')) {
-      // Extract bucket and path from URL
       const urlObj = new URL(url);
       const pathMatch = urlObj.pathname.match(/\/storage\/v1\/object\/(?:public|sign)\/([^/]+)\/(.+)/);
       
@@ -103,18 +123,24 @@ async function imageToBase64(url: string): Promise<string | null> {
         const [, bucket, filePath] = pathMatch;
         const decodedPath = decodeURIComponent(filePath);
         
-        console.log(`[ImagePipeline] Downloading from storage: ${bucket}/${decodedPath}`);
+        console.log(`[ImagePipeline] Downloading: ${decodedPath.substring(0, 50)}...`);
         
         const { data, error } = await supabase.storage.from(bucket).download(decodedPath);
         
         if (error) {
-          console.error(`[ImagePipeline] Storage download error:`, error);
-          // Fall back to direct fetch
+          console.error(`[ImagePipeline] Storage error:`, error.message);
         } else if (data) {
           const buffer = await data.arrayBuffer();
-          const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+          
+          // Skip very large images (>500KB)
+          if (buffer.byteLength > 500 * 1024) {
+            console.warn(`[ImagePipeline] Skipping large image (${Math.round(buffer.byteLength / 1024)}KB)`);
+            return null;
+          }
+          
+          const base64 = arrayBufferToBase64(buffer);
           const mimeType = data.type || 'image/jpeg';
-          console.log(`[ImagePipeline] ✓ Converted via storage API (${Math.round(buffer.byteLength / 1024)}KB)`);
+          console.log(`[ImagePipeline] ✓ OK (${Math.round(buffer.byteLength / 1024)}KB)`);
           return `data:${mimeType};base64,${base64}`;
         }
       }
@@ -122,7 +148,7 @@ async function imageToBase64(url: string): Promise<string | null> {
     
     // Fallback: Direct fetch with timeout
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    const timeout = setTimeout(() => controller.abort(), 10000);
     
     const response = await fetch(url, { 
       signal: controller.signal,
@@ -136,81 +162,88 @@ async function imageToBase64(url: string): Promise<string | null> {
     }
     
     const buffer = await response.arrayBuffer();
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(buffer)));
+    
+    // Skip very large images
+    if (buffer.byteLength > 500 * 1024) {
+      console.warn(`[ImagePipeline] Skipping large image (${Math.round(buffer.byteLength / 1024)}KB)`);
+      return null;
+    }
+    
+    const base64 = arrayBufferToBase64(buffer);
     const contentType = response.headers.get('content-type') || 'image/jpeg';
     
-    console.log(`[ImagePipeline] ✓ Converted via fetch (${Math.round(buffer.byteLength / 1024)}KB)`);
+    console.log(`[ImagePipeline] ✓ OK via fetch (${Math.round(buffer.byteLength / 1024)}KB)`);
     return `data:${contentType};base64,${base64}`;
     
   } catch (error) {
-    console.error(`[ImagePipeline] Error:`, error);
+    const errMsg = error instanceof Error ? error.message : 'Unknown error';
+    console.error(`[ImagePipeline] Error: ${errMsg}`);
     return null;
   }
 }
 
 /**
- * Process all images in parallel batches
+ * Process images SEQUENTIALLY to avoid CPU overload
+ * Also limits total images to stay within edge function resource limits
  */
 async function processAllImages(
   payload: InspectionPayload
 ): Promise<Map<string, string>> {
   const imageMap = new Map<string, string>();
-  const urls = new Set<string>();
+  const urls: string[] = [];
   
-  // Collect all unique URLs
-  if (payload.siteLogoUrl) urls.add(payload.siteLogoUrl);
+  // Prioritize: 1) Logo 2) First photo of each item
+  if (payload.siteLogoUrl) urls.push(payload.siteLogoUrl);
   
+  // Collect limited photos from sections (max 2 per item)
   if (payload.inspection.sections) {
     for (const section of payload.inspection.sections) {
       for (const item of section.items) {
         if (item.photos) {
-          for (const photo of item.photos) {
-            if (photo) urls.add(photo);
+          const limitedPhotos = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
+          for (const photo of limitedPhotos) {
+            if (photo && urls.length < MAX_TOTAL_IMAGES) {
+              urls.push(photo);
+            }
           }
         }
       }
     }
   }
   
+  // Snag photos (limited)
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
-      if (snag.photos) {
-        for (const photo of snag.photos) {
-          if (photo) urls.add(photo);
-        }
+      if (snag.photos && snag.photos[0] && urls.length < MAX_TOTAL_IMAGES) {
+        urls.push(snag.photos[0]);
       }
     }
   }
   
+  // Signatures
   if (payload.inspection.signatures) {
     for (const sig of payload.inspection.signatures) {
-      if (sig.signatureUrl) urls.add(sig.signatureUrl);
+      if (sig.signatureUrl && urls.length < MAX_TOTAL_IMAGES) {
+        urls.push(sig.signatureUrl);
+      }
     }
   }
   
-  console.log(`[ImagePipeline] Processing ${urls.size} unique images...`);
+  console.log(`[ImagePipeline] Processing ${urls.length} images (max ${MAX_TOTAL_IMAGES})...`);
   
-  // Process in parallel batches of 5
-  const urlArray = Array.from(urls);
-  const batchSize = 5;
-  
-  for (let i = 0; i < urlArray.length; i += batchSize) {
-    const batch = urlArray.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(async (url) => {
-        const base64 = await imageToBase64(url);
-        return { url, base64 };
-      })
-    );
-    
-    for (const { url, base64 } of results) {
+  // Process SEQUENTIALLY to avoid CPU spikes
+  for (const url of urls) {
+    try {
+      const base64 = await imageToBase64(url);
       if (base64) {
         imageMap.set(url, base64);
       }
+    } catch (e) {
+      console.warn(`[ImagePipeline] Failed: ${url.substring(0, 40)}...`);
     }
   }
   
-  console.log(`[ImagePipeline] Successfully processed ${imageMap.size}/${urls.size} images`);
+  console.log(`[ImagePipeline] ✓ Processed ${imageMap.size}/${urls.length} images`);
   return imageMap;
 }
 
