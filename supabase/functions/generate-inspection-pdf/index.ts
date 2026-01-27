@@ -73,6 +73,9 @@ interface InspectionPayload {
   clientName?: string;
   siteLogoUrl?: string | null;
   accentColor?: string;
+  // For document persistence
+  subsectionId?: string;
+  userId?: string;
 }
 
 // ============================================================================
@@ -1205,7 +1208,7 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
 }
 
 // ============================================================================
-// STORAGE & RESPONSE
+// STORAGE & DOCUMENT PERSISTENCE
 // ============================================================================
 
 async function uploadToStorage(
@@ -1234,6 +1237,75 @@ async function uploadToStorage(
   
   console.log('[Storage] ✓ Uploaded:', urlData.publicUrl);
   return urlData.publicUrl;
+}
+
+/**
+ * Create document record in subsection_documents table
+ * This ensures the report is saved even if client connection times out
+ */
+async function saveDocumentRecord(
+  subsectionId: string,
+  fileName: string,
+  fileUrl: string,
+  userId?: string
+): Promise<string | null> {
+  const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+  
+  try {
+    // Find or create "Inspection Reports" category
+    let categoryId: string | undefined;
+    
+    const { data: existingCategory } = await supabase
+      .from('document_categories')
+      .select('id')
+      .eq('subsection_id', subsectionId)
+      .eq('name', 'Inspection Reports')
+      .maybeSingle();
+    
+    if (existingCategory) {
+      categoryId = existingCategory.id;
+    } else {
+      const { data: newCategory } = await supabase
+        .from('document_categories')
+        .insert({
+          subsection_id: subsectionId,
+          name: 'Inspection Reports',
+          order_index: 0,
+        })
+        .select('id')
+        .single();
+      categoryId = newCategory?.id;
+    }
+    
+    if (!categoryId) {
+      console.warn('[Document] Could not create/find category');
+      return null;
+    }
+    
+    // Insert document record
+    const { data: docData, error: docError } = await supabase
+      .from('subsection_documents')
+      .insert({
+        subsection_id: subsectionId,
+        category_id: categoryId,
+        file_name: fileName,
+        file_url: fileUrl,
+        uploaded_by: userId || null,
+      })
+      .select('id')
+      .single();
+    
+    if (docError) {
+      console.warn('[Document] Insert error:', docError.message);
+      return null;
+    }
+    
+    console.log('[Document] ✓ Saved record:', docData.id);
+    return docData.id;
+  } catch (err) {
+    console.warn('[Document] Save error:', err);
+    return null;
+  }
 }
 
 // ============================================================================
@@ -1279,6 +1351,17 @@ Deno.serve(async (req: Request) => {
     
     const publicUrl = await uploadToStorage(pdfBuffer, fileName);
     
+    // Phase 5: Save document record (server-side to survive client timeout)
+    let documentId: string | null = null;
+    if (payload.subsectionId) {
+      documentId = await saveDocumentRecord(
+        payload.subsectionId,
+        fileName,
+        publicUrl,
+        payload.userId
+      );
+    }
+    
     console.log('[GenerateInspectionPDF] ✓ Complete');
     
     return new Response(
@@ -1286,6 +1369,7 @@ Deno.serve(async (req: Request) => {
         success: true,
         url: publicUrl,
         fileName,
+        documentId,
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
