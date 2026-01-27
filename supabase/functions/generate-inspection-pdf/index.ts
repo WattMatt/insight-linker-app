@@ -93,14 +93,13 @@ const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column g
  * Uses Supabase Render API for server-side compression before embedding:
  * - /storage/v1/render/image/public/{bucket}/{path}?width={maxWidth}&quality={quality}
  * 
- * Quality settings optimized for PDF embedding:
- * - 60-70% JPEG quality is optimal for PDFs (barely visible difference, 50-70% size reduction)
- * - Higher quality for logos/signatures since they're smaller and more important
+ * UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
+ * - Quality 60-65% is optimal for PDFs (minimal visible difference, 50-70% size reduction)
+ * - Server compresses before embedding to reduce PDF file size
  */
 const IMAGE_SPECS = {
   logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint, good quality
-  photo_2col: { maxWidth: 400, quality: 65 }, // 2-col photos: aggressive compression
-  photo_3col: { maxWidth: 280, quality: 60 }, // 3-col photos: max compression (small display)
+  photo: { maxWidth: 240, quality: 60 },      // All photos: 3-col grid (240px fits 3 across A4)
   signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
 };
 
@@ -337,7 +336,7 @@ async function downloadImageViaRenderAPI(
  * Uses Direct Render API (matching DOCX generator) for Supabase images
  * Falls back to direct fetch for external URLs
  */
-async function imageToBase64(url: string, imageType: ImageType = 'photo_2col'): Promise<string | null> {
+async function imageToBase64(url: string, imageType: ImageType = 'photo'): Promise<string | null> {
   if (!url || typeof url !== 'string') return null;
   if (url.startsWith('data:')) return url; // Already base64
   
@@ -434,19 +433,16 @@ async function processAllImages(
     requests.push({ url: payload.siteLogoUrl, type: 'logo' });
   }
   
-  // Collect photos from sections with appropriate sizing
-  // Determine photo type based on count per item
+  // Collect photos from sections - ALL use unified 3-column sizing
   if (payload.inspection.sections) {
     for (const section of payload.inspection.sections) {
       for (const item of section.items) {
         if (item.photos) {
           const limitedPhotos = item.photos.slice(0, MAX_PHOTOS_PER_ITEM);
-          // Use 3-column sizing if 3+ photos, otherwise 2-column
-          const photoType: ImageType = limitedPhotos.length >= 3 ? 'photo_3col' : 'photo_2col';
           
           for (const photo of limitedPhotos) {
             if (photo && requests.length < MAX_TOTAL_IMAGES) {
-              requests.push({ url: photo, type: photoType });
+              requests.push({ url: photo, type: 'photo' });
             }
           }
         }
@@ -454,26 +450,26 @@ async function processAllImages(
     }
   }
   
-  // Tenant images (meterImage, breakerImage, ctRatioImage) - use 3-column sizing
+  // Tenant images (meterImage, breakerImage, ctRatioImage) - use unified 3-column sizing
   if (payload.inspection.tenants) {
     for (const tenant of payload.inspection.tenants) {
       if (tenant.meterImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.meterImage, type: 'photo_3col' });
+        requests.push({ url: tenant.meterImage, type: 'photo' });
       }
       if (tenant.breakerImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.breakerImage, type: 'photo_3col' });
+        requests.push({ url: tenant.breakerImage, type: 'photo' });
       }
       if (tenant.ctRatioImage && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: tenant.ctRatioImage, type: 'photo_3col' });
+        requests.push({ url: tenant.ctRatioImage, type: 'photo' });
       }
     }
   }
   
-  // Snag photos (use 2-column sizing)
+  // Snag photos - use unified 3-column sizing
   if (payload.inspection.snags) {
     for (const snag of payload.inspection.snags) {
       if (snag.photos && snag.photos[0] && requests.length < MAX_TOTAL_IMAGES) {
-        requests.push({ url: snag.photos[0], type: 'photo_2col' });
+        requests.push({ url: snag.photos[0], type: 'photo' });
       }
     }
   }
@@ -832,8 +828,8 @@ function buildSectionPagesHTML(
     section.items.forEach((item, itemIdx) => {
       const photos = (item.photos || []).filter(p => p);
       
-      // Choose grid layout based on photo count: 3+ photos = 3-column, else 2-column
-      const gridClass = photos.length >= 3 ? 'photo-grid-3' : 'photo-grid-2';
+      // UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
+      const gridClass = 'photo-grid-3';
       
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
@@ -1372,28 +1368,18 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* Photo Grid - 2 Column Layout (1-2 photos) */
-    .photo-grid-2 {
-      display: grid;
-      grid-template-columns: repeat(2, 1fr);
-      gap: 12px;
-      padding: 12px 14px;
-      background: white;
-      border-top: 1px solid #e5e7eb;
-    }
-    
-    /* Photo Grid - 3 Column Layout (3+ photos) */
+    /* UNIFIED 3-COLUMN PHOTO GRID - Consistent spacing for all images
+       All photos rendered in 3-adjacent layout per PDF_LAYOUT_STANDARDS.md */
     .photo-grid-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 10px;
-      padding: 12px 14px;
-      background: white;
+      gap: 12px;
+      padding: 14px;
+      background: #f9fafb;
       border-top: 1px solid #e5e7eb;
     }
     
     /* Photo grid content integrity - prevents split across pages (PDF_LAYOUT_STANDARDS.md) */
-    .photo-grid-2,
     .photo-grid-3 {
       break-inside: avoid;
       page-break-inside: avoid;
@@ -1403,25 +1389,15 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* 2-column photo sizing - ASPECT RATIO PRESERVED (matching DOCX approach)
-       Server resizes to maxWidth=400, aspect ratio preserved automatically.
-       CSS uses max-width + height:auto to let natural dimensions flow. */
-    .photo-grid-2 .photo-item img {
-      width: 100%;
-      max-width: 300px;
-      height: auto;
-      border: 1px solid #e5e7eb;
-      border-radius: 4px;
-    }
-    
-    /* 3-column photo sizing - ASPECT RATIO PRESERVED (matching DOCX approach)
-       Server resizes to maxWidth=300, aspect ratio preserved automatically. */
+    /* Unified photo sizing - Server compresses to 240px via Supabase Render API
+       Fixed dimensions ensure consistent 3-column layout across all photos */
     .photo-grid-3 .photo-item img {
       width: 100%;
-      max-width: 200px;
-      height: auto;
+      height: 140px;
+      object-fit: cover;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
+      background: #ffffff;
     }
     
     .photo-label {
