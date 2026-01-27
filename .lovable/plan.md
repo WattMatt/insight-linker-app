@@ -1,74 +1,91 @@
 
+# Remove Blank Pages from PDF Report
 
-# Fix Page Break Issues & Duplicate Footers
+## Problem Identified
 
-## Problems Identified
+The PDF has unnecessary blank pages at positions 2, 4, and 6 because:
 
-1. **Duplicate footers** on every page (static HTML + Browserless template)
-2. **Inconsistent page counts** ("Page X of 11" vs "Page X of 9")
-3. **Content bleeding** without proper header spacing
-4. **CSS @page margin:0** conflicting with Browserless margin settings
+1. **Fixed pages** (Cover, Dashboard, Breakdown) use `.page` class with `page-break-after: always`
+2. **Flowing sections** use `.section-container` with `page-break-before: always`
+3. These **double page-break rules** combined with the CSS `@page { margin: 20mm 10mm 20mm 10mm }` create blank intermediate pages
 
-## Solution Overview
+```text
+Current flow causing blank pages:
+┌─────────────┐    ┌───────────┐    ┌─────────────┐
+│ Cover Page  │ -> │ BLANK     │ -> │ Dashboard   │
+│ (break-after)│    │ (unwanted)│    │ (break-after)│
+└─────────────┘    └───────────┘    └─────────────┘
+                        ↓
+              ┌───────────┐    ┌─────────────┐
+              │ BLANK     │ -> │ Breakdown   │
+              │ (unwanted)│    │ (break-after)│
+              └───────────┘    └─────────────┘
+```
 
-Remove all static footers from the HTML and rely solely on Browserless's dynamic header/footer templates. Fix the CSS @page rule to work with Browserless margins.
+---
+
+## Solution
+
+Remove the conflict by using ONLY one page-break method. Since the `@page` margins now handle layout, we'll remove `page-break-after` from fixed pages and rely on section containers to force breaks only when needed.
 
 ---
 
 ## Implementation Plan
 
-### Step 1: Remove All Static HTML Footers
+### Step 1: Remove `page-break-after` from `.page` class
 
-Delete the `.footer` div from all page builder functions:
+Update the CSS for `.page`:
 
-| Function | Lines to Remove |
-|----------|-----------------|
-| `buildCoverPageHTML` | Lines 475-479 |
-| `buildDashboardHTML` | Lines 543-547 |
-| `buildBreakdownHTML` | Lines 631-635 |
-
-Also remove the `.footer` CSS class definition (lines 774-786).
-
-### Step 2: Fix CSS @page Rule
-
-Change:
+**Before:**
 ```css
-@page { 
-  size: A4; 
-  margin: 0; 
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 0;
+  position: relative;
+  page-break-after: always;
+  background: white;
+}
+
+.page:last-child {
+  page-break-after: auto;
 }
 ```
 
-To:
+**After:**
 ```css
-@page { 
-  size: A4; 
-  margin: 20mm 0 15mm 0;
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  padding: 0;
+  position: relative;
+  page-break-inside: avoid;
+  background: white;
 }
 ```
 
-This ensures consistent margins are applied within the CSS itself, not conflicting with Browserless.
+The `page-break-after` rule is removed entirely; each page's content will fill its space naturally and the `@page` margins handle separation.
 
-### Step 3: Add Top Padding to Body/Content
+### Step 2: Add `page-break-before` to non-first `.page` elements
 
-Add padding to the body or a wrapper to create consistent "header distance":
+To ensure Dashboard and Breakdown still start on new pages, add CSS:
 
 ```css
-body {
-  padding-top: 15mm;
+.page.dashboard,
+.page.breakdown {
+  page-break-before: always;
 }
 ```
 
-This ensures all pages have content starting below the top margin zone.
+This forces only these specific pages to start fresh, without creating trailing blank pages.
 
-### Step 4: Fix Flowing Section Header Distance
+### Step 3: Keep `.section-container` logic unchanged
 
-Update `.section-container` to have proper top spacing:
+The existing rules work correctly for flowing section content:
 
 ```css
 .section-container {
   page-break-before: always;
-  padding-top: 0; /* margin handled by @page */
 }
 
 .section-container:first-child {
@@ -76,74 +93,40 @@ Update `.section-container` to have proper top spacing:
 }
 ```
 
-The padding is no longer needed because `@page` margins handle it.
-
-### Step 5: Update Browserless Options
-
-Ensure margins align with CSS:
-
-```typescript
-margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
-```
-
-Since `@page` now handles margins, Browserless shouldn't double-apply them.
-
-Alternatively, keep Browserless margins and remove `@page { margin: 0 }`:
-
-```typescript
-margin: { top: '20mm', right: '10mm', bottom: '20mm', left: '10mm' },
-```
+The `:first-child` selector prevents a break before the first section since it immediately follows Breakdown.
 
 ---
 
-## Technical Details
+## Technical Summary
 
-### File to Modify
+| CSS Class | Current Issue | Fix |
+|-----------|--------------|-----|
+| `.page` | `page-break-after: always` creates trailing blanks | Remove `page-break-after`, keep `page-break-inside: avoid` |
+| `.page.dashboard`, `.page.breakdown` | Need to start on new pages | Add `page-break-before: always` |
+| `.page:last-child` | No longer needed | Remove entirely |
+| `.section-container` | Works correctly | No change |
+| `.section-container:first-child` | Works correctly | No change |
+
+---
+
+## File to Modify
+
 `supabase/functions/generate-inspection-pdf/index.ts`
 
-### Changes Summary
+### Lines to Change
 
-| Section | Change |
-|---------|--------|
-| CSS `@page` rule (line 719-721) | Add proper margins: `margin: 20mm 10mm 20mm 10mm` |
-| CSS `.footer` class (lines 774-786) | Remove entirely |
-| Cover page (lines 475-479) | Remove static footer div |
-| Dashboard page (lines 543-547) | Remove static footer div |
-| Breakdown page (lines 631-635) | Remove static footer div |
-| `.section-container` (lines 1012-1020) | Remove extra padding-top (margins handled by @page) |
-| Browserless options (line 1217) | Set `margin: { top: '0mm', bottom: '20mm' }` to let @page handle top and Browserless handle footer space |
-
-### Expected Result
-
-After these changes:
-- **Single footer** per page from Browserless template
-- **Accurate page numbering** (dynamic "Page X of Y")
-- **Consistent 20mm top margin** on every page
-- **No duplicate dates** or conflicting information
-- **Professional header distance** before content starts
+| Section | Line Range | Change |
+|---------|------------|--------|
+| `.page` CSS rule | ~718-726 | Remove `page-break-after: always` |
+| `.page:last-child` rule | ~728-730 | Remove entirely |
+| New CSS after `.page` | After ~726 | Add `.page.dashboard, .page.breakdown { page-break-before: always; }` |
 
 ---
 
-## Visual Comparison
+## Expected Result
 
-**Before:**
-```text
-+------------------------+
-| Content starts here    |  ← Too close to top
-| ...                    |
-| Footer: Page 1 of 11   |  ← Static HTML footer
-| Footer: Page 1 of 9    |  ← Browserless footer (duplicate!)
-+------------------------+
-```
-
-**After:**
-```text
-+------------------------+
-|                        |  ← 20mm margin
-| Content starts here    |
-| ...                    |
-|                        |
-| Page 1 of 9 | Date     |  ← Single Browserless footer
-+------------------------+
-```
-
+After implementation:
+- **14 pages reduced to 11** (or correct count without blanks)
+- Cover → Dashboard → Breakdown → Sections flow without intermediate empty pages
+- Page numbering "Page X of Y" will be accurate
+- Professional layout maintained with consistent margins
