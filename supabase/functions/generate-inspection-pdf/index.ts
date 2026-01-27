@@ -647,19 +647,15 @@ function buildSectionPagesHTML(
   totalPages: number
 ): string {
   const sections = payload.inspection.sections || [];
-  const date = formatDate(payload.inspection.inspectionDate);
   let html = '';
-  let currentPage = startPage;
   
+  // Content flows naturally - no fixed page wrappers for sections
+  // Page breaks are handled via CSS (section headers force new pages)
   sections.forEach((section, sectionIdx) => {
-    // Start new page for each section
+    // Section container - forces page break before each section
     html += `
-      <div class="page section-page">
-        <div class="header-bar">
-          <span class="header-title">${payload.inspection.templateName || 'ELECTRICAL INSPECTION REPORT'}</span>
-        </div>
-        
-        <div class="section-header">
+      <div class="section-container">
+        <div class="section-header-bar">
           <span class="section-number">${sectionIdx + 1}</span>
           <span class="section-name">${section.title.toUpperCase()}</span>
         </div>
@@ -697,16 +693,8 @@ function buildSectionPagesHTML(
     
     html += `
         </div>
-        
-        <div class="footer">
-          <span>CONFIDENTIAL - For authorized use only</span>
-          <span>Page ${currentPage} of ${totalPages}</span>
-          <span>${date}</span>
-        </div>
       </div>
     `;
-    
-    currentPage++;
   });
   
   return html;
@@ -1020,7 +1008,27 @@ function buildCompleteHTML(
       color: #4b5563;
     }
     
-    /* Section Pages */
+    /* Section Container - flows across pages */
+    .section-container {
+      page-break-before: always;
+    }
+    
+    .section-container:first-child {
+      page-break-before: auto;
+    }
+    
+    .section-header-bar {
+      background: #0d7377;
+      color: white;
+      padding: 12px 24px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      break-after: avoid;
+      page-break-after: avoid;
+    }
+    
+    /* Legacy section header for fixed pages */
     .section-header {
       background: #0d7377;
       color: white;
@@ -1043,7 +1051,7 @@ function buildCompleteHTML(
     
     .section-content {
       padding: 20px 24px;
-      padding-bottom: 60px;
+      padding-bottom: 40px;
     }
     
     .inspection-item {
@@ -1184,6 +1192,15 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
   console.log('[Browserless] Sending HTML for PDF conversion...');
   console.log('[Browserless] HTML size:', Math.round(html.length / 1024), 'KB');
   
+  // Dynamic footer template with page numbers
+  const footerTemplate = `
+    <div style="width: 100%; font-size: 8px; font-family: Arial, sans-serif; display: flex; justify-content: space-between; padding: 0 24px; color: #6b7280;">
+      <span>CONFIDENTIAL - For authorized use only</span>
+      <span>Page <span class="pageNumber"></span> of <span class="totalPages"></span></span>
+      <span>${new Date().toLocaleDateString('en-ZA')}</span>
+    </div>
+  `;
+  
   const response = await fetch('https://chrome.browserless.io/pdf', {
     method: 'POST',
     headers: {
@@ -1195,9 +1212,11 @@ async function generatePdfWithBrowserless(html: string): Promise<ArrayBuffer> {
       options: {
         format: 'A4',
         printBackground: true,
-        margin: { top: '0mm', right: '0mm', bottom: '0mm', left: '0mm' },
-        displayHeaderFooter: false,
-        preferCSSPageSize: true,
+        margin: { top: '0mm', right: '0mm', bottom: '15mm', left: '0mm' },
+        displayHeaderFooter: true,
+        headerTemplate: '<span></span>',
+        footerTemplate: footerTemplate,
+        preferCSSPageSize: false,
       },
     }),
   });
