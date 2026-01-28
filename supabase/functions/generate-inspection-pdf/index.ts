@@ -1374,14 +1374,14 @@ function buildCompleteHTML(
     
     /* Unified photo sizing - Server compresses to 240px via Supabase Render API
        Fixed dimensions ensure consistent 3-column layout across all photos
-       object-fit: cover fills container, object-position: center top preserves top content */
+       object-fit: contain scales image to fit, preserving full content */
     .photo-grid-3 .photo-item img {
       width: 100%;
       height: 140px;
-      object-fit: cover;
-      object-position: center top;
+      object-fit: contain;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
+      background: #f9fafb;
     }
     
     .photo-label {
