@@ -79,9 +79,9 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
  * All reports use consistent sizing for uniform PDF appearance
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 180, quality: 75 },       // Logo: smaller footprint
-  photo: { maxWidth: 240, quality: 60 },      // All photos: unified 3-col sizing
-  signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
+  logo: { maxHeight: 200, quality: 75 },       // Logo: fit cover area height
+  photo: { maxHeight: 280, quality: 70 },      // Photos: 2x 140px container height for sharpness
+  signature: { maxHeight: 150, quality: 80 },  // Signatures: preserve legibility
 };
 
 type ImageType = keyof typeof IMAGE_SPECS;
@@ -176,14 +176,14 @@ function detectImageType(bytes: Uint8Array): string {
 async function downloadImageViaRenderAPI(
   bucket: string,
   filePath: string,
-  maxWidth: number,
+  maxHeight: number,
   quality: number = 75
 ): Promise<ArrayBuffer | null> {
-  // Construct transform URL exactly like generate-inspection-pdf
-  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
+  // Use height-based transformation for proper portrait image scaling in PDF containers
+  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?height=${maxHeight}&quality=${quality}`;
   
   try {
-    console.log(`[ImagePipeline] Render API: width=${maxWidth}, quality=${quality}`);
+    console.log(`[ImagePipeline] Render API: height=${maxHeight}, quality=${quality}`);
     
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -209,7 +209,7 @@ async function downloadImageViaRenderAPI(
   const alternativePath = await findMatchingFile(bucket, filePath);
   if (alternativePath && alternativePath !== filePath) {
     console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
-    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?width=${maxWidth}&quality=${quality}`;
+    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?height=${maxHeight}&quality=${quality}`;
     
     try {
       const altResponse = await fetch(altUrl);
@@ -275,11 +275,11 @@ async function getOptimizedImageUrl(url: string, imageType: ImageType = 'photo')
       }
     }
     
-    // Use Direct Render API - MATCHES generate-inspection-pdf APPROACH
+    // Use Direct Render API with height-based transformation for proper portrait scaling
     const buffer = await downloadImageViaRenderAPI(
       parsed.bucket,
       parsed.path,
-      spec.maxWidth,
+      spec.maxHeight,
       spec.quality
     );
     
