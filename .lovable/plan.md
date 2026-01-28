@@ -1,92 +1,108 @@
 
 
-# Fix Portrait Image Rendering in PDF Photo Grids
+# Plan: Optimize Photo Grid Container for Better Image Fit
 
-## Problem Analysis
+## Problem Summary
 
-The current image pipeline uses Supabase's Render API with `width=500` only. This works fine for landscape photos, but for portrait/vertical photos (common when photographing electrical boards), the result is:
+The current PDF photo grid uses a **nearly-square container** (≈160px × 140px = 1.14:1 ratio) which doesn't match typical photo aspect ratios. With `object-fit: cover`, this causes significant cropping:
 
-- Server output: 500px wide × 1200px+ tall (aspect ratio preserved)
-- PDF container: ~160px wide × 140px tall
-- CSS `object-fit: contain`: Scales the tall image to fit the 140px height → appears ~60px wide
+| Photo Type | Aspect Ratio | Cropping with Current Container |
+|------------|--------------|--------------------------------|
+| Portrait (3:4) | 0.75:1 | Top/bottom edges cropped |
+| Square (1:1) | 1.0:1 | Minor cropping |
+| Landscape (4:3) | 1.33:1 | Side edges cropped (~15%) |
+| Wide (16:9) | 1.78:1 | Side edges heavily cropped (~35%) |
 
-This creates the "tall and narrow" appearance visible in your screenshot.
+## Proposed Solution: Match Container to Common Photo Ratio
 
-## Solution
+Change the container dimensions to a **4:3 landscape ratio** (the most common photo orientation from mobile cameras), reducing cropping for the majority of images.
 
-Modify the Supabase Render API call to use `height` parameter instead of `width`, targeting the PDF container's height (140px → use 280px for 2x sharpness):
+### New Container Dimensions
 
 ```text
-Current:  /render/image/public/{bucket}/{path}?width=500&quality=70
-Proposed: /render/image/public/{bucket}/{path}?height=280&quality=70
+Current:  ~160px × 140px  (1.14:1 ratio - nearly square)
+Proposed: ~186px × 140px  (1.33:1 ratio - matches 4:3 photos)
 ```
 
-This ensures:
-- Portrait images: scaled to 280px tall (fits 140px container perfectly)
-- Landscape images: scaled proportionally (will be wider than tall, fills container width)
+Since the grid uses `grid-template-columns: repeat(3, 1fr)`, the width is fluid. The key change is ensuring the **width naturally expands** to fill available space while the **height stays at 140px**.
 
 ## Technical Changes
 
-### 1. Update IMAGE_SPECS (line 98-102)
+### 1. Update CSS in `generate-inspection-pdf/index.ts`
 
-```typescript
-const IMAGE_SPECS = {
-  logo: { maxHeight: 200, quality: 80 },       // Logo: fit cover area
-  photo: { maxHeight: 280, quality: 70 },      // Photos: 2x 140px container height
-  signature: { maxHeight: 150, quality: 80 },  // Signatures: preserve legibility
-};
+**Lines 1360-1385** - Adjust grid gap to allow images to expand wider:
+
+```css
+.photo-grid-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;           /* Reduced from 12px to allow wider images */
+  padding: 12px;
+  background: #f9fafb;
+  border-top: 1px solid #e5e7eb;
+  break-inside: avoid;
+}
+
+.photo-grid-3 .photo-item img {
+  width: 100%;
+  height: 140px;
+  object-fit: cover;
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
 ```
 
-### 2. Update Render API call (line 260)
+This gives each image cell approximately **186px width** (on A4 with 25mm margins), creating a 1.33:1 container ratio that matches 4:3 photos exactly.
 
-Change from width-based to height-based transformation:
+### 2. Update Inline Styles in `generate-pdf/index.ts`
 
-```typescript
-// FROM:
-const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
-
-// TO:
-const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?height=${maxHeight}&quality=${quality}`;
-```
-
-### 3. Update function signature (line 253-258)
+**Lines 399-423** - Change fixed dimensions:
 
 ```typescript
-async function downloadImageViaRenderAPI(
-  bucket: string,
-  filePath: string,
-  maxHeight: number,  // Changed from maxWidth
-  quality: number = 75
-): Promise<ArrayBuffer | null> {
+const imageWidthPx = 186;   // Up from 180 to match 4:3 ratio
+const imageHeightPx = 140;  // Keep at 140px
 ```
 
-### 4. Apply same changes to other generators
+### 3. Update Inline Styles in `generate-pdf-browserless/index.ts`
 
-- `supabase/functions/generate-pdf/index.ts`
-- `supabase/functions/generate-pdf-browserless/index.ts`
+**Lines 552-650** - Update all image style declarations to use consistent sizing.
 
-## Expected Result
+### 4. Server-Side Image Sizing (Optional Optimization)
 
-| Image Type | Before (width=500) | After (height=280) |
-|------------|-------------------|-------------------|
-| Portrait (2:3) | 500×750px → appears ~90px wide in PDF | 187×280px → fills 140px height properly |
-| Landscape (4:3) | 500×375px → OK | 373×280px → fills container width |
-| Square (1:1) | 500×500px → appears narrow | 280×280px → balanced fit |
+The current `height=280` server transform is correct for the 140px container. However, we can optionally add width limiting to prevent downloading overly wide images:
 
-## Files to Update
+```typescript
+// Use both width and height constraints
+const transformUrl = `...?height=280&width=400&quality=70`;
+```
+
+This ensures server output never exceeds what's needed for the container.
+
+## Expected Results
+
+| Photo Type | Before (1.14:1 container) | After (1.33:1 container) |
+|------------|--------------------------|--------------------------|
+| Portrait (3:4) | Heavy top/bottom crop | Moderate top/bottom crop |
+| Landscape (4:3) | Side crop ~15% | **Perfect fit - no crop** |
+| Wide (16:9) | Side crop ~35% | Side crop ~25% |
+
+Since most inspection photos are landscape (4:3 from phones held horizontally), this change optimizes for the common case.
+
+## Files to Modify
 
 1. **supabase/functions/generate-inspection-pdf/index.ts**
-   - Lines 98-102: Update IMAGE_SPECS to use maxHeight
-   - Lines 253-260: Update downloadImageViaRenderAPI signature and URL
-   - Lines 340-344: Update call site
+   - Lines 1360-1385: Adjust grid CSS gap and padding
 
 2. **supabase/functions/generate-pdf/index.ts**
-   - Apply same height-based transformation logic
+   - Lines 399-401: Update `imageWidthPx` to 186
 
 3. **supabase/functions/generate-pdf-browserless/index.ts**
-   - Apply same height-based transformation logic
+   - Multiple inline style locations: Update fixed dimensions
 
 ## Deployment
 
-Redeploy all three Edge Functions after changes are applied.
+After code changes, redeploy all three Edge Functions:
+- `generate-inspection-pdf`
+- `generate-pdf`
+- `generate-pdf-browserless`
 
