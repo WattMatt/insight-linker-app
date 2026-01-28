@@ -1372,13 +1372,13 @@ function buildCompleteHTML(
       text-align: center;
     }
     
-    /* Unified photo sizing - Server compresses to 240px via Supabase Render API
+    /* Unified photo sizing - Server compresses via Supabase Render API
        Fixed dimensions ensure consistent 3-column layout across all photos
-       object-fit: contain scales image to fit, preserving full content */
+       object-fit: cover fills container height, may crop sides of very wide images */
     .photo-grid-3 .photo-item img {
       width: 100%;
       height: 140px;
-      object-fit: contain;
+      object-fit: cover;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       background: #f9fafb;
