@@ -1355,13 +1355,14 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* UNIFIED 3-COLUMN PHOTO GRID - Consistent spacing for all images
-       All photos rendered in 3-adjacent layout with object-fit: cover */
+    /* UNIFIED 3-COLUMN PHOTO GRID - Optimized for 4:3 landscape photos
+       Container ratio ~186px × 140px (1.33:1) matches common phone camera output
+       Gap reduced to 8px to allow images to expand to ~186px width on A4 */
     .photo-grid-3 {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
-      gap: 12px;
-      padding: 14px;
+      gap: 8px;
+      padding: 12px;
       background: #f9fafb;
       border-top: 1px solid #e5e7eb;
       break-inside: avoid;
@@ -1373,8 +1374,8 @@ function buildCompleteHTML(
     }
     
     /* Unified photo sizing - Server compresses via Supabase Render API
-       Fixed dimensions ensure consistent 3-column layout across all photos
-       object-fit: cover fills container height, may crop sides of very wide images */
+       Container naturally expands to ~186px width (4:3 ratio with 140px height)
+       object-fit: cover fills container - zero cropping for 4:3 landscape photos */
     .photo-grid-3 .photo-item img {
       width: 100%;
       height: 140px;

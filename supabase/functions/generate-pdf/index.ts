@@ -396,8 +396,9 @@ function generatePhotoGrid(photos: string[], options?: {
   
   if (validPhotos.length === 0) return '';
   
-// UNIFIED 3-COLUMN GRID: 180x140px with object-fit: cover (fills container, may crop sides)
-  const imageWidthPx = 180;
+// UNIFIED 3-COLUMN GRID: 186x140px optimized for 4:3 landscape photos (1.33:1 ratio)
+  // This matches typical phone camera output, minimizing cropping for most inspection photos
+  const imageWidthPx = 186;
   const imageHeightPx = 140;
   
   // Split photos into rows of 3
