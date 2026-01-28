@@ -396,7 +396,7 @@ function generatePhotoGrid(photos: string[], options?: {
   
   if (validPhotos.length === 0) return '';
   
-  // UNIFIED 3-COLUMN GRID: 180x140px with object-fit: cover (matches generate-inspection-pdf)
+// UNIFIED 3-COLUMN GRID: 180x140px with object-fit: contain (preserves full image, no cropping)
   const imageWidthPx = 180;
   const imageHeightPx = 140;
   
@@ -411,7 +411,7 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
-  // object-fit: cover ensures uniform appearance (crops to fit) - matches generate-inspection-pdf
+  // object-fit: contain preserves full image content without cropping
   return `
     <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `
@@ -420,7 +420,7 @@ function generatePhotoGrid(photos: string[], options?: {
             <td style="padding: 6px; vertical-align: top; text-align: center; width: 33.33%;">
               ${showLabels ? `<div style="font-size: 8pt; color: #6b7280; margin-bottom: 4px; font-weight: 500;">${item.label}</div>` : ''}
               <div style="display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px; background: #f9fafb; overflow: hidden;">
-                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: cover; display: block;" />
+                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: contain; background: #f9fafb; display: block;" />
               </div>
             </td>
           `).join('')}

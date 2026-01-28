@@ -1373,14 +1373,15 @@ function buildCompleteHTML(
     }
     
     /* Unified photo sizing - Server compresses to 240px via Supabase Render API
-       Fixed dimensions ensure consistent 3-column layout across all photos */
+       Fixed dimensions ensure consistent 3-column layout across all photos
+       object-fit: contain preserves full image content (no cropping) */
     .photo-grid-3 .photo-item img {
       width: 100%;
       height: 140px;
-      object-fit: cover;
+      object-fit: contain;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      background: #ffffff;
+      background: #f9fafb;
     }
     
     .photo-label {
