@@ -548,7 +548,7 @@ function generateHTML(
                 ${item.photos && item.photos.length > 0 ? `
                   <tr>
                     <td colspan="3" style="padding: 12px; background: #fafafa;">
-                      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px;">
+                      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                         ${item.photos.slice(0, 3).map(photo => `
                           <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
                             <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" loading="eager" />
@@ -594,7 +594,7 @@ function generateHTML(
               </tr>
             </table>
             ${(tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage) ? `
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px;">
+              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                 ${tenant.meterImage ? `
                   <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
                     <img src="${getImage(tenant.meterImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
