@@ -40,9 +40,9 @@ const SUPABASE_URL = Deno.env.get('SUPABASE_URL')!;
  * Matches generate-inspection-pdf/index.ts exactly
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 180, quality: 75 },
-  photo: { maxWidth: 240, quality: 60 },
-  signature: { maxWidth: 350, quality: 80 },
+  logo: { maxHeight: 200, quality: 75 },       // Logo: fit cover area height
+  photo: { maxHeight: 280, quality: 70 },      // Photos: 2x 140px container height for sharpness
+  signature: { maxHeight: 150, quality: 80 },  // Signatures: preserve legibility
 };
 
 // Placeholder for failed images
@@ -160,13 +160,13 @@ async function downloadImageWithTransform(url: string): Promise<ArrayBuffer | nu
     
     // LOGOS: Download without transformation to preserve original quality
     if (isLogo) {
-      console.log(`[Transform] LOGO: Using Render API at ${specs.maxWidth}px`);
+      console.log(`[Transform] LOGO: Using Render API at height=${specs.maxHeight}px`);
     } else {
-      console.log(`[Transform] Photo: Render API ${specs.maxWidth}px @ ${specs.quality}%`);
+      console.log(`[Transform] Photo: Render API height=${specs.maxHeight}px @ ${specs.quality}%`);
     }
     
-    // Use Direct Render API - MATCHES generate-inspection-pdf EXACTLY
-    const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${parsed.bucket}/${parsed.path}?width=${specs.maxWidth}&quality=${specs.quality}`;
+    // Use height-based transformation for proper portrait image scaling in PDF containers
+    const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${parsed.bucket}/${parsed.path}?height=${specs.maxHeight}&quality=${specs.quality}`;
     
     try {
       const controller = new AbortController();

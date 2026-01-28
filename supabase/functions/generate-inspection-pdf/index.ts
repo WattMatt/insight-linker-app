@@ -96,9 +96,9 @@ const MAX_PHOTOS_PER_ITEM = 3; // Support up to 3 photos per item for 3-column g
  * ... (unchanged comments)
  */
 const IMAGE_SPECS = {
-  logo: { maxWidth: 300, quality: 80 },       // Logo: higher res for cover page
-  photo: { maxWidth: 500, quality: 70 },      // All photos: 500px width for sharp 3-col print
-  signature: { maxWidth: 350, quality: 80 },  // Signatures: preserve detail
+  logo: { maxHeight: 200, quality: 80 },       // Logo: fit cover area height
+  photo: { maxHeight: 280, quality: 70 },      // Photos: 2x 140px container height for sharpness
+  signature: { maxHeight: 150, quality: 80 },  // Signatures: preserve legibility
 };
 
 type ImageType = keyof typeof IMAGE_SPECS;
@@ -253,14 +253,14 @@ async function findAlternativeFile(bucket: string, filePath: string): Promise<st
 async function downloadImageViaRenderAPI(
   bucket: string,
   filePath: string,
-  maxWidth: number,
+  maxHeight: number,
   quality: number = 75
 ): Promise<ArrayBuffer | null> {
-  // Construct transform URL exactly like DOCX generator (line 253)
-  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?width=${maxWidth}&quality=${quality}`;
+  // Use height-based transformation for proper portrait image scaling in PDF containers
+  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?height=${maxHeight}&quality=${quality}`;
 
   try {
-    console.log(`[ImagePipeline] Render API: width=${maxWidth}, quality=${quality}`);
+    console.log(`[ImagePipeline] Render API: height=${maxHeight}, quality=${quality}`);
 
     const controller = new AbortController();
     const timeoutId = setTimeout(() => controller.abort(), 12000);
@@ -286,7 +286,7 @@ async function downloadImageViaRenderAPI(
   const alternativePath = await findAlternativeFile(bucket, filePath);
   if (alternativePath && alternativePath !== filePath) {
     console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
-    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?width=${maxWidth}&quality=${quality}`;
+    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?height=${maxHeight}&quality=${quality}`;
 
     try {
       const altResponse = await fetch(altUrl);
@@ -336,11 +336,11 @@ async function imageToBase64(url: string, imageType: ImageType = 'photo'): Promi
     const parsed = parseSupabaseStorageUrl(url);
 
     if (parsed) {
-      // Use Direct Render API - MATCHES DOCX GENERATOR APPROACH
+      // Use Direct Render API with height-based transformation for proper portrait scaling
       const buffer = await downloadImageViaRenderAPI(
         parsed.bucket,
         parsed.path,
-        spec.maxWidth,
+        spec.maxHeight,
         spec.quality
       );
 
