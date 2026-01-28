@@ -1,158 +1,87 @@
 
-# Plan: Align PDF Generator with PDF_LAYOUT_STANDARDS.md
+# Fix Image Quality in PDF Reports - Restore Proper Scaling
 
-## Summary
+## Problem Analysis
 
-The current `generate-inspection-pdf` implementation is **largely compliant** with the layout standards. However, there are a few discrepancies that need to be corrected to ensure full alignment and prevent potential layout issues (orphaned photo grids, split tables).
+The current `generate-inspection-pdf` function uses `object-fit: cover` with a fixed `height: 140px` for photo grid images. This **crops** photos to fill the container, cutting off critical details (visible in Screenshot 2 showing only numbers 5-11 of a ruler instead of the full electrical board panel).
 
----
+### Visual Comparison
 
-## Discrepancies to Fix
+| Approach | CSS | Result |
+|----------|-----|--------|
+| **GOOD (Screenshot 1)** | `object-fit: contain` or `height: auto` | Full image visible, properly scaled |
+| **BAD (Screenshot 2)** | `object-fit: cover` + `height: 140px` | Cropped center portion only |
 
-### 1. Browserless Margin Configuration (Critical)
+## Root Cause
 
-**Standard Requires:**
-```typescript
-margin: {
-  top: '20mm',
-  bottom: '20mm',
-  left: '10mm',
-  right: '10mm'
-}
-```
-
-**Current Implementation (Line 1553):**
-```typescript
-margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' }
-```
-
-**Issue:** Top and side margins set to `0mm` means CSS `@page` margins are handling it alone. This can cause conflicts when Browserless applies its own logic. The standard mandates explicit Browserless margins to sync with CSS.
-
----
-
-### 2. Photo Grid Content Integrity (Missing Rule)
-
-**Standard Requires:**
-```css
-.photo-grid {
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-```
-
-**Current Implementation:** Only `.inspection-item` and `.tenant-card` have `break-inside: avoid`. The photo grid containers (`.photo-grid-2`, `.photo-grid-3`) are missing this rule.
-
-**Risk:** A photo grid could be split across pages, leaving orphaned photos.
-
----
-
-### 3. Table Container Integrity (Missing Rule)
-
-**Standard Requires:**
-```css
-.table-container {
-  break-inside: avoid;
-  page-break-inside: avoid;
-}
-```
-
-**Current Implementation:** The `.breakdown-table` and `.info-table` do not have `break-inside: avoid`.
-
-**Risk:** Tables could break mid-row across pages.
-
----
-
-## Technical Changes
-
-### File: `supabase/functions/generate-inspection-pdf/index.ts`
-
-#### Change 1: Update Browserless Margin Configuration
-
-**Location:** Line 1553
-
-```typescript
-// BEFORE
-margin: { top: '0mm', right: '0mm', bottom: '20mm', left: '0mm' },
-
-// AFTER (aligned with PDF_LAYOUT_STANDARDS.md)
-margin: {
-  top: '20mm',
-  bottom: '20mm', 
-  left: '10mm',
-  right: '10mm'
-},
-```
-
-#### Change 2: Add Photo Grid Content Integrity Rules
-
-**Location:** After line 1380 (in CSS section)
+Located in `supabase/functions/generate-inspection-pdf/index.ts` at lines 1377-1384:
 
 ```css
-/* Photo grid content integrity - prevents split across pages */
-.photo-grid-2,
-.photo-grid-3 {
-  break-inside: avoid;
-  page-break-inside: avoid;
+.photo-grid-3 .photo-item img {
+  width: 100%;
+  height: 140px;           /* Fixed height forces cropping */
+  object-fit: cover;       /* PROBLEM: Crops to fill container */
+  ...
 }
 ```
 
-#### Change 3: Add Table Container Content Integrity Rules
+The tenant images section (lines 1465-1472) uses the **correct** approach with `height: auto`.
 
-**Location:** After the `.breakdown-table` and `.info-table` definitions
+## Solution
+
+Change the photo grid CSS to preserve full image content while maintaining a clean grid layout:
+
+### Option A: Use `object-fit: contain` (Recommended)
 
 ```css
-/* Table content integrity - prevents split across pages */
-.breakdown-table,
-.info-table,
-.tenant-table {
-  break-inside: avoid;
-  page-break-inside: avoid;
+.photo-grid-3 .photo-item img {
+  width: 100%;
+  height: 140px;
+  object-fit: contain;     /* Scale to fit, preserving full content */
+  background: #f9fafb;     /* Fill empty space with background */
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
 }
 ```
 
----
+**Pros**: Maintains consistent grid cell heights, shows full image content
+**Cons**: May have empty space around some images (letterboxing)
 
-## Updated CSS Structure (Summary)
+### Option B: Use `height: auto` (Maximum Fidelity)
 
-```text
-+----------------------------------------------+
-| @page { margin: 20mm 10mm 20mm 10mm }        |  <-- CSS defines page margins
-+----------------------------------------------+
-| .page.cover { page-break-before: avoid }     |  <-- No break before cover
-+----------------------------------------------+
-| .page.dashboard,                             |
-| .page.breakdown { page-break-before: always }|  <-- New pages for fixed sections
-+----------------------------------------------+
-| .section-container { page-break-before: always }
-| .section-container:first-child { page-break-before: auto }
-+----------------------------------------------+
-| Content Integrity:                           |
-| - .inspection-item { break-inside: avoid }   |
-| - .photo-grid-2, .photo-grid-3 { break-inside: avoid }  <-- NEW
-| - .tenant-card { break-inside: avoid }       |
-| - .breakdown-table, .info-table { break-inside: avoid } <-- NEW
-+----------------------------------------------+
-| Browserless margins sync:                    |
-| { top: '20mm', bottom: '20mm',              |
-|   left: '10mm', right: '10mm' }              |  <-- FIXED
-+----------------------------------------------+
+```css
+.photo-grid-3 .photo-item img {
+  width: 100%;
+  max-height: 200px;       /* Prevent excessively tall images */
+  height: auto;            /* Natural aspect ratio preserved */
+  border: 1px solid #e5e7eb;
+  border-radius: 4px;
+}
 ```
 
----
+**Pros**: Perfect image quality, no cropping or letterboxing
+**Cons**: Grid rows may have varying heights
 
-## Expected Outcome
+## Implementation Steps
 
-1. **No blank pages** - Page break rules are correctly applied
-2. **No orphaned photos** - Photo grids cannot split across pages
-3. **No split tables** - Tables remain intact on a single page
-4. **Consistent margins** - CSS and Browserless margins are synchronized
-5. **Full SANS 10142-1 compliance** - Professional document formatting
+1. Update `supabase/functions/generate-inspection-pdf/index.ts`:
+   - Change `.photo-grid-3 .photo-item img` CSS from `object-fit: cover` to `object-fit: contain`
+   - Add a subtle background color (`#f9fafb`) to fill any letterbox areas
+   - Keep consistent height for visual alignment
 
----
+2. Apply the same fix to `generate-pdf/index.ts` and `generate-pdf-browserless/index.ts` if they have the same issue
 
-## Files to Modify
+3. Redeploy all affected Edge Functions
 
-| File | Changes |
-|------|---------|
-| `supabase/functions/generate-inspection-pdf/index.ts` | Update Browserless margins, add content integrity CSS rules |
+## Affected Files
 
+- `supabase/functions/generate-inspection-pdf/index.ts` - Photo grid CSS (lines 1377-1384)
+- `supabase/functions/generate-pdf/index.ts` - Same grid styling if present  
+- `supabase/functions/generate-pdf-browserless/index.ts` - Same grid styling if present
+
+## Testing
+
+After deployment, generate a test inspection PDF and verify:
+- Electrical board panel images show the **complete** panel (not just cropped center)
+- All photos are legible and maintain their original aspect ratio
+- Grid layout remains clean and professional
