@@ -1,14 +1,14 @@
 /**
  * Inspection Report Generator
- * Uses PDFShift Edge Function with pre-embedded Base64 images for reliable,
- * high-quality report generation with perfect layout and photo rendering.
+ * Uses pdfmake (client-side) for reliable PDF generation
+ * without external API dependencies.
  */
 
 import { supabase } from "@/integrations/supabase/client";
 import { 
-  generateAndSavePdfShiftInspectionReport, 
+  generateAndSaveInspectionReportPdfmake as pdfmakeGenerateAndSave,
   InspectionReportData 
-} from "@/lib/pdfshiftInspectionReport";
+} from "@/lib/pdfmakeInspectionReport";
 
 interface GenerateAndSaveReportOptions {
   inspectionId: string;
@@ -38,6 +38,8 @@ export async function generateAndSaveInspectionReport(
   const { inspectionId, subsectionId, siteName, subsectionName, clientName, templateId, siteLogoUrl } = options;
 
   try {
+    console.log('[InspectionReport] Starting pdfmake generation...');
+    
     // Fetch inspection data
     const { data: inspection, error: inspectionError } = await supabase
       .from('inspections')
@@ -190,16 +192,15 @@ export async function generateAndSaveInspectionReport(
       subsectionName,
     };
 
-    console.log('[InspectionReport] Generating via PDFShift Edge Function');
+    console.log('[InspectionReport] Generating via pdfmake (client-side)');
 
-    // Generate using PDFShift (server-side with pre-embedded Base64 images)
-    const result = await generateAndSavePdfShiftInspectionReport({
+    // Generate using pdfmake (client-side - no external API dependencies)
+    const result = await pdfmakeGenerateAndSave({
       inspection: inspectionData,
       siteName,
       clientName,
       siteLogoUrl,
       subsectionId,
-      siteId: inspection.site_id,
     });
 
     return result;
