@@ -371,9 +371,9 @@ function validateBase64Image(dataUri: string): boolean {
 
 // Generate a responsive photo grid - UNIFIED 3-COLUMN STANDARD
 // Uses NESTED TABLE with fixed cell dimensions - most reliable for PDFShift
-// All reports use consistent 3-adjacent spacing with object-fit: cover
-// Matches generate-inspection-pdf CSS: width: 100%; height: 140px; object-fit: cover
-function generatePhotoGrid(photos: string[], options?: { 
+// All reports use consistent 3-adjacent spacing with object-fit: contain
+// Matches generate-inspection-pdf CSS: width: 100%; height: 140px; object-fit: contain
+function generatePhotoGrid(photos: string[], options?: {
   perRow?: number; 
   labels?: string[];
   showLabels?: boolean;
@@ -412,7 +412,7 @@ function generatePhotoGrid(photos: string[], options?: {
   }
   
   // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
-  // object-fit: cover fills container height, may crop sides of very wide images
+  // object-fit: contain shows FULL image without cropping - letterboxed with subtle background
   return `
     <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `
@@ -420,8 +420,8 @@ function generatePhotoGrid(photos: string[], options?: {
           ${row.map(item => `
             <td style="padding: 6px; vertical-align: top; text-align: center; width: 33.33%;">
               ${showLabels ? `<div style="font-size: 8pt; color: #6b7280; margin-bottom: 4px; font-weight: 500;">${item.label}</div>` : ''}
-              <div style="display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden;">
-                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: cover; display: block;" />
+              <div style="display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb;">
+                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: contain; display: block; background: #f9fafb;" />
               </div>
             </td>
           `).join('')}

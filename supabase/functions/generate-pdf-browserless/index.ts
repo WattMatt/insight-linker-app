@@ -550,8 +550,8 @@ function generateHTML(
                     <td colspan="3" style="padding: 12px; background: #fafafa;">
                       <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                         ${item.photos.slice(0, 3).map(photo => `
-                          <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
-                            <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" loading="eager" />
+                          <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #f9fafb;">
+                            <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" loading="eager" />
                           </div>
                         `).join('')}
                       </div>
@@ -596,20 +596,20 @@ function generateHTML(
             ${(tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage) ? `
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
                 ${tenant.meterImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
-                    <img src="${getImage(tenant.meterImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
+                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
+                    <img src="${getImage(tenant.meterImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Meter</div>
                   </div>
                 ` : ''}
                 ${tenant.breakerImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
-                    <img src="${getImage(tenant.breakerImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
+                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
+                    <img src="${getImage(tenant.breakerImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Breaker</div>
                   </div>
                 ` : ''}
                 ${tenant.ctRatioImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden;">
-                    <img src="${getImage(tenant.ctRatioImage)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" />
+                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
+                    <img src="${getImage(tenant.ctRatioImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
                     <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">CT Ratio</div>
                   </div>
                 ` : ''}
@@ -645,8 +645,8 @@ function generateHTML(
             ${snag.photos && snag.photos.length > 0 ? `
               <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px;">
                 ${snag.photos.slice(0, 3).map(photo => `
-                  <div style="border-radius: 4px; border: 1px solid #fcd34d; padding: 4px; overflow: hidden;">
-                    <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: cover; display: block;" loading="eager" />
+                  <div style="border-radius: 4px; border: 1px solid #fcd34d; padding: 4px; overflow: hidden; background: #f9fafb;">
+                    <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" loading="eager" />
                   </div>
                 `).join('')}
               </div>
