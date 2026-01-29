@@ -1375,11 +1375,11 @@ function buildCompleteHTML(
     
     /* Unified photo sizing - Server compresses via Supabase Render API
        Container naturally expands to ~186px width (4:3 ratio with 140px height)
-       object-fit: cover fills container - zero cropping for 4:3 landscape photos */
+       object-fit: contain shows FULL image without cropping - letterboxed if needed */
     .photo-grid-3 .photo-item img {
       width: 100%;
       height: 140px;
-      object-fit: cover;
+      object-fit: contain;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       background: #f9fafb;
