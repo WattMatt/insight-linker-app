@@ -548,10 +548,10 @@ function generateHTML(
                 ${item.photos && item.photos.length > 0 ? `
                   <tr>
                     <td colspan="3" style="padding: 12px; background: #fafafa;">
-                      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+                      <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                         ${item.photos.slice(0, 3).map(photo => `
-                          <div style="border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden; background: #f9fafb;">
-                            <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" loading="eager" />
+                          <div style="width: 186px; height: 140px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">
+                            <img src="${getImage(photo)}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" loading="eager" />
                           </div>
                         `).join('')}
                       </div>
@@ -594,23 +594,23 @@ function generateHTML(
               </tr>
             </table>
             ${(tenant.meterImage || tenant.breakerImage || tenant.ctRatioImage) ? `
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px;">
                 ${tenant.meterImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
-                    <img src="${getImage(tenant.meterImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
-                    <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Meter</div>
+                  <div style="width: 186px; height: 160px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">
+                    <img src="${getImage(tenant.meterImage)}" style="position: absolute; top: 0; left: 0; width: 100%; height: 140px; object-fit: contain;" />
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px; color: #6b7280; text-align: center; padding: 2px; background: white;">Meter</div>
                   </div>
                 ` : ''}
                 ${tenant.breakerImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
-                    <img src="${getImage(tenant.breakerImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
-                    <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">Breaker</div>
+                  <div style="width: 186px; height: 160px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">
+                    <img src="${getImage(tenant.breakerImage)}" style="position: absolute; top: 0; left: 0; width: 100%; height: 140px; object-fit: contain;" />
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px; color: #6b7280; text-align: center; padding: 2px; background: white;">Breaker</div>
                   </div>
                 ` : ''}
                 ${tenant.ctRatioImage ? `
-                  <div style="text-align: center; border-radius: 4px; border: 1px solid #e5e7eb; padding: 4px; overflow: hidden; background: #f9fafb;">
-                    <img src="${getImage(tenant.ctRatioImage)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" />
-                    <div style="font-size: 9px; color: #6b7280; margin-top: 4px;">CT Ratio</div>
+                  <div style="width: 186px; height: 160px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px;">
+                    <img src="${getImage(tenant.ctRatioImage)}" style="position: absolute; top: 0; left: 0; width: 100%; height: 140px; object-fit: contain;" />
+                    <div style="position: absolute; bottom: 0; left: 0; right: 0; font-size: 9px; color: #6b7280; text-align: center; padding: 2px; background: white;">CT Ratio</div>
                   </div>
                 ` : ''}
               </div>
@@ -643,10 +643,10 @@ function generateHTML(
             </div>
             ${snag.description ? `<p style="font-size: 11px; color: #78350f; margin: 8px 0 0;">${snag.description}</p>` : ''}
             ${snag.photos && snag.photos.length > 0 ? `
-              <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px;">
+              <div style="display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px;">
                 ${snag.photos.slice(0, 3).map(photo => `
-                  <div style="border-radius: 4px; border: 1px solid #fcd34d; padding: 4px; overflow: hidden; background: #f9fafb;">
-                    <img src="${getImage(photo)}" style="width: 100%; height: 140px; object-fit: contain; display: block; background: #f9fafb;" loading="eager" />
+                  <div style="width: 186px; height: 140px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #fcd34d; border-radius: 4px;">
+                    <img src="${getImage(photo)}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" loading="eager" />
                   </div>
                 `).join('')}
               </div>
