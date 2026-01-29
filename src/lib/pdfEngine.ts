@@ -115,6 +115,45 @@ const PDF_IMAGE_CONFIG = {
 };
 
 /**
+ * Load image via Image element - works for public URLs with proper CORS headers
+ */
+async function loadImageViaElement(url: string): Promise<string | null> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth;
+        canvas.height = img.naturalHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(dataUrl);
+      } catch (e) {
+        console.warn('[PDF] Canvas export failed (tainted canvas):', e);
+        resolve(null);
+      }
+    };
+    
+    img.onerror = () => {
+      resolve(null);
+    };
+    
+    // Add cache busting to avoid stale responses
+    const separator = url.includes('?') ? '&' : '?';
+    img.src = `${url}${separator}_t=${Date.now()}`;
+  });
+}
+
+/**
  * Compress an image blob using canvas
  */
 async function compressImageBlob(blob: Blob): Promise<string> {
@@ -167,15 +206,58 @@ async function compressImageBlob(blob: Blob): Promise<string> {
 
 /**
  * Load an image from URL, compress it, and convert to base64 data URL for embedding in PDF
+ * Uses robust Supabase storage handling with fallbacks
  */
 export async function loadImageAsDataUrl(url: string): Promise<string | null> {
+  if (!url) return null;
+  
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      console.warn(`Failed to fetch image: ${response.status}`);
+    // Try multiple fetch strategies for resilience
+    let blob: Blob | null = null;
+    
+    // Strategy 1: Direct fetch with no-cors fallback
+    try {
+      const response = await fetch(url, { 
+        mode: 'cors',
+        credentials: 'omit',
+        cache: 'force-cache',
+      });
+      if (response.ok) {
+        blob = await response.blob();
+      }
+    } catch (e) {
+      console.warn(`[PDF] CORS fetch failed for ${url.substring(0, 80)}...`);
+    }
+    
+    // Strategy 2: Try without cors mode
+    if (!blob) {
+      try {
+        const response = await fetch(url);
+        if (response.ok) {
+          blob = await response.blob();
+        }
+      } catch (e) {
+        console.warn(`[PDF] Standard fetch failed for ${url.substring(0, 80)}...`);
+      }
+    }
+    
+    // Strategy 3: Use Image element (works for public URLs with CORS headers)
+    if (!blob) {
+      try {
+        const dataUrl = await loadImageViaElement(url);
+        if (dataUrl) {
+          console.log(`[PDF] Loaded via Image element: ${url.substring(0, 50)}...`);
+          return dataUrl;
+        }
+      } catch (e) {
+        console.warn(`[PDF] Image element load failed for ${url.substring(0, 80)}...`);
+      }
+    }
+    
+    if (!blob) {
+      console.warn(`[PDF] All fetch strategies failed for: ${url.substring(0, 80)}...`);
       return null;
     }
-    const blob = await response.blob();
     
     // Skip compression for SVGs and very small files
     if (blob.type === 'image/svg+xml' || blob.size < 5000) {
@@ -193,7 +275,7 @@ export async function loadImageAsDataUrl(url: string): Promise<string | null> {
       console.log(`[PDF] Compressed image: ${(blob.size / 1024).toFixed(1)}KB → ~${(compressedDataUrl.length * 0.75 / 1024).toFixed(1)}KB`);
       return compressedDataUrl;
     } catch (compressError) {
-      console.warn('Image compression failed, using original:', compressError);
+      console.warn('[PDF] Image compression failed, using original:', compressError);
       return new Promise((resolve) => {
         const reader = new FileReader();
         reader.onloadend = () => resolve(reader.result as string);
