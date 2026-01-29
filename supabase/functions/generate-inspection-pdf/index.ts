@@ -616,7 +616,10 @@ function buildCoverPageHTML(
       </div>
       
       <div class="cover-content">
-        ${logoBase64 ? `<img src="${logoBase64}" width="180" height="100" style="display:block;margin:0 auto 30px;object-fit:contain;" alt="Logo">` : '<div class="cover-logo-placeholder"></div>'}
+        ${logoBase64 ? `
+          <div class="cover-logo-wrapper">
+            <img src="${logoBase64}" alt="Logo">
+          </div>` : '<div class="cover-logo-placeholder"></div>'}
         
         <h1 class="cover-title">${inspection.templateName || 'Electrical Inspection Report'}</h1>
         <p class="cover-subtitle">${inspection.subsectionName || siteName}</p>
@@ -1046,9 +1049,24 @@ function buildCompleteHTML(
       text-align: center;
     }
     
+    /* Logo container - simple block with explicit dimensions */
+    .cover-logo-wrapper {
+      width: 200px;
+      height: 120px;
+      margin: 0 auto 30px;
+      display: block;
+    }
+    
+    .cover-logo-wrapper img {
+      width: 200px;
+      height: 120px;
+      object-fit: contain;
+      display: block;
+    }
+    
     .cover-logo-placeholder {
-      width: 180px;
-      height: 80px;
+      width: 200px;
+      height: 100px;
       margin: 0 auto 30px;
     }
     
@@ -1070,6 +1088,7 @@ function buildCompleteHTML(
       padding-left: 20px;
       text-align: left;
       width: 300px;
+      margin: 0 auto;
     }
     
     .meta-row {
@@ -1685,7 +1704,7 @@ Deno.serve(async (req: Request) => {
   try {
     console.log('[GenerateInspectionPDF] Starting...');
 
-    const payload: InspectionPayload = await req.json();
+    const payload: InspectionPayload & { returnHtmlOnly?: boolean } = await req.json();
 
     if (!payload.inspection) {
       return new Response(
@@ -1717,6 +1736,14 @@ Deno.serve(async (req: Request) => {
 
     // Phase 2: Build complete HTML
     const html = buildCompleteHTML(payload, imageMap);
+    
+    // Debug mode: return HTML only for inspection
+    if (payload.returnHtmlOnly) {
+      console.log('[GenerateInspectionPDF] Debug mode - returning HTML only');
+      return new Response(html, { 
+        headers: { ...corsHeaders, 'Content-Type': 'text/html' } 
+      });
+    }
 
     // Phase 3: Convert to PDF via Browserless
     const pdfBuffer = await generatePdfWithBrowserless(html);
