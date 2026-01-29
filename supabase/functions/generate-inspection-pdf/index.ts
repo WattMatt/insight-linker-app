@@ -821,9 +821,9 @@ function buildSectionPagesHTML(
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
         return base64 ? `
-          <div class="photo-cell">
-            <img src="${base64}" alt="Photo ${pIdx + 1}">
-            <span class="photo-label">Photo ${pIdx + 1}</span>
+          <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
+            <img src="${base64}" alt="Photo ${pIdx + 1}" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
+            <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Photo ${pIdx + 1}</span>
           </div>
         ` : '';
       }).join('') : '';
@@ -913,23 +913,23 @@ function buildTenantsPageHTML(
         </div>
         
         ${hasImages ? `
-          <div class="photo-grid-3">
+          <div class="photo-grid-3" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#f9fafb;border-top:1px solid #e5e7eb;">
             ${meterBase64 ? `
-              <div class="photo-cell">
-                <img src="${meterBase64}" alt="Meter Image">
-                <span class="photo-label">Meter</span>
+              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
+                <img src="${meterBase64}" alt="Meter Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
+                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Meter</span>
               </div>
             ` : ''}
             ${breakerBase64 ? `
-              <div class="photo-cell">
-                <img src="${breakerBase64}" alt="Breaker Image">
-                <span class="photo-label">Breaker</span>
+              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
+                <img src="${breakerBase64}" alt="Breaker Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
+                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Breaker</span>
               </div>
             ` : ''}
             ${ctRatioBase64 ? `
-              <div class="photo-cell">
-                <img src="${ctRatioBase64}" alt="CT Ratio Image">
-                <span class="photo-label">CT Ratio</span>
+              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
+                <img src="${ctRatioBase64}" alt="CT Ratio Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
+                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">CT Ratio</span>
               </div>
             ` : ''}
           </div>
@@ -1355,9 +1355,8 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* UNIFIED 3-COLUMN PHOTO GRID - VIEWPORT-BASED RENDERING
-       Uses absolute positioning to GUARANTEE image fills the container
-       No flexbox - explicit fixed dimensions for bulletproof rendering */
+    /* UNIFIED 3-COLUMN PHOTO GRID - EXPLICIT PIXEL DIMENSIONS
+       Uses inline width/height on img for Chrome PDF compatibility */
     .photo-grid-3 {
       display: flex;
       flex-wrap: wrap;
@@ -1369,38 +1368,45 @@ function buildCompleteHTML(
       page-break-inside: avoid;
     }
     
-    /* VIEWPORT CONTAINER - Fixed dimensions, image CANNOT escape */
+    /* PHOTO CELL - Fixed outer container */
     .photo-cell {
       width: 186px;
       height: 140px;
-      position: relative;
-      overflow: hidden;
+      display: flex;
+      align-items: center;
+      justify-content: center;
       background: #f9fafb;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
+      overflow: hidden;
+      position: relative;
     }
     
-    /* IMAGE fills viewport via absolute positioning */
+    /* IMAGE - Explicit pixel dimensions that Chrome MUST respect */
     .photo-cell img {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      object-fit: contain;
+      width: 184px !important;
+      height: 138px !important;
+      max-width: 184px !important;
+      max-height: 138px !important;
+      min-width: 184px !important;
+      min-height: 138px !important;
+      object-fit: cover;
+      object-position: center;
+      display: block;
     }
     
-    /* Label overlays bottom of image */
+    /* Label positioned at bottom */
     .photo-cell .photo-label {
       position: absolute;
       bottom: 0;
       left: 0;
       right: 0;
-      background: rgba(0,0,0,0.5);
+      background: rgba(0,0,0,0.6);
       color: white;
       font-size: 8pt;
-      padding: 2px 4px;
+      padding: 3px 4px;
       text-align: center;
+      z-index: 1;
     }
     
     /* Tenant Card Styles */
