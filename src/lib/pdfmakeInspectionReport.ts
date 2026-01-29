@@ -12,7 +12,6 @@
 
 import {
   generateReport,
-  loadImageAsDataUrl,
   COLORS,
   CONTENT_WIDTH_PT,
   CoverPageOptions,
@@ -20,6 +19,7 @@ import {
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
+import { loadImageSimple, loadImagesSimple } from './simpleImageLoader';
 
 // Type definitions
 type Content = any;
@@ -111,23 +111,9 @@ export interface GenerateInspectionReportResult {
 // IMAGE UTILITIES
 // ============================================================================
 
+// Using simple image loader from simpleImageLoader.ts
 async function loadImagesAsDataUrls(urls: string[]): Promise<Map<string, string>> {
-  const results = new Map<string, string>();
-  
-  const loadPromises = urls.map(async (url) => {
-    if (!url) return;
-    try {
-      const dataUrl = await loadImageAsDataUrl(url);
-      if (dataUrl) {
-        results.set(url, dataUrl);
-      }
-    } catch (error) {
-      console.warn(`Failed to load image: ${url}`, error);
-    }
-  });
-  
-  await Promise.all(loadPromises);
-  return results;
+  return loadImagesSimple(urls);
 }
 
 function collectImageUrls(inspection: InspectionReportData): string[] {
@@ -1465,10 +1451,12 @@ export async function generateInspectionReportPdf(
     const imageCache = await loadImagesAsDataUrls(imageUrls);
     console.log(`[pdfmake] Loaded ${imageCache.size} images successfully`);
 
-    // Load logo
+    // Load logo using simple loader
     let logoDataUrl: string | null = null;
     if (siteLogoUrl) {
-      logoDataUrl = await loadImageAsDataUrl(siteLogoUrl);
+      console.log(`[pdfmake] Loading logo from: ${siteLogoUrl}`);
+      logoDataUrl = await loadImageSimple(siteLogoUrl);
+      console.log(`[pdfmake] Logo loaded: ${logoDataUrl ? 'SUCCESS' : 'FAILED'}`);
     }
 
     // Calculate statistics
