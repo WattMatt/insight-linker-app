@@ -1371,6 +1371,9 @@ function buildCompleteHTML(
     
     .photo-item {
       text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
     }
     
     /* Unified photo sizing - Server compresses via Supabase Render API
@@ -1378,11 +1381,14 @@ function buildCompleteHTML(
        object-fit: contain shows FULL image without cropping - letterboxed if needed */
     .photo-grid-3 .photo-item img {
       width: 100%;
+      max-width: 186px;
       height: 140px;
       object-fit: contain;
+      object-position: center;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
       background: #f9fafb;
+      display: block;
     }
     
     .photo-label {
