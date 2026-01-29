@@ -256,8 +256,9 @@ async function downloadImageViaRenderAPI(
   maxHeight: number,
   quality: number = 75
 ): Promise<ArrayBuffer | null> {
-  // Use height-based transformation for proper portrait image scaling in PDF containers
-  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${filePath}?height=${maxHeight}&quality=${quality}`;
+  // Encode each path segment individually to handle spaces and special characters
+  const encodedPath = filePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
+  const transformUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${encodedPath}?height=${maxHeight}&quality=${quality}`;
 
   try {
     console.log(`[ImagePipeline] Render API: height=${maxHeight}, quality=${quality}`);
@@ -285,8 +286,9 @@ async function downloadImageViaRenderAPI(
   // Fallback: Try alternative file in same directory
   const alternativePath = await findAlternativeFile(bucket, filePath);
   if (alternativePath && alternativePath !== filePath) {
+    const encodedAltPath = alternativePath.split('/').map(segment => encodeURIComponent(segment)).join('/');
     console.log(`[ImagePipeline] Trying alternative: ${alternativePath.substring(0, 50)}...`);
-    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${alternativePath}?height=${maxHeight}&quality=${quality}`;
+    const altUrl = `${SUPABASE_URL}/storage/v1/render/image/public/${bucket}/${encodedAltPath}?height=${maxHeight}&quality=${quality}`;
 
     try {
       const altResponse = await fetch(altUrl);
