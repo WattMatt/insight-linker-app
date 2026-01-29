@@ -5,10 +5,10 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { 
-  generatePdfShiftInspectionReport,
-  generateAndSavePdfShiftInspectionReport,
-  InspectionReportData as PdfShiftInspectionData 
-} from "@/lib/pdfshiftInspectionReport";
+  generateInspectionReportPdf,
+  generateAndSaveInspectionReportPdfmake,
+  InspectionReportData as PdfmakeInspectionData 
+} from "@/lib/pdfmakeInspectionReport";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
@@ -155,8 +155,8 @@ export async function generateAndSaveComprehensiveReport(
     
     console.log('[ComprehensiveReport] Tenants for PDF:', tenantsForPdf.length);
 
-    // Build PDFShift inspection data
-    const pdfData: PdfShiftInspectionData = {
+    // Build pdfmake inspection data
+    const pdfData: PdfmakeInspectionData = {
       inspectionId,
       templateName: template.name,
       inspectorName: generalInfo.inspectorName || inspection.inspector_name,
@@ -182,16 +182,15 @@ export async function generateAndSaveComprehensiveReport(
       subsectionName,
     };
 
-    console.log('[ComprehensiveReport] Generating via PDFShift');
+    console.log('[ComprehensiveReport] Generating via pdfmake (client-side)');
 
-    // Generate and save using PDFShift Edge Function
-    const result = await generateAndSavePdfShiftInspectionReport({
+    // Generate and save using pdfmake (client-side - reliable image handling)
+    const result = await generateAndSaveInspectionReportPdfmake({
       inspection: pdfData,
       siteName,
       clientName,
       siteLogoUrl,
       subsectionId,
-      siteId: inspection.site_id,
     });
 
     if (!result.success) {
@@ -390,8 +389,8 @@ export const ComprehensiveInspectionReport = ({
       
       console.log('[ComprehensiveReport] Preview: Tenants for PDF:', tenantsForPdf.length);
 
-      // Build PDFShift inspection data
-      const pdfData: PdfShiftInspectionData = {
+      // Build pdfmake inspection data
+      const pdfData: PdfmakeInspectionData = {
         inspectionId: inspId || '',
         templateName: template.name,
         inspectorName: generalInfo.inspectorName || inspectionData?.inspector_name,
@@ -417,15 +416,15 @@ export const ComprehensiveInspectionReport = ({
         subsectionName,
       };
 
-      console.log('[ComprehensiveReport] Generating PDF with PDFShift...');
+      console.log('[ComprehensiveReport] Generating PDF with pdfmake (client-side)...');
       console.log('[ComprehensiveReport] Data:', { 
         sectionsCount: sectionsForPdf.length, 
         snagsCount: snags.length,
         signaturesCount: signatures.length 
       });
 
-      // Generate using PDFShift Edge Function
-      const result = await generatePdfShiftInspectionReport({
+      // Generate using pdfmake (client-side - reliable image handling)
+      const result = await generateInspectionReportPdf({
         inspection: pdfData,
         siteName,
         clientName,
@@ -441,7 +440,7 @@ export const ComprehensiveInspectionReport = ({
 
       if (result.success && result.previewUrl) {
         setPreviewUrl(result.previewUrl);
-        setPreviewFileName(result.filename || `${subsectionName}_Inspection_Report.docx`);
+        setPreviewFileName(result.filename || `${subsectionName}_Inspection_Report.pdf`);
         setPreviewOpen(true);
       } else {
         toast.error(result.error || "Failed to generate report");
