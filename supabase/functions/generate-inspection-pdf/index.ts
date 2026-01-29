@@ -614,7 +614,7 @@ function buildCoverPageHTML(
       </div>
       
       <div class="cover-content">
-        ${logoBase64 ? `<img src="${logoBase64}" class="cover-logo" alt="Logo">` : '<div class="cover-logo-placeholder"></div>'}
+        ${logoBase64 ? `<div class="cover-logo-container"><img src="${logoBase64}" class="cover-logo" width="180" height="100" alt="Logo"></div>` : '<div class="cover-logo-placeholder"></div>'}
         
         <h1 class="cover-title">${inspection.templateName || 'Electrical Inspection Report'}</h1>
         <p class="cover-subtitle">${inspection.subsectionName || siteName}</p>
@@ -1040,24 +1040,29 @@ function buildCompleteHTML(
     
     /* Cover Page */
     .cover-content {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
       padding: 40px 24px;
       text-align: center;
     }
     
+    .cover-logo-container {
+      width: 180px;
+      height: 100px;
+      margin: 0 auto 30px;
+      display: block;
+    }
+    
     .cover-logo {
-      max-width: 180px;
-      max-height: 100px;
-      margin-bottom: 30px;
+      display: block;
+      width: 180px;
+      height: 100px;
       object-fit: contain;
+      object-position: center;
     }
     
     .cover-logo-placeholder {
       width: 180px;
       height: 80px;
-      margin-bottom: 30px;
+      margin: 0 auto 30px;
     }
     
     .cover-title {
