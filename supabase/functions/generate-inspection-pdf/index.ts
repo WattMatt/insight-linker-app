@@ -815,18 +815,32 @@ function buildSectionPagesHTML(
     section.items.forEach((item, itemIdx) => {
       const photos = (item.photos || []).filter(p => p);
 
-      // UNIFIED 3-COLUMN GRID: All photos use consistent 3-adjacent spacing
-      const gridClass = 'photo-grid-3';
+      // Build TABLE-based photo grid with HTML width/height attributes
+      let photoTableHtml = '';
+      if (photos.length > 0) {
+        const validPhotos = photos.map((photoUrl, pIdx) => {
+          const base64 = getImage(photoUrl, imageMap);
+          return base64 ? { base64, label: `Photo ${pIdx + 1}` } : null;
+        }).filter(Boolean);
 
-      const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
-        const base64 = getImage(photoUrl, imageMap);
-        return base64 ? `
-          <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
-            <img src="${base64}" alt="Photo ${pIdx + 1}" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
-            <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Photo ${pIdx + 1}</span>
-          </div>
-        ` : '';
-      }).join('') : '';
+        if (validPhotos.length > 0) {
+          // Build rows of 3 photos each
+          const rows: string[] = [];
+          for (let i = 0; i < validPhotos.length; i += 3) {
+            const rowPhotos = validPhotos.slice(i, i + 3);
+            const cells = rowPhotos.map(p => `
+              <td>
+                <img src="${p!.base64}" width="180" height="130" style="display:block;margin:0 auto;object-fit:cover;">
+                <span class="photo-caption">${p!.label}</span>
+              </td>
+            `).join('');
+            // Pad with empty cells if less than 3
+            const emptyCells = '<td></td>'.repeat(3 - rowPhotos.length);
+            rows.push(`<tr>${cells}${emptyCells}</tr>`);
+          }
+          photoTableHtml = `<table class="photo-grid-table"><tbody>${rows.join('')}</tbody></table>`;
+        }
+      }
 
       html += `
         <div class="inspection-item">
@@ -835,9 +849,9 @@ function buildSectionPagesHTML(
             ${getStatusBadge(item.value)}
           </div>
           ${item.notes ? `<div class="item-notes">${item.notes}</div>` : ''}
-          ${photoHtml ? `<div class="${gridClass}">${photoHtml}</div>` : ''}
+          ${photoTableHtml}
         </div>
-      `;
+      `
     });
 
     html += `
@@ -913,26 +927,30 @@ function buildTenantsPageHTML(
         </div>
         
         ${hasImages ? `
-          <div class="photo-grid-3" style="display:flex;flex-wrap:wrap;gap:8px;padding:12px;background:#f9fafb;border-top:1px solid #e5e7eb;">
-            ${meterBase64 ? `
-              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
-                <img src="${meterBase64}" alt="Meter Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
-                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Meter</span>
-              </div>
-            ` : ''}
-            ${breakerBase64 ? `
-              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
-                <img src="${breakerBase64}" alt="Breaker Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
-                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">Breaker</span>
-              </div>
-            ` : ''}
-            ${ctRatioBase64 ? `
-              <div class="photo-cell" style="width:186px;height:140px;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;background:#f9fafb;border:1px solid #e5e7eb;border-radius:4px;">
-                <img src="${ctRatioBase64}" alt="CT Ratio Image" style="width:184px!important;height:138px!important;max-width:184px!important;max-height:138px!important;min-width:184px!important;min-height:138px!important;object-fit:cover;object-position:center;display:block;">
-                <span class="photo-label" style="position:absolute;bottom:0;left:0;right:0;background:rgba(0,0,0,0.6);color:white;font-size:8pt;padding:3px 4px;text-align:center;z-index:1;">CT Ratio</span>
-              </div>
-            ` : ''}
-          </div>
+          <table class="photo-grid-table">
+            <tbody>
+              <tr>
+                ${meterBase64 ? `
+                  <td>
+                    <img src="${meterBase64}" width="180" height="130" style="display:block;margin:0 auto;object-fit:cover;">
+                    <span class="photo-caption">Meter</span>
+                  </td>
+                ` : '<td></td>'}
+                ${breakerBase64 ? `
+                  <td>
+                    <img src="${breakerBase64}" width="180" height="130" style="display:block;margin:0 auto;object-fit:cover;">
+                    <span class="photo-caption">Breaker</span>
+                  </td>
+                ` : '<td></td>'}
+                ${ctRatioBase64 ? `
+                  <td>
+                    <img src="${ctRatioBase64}" width="180" height="130" style="display:block;margin:0 auto;object-fit:cover;">
+                    <span class="photo-caption">CT Ratio</span>
+                  </td>
+                ` : '<td></td>'}
+              </tr>
+            </tbody>
+          </table>
         ` : ''}
       </div>
     `;
@@ -1355,58 +1373,45 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* UNIFIED 3-COLUMN PHOTO GRID - EXPLICIT PIXEL DIMENSIONS
-       Uses inline width/height on img for Chrome PDF compatibility */
-    .photo-grid-3 {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-      padding: 12px;
+    /* PHOTO GRID TABLE - Most reliable for PDF rendering */
+    .photo-grid-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 6px;
       background: #f9fafb;
+      padding: 8px;
       border-top: 1px solid #e5e7eb;
       break-inside: avoid;
       page-break-inside: avoid;
     }
     
-    /* PHOTO CELL - Fixed outer container */
-    .photo-cell {
+    .photo-grid-table td {
       width: 186px;
       height: 140px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: #f9fafb;
+      vertical-align: middle;
+      text-align: center;
+      background: white;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      overflow: hidden;
+      padding: 0;
       position: relative;
     }
     
-    /* IMAGE - Explicit pixel dimensions that Chrome MUST respect */
-    .photo-cell img {
-      width: 184px !important;
-      height: 138px !important;
-      max-width: 184px !important;
-      max-height: 138px !important;
-      min-width: 184px !important;
-      min-height: 138px !important;
-      object-fit: cover;
-      object-position: center;
+    /* IMAGE with HTML width/height attributes - most reliable */
+    .photo-grid-table img {
       display: block;
+      margin: 0 auto;
     }
     
-    /* Label positioned at bottom */
-    .photo-cell .photo-label {
-      position: absolute;
-      bottom: 0;
-      left: 0;
-      right: 0;
+    /* Photo label */
+    .photo-caption {
+      display: block;
       background: rgba(0,0,0,0.6);
       color: white;
       font-size: 8pt;
       padding: 3px 4px;
       text-align: center;
-      z-index: 1;
+      margin-top: -4px;
     }
     
     /* Tenant Card Styles */
