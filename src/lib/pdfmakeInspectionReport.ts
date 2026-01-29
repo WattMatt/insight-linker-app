@@ -305,7 +305,7 @@ function createEngineeringCoverPage(
     absolutePosition: { x: 0, y: 0 },
   });
 
-  // Logo section - centered
+  // Logo section - centered with defensive placeholder
   if (logoDataUrl) {
     content.push({
       image: logoDataUrl,
@@ -314,9 +314,26 @@ function createEngineeringCoverPage(
       margin: [0, 80, 0, 60],
     });
   } else {
+    // Defensive placeholder for missing logo
     content.push({
-      text: '',
-      margin: [0, 140, 0, 0],
+      table: {
+        widths: [180],
+        body: [[{
+          text: '[Company Logo]',
+          alignment: 'center',
+          color: REPORT_COLORS.textMuted,
+          fontSize: 10,
+          margin: [0, 30, 0, 30],
+        }]]
+      },
+      layout: {
+        hLineColor: () => REPORT_COLORS.border,
+        vLineColor: () => REPORT_COLORS.border,
+        hLineWidth: () => 1,
+        vLineWidth: () => 1,
+      },
+      alignment: 'center',
+      margin: [180, 80, 180, 60],
     });
   }
 
