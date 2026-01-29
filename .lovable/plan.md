@@ -1,70 +1,170 @@
 
 
-# Plan: Complete Overhaul of PDF Image Grid Rendering
-
-## Status: ✅ IMPLEMENTED
+# Complete Overhaul: Image Handling for PDF Reports
 
 ## Problem Summary
 
-The root cause was identified: flexbox containers with `align-items: center` were collapsing image dimensions, making `height: 140px` a suggestion rather than a constraint.
+The current PDF generation system has a fundamentally broken image pipeline that has been failing persistently despite multiple attempted fixes. The screenshot shows the logo appearing as a corrupted/tiny artifact on the cover page.
 
-## Solution Implemented: Viewport-Based Rendering
+**Root Causes Identified:**
 
-Replaced flex-based approach with **absolute positioning inside fixed-dimension containers**:
+1. **Multiple Competing Systems**: There are 3+ different image loading approaches scattered across the codebase (`pdfEngine.ts`, `simpleImageLoader.ts`, `imageUrlResolver.ts`, `pdfshiftInspectionReport.ts`) that use different strategies
+2. **Complex CORS Workarounds**: Multi-tier fallback strategies that don't reliably work
+3. **Data Flow Disconnect**: `ComprehensiveInspectionReport.tsx` calls `generateAndSavePdfShiftInspectionReport` (server-side DOCX), but `inspectionReportGenerator.ts` uses `pdfmakeGenerateAndSave` (client-side PDF)
+4. **URL Parsing Edge Cases**: The `simpleImageLoader.ts` regex may not match all Supabase URL formats
 
-```css
-/* Container has FIXED dimensions - image CANNOT escape */
-.photo-cell {
-  width: 186px;
-  height: 140px;
-  position: relative;
-  overflow: hidden;
-  background: #f9fafb;
-  border: 1px solid #e5e7eb;
-  border-radius: 4px;
-}
+---
 
-/* Image fills container via absolute positioning */
-.photo-cell img {
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
+## Current Image Flow (Traced)
+
+```text
+Database Storage:
+├── inspection.json_data → photos array with Supabase URLs
+├── sites.client_logo_url → Logo URL from client-logos bucket
+└── sites.site_image_url → Site image from site-images bucket
+
+Client-Side Generation Path (pdfmake):
+1. inspectionReportGenerator.ts → calls pdfmakeGenerateAndSave
+2. pdfmakeInspectionReport.ts → collectImageUrls() + loadImagesSimple()
+3. simpleImageLoader.ts → parseSupabaseUrl() + supabase.storage.download()
+4. Convert blob → base64 via FileReader
+5. Embed base64 in pdfmake document definition
+
+Server-Side Generation Path (DOCX/PDFShift - NOT USED):
+1. ComprehensiveInspectionReport.tsx → calls generateAndSavePdfShiftInspectionReport
+2. pdfshiftInspectionReport.ts → calls Edge Function
+3. Edge Function downloads images server-side
+```
+
+---
+
+## Solution: Unified Client-Side Image Pipeline
+
+### Technical Strategy
+
+Replace all complex image loading with a single, bulletproof approach using **Supabase Storage's native download API** consistently across all image types.
+
+### Key Changes
+
+#### 1. Rewrite `simpleImageLoader.ts`
+- Fix URL pattern matching for ALL bucket types (`client-logos`, `site-images`, `inspection-photos`, `documents`)
+- Add comprehensive logging for debugging
+- Handle query parameters and timestamps in URLs
+- Return placeholder on failure instead of null (ensures PDF layout stability)
+
+#### 2. Consolidate Image Loading in `pdfmakeInspectionReport.ts`
+- Remove dependency on `pdfEngine.ts` image utilities
+- Use only `simpleImageLoader.ts` for all images (logo + photos)
+- Pre-cache ALL images before PDF generation starts
+- Add the logo URL to the `collectImageUrls` list
+
+#### 3. Add Defensive Image Rendering
+- If image fails to load, render a placeholder box with "Image unavailable" text
+- This prevents layout collapse from missing images
+
+#### 4. Fix the Logo Loading Path
+- Currently logo is loaded separately via `loadImageSimple(siteLogoUrl)`
+- Ensure this uses the same robust download path
+
+---
+
+## Files to Modify
+
+| File | Changes |
+|------|---------|
+| `src/lib/simpleImageLoader.ts` | Rewrite URL parser to handle all bucket formats; add retry logic; return placeholder on failure |
+| `src/lib/pdfmakeInspectionReport.ts` | Use unified image loading; add logo to collectImageUrls; add defensive rendering |
+| `src/lib/inspectionReportGenerator.ts` | No changes needed (already correctly orchestrates pdfmake) |
+
+---
+
+## Technical Details
+
+### URL Patterns to Support
+
+```
+Client Logo:
+https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/client-logos/ade5256f-419e-4860-bfd4-2f38dc3cb21a/logo-1760494216241.png
+
+Site Image:
+https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/site-images/ade5256f-419e-4860-bfd4-2f38dc3cb21a/site-image.jpeg?t=1768382035130
+
+Inspection Photo:
+https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/inspection-photos/ce801ab0-e394-438f-83d6-9905a768fe8a/componentImages/earthLeakage/YARONA_CENTRE_YARONA_CENTRE_ACKERMANS_componentImages_earthLeakage_1767783989118_1.jpg
+```
+
+### Improved URL Parser
+
+```typescript
+function parseSupabaseUrl(url: string): { bucket: string; path: string } | null {
+  if (!url) return null;
+  
+  try {
+    const urlObj = new URL(url);
+    // Match: /storage/v1/object/public/BUCKET/PATH or /storage/v1/object/sign/BUCKET/PATH
+    const pathMatch = urlObj.pathname.match(/^\/storage\/v1\/object\/(?:public|sign)\/([^\/]+)\/(.+)$/);
+    
+    if (pathMatch) {
+      return {
+        bucket: pathMatch[1],
+        path: decodeURIComponent(pathMatch[2])
+      };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
 ```
 
-## Files Modified
+### Defensive Image Rendering
 
-1. **supabase/functions/generate-inspection-pdf/index.ts**
-   - Updated `.photo-grid-3` CSS (lines 1358-1405)
-   - Changed HTML from `.photo-item` to `.photo-cell` (lines 821-829)
-   - Updated tenant images to use `.photo-cell` (lines 915-936)
+```typescript
+// In createEngineeringCoverPage:
+if (logoDataUrl) {
+  content.push({
+    image: logoDataUrl,
+    height: 80,
+    alignment: 'center',
+    margin: [0, 80, 0, 60],
+  });
+} else {
+  // Placeholder for missing logo
+  content.push({
+    table: {
+      widths: [180],
+      body: [[{
+        text: '[Company Logo]',
+        alignment: 'center',
+        color: '#94a3b8',
+        fontSize: 10,
+        margin: [0, 30, 0, 30],
+      }]]
+    },
+    layout: { hLineColor: () => '#e2e8f0', vLineColor: () => '#e2e8f0' },
+    alignment: 'center',
+    margin: [0, 80, 0, 60],
+  });
+}
+```
 
-2. **supabase/functions/generate-pdf/index.ts**
-   - Updated `generatePhotoGrid()` function (lines 416-431)
-   - Uses inline viewport-based styles
+---
 
-3. **supabase/functions/generate-pdf-browserless/index.ts**
-   - Updated section photo grids (lines 548-560)
-   - Updated tenant verification images (lines 596-617)
-   - Updated snag photo grids (lines 645-654)
+## Cleanup
 
-## Key Technical Changes
+### Files/Code to Remove
 
-| Previous Approach | New Approach |
-|-------------------|--------------|
-| `display: flex` with `align-items: center` | `display: flex; flex-wrap: wrap` (grid only) |
-| `height: 140px` as CSS suggestion | Container is `186×140px` with `position: relative` |
-| Image inside flex child | Image uses `position: absolute; top:0; left:0; width:100%; height:100%` |
-| Complex property interactions | Simple, predictable layout |
+1. **Complex fallback strategies** in `pdfEngine.ts` (lines 119-290)
+2. **Duplicate image compression** utilities that are no longer used
+3. **Browserless/PDFShift Edge Functions** for inspection reports (optional - can be deprecated)
 
-## Deployment
+---
 
-All three Edge Functions deployed:
-- ✅ `generate-inspection-pdf`
-- ✅ `generate-pdf`
-- ✅ `generate-pdf-browserless`
+## Expected Outcome
 
+1. Logo renders correctly at proper size on cover page
+2. All inspection photos display in 2-column grids
+3. Tenant verification photos render in the tenant section
+4. Snag photos appear correctly
+5. No more corrupted/tiny/missing images
 
