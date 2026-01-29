@@ -821,7 +821,7 @@ function buildSectionPagesHTML(
       const photoHtml = photos.length > 0 ? photos.map((photoUrl, pIdx) => {
         const base64 = getImage(photoUrl, imageMap);
         return base64 ? `
-          <div class="photo-item">
+          <div class="photo-cell">
             <img src="${base64}" alt="Photo ${pIdx + 1}">
             <span class="photo-label">Photo ${pIdx + 1}</span>
           </div>
@@ -913,21 +913,21 @@ function buildTenantsPageHTML(
         </div>
         
         ${hasImages ? `
-          <div class="tenant-images">
+          <div class="photo-grid-3">
             ${meterBase64 ? `
-              <div class="tenant-image-item">
+              <div class="photo-cell">
                 <img src="${meterBase64}" alt="Meter Image">
                 <span class="photo-label">Meter</span>
               </div>
             ` : ''}
             ${breakerBase64 ? `
-              <div class="tenant-image-item">
+              <div class="photo-cell">
                 <img src="${breakerBase64}" alt="Breaker Image">
                 <span class="photo-label">Breaker</span>
               </div>
             ` : ''}
             ${ctRatioBase64 ? `
-              <div class="tenant-image-item">
+              <div class="photo-cell">
                 <img src="${ctRatioBase64}" alt="CT Ratio Image">
                 <span class="photo-label">CT Ratio</span>
               </div>
@@ -1355,12 +1355,12 @@ function buildCompleteHTML(
       border-top: 1px solid #e5e7eb;
     }
     
-    /* UNIFIED 3-COLUMN PHOTO GRID - Optimized for 4:3 landscape photos
-       Container ratio ~186px × 140px (1.33:1) matches common phone camera output
-       Gap reduced to 8px to allow images to expand to ~186px width on A4 */
+    /* UNIFIED 3-COLUMN PHOTO GRID - VIEWPORT-BASED RENDERING
+       Uses absolute positioning to GUARANTEE image fills the container
+       No flexbox - explicit fixed dimensions for bulletproof rendering */
     .photo-grid-3 {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
+      display: flex;
+      flex-wrap: wrap;
       gap: 8px;
       padding: 12px;
       background: #f9fafb;
@@ -1369,33 +1369,38 @@ function buildCompleteHTML(
       page-break-inside: avoid;
     }
     
-    .photo-item {
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    
-    /* Unified photo sizing - Server compresses via Supabase Render API
-       Container naturally expands to ~186px width (4:3 ratio with 140px height)
-       object-fit: contain shows FULL image without cropping - letterboxed if needed */
-    .photo-grid-3 .photo-item img {
-      width: 100%;
-      max-width: 186px;
+    /* VIEWPORT CONTAINER - Fixed dimensions, image CANNOT escape */
+    .photo-cell {
+      width: 186px;
       height: 140px;
-      object-fit: contain;
-      object-position: center;
+      position: relative;
+      overflow: hidden;
+      background: #f9fafb;
       border: 1px solid #e5e7eb;
       border-radius: 4px;
-      background: #f9fafb;
-      display: block;
     }
     
-    .photo-label {
-      display: block;
+    /* IMAGE fills viewport via absolute positioning */
+    .photo-cell img {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    
+    /* Label overlays bottom of image */
+    .photo-cell .photo-label {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      background: rgba(0,0,0,0.5);
+      color: white;
       font-size: 8pt;
-      color: #6b7280;
-      margin-top: 4px;
+      padding: 2px 4px;
+      text-align: center;
     }
     
     /* Tenant Card Styles */

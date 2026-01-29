@@ -411,8 +411,8 @@ function generatePhotoGrid(photos: string[], options?: {
     rows.push(rowPhotos);
   }
   
-  // Use nested table with FIXED cell width/height for bulletproof sizing in PDFShift
-  // object-fit: contain shows FULL image without cropping - letterboxed with subtle background
+  // VIEWPORT-BASED RENDERING: Fixed container with absolute-positioned image
+  // Guarantees image fills 186x140 viewport without flexbox calculation issues
   return `
     <table style="width: 100%; border-collapse: collapse; page-break-inside: avoid; margin-bottom: 15px;" cellpadding="0" cellspacing="0">
       ${rows.map(row => `
@@ -420,8 +420,8 @@ function generatePhotoGrid(photos: string[], options?: {
           ${row.map(item => `
             <td style="padding: 6px; vertical-align: top; text-align: center; width: 33.33%;">
               ${showLabels ? `<div style="font-size: 8pt; color: #6b7280; margin-bottom: 4px; font-weight: 500;">${item.label}</div>` : ''}
-              <div style="display: inline-block; border: 1px solid #e5e7eb; border-radius: 4px; overflow: hidden; background: #f9fafb;">
-                <img src="${item.photo}" style="width: ${imageWidthPx}px; height: ${imageHeightPx}px; object-fit: contain; display: block; background: #f9fafb;" />
+              <div style="width: 186px; height: 140px; position: relative; overflow: hidden; background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 4px; display: inline-block;">
+                <img src="${item.photo}" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: contain;" />
               </div>
             </td>
           `).join('')}
