@@ -16,7 +16,7 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
-import { generateAndSaveComprehensiveReport } from "@/components/ComprehensiveInspectionReport";
+import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import { getSubsectionDocuments, getSubsectionFloorPlans } from "@/lib/offlineDBExtensions";
 import { Breadcrumbs } from "@/components/Breadcrumb";
@@ -125,7 +125,7 @@ const SubsectionDetail = () => {
   const [cocPreviewDoc, setCocPreviewDoc] = useState<{id: string, file_name: string, file_url: string, uploaded_at: string} | null>(null);
   const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{file_name: string, file_url: string} | null>(null);
-  const [generatingReportForId, setGeneratingReportForId] = useState<string | null>(null);
+  
   const [editingExtractionDoc, setEditingExtractionDoc] = useState<{id: string, url: string, name: string} | null>(null);
 
   // Offline capabilities
@@ -1920,29 +1920,8 @@ const SubsectionDetail = () => {
           return;
         }
 
-        // Generate and save PDF report
-        if (subsectionId && siteData?.siteName && subsection?.name) {
-          toast.info("Generating inspection report...");
-          
-          const reportResult = await generateAndSaveComprehensiveReport({
-            inspectionId,
-            subsectionId,
-            siteName: siteData.siteName,
-            subsectionName: subsection.name,
-            clientName: siteData.clientInfo || undefined,
-            templateId: inspection.template_id,
-            siteLogoUrl: companyLogo
-          });
-
-          if (reportResult.success) {
-            toast.success(`Report saved: ${reportResult.fileName}`);
-            // Refresh documents to show the new report
-            fetchSupabaseDocuments();
-            fetchDocumentCategories();
-          } else {
-            toast.error(`Report generation failed: ${reportResult.error}`);
-          }
-        }
+        // WYSIWYG report generation requires UI context - inform user to use the Generate Report button
+        toast.success("Inspection marked as complete. Use the 'Generate Report' button to create a PDF report.");
       }
       
       // Update using UUID id (the primary key from inspections table)
@@ -2831,41 +2810,24 @@ const SubsectionDetail = () => {
                           </SelectContent>
                         </Select>
                         {inspection.status === 'Completed' && (
-                          <Button
-                            size="sm"
-                            variant="default"
-                            onClick={async (e) => {
-                              e.stopPropagation();
-                              setGeneratingReportForId(id);
-                              try {
-                                const result = await generateAndSaveComprehensiveReport({
-                                  inspectionId: id,
-                                  subsectionId: subsectionId!,
-                                  siteName: siteData?.siteName || 'Unknown Site',
-                                  subsectionName: subsection?.name || 'Unknown Subsection',
-                                  clientName: siteData?.clientInfo,
-                                  templateId: inspection.templateId,
-                                  siteLogoUrl: companyLogo
-                                });
-                                if (result.success && result.fileUrl && result.fileName) {
-                                  toast.success("Report generated and saved successfully");
-                                  fetchSupabaseDocuments();
-                                  setPreviewDocument({ file_name: result.fileName, file_url: result.fileUrl });
-                                } else {
-                                  toast.error(result.error || "Failed to generate report");
-                                }
-                              } catch (error) {
-                                console.error("Error generating report:", error);
-                                toast.error("Failed to generate report");
-                              } finally {
-                                setGeneratingReportForId(null);
-                              }
-                            }}
-                            disabled={generatingReportForId === id}
-                          >
-                            <FileText className="h-4 w-4 mr-1" />
-                            {generatingReportForId === id ? 'Generating...' : 'Generate Report'}
-                          </Button>
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <ComprehensiveInspectionReport
+                              inspectionData={{
+                                id,
+                                templateId: inspection.templateId,
+                                status: inspection.status,
+                                inspection_date: inspection.date,
+                              }}
+                              siteName={siteData?.siteName || 'Unknown Site'}
+                              subsectionName={subsection?.name || 'Unknown Subsection'}
+                              templateId={inspection.templateId}
+                              subsectionId={subsectionId}
+                              siteLogoUrl={companyLogo}
+                              inspectionId={id}
+                              clientName={siteData?.clientInfo}
+                              snags={snags.filter(s => s.status?.toLowerCase() !== 'rectified' && s.status?.toLowerCase() !== 'closed')}
+                            />
+                          </div>
                         )}
                         <Button
                           size="icon"
