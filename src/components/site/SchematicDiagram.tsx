@@ -243,7 +243,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !schematic) return;
-    if (!isEditMode) return;
+    // Pan and zoom work in both View and Edit modes
 
     const handleWheel = (e: WheelEvent) => {
       // Browser's native zoom with Ctrl/Cmd - don't interfere
@@ -285,17 +285,16 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [isEditMode, schematic, panOffset]);
+  }, [schematic, panOffset]);
 
   // Calculate the display scale for blocks and PDF
-  // In edit mode, we use a fixed base scale (fit to container) and CSS transform handles user zoom
-  // In view mode, we calculate fit scale
+  // Pan and zoom now work in both modes
   const displayScale = useMemo(() => {
     if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
       return 1;
     }
     
-    const padding = isEditMode ? 48 : 16; // Extra padding in edit mode for transform margin
+    const padding = 48; // Consistent padding for transform margin
     const availableWidth = containerWidth - padding;
     const availableHeight = CONTAINER_HEIGHT - padding;
     
@@ -305,17 +304,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const fitScale = Math.min(scaleX, scaleY);
     
     // Always use fit scale for the base PDF rendering
-    // CSS transform handles the user's zoom in edit mode
+    // CSS transform handles the user's zoom
     return fitScale;
-  }, [containerWidth, originalPdfDimensions, isEditMode]);
+  }, [containerWidth, originalPdfDimensions]);
 
   // Calculate the target page width - include zoom scale for crisp rendering
   const calculatedPageWidth = useMemo(() => {
     // If we have dimensions, use calculated scale multiplied by zoom for crisp rendering
     if (dimensionsLoaded && originalPdfDimensions.width > 0) {
       const baseWidth = originalPdfDimensions.width * displayScale;
-      // In edit mode, render at zoomed resolution for crisp text
-      return isEditMode ? baseWidth * scale : baseWidth;
+      // Render at zoomed resolution for crisp text in all modes
+      return baseWidth * scale;
     }
     // Fallback: use container width minus padding for initial render
     if (containerWidth > 0) {
@@ -323,18 +322,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
     // Last resort: use a reasonable default
     return 800;
-  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, isEditMode, scale]);
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, scale]);
 
   // Calculate the scaled height for the PDF container
   const calculatedPageHeight = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.height > 0) {
       const baseHeight = originalPdfDimensions.height * displayScale;
-      // In edit mode, render at zoomed resolution for crisp text
-      return isEditMode ? baseHeight * scale : baseHeight;
+      // Render at zoomed resolution for crisp text in all modes
+      return baseHeight * scale;
     }
     // Fallback based on container height
     return CONTAINER_HEIGHT - 32;
-  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, isEditMode, scale]);
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, scale]);
 
   // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
@@ -371,22 +370,19 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setDimensionsLoaded(false);
   }, [pageNumber]);
 
-  // Reset pan/zoom when exiting edit mode
+  // Reset pan/zoom when schematic changes (but preserve across mode toggles)
   useEffect(() => {
-    if (!isEditMode) {
-      setScale(1);
-      setPanOffset({ x: 0, y: 0 });
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth);
-      }
+    setScale(1);
+    setPanOffset({ x: 0, y: 0 });
+    if (containerRef.current) {
+      setContainerWidth(containerRef.current.clientWidth);
     }
-  }, [isEditMode]);
+  }, [schematic?.id]);
 
   // Pan handlers (like FloorPlanViewer - shift+click or right-click)
+  // Works in both View and Edit modes for navigation
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isEditMode) return;
-    
-    // Shift + left click OR right click for panning
+    // Shift + left click OR right click for panning (works in all modes)
     if (isShiftPressed || e.button === 2) {
       e.preventDefault();
       setIsPanning(true);
@@ -403,12 +399,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!isPanning || !isEditMode) return;
+    // Handle panning (works in all modes)
+    if (isPanning) {
+      setPanOffset({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+      return;
+    }
     
-    setPanOffset({
-      x: e.clientX - panStart.x,
-      y: e.clientY - panStart.y,
-    });
+    // Block dragging/resizing only in edit mode
+    if (!isEditMode) return;
   };
 
   const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -1466,54 +1467,80 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       {/* Schematic Viewer - Fixed Height */}
       <CardContent className="p-0 relative">
-        {/* Controls Overlay - Visible when not editing and not readOnly */}
-        {!isEditMode && !readOnly && (
+        {/* Controls Overlay - Visible when not editing */}
+        {!isEditMode && (
           <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={toggleEditMode}
-              className="shadow-md"
-            >
-              <Pencil className="h-4 w-4 mr-1" />
-              Edit
-            </Button>
-            
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="sm" className="shadow-md px-2">
-                  <MoreVertical className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={loadData}>
-                  <RefreshCw className="h-4 w-4 mr-2" />
-                  Reload Schematic
-                </DropdownMenuItem>
-                <DropdownMenuItem asChild>
-                  <label htmlFor="schematic-replace" className="flex items-center cursor-pointer">
-                    <Replace className="h-4 w-4 mr-2" />
-                    Replace PDF
-                  </label>
-                </DropdownMenuItem>
-                <DropdownMenuItem 
-                  onClick={handleDeleteSchematic}
-                  className="text-destructive focus:text-destructive"
+            {/* Zoom indicator and reset */}
+            <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 shadow-md text-xs">
+              <span className="text-muted-foreground">{Math.round(scale * 100)}%</span>
+              {scale !== 1 && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="h-5 px-1.5 text-xs"
+                  onClick={() => { setScale(1); setPanOffset({ x: 0, y: 0 }); }}
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
-                  Delete Schematic
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  Reset
+                </Button>
+              )}
+            </div>
             
-            {/* Hidden file input for replace */}
-            <input
-              id="schematic-replace"
-              type="file"
-              accept=".pdf"
-              className="hidden"
-              onChange={handleFileUpload}
-            />
+            {!readOnly && (
+              <>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={toggleEditMode}
+                  className="shadow-md"
+                >
+                  <Pencil className="h-4 w-4 mr-1" />
+                  Edit
+                </Button>
+                
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" size="sm" className="shadow-md px-2">
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={loadData}>
+                      <RefreshCw className="h-4 w-4 mr-2" />
+                      Reload Schematic
+                    </DropdownMenuItem>
+                    <DropdownMenuItem asChild>
+                      <label htmlFor="schematic-replace" className="flex items-center cursor-pointer">
+                        <Replace className="h-4 w-4 mr-2" />
+                        Replace PDF
+                      </label>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                      onClick={handleDeleteSchematic}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="h-4 w-4 mr-2" />
+                      Delete Schematic
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                
+                {/* Hidden file input for replace */}
+                <input
+                  id="schematic-replace"
+                  type="file"
+                  accept=".pdf"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+              </>
+            )}
+          </div>
+        )}
+        
+        {/* Pan/Zoom hint - visible when viewing */}
+        {!isEditMode && scale === 1 && (
+          <div className="absolute bottom-3 left-3 z-10 text-xs text-muted-foreground/70 bg-background/80 backdrop-blur-sm rounded px-2 py-1">
+            Scroll to zoom • Shift+drag to pan
           </div>
         )}
         
@@ -1554,16 +1581,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         >
           <div 
             ref={contentRef}
-            className={`relative ${isEditMode ? '' : 'flex justify-center items-center w-full h-full'}`}
+            className="relative"
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
-            style={isEditMode ? {
-              // Only use translate for panning - PDF is rendered at full zoom resolution for crisp text
+            style={{
+              // Pan and zoom work in both modes
               transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
               transformOrigin: 'top left',
               width: 'fit-content',
               margin: '24px',
               position: 'relative',
-            } : { minHeight: CONTAINER_HEIGHT }}
+              cursor: isPanning ? 'grabbing' : (isShiftPressed ? 'grab' : 'default'),
+            }}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
             <div 
