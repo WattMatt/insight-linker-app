@@ -1567,12 +1567,18 @@ Return ONLY the JSON validation result.`
         .single();
 
       // Determine if we should update the subsection
-      // Update if: no current COC, or this one is valid and current is not, or this is newer
+      // CRITICAL: Failed validations should ALWAYS update the subsection status to Failed
+      // This ensures failed COC validations properly mark the subsection as non-compliant
+      // 
+      // Priority Logic:
+      // - Failed validations ALWAYS update status (even if current is Approved)
+      // - Pass validations update if no current data or current is Failed/pending/Missing
+      // - Same status: newer date wins
       const statusPriority: Record<string, number> = {
-        'valid': 4,
         'Approved': 4,
-        'invalid': 3,
+        'valid': 4,
         'Failed': 3,
+        'invalid': 3,
         'pending': 2,
         'Missing': 1,
         '': 0
@@ -1581,8 +1587,17 @@ Return ONLY the JSON validation result.`
       const currentPriority = statusPriority[currentSubsection?.coc_status || ''] || 0;
       const newPriority = statusPriority[mappedSubsectionStatus] || 0;
       
-      // Update subsection if: no current data, new is higher priority, or same priority but newer date
-      const shouldUpdate = !currentSubsection?.coc_number || 
+      // ALWAYS update if validation failed (ensures Failed overrides Approved)
+      // This is the key fix: failed validations must always update status
+      const isNewValidationFailed = mappedSubsectionStatus === 'Failed';
+      
+      // Update subsection if: 
+      // 1. Validation failed (always update to Failed), OR
+      // 2. No current COC data, OR
+      // 3. New priority is higher, OR
+      // 4. Same priority but newer date
+      const shouldUpdate = isNewValidationFailed ||
+                          !currentSubsection?.coc_number || 
                           newPriority > currentPriority ||
                           (newPriority === currentPriority && validationResult.cocIssueDate > (currentSubsection?.coc_issue_date || ''));
 
