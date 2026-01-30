@@ -1,70 +1,68 @@
 
 
-# Complete Overhaul: Image Handling for PDF Reports
+# WYSIWYG Inspection Report Generator: Complete Rebuild
 
-## Problem Summary
+## Overview
 
-The current PDF generation system has a fundamentally broken image pipeline that has been failing persistently despite multiple attempted fixes. The screenshot shows the logo appearing as a corrupted/tiny artifact on the cover page.
+Replace the broken pdfmake/image-fetching pipeline with a **visual-first approach**:
 
-**Root Causes Identified:**
+1. **Render the report as HTML/React** in a preview container
+2. **Use html2canvas** to capture the visual output as images
+3. **Generate PDF** from those captured images using jsPDF
 
-1. **Multiple Competing Systems**: There are 3+ different image loading approaches scattered across the codebase (`pdfEngine.ts`, `simpleImageLoader.ts`, `imageUrlResolver.ts`, `pdfshiftInspectionReport.ts`) that use different strategies
-2. **Complex CORS Workarounds**: Multi-tier fallback strategies that don't reliably work
-3. **Data Flow Disconnect**: `ComprehensiveInspectionReport.tsx` calls `generateAndSavePdfShiftInspectionReport` (server-side DOCX), but `inspectionReportGenerator.ts` uses `pdfmakeGenerateAndSave` (client-side PDF)
-4. **URL Parsing Edge Cases**: The `simpleImageLoader.ts` regex may not match all Supabase URL formats
+This approach guarantees that **what you see is exactly what gets exported** because we're literally screenshotting the rendered page.
 
 ---
 
-## Current Image Flow (Traced)
+## Architecture
 
 ```text
-Database Storage:
-├── inspection.json_data → photos array with Supabase URLs
-├── sites.client_logo_url → Logo URL from client-logos bucket
-└── sites.site_image_url → Site image from site-images bucket
-
-Client-Side Generation Path (pdfmake):
-1. inspectionReportGenerator.ts → calls pdfmakeGenerateAndSave
-2. pdfmakeInspectionReport.ts → collectImageUrls() + loadImagesSimple()
-3. simpleImageLoader.ts → parseSupabaseUrl() + supabase.storage.download()
-4. Convert blob → base64 via FileReader
-5. Embed base64 in pdfmake document definition
-
-Server-Side Generation Path (DOCX/PDFShift - NOT USED):
-1. ComprehensiveInspectionReport.tsx → calls generateAndSavePdfShiftInspectionReport
-2. pdfshiftInspectionReport.ts → calls Edge Function
-3. Edge Function downloads images server-side
+User clicks "Generate Report"
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  InspectionReportPreview.tsx        │
+│  (React component renders report)   │
+│  - Cover page with logo             │
+│  - Sections with findings           │
+│  - Photo grids (using <img> tags)   │
+│  - Tenant cards                     │
+│  - Signatures                       │
+└─────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  User sees WYSIWYG preview          │
+│  in a dialog/modal                  │
+└─────────────────────────────────────┘
+         │
+         ▼ (User clicks "Download PDF")
+┌─────────────────────────────────────┐
+│  html2canvas captures each page     │
+│  → Canvas screenshots               │
+└─────────────────────────────────────┘
+         │
+         ▼
+┌─────────────────────────────────────┐
+│  jsPDF creates PDF from images      │
+│  → Final PDF file                   │
+└─────────────────────────────────────┘
 ```
 
 ---
 
-## Solution: Unified Client-Side Image Pipeline
+## Files to Create
 
-### Technical Strategy
-
-Replace all complex image loading with a single, bulletproof approach using **Supabase Storage's native download API** consistently across all image types.
-
-### Key Changes
-
-#### 1. Rewrite `simpleImageLoader.ts`
-- Fix URL pattern matching for ALL bucket types (`client-logos`, `site-images`, `inspection-photos`, `documents`)
-- Add comprehensive logging for debugging
-- Handle query parameters and timestamps in URLs
-- Return placeholder on failure instead of null (ensures PDF layout stability)
-
-#### 2. Consolidate Image Loading in `pdfmakeInspectionReport.ts`
-- Remove dependency on `pdfEngine.ts` image utilities
-- Use only `simpleImageLoader.ts` for all images (logo + photos)
-- Pre-cache ALL images before PDF generation starts
-- Add the logo URL to the `collectImageUrls` list
-
-#### 3. Add Defensive Image Rendering
-- If image fails to load, render a placeholder box with "Image unavailable" text
-- This prevents layout collapse from missing images
-
-#### 4. Fix the Logo Loading Path
-- Currently logo is loaded separately via `loadImageSimple(siteLogoUrl)`
-- Ensure this uses the same robust download path
+| File | Purpose |
+|------|---------|
+| `src/components/inspection-report/InspectionReportPreview.tsx` | Main WYSIWYG report renderer (React component) |
+| `src/components/inspection-report/CoverPage.tsx` | Cover page with logo and metadata |
+| `src/components/inspection-report/QualityDashboard.tsx` | Quality score dashboard |
+| `src/components/inspection-report/SectionPage.tsx` | Section with checklist items and photos |
+| `src/components/inspection-report/TenantSection.tsx` | Tenant verification cards |
+| `src/components/inspection-report/SnagSection.tsx` | Snags/defects listing |
+| `src/components/inspection-report/SignaturePage.tsx` | Signatures section |
+| `src/lib/wysiwygPdfGenerator.ts` | html2canvas + jsPDF conversion utility |
 
 ---
 
@@ -72,99 +70,190 @@ Replace all complex image loading with a single, bulletproof approach using **Su
 
 | File | Changes |
 |------|---------|
-| `src/lib/simpleImageLoader.ts` | Rewrite URL parser to handle all bucket formats; add retry logic; return placeholder on failure |
-| `src/lib/pdfmakeInspectionReport.ts` | Use unified image loading; add logo to collectImageUrls; add defensive rendering |
-| `src/lib/inspectionReportGenerator.ts` | No changes needed (already correctly orchestrates pdfmake) |
+| `src/components/ComprehensiveInspectionReport.tsx` | Replace pdfmake calls with WYSIWYG preview + screenshot-to-PDF workflow |
+| `package.json` | Add jsPDF dependency (html2canvas already installed) |
 
 ---
 
-## Technical Details
+## Technical Implementation Details
 
-### URL Patterns to Support
-
-```
-Client Logo:
-https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/client-logos/ade5256f-419e-4860-bfd4-2f38dc3cb21a/logo-1760494216241.png
-
-Site Image:
-https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/site-images/ade5256f-419e-4860-bfd4-2f38dc3cb21a/site-image.jpeg?t=1768382035130
-
-Inspection Photo:
-https://oltzgidkjxwsukvkomof.supabase.co/storage/v1/object/public/inspection-photos/ce801ab0-e394-438f-83d6-9905a768fe8a/componentImages/earthLeakage/YARONA_CENTRE_YARONA_CENTRE_ACKERMANS_componentImages_earthLeakage_1767783989118_1.jpg
+### 1. Install jsPDF
+```bash
+npm install jspdf
 ```
 
-### Improved URL Parser
+### 2. Report Preview Component Structure
 
-```typescript
-function parseSupabaseUrl(url: string): { bucket: string; path: string } | null {
-  if (!url) return null;
+```tsx
+// src/components/inspection-report/InspectionReportPreview.tsx
+export function InspectionReportPreview({ data, onGeneratePdf }) {
+  const pagesRef = useRef<HTMLDivElement[]>([]);
   
-  try {
-    const urlObj = new URL(url);
-    // Match: /storage/v1/object/public/BUCKET/PATH or /storage/v1/object/sign/BUCKET/PATH
-    const pathMatch = urlObj.pathname.match(/^\/storage\/v1\/object\/(?:public|sign)\/([^\/]+)\/(.+)$/);
-    
-    if (pathMatch) {
-      return {
-        bucket: pathMatch[1],
-        path: decodeURIComponent(pathMatch[2])
-      };
-    }
-    return null;
-  } catch {
-    return null;
-  }
+  return (
+    <div className="wysiwyg-report-container">
+      {/* Page 1: Cover */}
+      <div ref={el => pagesRef.current[0] = el} className="page">
+        <CoverPage {...} />
+      </div>
+      
+      {/* Page 2: Quality Dashboard */}
+      <div ref={el => pagesRef.current[1] = el} className="page">
+        <QualityDashboard {...} />
+      </div>
+      
+      {/* Section Pages */}
+      {sections.map((section, idx) => (
+        <div ref={el => pagesRef.current[idx+2] = el} className="page">
+          <SectionPage section={section} />
+        </div>
+      ))}
+    </div>
+  );
 }
 ```
 
-### Defensive Image Rendering
+### 3. Page Styling (A4 dimensions)
+
+```css
+.page {
+  width: 210mm;
+  min-height: 297mm;
+  background: white;
+  padding: 20mm 10mm;
+  box-sizing: border-box;
+  margin-bottom: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+```
+
+### 4. Screenshot-to-PDF Conversion
 
 ```typescript
-// In createEngineeringCoverPage:
-if (logoDataUrl) {
-  content.push({
-    image: logoDataUrl,
-    height: 80,
-    alignment: 'center',
-    margin: [0, 80, 0, 60],
-  });
-} else {
-  // Placeholder for missing logo
-  content.push({
-    table: {
-      widths: [180],
-      body: [[{
-        text: '[Company Logo]',
-        alignment: 'center',
-        color: '#94a3b8',
-        fontSize: 10,
-        margin: [0, 30, 0, 30],
-      }]]
-    },
-    layout: { hLineColor: () => '#e2e8f0', vLineColor: () => '#e2e8f0' },
-    alignment: 'center',
-    margin: [0, 80, 0, 60],
-  });
+// src/lib/wysiwygPdfGenerator.ts
+import html2canvas from 'html2canvas';
+import jsPDF from 'jspdf';
+
+export async function generatePdfFromPages(
+  pages: HTMLElement[],
+  filename: string
+): Promise<{ success: boolean; blob?: Blob; url?: string; error?: string }> {
+  const pdf = new jsPDF('p', 'mm', 'a4');
+  const pageWidth = 210;
+  const pageHeight = 297;
+  
+  for (let i = 0; i < pages.length; i++) {
+    const page = pages[i];
+    
+    // Capture page as canvas
+    const canvas = await html2canvas(page, {
+      scale: 2, // Higher resolution
+      useCORS: true,
+      allowTaint: true,
+      backgroundColor: '#ffffff',
+    });
+    
+    // Convert to image
+    const imgData = canvas.toDataURL('image/jpeg', 0.95);
+    
+    // Add page to PDF
+    if (i > 0) pdf.addPage();
+    pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
+  }
+  
+  const blob = pdf.output('blob');
+  const url = URL.createObjectURL(blob);
+  
+  return { success: true, blob, url };
 }
 ```
 
+### 5. Cover Page Component
+
+```tsx
+// src/components/inspection-report/CoverPage.tsx
+export function CoverPage({ 
+  logoUrl, 
+  templateName, 
+  subsectionName, 
+  siteName, 
+  clientName, 
+  inspectorName, 
+  inspectionDate 
+}) {
+  return (
+    <div className="cover-page">
+      {/* Top accent bar */}
+      <div className="h-4 bg-[#1e3a5f] absolute top-0 left-0 right-0" />
+      
+      {/* Logo - uses standard <img> tag */}
+      {logoUrl && (
+        <img 
+          src={logoUrl} 
+          alt="Company Logo"
+          className="h-20 mx-auto mt-20 object-contain"
+          crossOrigin="anonymous"
+        />
+      )}
+      
+      {/* Title */}
+      <h1 className="text-3xl font-bold text-[#1e3a5f] text-center mt-16">
+        {templateName || 'Inspection Report'}
+      </h1>
+      
+      {/* ... metadata table */}
+    </div>
+  );
+}
+```
+
+### 6. Image Handling (Simplified)
+
+Since images are rendered as standard `<img>` tags in the browser:
+- The browser handles all image loading natively
+- `html2canvas` captures what's visible on screen
+- No complex base64 conversion or Supabase downloads needed
+- Logo and photos just work because the browser already loaded them
+
+### 7. User Flow
+
+1. User clicks **"Generate Report"** button
+2. Dialog opens showing **live WYSIWYG preview** (scrollable pages)
+3. User can review the report visually
+4. User clicks **"Download PDF"**
+5. System captures each page with html2canvas
+6. jsPDF assembles the images into a PDF
+7. PDF downloads automatically
+
 ---
 
-## Cleanup
+## Benefits of This Approach
 
-### Files/Code to Remove
-
-1. **Complex fallback strategies** in `pdfEngine.ts` (lines 119-290)
-2. **Duplicate image compression** utilities that are no longer used
-3. **Browserless/PDFShift Edge Functions** for inspection reports (optional - can be deprecated)
+| Issue | Old Approach | New Approach |
+|-------|--------------|--------------|
+| Image loading | Complex CORS workarounds, base64 conversion | Browser loads images normally via `<img>` tags |
+| Layout accuracy | pdfmake approximates layout | Exact screenshot of rendered HTML |
+| Logo rendering | Broken/corrupted | Just works (browser renders it) |
+| Debugging | Hard to debug PDF internals | Visual preview shows exactly what will export |
+| Maintenance | Multiple fallback strategies | Single straightforward pipeline |
 
 ---
 
-## Expected Outcome
+## Cleanup (Deprecation)
+
+Once the new system is working, the following can be deprecated:
+
+1. `src/lib/pdfmakeInspectionReport.ts` - No longer needed
+2. `src/lib/simpleImageLoader.ts` - Not needed for WYSIWYG
+3. Complex image loading in `src/lib/pdfEngine.ts`
+4. Server-side Edge Functions for PDF generation (`generate-pdf-*`)
+
+---
+
+## Expected Result
 
 1. Logo renders correctly at proper size on cover page
-2. All inspection photos display in 2-column grids
-3. Tenant verification photos render in the tenant section
-4. Snag photos appear correctly
+2. All inspection photos display in grids exactly as previewed
+3. Tenant verification photos render correctly
+4. What you see in the preview is exactly what exports to PDF
 5. No more corrupted/tiny/missing images
 
