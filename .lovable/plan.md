@@ -1,259 +1,198 @@
 
+# COC Validation System - Comprehensive Review & Testing Plan
 
-# WYSIWYG Inspection Report Generator: Complete Rebuild
+## System Overview
 
-## Overview
-
-Replace the broken pdfmake/image-fetching pipeline with a **visual-first approach**:
-
-1. **Render the report as HTML/React** in a preview container
-2. **Use html2canvas** to capture the visual output as images
-3. **Generate PDF** from those captured images using jsPDF
-
-This approach guarantees that **what you see is exactly what gets exported** because we're literally screenshotting the rendered page.
+The COC (Certificate of Compliance) validation system is a multi-layered architecture that validates electrical certificates against SANS 10142-1:2020 standards.
 
 ---
 
-## Architecture
+## Architecture Components Reviewed
 
-```text
-User clicks "Generate Report"
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  InspectionReportPreview.tsx        │
-│  (React component renders report)   │
-│  - Cover page with logo             │
-│  - Sections with findings           │
-│  - Photo grids (using <img> tags)   │
-│  - Tenant cards                     │
-│  - Signatures                       │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  User sees WYSIWYG preview          │
-│  in a dialog/modal                  │
-└─────────────────────────────────────┘
-         │
-         ▼ (User clicks "Download PDF")
-┌─────────────────────────────────────┐
-│  html2canvas captures each page     │
-│  → Canvas screenshots               │
-└─────────────────────────────────────┘
-         │
-         ▼
-┌─────────────────────────────────────┐
-│  jsPDF creates PDF from images      │
-│  → Final PDF file                   │
-└─────────────────────────────────────┘
-```
+### 1. Edge Function: `validate-coc/index.ts`
+**Purpose:** AI-powered document analysis and validation
+
+**Key Features:**
+- Uses Anthropic Claude API to analyze COC document images/PDFs
+- Implements comprehensive SANS 10142-1:2020 rule sets
+- Includes anti-hallucination guardrails
+- Supports COC Type hierarchy validation (Initial/Supplementary/Temporary)
+
+**Validation Checks Implemented:**
+| Check ID | Clause | Description | Type |
+|----------|--------|-------------|------|
+| COC-TYPE-001 | Hierarchy | COC Type Checkbox Marked | Critical |
+| COC-INIT-001 | Hierarchy | Initial COC Validation | Critical |
+| COC-SUPP-001 | Hierarchy | Supplementary COC Reference | Critical |
+| COC-TEMP-001 | Hierarchy | Temporary COC Validity | Critical |
+| EARTH-001 | 8.4 | Earth Resistance | Safety-Critical |
+| LOOP-001 | 8.5 | Earth Loop Impedance | Safety-Critical |
+| INSUL-001 | 8.6 | Insulation Resistance | Safety-Critical |
+| RCD-001 | 8.8 | RCD Protection | Safety-Critical |
+| POL-001 | 8.7 | Polarity & Continuity | Mandatory |
+| COND-001 | 7.2 | Conductor Sizing | Mandatory |
+| OCP-001 | 8.3 | Overcurrent Protection | Mandatory |
+| DOC-001 | 22 | Documentation | Administrative |
 
 ---
 
-## Files to Create
+### 2. Compliance Calculations: `complianceCalculations.ts`
+**Purpose:** Single source of truth for compliance rate calculations
 
-| File | Purpose |
-|------|---------|
-| `src/components/inspection-report/InspectionReportPreview.tsx` | Main WYSIWYG report renderer (React component) |
-| `src/components/inspection-report/CoverPage.tsx` | Cover page with logo and metadata |
-| `src/components/inspection-report/QualityDashboard.tsx` | Quality score dashboard |
-| `src/components/inspection-report/SectionPage.tsx` | Section with checklist items and photos |
-| `src/components/inspection-report/TenantSection.tsx` | Tenant verification cards |
-| `src/components/inspection-report/SnagSection.tsx` | Snags/defects listing |
-| `src/components/inspection-report/SignaturePage.tsx` | Signatures section |
-| `src/lib/wysiwygPdfGenerator.ts` | html2canvas + jsPDF conversion utility |
+**Key Logic:**
+```typescript
+VALID_COC_STATUSES = ['Approved', 'Valid', 'Pass']
+FAILED_VALIDATION_STATUSES = ['Fail', 'Failed', 'Incomplete']
+```
+
+**Compliance Determination:**
+1. Fetch MOST RECENT validation per subsection
+2. If latest validation is Failed/Fail/Incomplete: subsection is non-compliant
+3. If `coc_status` is Approved AND no failed validation: compliant
 
 ---
 
-## Files to Modify
-
-| File | Changes |
-|------|---------|
-| `src/components/ComprehensiveInspectionReport.tsx` | Replace pdfmake calls with WYSIWYG preview + screenshot-to-PDF workflow |
-| `package.json` | Add jsPDF dependency (html2canvas already installed) |
-
----
-
-## Technical Implementation Details
-
-### 1. Install jsPDF
-```bash
-npm install jspdf
-```
-
-### 2. Report Preview Component Structure
-
-```tsx
-// src/components/inspection-report/InspectionReportPreview.tsx
-export function InspectionReportPreview({ data, onGeneratePdf }) {
-  const pagesRef = useRef<HTMLDivElement[]>([]);
-  
-  return (
-    <div className="wysiwyg-report-container">
-      {/* Page 1: Cover */}
-      <div ref={el => pagesRef.current[0] = el} className="page">
-        <CoverPage {...} />
-      </div>
-      
-      {/* Page 2: Quality Dashboard */}
-      <div ref={el => pagesRef.current[1] = el} className="page">
-        <QualityDashboard {...} />
-      </div>
-      
-      {/* Section Pages */}
-      {sections.map((section, idx) => (
-        <div ref={el => pagesRef.current[idx+2] = el} className="page">
-          <SectionPage section={section} />
-        </div>
-      ))}
-    </div>
-  );
-}
-```
-
-### 3. Page Styling (A4 dimensions)
-
-```css
-.page {
-  width: 210mm;
-  min-height: 297mm;
-  background: white;
-  padding: 20mm 10mm;
-  box-sizing: border-box;
-  margin-bottom: 16px;
-  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-}
-```
-
-### 4. Screenshot-to-PDF Conversion
+### 3. Status Priority Bug Fix (Recently Applied)
+The edge function now correctly handles status updates:
+- **Before:** Failed validations couldn't override Approved status due to priority logic
+- **After:** Failed validations ALWAYS update subsection status to Failed (line 1590-1599)
 
 ```typescript
-// src/lib/wysiwygPdfGenerator.ts
-import html2canvas from 'html2canvas';
-import jsPDF from 'jspdf';
-
-export async function generatePdfFromPages(
-  pages: HTMLElement[],
-  filename: string
-): Promise<{ success: boolean; blob?: Blob; url?: string; error?: string }> {
-  const pdf = new jsPDF('p', 'mm', 'a4');
-  const pageWidth = 210;
-  const pageHeight = 297;
-  
-  for (let i = 0; i < pages.length; i++) {
-    const page = pages[i];
-    
-    // Capture page as canvas
-    const canvas = await html2canvas(page, {
-      scale: 2, // Higher resolution
-      useCORS: true,
-      allowTaint: true,
-      backgroundColor: '#ffffff',
-    });
-    
-    // Convert to image
-    const imgData = canvas.toDataURL('image/jpeg', 0.95);
-    
-    // Add page to PDF
-    if (i > 0) pdf.addPage();
-    pdf.addImage(imgData, 'JPEG', 0, 0, pageWidth, pageHeight);
-  }
-  
-  const blob = pdf.output('blob');
-  const url = URL.createObjectURL(blob);
-  
-  return { success: true, blob, url };
-}
+const isNewValidationFailed = mappedSubsectionStatus === 'Failed';
+const shouldUpdate = isNewValidationFailed || 
+                    !currentSubsection?.coc_number || 
+                    newPriority > currentPriority || ...
 ```
 
-### 5. Cover Page Component
+---
 
-```tsx
-// src/components/inspection-report/CoverPage.tsx
-export function CoverPage({ 
-  logoUrl, 
-  templateName, 
-  subsectionName, 
-  siteName, 
-  clientName, 
-  inspectorName, 
-  inspectionDate 
-}) {
-  return (
-    <div className="cover-page">
-      {/* Top accent bar */}
-      <div className="h-4 bg-[#1e3a5f] absolute top-0 left-0 right-0" />
-      
-      {/* Logo - uses standard <img> tag */}
-      {logoUrl && (
-        <img 
-          src={logoUrl} 
-          alt="Company Logo"
-          className="h-20 mx-auto mt-20 object-contain"
-          crossOrigin="anonymous"
-        />
-      )}
-      
-      {/* Title */}
-      <h1 className="text-3xl font-bold text-[#1e3a5f] text-center mt-16">
-        {templateName || 'Inspection Report'}
-      </h1>
-      
-      {/* ... metadata table */}
-    </div>
-  );
-}
+## Current Yarona Centre Data Analysis
+
+### Database State (23 subsections):
+
+| Status | Count | Examples |
+|--------|-------|----------|
+| Failed | 18 | ACKERMANS, DEBONAIRS, KFC, PEP, etc. |
+| Missing | 5 | CENTRE MANAGEMENT, GENERATOR, LV ROOM, SHOPRITE, SHOPRITE LIQUOR |
+| Approved | 1 | DAY TO DAY (has Pass validation) |
+
+### Identified Issue: Inconsistent `is_compliant` Flag
+- **DAY TO DAY:** `coc_status=Approved` but `is_compliant=false`
+  - This appears incorrect since the latest validation shows Pass
+  - Should be `is_compliant=true`
+
+- **Missing COC subsections:** `coc_status=Missing` but `is_compliant=true`
+  - This is incorrect logic - missing COC should NOT be compliant
+  - Compliance requires either: COC not required OR valid COC present
+
+---
+
+## Issues Found & Corrections Needed
+
+### Issue 1: `is_compliant` Logic for Missing COCs
+**Problem:** Subsections with `coc_status=Missing` and `is_coc_required=true` incorrectly show `is_compliant=true`
+
+**Root Cause:** The edge function only updates `is_compliant` during validation runs. Subsections that have never been validated retain their default state.
+
+**Fix Required:** SQL migration to correct existing data + logic review
+
+### Issue 2: DAY TO DAY Inconsistency
+**Problem:** DAY TO DAY has a passing validation but `is_compliant=false`
+
+**Root Cause:** The `is_compliant` calculation in the edge function has multiple conditions (cocTypeMarked, hierarchyValid, etc.) that may have triggered false
+
+**Investigation Needed:** Review the specific validation report for DAY TO DAY
+
+---
+
+## Proposed Corrections
+
+### Migration 1: Fix `is_compliant` for Missing COCs
+```sql
+-- Subsections with missing COC that require COC should NOT be compliant
+UPDATE subsections
+SET is_compliant = false
+WHERE coc_status = 'Missing' 
+  AND is_coc_required = true 
+  AND is_compliant = true;
 ```
 
-### 6. Image Handling (Simplified)
-
-Since images are rendered as standard `<img>` tags in the browser:
-- The browser handles all image loading natively
-- `html2canvas` captures what's visible on screen
-- No complex base64 conversion or Supabase downloads needed
-- Logo and photos just work because the browser already loaded them
-
-### 7. User Flow
-
-1. User clicks **"Generate Report"** button
-2. Dialog opens showing **live WYSIWYG preview** (scrollable pages)
-3. User can review the report visually
-4. User clicks **"Download PDF"**
-5. System captures each page with html2canvas
-6. jsPDF assembles the images into a PDF
-7. PDF downloads automatically
-
----
-
-## Benefits of This Approach
-
-| Issue | Old Approach | New Approach |
-|-------|--------------|--------------|
-| Image loading | Complex CORS workarounds, base64 conversion | Browser loads images normally via `<img>` tags |
-| Layout accuracy | pdfmake approximates layout | Exact screenshot of rendered HTML |
-| Logo rendering | Broken/corrupted | Just works (browser renders it) |
-| Debugging | Hard to debug PDF internals | Visual preview shows exactly what will export |
-| Maintenance | Multiple fallback strategies | Single straightforward pipeline |
+### Migration 2: Fix DAY TO DAY Based on Latest Validation
+```sql
+-- If latest validation is Pass and subsection still shows non-compliant, fix it
+UPDATE subsections s
+SET is_compliant = true
+WHERE s.id IN (
+  SELECT s2.id
+  FROM subsections s2
+  JOIN coc_validations cv ON cv.subsection_id = s2.id
+  WHERE s2.coc_status = 'Approved'
+    AND s2.is_compliant = false
+    AND cv.validated_at = (
+      SELECT MAX(cv2.validated_at) 
+      FROM coc_validations cv2 
+      WHERE cv2.subsection_id = s2.id
+    )
+    AND cv.status = 'Pass'
+);
+```
 
 ---
 
-## Cleanup (Deprecation)
+## Testing Plan
 
-Once the new system is working, the following can be deprecated:
+### Test 1: Validate Edge Function Directly
+Use `supabase--curl_edge_functions` to call `validate-coc` with a known document
 
-1. `src/lib/pdfmakeInspectionReport.ts` - No longer needed
-2. `src/lib/simpleImageLoader.ts` - Not needed for WYSIWYG
-3. Complex image loading in `src/lib/pdfEngine.ts`
-4. Server-side Edge Functions for PDF generation (`generate-pdf-*`)
+### Test 2: Verify Compliance Calculations
+1. Run SQL query to check compliance stats match UI
+2. Verify dashboard shows correct 1/23 compliant for Yarona
+
+### Test 3: Bulk Validation Flow
+1. Navigate to Yarona Centre > Compliance tab
+2. Run bulk COC validation
+3. Verify results update correctly
+
+### Test 4: Individual Validation
+1. Select a subsection with a COC document
+2. Trigger validation
+3. Verify:
+   - Validation record created in `coc_validations`
+   - `subsection.coc_status` updated
+   - `subsection.is_compliant` updated
+   - UI reflects new status
 
 ---
 
-## Expected Result
+## Files Involved
 
-1. Logo renders correctly at proper size on cover page
-2. All inspection photos display in grids exactly as previewed
-3. Tenant verification photos render correctly
-4. What you see in the preview is exactly what exports to PDF
-5. No more corrupted/tiny/missing images
+| File | Role |
+|------|------|
+| `supabase/functions/validate-coc/index.ts` | AI validation engine |
+| `supabase/functions/bulk-validate-coc/index.ts` | Batch processing |
+| `src/lib/complianceCalculations.ts` | Unified compliance logic |
+| `src/components/site/BulkCOCValidation.tsx` | Bulk validation UI |
+| `src/components/COCValidationReport.tsx` | Validation result display |
+| `src/components/ComplianceDashboard.tsx` | Compliance overview dashboard |
+
+---
+
+## Summary
+
+The COC validation system is well-architected with:
+- Comprehensive SANS 10142-1:2020 rule coverage
+- Strong anti-hallucination measures for AI analysis
+- Proper status priority handling (recently fixed)
+- Centralized compliance calculations
+
+**Corrections Needed:**
+1. Fix `is_compliant` flag for subsections with `coc_status=Missing`
+2. Investigate and fix DAY TO DAY `is_compliant` inconsistency
+3. Consider adding a database trigger to auto-update `is_compliant` when `coc_status` changes
+
+**Testing Approach:**
+Since browser login is currently blocked, testing can proceed via:
+1. Direct edge function invocation using `supabase--curl_edge_functions`
+2. Database queries to verify data consistency
+3. Edge function logs review
 
