@@ -417,6 +417,7 @@ export function COCValidationSettings({ className }: COCValidationSettingsProps)
       const { data, error } = await supabase.functions.invoke('validate-coc', {
         body: {
           documentId: testDocumentId,
+          documentUrl: doc.file_url,
           subsectionId: doc.subsection_id,
           testSettings: settings
         }
