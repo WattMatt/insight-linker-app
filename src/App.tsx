@@ -63,6 +63,7 @@ import { HelpButton } from "./components/HelpButton";
 import { DoubleSlashRedirect } from "./components/DoubleSlashRedirect";
 import { NotificationListener } from "./components/NotificationListener";
 import { VerificationListener } from "./components/VerificationListener";
+import { SessionWatcher } from "./components/SessionWatcher";
 import { GlobalSearch } from "./components/GlobalSearch";
 
 const queryClient = new QueryClient();
@@ -96,6 +97,7 @@ const App = () => (
         <HelpButton />
         <NotificationListener />
         <VerificationListener />
+        <SessionWatcher />
         <OfflineIndicator />
         <BrowserRouter>
           <DoubleSlashRedirect>

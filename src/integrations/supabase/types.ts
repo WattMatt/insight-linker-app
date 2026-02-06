@@ -1407,6 +1407,8 @@ export type Database = {
       }
       settings: {
         Row: {
+          auto_logout_enabled: boolean | null
+          auto_logout_time: string | null
           company_logo_url: string | null
           company_name: string | null
           created_at: string | null
@@ -1417,6 +1419,8 @@ export type Database = {
           updated_at: string | null
         }
         Insert: {
+          auto_logout_enabled?: boolean | null
+          auto_logout_time?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
@@ -1427,6 +1431,8 @@ export type Database = {
           updated_at?: string | null
         }
         Update: {
+          auto_logout_enabled?: boolean | null
+          auto_logout_time?: string | null
           company_logo_url?: string | null
           company_name?: string | null
           created_at?: string | null
