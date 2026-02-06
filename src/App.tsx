@@ -97,9 +97,9 @@ const App = () => (
         <HelpButton />
         <NotificationListener />
         <VerificationListener />
-        <SessionWatcher />
         <OfflineIndicator />
         <BrowserRouter>
+          <SessionWatcher />
           <DoubleSlashRedirect>
             <Suspense fallback={<LoadingState variant="full-page" message="Loading..." />}>
               <Routes>
