@@ -28,6 +28,8 @@ interface FloorPlanViewerProps {
   onPinClick: (pin: Pin) => void;
   addMode: 'snag' | 'observation' | null;
   onAddModeChange: (mode: 'snag' | 'observation' | null) => void;
+  selectedPinId?: string | null;
+  quickAddMode?: boolean;
 }
 
 export const FloorPlanViewer = ({
@@ -35,6 +37,8 @@ export const FloorPlanViewer = ({
   pins,
   onAddPin,
   onPinClick,
+  selectedPinId,
+  quickAddMode,
 }: FloorPlanViewerProps) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const pageRef = useRef<HTMLDivElement>(null);
@@ -309,7 +313,7 @@ export const FloorPlanViewer = ({
       <div className="flex items-center gap-1 sm:gap-2 p-2 sm:p-3 border-b bg-card">
         <div className="flex items-center gap-1 sm:gap-2 text-xs sm:text-sm text-muted-foreground">
           <MapPin className="w-3 h-3 sm:w-4 sm:h-4" />
-          <span className="hidden sm:inline">Click to add pin</span>
+          <span className="hidden sm:inline">{quickAddMode ? 'Quick add mode' : 'Click to add pin'}</span>
           <span className="text-[10px] sm:text-xs">• Pinch to zoom • Hold Shift to pan</span>
         </div>
         <div className="flex-1" />
@@ -460,6 +464,7 @@ export const FloorPlanViewer = ({
               const pinSize = 40;
               const fontSize = 14;
               const borderWidth = 3;
+              const isSelected = selectedPinId === item.id;
               
               return (
                 <div
@@ -475,11 +480,11 @@ export const FloorPlanViewer = ({
                     alignItems: 'center',
                     justifyContent: 'center',
                     cursor: 'pointer',
-                    zIndex: 10,
+                    zIndex: isSelected ? 20 : 10,
                     pointerEvents: 'auto',
                     transition: 'transform 0.2s ease-out',
                   }}
-                  className="group"
+                  className={`group ${isSelected ? 'animate-pulse' : ''}`}
                   onClick={(e) => {
                     e.stopPropagation();
                     onPinClick(item);
@@ -497,15 +502,17 @@ export const FloorPlanViewer = ({
                       height: '100%',
                       borderRadius: '50%',
                       backgroundColor: getPinColor(item),
-                      border: `${borderWidth}px solid white`,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      border: isSelected ? `${borderWidth + 1}px solid hsl(var(--primary))` : `${borderWidth}px solid white`,
+                      boxShadow: isSelected 
+                        ? '0 0 20px rgba(59,130,246,0.8), 0 0 40px rgba(59,130,246,0.4)' 
+                        : '0 2px 8px rgba(0,0,0,0.3)',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       color: 'white',
                       fontWeight: 'bold',
                       fontSize: `${fontSize}px`,
-                      transition: 'box-shadow 0.2s ease-out',
+                      transition: 'box-shadow 0.2s ease-out, border 0.2s ease-out',
                     }}
                     className="group-hover:shadow-[0_0_20px_rgba(59,130,246,0.6)]"
                   >

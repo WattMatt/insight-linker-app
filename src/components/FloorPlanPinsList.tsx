@@ -1,10 +1,23 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { MapPin, CheckCircle2, Circle, AlertTriangle, Clock, Check, X, Minus } from "lucide-react";
+import { 
+  MapPin, 
+  CheckCircle2, 
+  Circle, 
+  AlertTriangle, 
+  Clock, 
+  Check, 
+  Trash2, 
+  ChevronDown,
+  ChevronUp 
+} from "lucide-react";
 import { ScrollArea } from "./ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { PinFilters, StatusFilter, PriorityFilter, TypeFilter } from "./floor-plan/PinFilters";
+import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "./ui/sheet";
+import { useIsMobile } from "@/hooks/use-mobile";
 
 interface Pin {
   id: string;
@@ -21,6 +34,8 @@ interface FloorPlanPinsListProps {
   pins: Pin[];
   onPinClick: (pin: Pin) => void;
   onQuickStatusChange?: (pinId: string, newStatus: Pin['status']) => Promise<void>;
+  onQuickDelete?: (pin: Pin) => void;
+  selectedPinId?: string | null;
 }
 
 const STATUS_OPTIONS: { value: Pin['status']; label: string; icon: React.ReactNode; color: string }[] = [
@@ -30,11 +45,37 @@ const STATUS_OPTIONS: { value: Pin['status']; label: string; icon: React.ReactNo
   { value: 'closed', label: 'Closed', icon: <CheckCircle2 className="w-3.5 h-3.5" />, color: 'bg-gray-500 hover:bg-gray-600 text-white' },
 ];
 
-export const FloorPlanPinsList = ({ pins, onPinClick, onQuickStatusChange }: FloorPlanPinsListProps) => {
+export const FloorPlanPinsList = ({ 
+  pins, 
+  onPinClick, 
+  onQuickStatusChange, 
+  onQuickDelete,
+  selectedPinId 
+}: FloorPlanPinsListProps) => {
+  const isMobile = useIsMobile();
   const [updatingPinId, setUpdatingPinId] = useState<string | null>(null);
-  
-  const snags = pins.filter(p => p.pin_type === 'snag');
-  const observations = pins.filter(p => p.pin_type === 'observation');
+  const [showFilters, setShowFilters] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
+  const [priorityFilter, setPriorityFilter] = useState<PriorityFilter>('all');
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all');
+  const [isBottomSheetOpen, setIsBottomSheetOpen] = useState(false);
+
+  // Filter pins based on active filters
+  const filteredPins = useMemo(() => {
+    return pins.filter((pin) => {
+      if (statusFilter !== 'all' && pin.status !== statusFilter) return false;
+      if (priorityFilter !== 'all' && pin.priority !== priorityFilter) return false;
+      if (typeFilter !== 'all' && pin.pin_type !== typeFilter) return false;
+      return true;
+    });
+  }, [pins, statusFilter, priorityFilter, typeFilter]);
+
+  const activeFilterCount = [
+    statusFilter !== 'all',
+    priorityFilter !== 'all',
+    typeFilter !== 'all',
+  ].filter(Boolean).length;
+
   const openItems = pins.filter(p => p.status === 'open');
   const inProgressItems = pins.filter(p => p.status === 'in_progress');
   const finishedItems = pins.filter(p => p.status === 'finished' || p.status === 'closed' || p.status === 'resolved');
@@ -79,119 +120,230 @@ export const FloorPlanPinsList = ({ pins, onPinClick, onQuickStatusChange }: Flo
     }
   };
 
+  const handleQuickDelete = (e: React.MouseEvent, pin: Pin) => {
+    e.stopPropagation();
+    if (onQuickDelete) {
+      onQuickDelete(pin);
+    }
+  };
+
+  const clearFilters = () => {
+    setStatusFilter('all');
+    setPriorityFilter('all');
+    setTypeFilter('all');
+  };
+
+  const renderPinItem = (pin: Pin) => (
+    <div
+      key={pin.id}
+      className={cn(
+        "border rounded-lg overflow-hidden bg-card transition-all",
+        selectedPinId === pin.id && "ring-2 ring-primary shadow-lg"
+      )}
+    >
+      {/* Main pin row - clickable */}
+      <div className="relative group">
+        <Button
+          variant="ghost"
+          className="w-full justify-start h-auto py-3 px-3 rounded-none hover:bg-muted/50"
+          onClick={() => onPinClick(pin)}
+        >
+          <div className="flex items-start gap-2 md:gap-3 w-full pr-8">
+            {/* Pin Number Badge */}
+            <div className={cn(
+              "flex-shrink-0 w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold",
+              pin.pin_type === 'snag' ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground',
+              (pin.status === 'finished' || pin.status === 'closed' || pin.status === 'resolved') && 'opacity-50'
+            )}>
+              {pin.pin_number}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 text-left min-w-0">
+              <div className="flex items-center gap-1.5 mb-1 flex-wrap">
+                <Badge variant={pin.pin_type === 'snag' ? 'destructive' : 'default'} className="text-xs">
+                  {pin.pin_type}
+                </Badge>
+                {pin.priority && (
+                  <Badge variant={getPriorityColor(pin.priority)} className="text-xs">
+                    {getPriorityIcon(pin.priority)}
+                    <span className="ml-1">{pin.priority}</span>
+                  </Badge>
+                )}
+                {getStatusIcon(pin.status)}
+              </div>
+              <div className="font-medium text-sm mb-1 truncate">
+                {pin.title || 'Untitled'}
+              </div>
+              {pin.notes && (
+                <div className="text-xs text-muted-foreground line-clamp-1">
+                  {pin.notes}
+                </div>
+              )}
+            </div>
+
+            {/* Photo indicator */}
+            {pin.photo_url && (
+              <div className="flex-shrink-0 hidden md:block">
+                <img 
+                  src={pin.photo_url} 
+                  alt="thumbnail" 
+                  className="w-10 h-10 md:w-12 md:h-12 object-cover rounded border"
+                />
+              </div>
+            )}
+          </div>
+        </Button>
+        
+        {/* Quick delete button - appears on hover */}
+        {onQuickDelete && (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="absolute right-2 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 transition-opacity h-8 w-8 hover:bg-destructive/10 hover:text-destructive"
+            onClick={(e) => handleQuickDelete(e, pin)}
+          >
+            <Trash2 className="w-4 h-4" />
+          </Button>
+        )}
+      </div>
+
+      {/* Quick Status Toggle Row */}
+      {onQuickStatusChange && (
+        <div className="flex border-t bg-muted/30">
+          {STATUS_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              onClick={(e) => handleQuickStatus(e, pin.id, option.value)}
+              disabled={updatingPinId === pin.id}
+              className={cn(
+                "flex-1 py-2 px-1 text-xs font-medium flex items-center justify-center gap-1 transition-all",
+                pin.status === option.value 
+                  ? option.color
+                  : "hover:bg-muted text-muted-foreground hover:text-foreground",
+                updatingPinId === pin.id && "opacity-50 cursor-wait"
+              )}
+            >
+              {option.icon}
+              <span className="hidden sm:inline">{option.label}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  const listContent = (
+    <>
+      {/* Stats badges */}
+      <div className="flex flex-wrap gap-2 text-xs md:text-sm mb-3">
+        <Badge variant="destructive" className="text-xs whitespace-nowrap gap-1">
+          <Circle className="w-3 h-3" />
+          {openItems.length} Open
+        </Badge>
+        <Badge className="text-xs whitespace-nowrap gap-1 bg-yellow-500">
+          <Clock className="w-3 h-3" />
+          {inProgressItems.length} In Progress
+        </Badge>
+        <Badge variant="secondary" className="text-xs whitespace-nowrap gap-1">
+          <Check className="w-3 h-3" />
+          {finishedItems.length} Done
+        </Badge>
+      </div>
+
+      {/* Filter toggle */}
+      <Button
+        variant="outline"
+        size="sm"
+        onClick={() => setShowFilters(!showFilters)}
+        className="w-full mb-3 justify-between"
+      >
+        <span className="flex items-center gap-2">
+          <MapPin className="w-4 h-4" />
+          {filteredPins.length} of {pins.length} items
+          {activeFilterCount > 0 && (
+            <Badge variant="secondary" className="ml-1">{activeFilterCount}</Badge>
+          )}
+        </span>
+        {showFilters ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+      </Button>
+
+      {/* Filters */}
+      {showFilters && (
+        <div className="mb-3">
+          <PinFilters
+            statusFilter={statusFilter}
+            priorityFilter={priorityFilter}
+            typeFilter={typeFilter}
+            onStatusChange={setStatusFilter}
+            onPriorityChange={setPriorityFilter}
+            onTypeChange={setTypeFilter}
+            onClearFilters={clearFilters}
+            activeFilterCount={activeFilterCount}
+          />
+        </div>
+      )}
+
+      {/* Pin list */}
+      {filteredPins.length === 0 ? (
+        <div className="text-center text-muted-foreground py-8">
+          {pins.length === 0 
+            ? "No items yet. Tap on the floor plan to add pins."
+            : "No items match the current filters."
+          }
+        </div>
+      ) : (
+        <div className="space-y-2">
+          {filteredPins
+            .sort((a, b) => a.pin_number - b.pin_number)
+            .map(renderPinItem)
+          }
+        </div>
+      )}
+    </>
+  );
+
+  // Mobile: Bottom sheet toggle
+  if (isMobile) {
+    return (
+      <Sheet open={isBottomSheetOpen} onOpenChange={setIsBottomSheetOpen}>
+        <SheetTrigger asChild>
+          <Button 
+            className="fixed bottom-4 right-4 z-50 shadow-lg rounded-full h-14 w-14 p-0"
+            size="icon"
+          >
+            <MapPin className="w-6 h-6" />
+            {pins.length > 0 && (
+              <Badge 
+                variant="destructive" 
+                className="absolute -top-1 -right-1 h-5 w-5 p-0 flex items-center justify-center text-xs"
+              >
+                {openItems.length}
+              </Badge>
+            )}
+          </Button>
+        </SheetTrigger>
+        <SheetContent side="bottom" className="h-[70vh] rounded-t-xl">
+          <SheetHeader className="pb-2">
+            <SheetTitle>Items ({pins.length})</SheetTitle>
+          </SheetHeader>
+          <ScrollArea className="h-full pb-6">
+            {listContent}
+          </ScrollArea>
+        </SheetContent>
+      </Sheet>
+    );
+  }
+
+  // Desktop: Card layout
   return (
     <Card className="h-full flex flex-col">
       <CardHeader className="pb-3">
         <CardTitle className="text-base md:text-lg">Items</CardTitle>
-        <div className="flex flex-wrap gap-2 text-xs md:text-sm">
-          <Badge variant="destructive" className="text-xs whitespace-nowrap gap-1">
-            <Circle className="w-3 h-3" />
-            {openItems.length} Open
-          </Badge>
-          <Badge className="text-xs whitespace-nowrap gap-1 bg-yellow-500">
-            <Clock className="w-3 h-3" />
-            {inProgressItems.length} In Progress
-          </Badge>
-          <Badge variant="secondary" className="text-xs whitespace-nowrap gap-1">
-            <Check className="w-3 h-3" />
-            {finishedItems.length} Done
-          </Badge>
-        </div>
       </CardHeader>
       <CardContent className="flex-1 overflow-hidden p-0">
         <ScrollArea className="h-full px-4 md:px-6 pb-6">
-          {pins.length === 0 ? (
-            <div className="text-center text-muted-foreground py-8">
-              No items yet. Tap on the floor plan to add pins.
-            </div>
-          ) : (
-            <div className="space-y-2">
-              {pins
-                .sort((a, b) => a.pin_number - b.pin_number)
-                .map((pin) => (
-                  <div
-                    key={pin.id}
-                    className="border rounded-lg overflow-hidden bg-card"
-                  >
-                    {/* Main pin row - clickable */}
-                    <Button
-                      variant="ghost"
-                      className="w-full justify-start h-auto py-3 px-3 rounded-none hover:bg-muted/50"
-                      onClick={() => onPinClick(pin)}
-                    >
-                      <div className="flex items-start gap-2 md:gap-3 w-full">
-                        {/* Pin Number Badge */}
-                        <div className={cn(
-                          "flex-shrink-0 w-7 h-7 md:w-8 md:h-8 rounded-full flex items-center justify-center text-xs font-bold",
-                          pin.pin_type === 'snag' ? 'bg-destructive text-destructive-foreground' : 'bg-primary text-primary-foreground',
-                          (pin.status === 'finished' || pin.status === 'closed' || pin.status === 'resolved') && 'opacity-50'
-                        )}>
-                          {pin.pin_number}
-                        </div>
-
-                        {/* Content */}
-                        <div className="flex-1 text-left min-w-0">
-                          <div className="flex items-center gap-1.5 mb-1 flex-wrap">
-                            <Badge variant={pin.pin_type === 'snag' ? 'destructive' : 'default'} className="text-xs">
-                              {pin.pin_type}
-                            </Badge>
-                            {pin.priority && (
-                              <Badge variant={getPriorityColor(pin.priority)} className="text-xs">
-                                {getPriorityIcon(pin.priority)}
-                                <span className="ml-1">{pin.priority}</span>
-                              </Badge>
-                            )}
-                            {getStatusIcon(pin.status)}
-                          </div>
-                          <div className="font-medium text-sm mb-1 truncate">
-                            {pin.title || 'Untitled'}
-                          </div>
-                          {pin.notes && (
-                            <div className="text-xs text-muted-foreground line-clamp-1">
-                              {pin.notes}
-                            </div>
-                          )}
-                        </div>
-
-                        {/* Photo indicator */}
-                        {pin.photo_url && (
-                          <div className="flex-shrink-0 hidden md:block">
-                            <img 
-                              src={pin.photo_url} 
-                              alt="thumbnail" 
-                              className="w-10 h-10 md:w-12 md:h-12 object-cover rounded border"
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </Button>
-
-                    {/* Quick Status Toggle Row */}
-                    {onQuickStatusChange && (
-                      <div className="flex border-t bg-muted/30">
-                        {STATUS_OPTIONS.map((option) => (
-                          <button
-                            key={option.value}
-                            onClick={(e) => handleQuickStatus(e, pin.id, option.value)}
-                            disabled={updatingPinId === pin.id}
-                            className={cn(
-                              "flex-1 py-2 px-1 text-xs font-medium flex items-center justify-center gap-1 transition-all",
-                              pin.status === option.value 
-                                ? option.color
-                                : "hover:bg-muted text-muted-foreground hover:text-foreground",
-                              updatingPinId === pin.id && "opacity-50 cursor-wait"
-                            )}
-                          >
-                            {option.icon}
-                            <span className="hidden sm:inline">{option.label}</span>
-                          </button>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                ))}
-            </div>
-          )}
+          {listContent}
         </ScrollArea>
       </CardContent>
     </Card>
