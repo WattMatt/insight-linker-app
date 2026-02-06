@@ -1,11 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { FloorPlanViewer } from "./FloorPlanViewer";
 import { FloorPlanPinModal } from "./FloorPlanPinModal";
 import { FloorPlanPinsList } from "./FloorPlanPinsList";
 import { FloorPlanStatsWidget } from "./FloorPlanStatsWidget";
 import { Button } from "./ui/button";
 import { Badge } from "./ui/badge";
-import { Upload, Eye, Loader2, WifiOff } from "lucide-react";
+import { Upload, Eye, Loader2, WifiOff, Zap, Undo2 } from "lucide-react";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
 import { supabase } from "@/integrations/supabase/client";
@@ -13,6 +13,7 @@ import { toast } from "sonner";
 import { generateFloorPlanReport } from "@/lib/floorPlanReportGenerator";
 import html2canvas from "html2canvas";
 import { useOfflineFloorPlanAnnotations } from "@/hooks/useOfflineFloorPlanAnnotations";
+import { useUndoStack, UndoAction } from "@/hooks/useUndoStack";
 
 interface InteractiveFloorPlanProps {
   subsectionId: string;
@@ -37,6 +38,8 @@ export const InteractiveFloorPlan = ({
   const [pdfPreview, setPdfPreview] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
   const [savingToDocuments, setSavingToDocuments] = useState(false);
   const [moveMode, setMoveMode] = useState<string | null>(null); // Pin ID being moved
+  const [quickAddMode, setQuickAddMode] = useState(false);
+  const undoTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   
   const {
     addPin,
@@ -45,6 +48,14 @@ export const InteractiveFloorPlan = ({
     getOfflineAnnotations,
     isOnline,
   } = useOfflineFloorPlanAnnotations();
+
+  const {
+    pendingUndo,
+    pushAction,
+    popAction,
+    clearPendingUndo,
+    canUndo,
+  } = useUndoStack();
 
   useEffect(() => {
     loadFloorPlan();
@@ -249,8 +260,15 @@ export const InteractiveFloorPlan = ({
       const newPin = await addPin(floorPlan.id, x, y, newPinNumber, user.id);
       
       setPins([...pins, newPin as any]);
-      setSelectedPin(newPin);
-      setIsModalOpen(true);
+      
+      // In quick-add mode, don't open modal - just show success
+      if (quickAddMode) {
+        setSelectedPin(newPin);
+        toast.success(`Pin #${newPinNumber} added`, { duration: 2000 });
+      } else {
+        setSelectedPin(newPin);
+        setIsModalOpen(true);
+      }
     } catch (error) {
       console.error("Error adding pin:", error);
       toast.error("Failed to add pin");
@@ -279,23 +297,79 @@ export const InteractiveFloorPlan = ({
     }
   };
 
-  const handleDeletePin = async () => {
-    if (!selectedPin?.id) return;
+  const handleDeletePin = async (pinToDelete?: any) => {
+    const pin = pinToDelete || selectedPin;
+    if (!pin?.id) return;
     
-    if (!confirm(`Are you sure you want to delete Pin #${selectedPin.pin_number}?`)) {
-      return;
-    }
-
     try {
-      await deletePin(selectedPin.id);
+      await deletePin(pin.id);
       
-      setPins(pins.filter(p => p.id !== selectedPin.id));
-      setSelectedPin(null);
-      setIsModalOpen(false);
+      setPins(pins.filter(p => p.id !== pin.id));
+      if (selectedPin?.id === pin.id) {
+        setSelectedPin(null);
+        setIsModalOpen(false);
+      }
     } catch (error) {
       console.error("Error deleting pin:", error);
       throw error;
     }
+  };
+
+  // Quick delete with undo support
+  const handleQuickDelete = (pin: any) => {
+    // Store pin data for potential undo
+    const pinData = { ...pin };
+    
+    // Optimistically remove from UI
+    setPins(prevPins => prevPins.filter(p => p.id !== pin.id));
+    
+    // Push to undo stack
+    pushAction({
+      type: 'delete',
+      pinId: pin.id,
+      previousData: pinData,
+      description: `Pin #${pin.pin_number} deleted`,
+    });
+    
+    // Clear any existing timeout
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+    }
+    
+    // Show undo toast
+    toast.info(`Pin #${pin.pin_number} deleted`, {
+      duration: 5000,
+      action: {
+        label: "Undo",
+        onClick: () => handleUndoDelete(pinData),
+      },
+    });
+    
+    // Actually delete after 5 seconds if not undone
+    undoTimeoutRef.current = setTimeout(async () => {
+      try {
+        await deletePin(pin.id);
+        clearPendingUndo();
+      } catch (error) {
+        console.error("Error deleting pin:", error);
+        // Restore the pin if delete failed
+        setPins(prevPins => [...prevPins, pinData].sort((a, b) => a.pin_number - b.pin_number));
+        toast.error("Failed to delete pin");
+      }
+    }, 5000);
+  };
+
+  const handleUndoDelete = (pinData: any) => {
+    // Cancel the pending delete
+    if (undoTimeoutRef.current) {
+      clearTimeout(undoTimeoutRef.current);
+      undoTimeoutRef.current = null;
+    }
+    
+    // Restore pin to the list
+    setPins(prevPins => [...prevPins, pinData].sort((a, b) => a.pin_number - b.pin_number));
+    clearPendingUndo();
+    toast.success(`Pin #${pinData.pin_number} restored`);
   };
 
   const handleSaveRectification = async (pinId: string, photoUrl: string, notes: string) => {
@@ -504,7 +578,24 @@ export const InteractiveFloorPlan = ({
             </Badge>
           )}
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {/* Quick Add Mode Toggle */}
+          <Button
+            variant={quickAddMode ? "default" : "outline"}
+            size="sm"
+            onClick={() => {
+              setQuickAddMode(!quickAddMode);
+              toast.info(quickAddMode 
+                ? "Quick add mode disabled" 
+                : "Quick add mode enabled - click to add pins rapidly"
+              );
+            }}
+            className="gap-2"
+          >
+            <Zap className={`w-4 h-4 ${quickAddMode ? 'animate-pulse' : ''}`} />
+            <span className="hidden sm:inline">Quick Add</span>
+          </Button>
+          
           <label className="flex-1 sm:flex-initial">
             <Button variant="outline" disabled={isUploading} size="sm" className="w-full sm:w-auto" asChild>
               <span>
@@ -573,9 +664,11 @@ export const InteractiveFloorPlan = ({
             }}
             addMode={null}
             onAddModeChange={() => {}}
+            selectedPinId={selectedPin?.id}
+            quickAddMode={quickAddMode}
           />
         </div>
-        <div>
+        <div className="hidden lg:block">
           <FloorPlanPinsList
             pins={pins}
             onPinClick={(pin) => {
@@ -583,6 +676,21 @@ export const InteractiveFloorPlan = ({
               setIsModalOpen(true);
             }}
             onQuickStatusChange={handleQuickStatusChange}
+            onQuickDelete={handleQuickDelete}
+            selectedPinId={selectedPin?.id}
+          />
+        </div>
+        {/* Mobile pins list is rendered inside FloorPlanPinsList as a bottom sheet */}
+        <div className="lg:hidden">
+          <FloorPlanPinsList
+            pins={pins}
+            onPinClick={(pin) => {
+              setSelectedPin(pin);
+              setIsModalOpen(true);
+            }}
+            onQuickStatusChange={handleQuickStatusChange}
+            onQuickDelete={handleQuickDelete}
+            selectedPinId={selectedPin?.id}
           />
         </div>
       </div>
