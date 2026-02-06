@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   ArrowLeft,
   Download, 
@@ -124,6 +126,9 @@ const PublicSubsectionReview = () => {
   const [error, setError] = useState<string | null>(null);
   const [companySettings, setCompanySettings] = useState<{ company_name: string; company_logo_url?: string } | null>(null);
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
+  const [selectedInspection, setSelectedInspection] = useState<InspectionData | null>(null);
+  const [inspectionDetails, setInspectionDetails] = useState<any | null>(null);
+  const [loadingInspection, setLoadingInspection] = useState(false);
 
   useEffect(() => {
     if (token && subsectionId) {
@@ -394,6 +399,42 @@ const PublicSubsectionReview = () => {
   };
   
   const effectiveComplianceStatus = getEffectiveComplianceStatus();
+
+  // Fetch full inspection details when an inspection is selected
+  const fetchInspectionDetails = async (inspectionId: string) => {
+    setLoadingInspection(true);
+    try {
+      const { data, error } = await supabase
+        .from('inspections')
+        .select(`
+          *,
+          inspection_templates (name, sections),
+          inspection_signatures (signer_name, signer_type, signed_at)
+        `)
+        .eq('id', inspectionId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching inspection:', error);
+        return;
+      }
+      
+      setInspectionDetails(data);
+    } catch (err) {
+      console.error('Error fetching inspection details:', err);
+    } finally {
+      setLoadingInspection(false);
+    }
+  };
+
+  // Trigger fetch when inspection is selected
+  useEffect(() => {
+    if (selectedInspection) {
+      fetchInspectionDetails(selectedInspection.id);
+    } else {
+      setInspectionDetails(null);
+    }
+  }, [selectedInspection]);
 
   if (loading) {
     return (
@@ -907,6 +948,15 @@ const PublicSubsectionReview = () => {
                           >
                             {insp.status || 'Unknown'}
                           </Badge>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setSelectedInspection(insp)}
+                            className="gap-1"
+                          >
+                            <Eye className="h-4 w-4" />
+                            View
+                          </Button>
                         </div>
                       </div>
                     ))}
@@ -1001,6 +1051,145 @@ const PublicSubsectionReview = () => {
           fileName={previewDocument.name}
         />
       )}
+
+      {/* Inspection Detail Dialog */}
+      <Dialog open={!!selectedInspection} onOpenChange={(open) => !open && setSelectedInspection(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              {selectedInspection?.title || 'Inspection Details'}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedInspection?.template_name && (
+                <span>Template: {selectedInspection.template_name}</span>
+              )}
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingInspection ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : inspectionDetails ? (
+            <ScrollArea className="max-h-[60vh]">
+              <div className="space-y-6 pr-4">
+                {/* Inspection Summary */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm text-muted-foreground">Status</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className={`w-2 h-2 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
+                      <span className="font-medium">{inspectionDetails.status}</span>
+                    </div>
+                  </div>
+                  {inspectionDetails.inspection_date && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Inspection Date</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{new Date(inspectionDetails.inspection_date).toLocaleDateString()}</span>
+                      </div>
+                    </div>
+                  )}
+                  {inspectionDetails.inspector_name && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Inspector</span>
+                      <p className="font-medium mt-1">{inspectionDetails.inspector_name}</p>
+                    </div>
+                  )}
+                  {inspectionDetails.quality_rating && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Quality Rating</span>
+                      <p className="font-medium mt-1">{inspectionDetails.quality_rating}/5</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                {inspectionDetails.description && (
+                  <div>
+                    <h4 className="font-medium mb-2">Description</h4>
+                    <p className="text-sm text-muted-foreground">{inspectionDetails.description}</p>
+                  </div>
+                )}
+
+                {/* JSON Data Sections */}
+                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (
+                  <div>
+                    <h4 className="font-medium mb-3">Inspection Results</h4>
+                    <div className="space-y-3">
+                      {inspectionDetails.json_data.sections?.map((section: any, idx: number) => (
+                        <Accordion key={idx} type="single" collapsible className="border rounded-lg">
+                          <AccordionItem value={`section-${idx}`} className="border-0">
+                            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium">{section.name || `Section ${idx + 1}`}</span>
+                                {section.items && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {section.items.length} items
+                                  </Badge>
+                                )}
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-4">
+                              {section.items?.length > 0 ? (
+                                <div className="space-y-2">
+                                  {section.items.map((item: any, itemIdx: number) => (
+                                    <div key={itemIdx} className="flex items-center justify-between p-2 rounded bg-muted/30">
+                                      <span className="text-sm">{item.name || item.label || `Item ${itemIdx + 1}`}</span>
+                                      <Badge 
+                                        variant={item.status?.toLowerCase() === 'pass' ? 'default' : 'secondary'}
+                                        className={item.status?.toLowerCase() === 'pass' ? 'bg-green-500 text-white' : 
+                                                  item.status?.toLowerCase() === 'fail' ? 'bg-destructive text-white' : ''}
+                                      >
+                                        {item.status || 'Pending'}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No items in this section</p>
+                              )}
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Signatures */}
+                {inspectionDetails.inspection_signatures?.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-3">Signatures</h4>
+                    <div className="space-y-2">
+                      {inspectionDetails.inspection_signatures.map((sig: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
+                          <div>
+                            <p className="font-medium">{sig.signer_name}</p>
+                            <p className="text-sm text-muted-foreground capitalize">{sig.signer_type}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-green-600">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-sm">
+                              {sig.signed_at ? new Date(sig.signed_at).toLocaleDateString() : 'Signed'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Unable to load inspection details</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
