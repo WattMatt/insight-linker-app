@@ -1,223 +1,73 @@
 
-# Enhanced Offline-First Inspection System
+# View-Only Inspection Details for Client Portal
 
-## Overview
-
-This plan outlines enhancements to enable users with poor cell reception to capture images offline, navigate inspections with all applicable tabs, and automatically sync data when connectivity improves.
+## Summary
+Add a view-only inspection details capability to the Client Portal's subsection page, matching the existing functionality in the Public Review portal. This allows clients to view full inspection details (summary, section results, signatures) without any edit capabilities.
 
 ## Current State Analysis
 
-### What Already Exists
+| Feature | Public Review (`PublicSubsectionReview.tsx`) | Client Portal (`ClientPortalSubsectionDetail.tsx`) |
+|---------|----------------------------------------------|---------------------------------------------------|
+| Inspection List | Shows list with View button | Shows list without View button |
+| Inspection Dialog | Full read-only dialog with sections | Not implemented |
+| Section Results | Accordion with pass/fail items | N/A |
+| Signatures | Displays all signers | N/A |
 
-| Component | Status | Description |
-|-----------|--------|-------------|
-| IndexedDB Storage | Implemented | `offlineDB.ts` stores inspections, images, subsections, documents, floor plans, pins |
-| Offline Sync Hook | Implemented | `useOfflineSync.ts` with queue processing, 3 retries, auto-sync |
-| PWA Service Worker | Implemented | Network-first API caching (24h), cache-first images (7d) |
-| Offline Indicator | Implemented | Shows connection status and pending queue |
-| Image Upload Queue | Implemented | Stores blobs in IndexedDB, queues for sync |
-| Floor Plan Annotations | Implemented | Offline pins, markups, measurements |
+## Implementation Approach
 
-### Current Gaps
+The existing inspection view dialog in `PublicSubsectionReview.tsx` provides a proven pattern. We will replicate this in the Client Portal with matching read-only behaviour.
 
-1. **Inspection Detail Page** - Not designed for offline navigation; relies on live Supabase queries
-2. **Inspection Data Caching** - No proactive caching of inspection data and templates
-3. **Offline Image Gallery** - Images taken offline not displayed in inspection tabs
-4. **Tab Navigation** - Cannot switch between inspection sections offline
-5. **Template Caching** - Inspection templates not cached for offline use
+## Technical Implementation
 
-## Architecture
+### Step 1: Add State and Fetch Logic to ClientPortalSubsectionDetail.tsx
 
-```text
-+-----------------------------------------------------------------------------------+
-|                     ENHANCED OFFLINE INSPECTION SYSTEM                            |
-+-----------------------------------------------------------------------------------+
-|                                                                                   |
-|  +---------------------------+     +----------------------------------------+     |
-|  |   Inspection Cache        |     |       Offline Inspection Hook          |     |
-|  |                           |     |                                        |     |
-|  |  - Inspection metadata    |<--->|  - cacheInspection()                   |     |
-|  |  - Template sections      |     |  - getCachedInspection()               |     |
-|  |  - Section data (JSON)    |     |  - saveInspectionSection()             |     |
-|  |  - Offline images         |     |  - addOfflineImage()                   |     |
-|  +---------------------------+     +----------------------------------------+     |
-|              |                                    |                               |
-|              v                                    v                               |
-|  +---------------------------+     +----------------------------------------+     |
-|  |   IndexedDB Extended      |     |       InspectionDetail Offline         |     |
-|  |                           |     |                                        |     |
-|  |  NEW: inspections_cache   |     |  - Load from cache when offline        |     |
-|  |  NEW: inspection_images   |     |  - Display offline images in gallery   |     |
-|  |  NEW: templates_cache     |     |  - Enable all tab navigation           |     |
-|  +---------------------------+     |  - Queue changes for sync              |     |
-|                                    +----------------------------------------+     |
-|                                                                                   |
-+-----------------------------------------------------------------------------------+
-```
+**New state variables:**
+- `selectedInspection` - tracks which inspection is selected for viewing
+- `inspectionDetails` - holds the full inspection data fetched from database
+- `loadingInspection` - loading state for the fetch operation
 
-## Implementation Details
+**New function:**
+- `fetchInspectionDetails(inspectionId)` - fetches complete inspection data including:
+  - All inspection fields
+  - Template sections (`inspection_templates.sections`)
+  - Signatures (`inspection_signatures`)
 
-### 1. Extended IndexedDB Schema
+### Step 2: Add View Button to Inspection List
 
-Add new object stores to `offlineDB.ts`:
+Update the Inspections Tab to include a "View" button for each inspection card that triggers the dialog.
 
-| Store | Purpose | Indexes |
-|-------|---------|---------|
-| `inspection_cache` | Full inspection data with template | `id`, `synced`, `site_id` |
-| `inspection_images` | Images captured during inspection | `inspection_id`, `section_key`, `synced` |
-| `template_cache` | Inspection templates | `id` |
+### Step 3: Create the Inspection Details Dialog
 
-### 2. New Hook: useOfflineInspectionDetail
+Add a Dialog component that displays:
+1. **Header**: Inspection title and template name
+2. **Summary Grid**: Status, date, inspector, quality rating
+3. **Description**: If available
+4. **Section Results**: Accordion showing each section with items and pass/fail badges
+5. **Signatures**: List of signers with signed dates
 
-```text
-src/hooks/useOfflineInspectionDetail.ts
+All content is strictly read-only with no edit, save, or delete actions.
 
-Features:
-- cacheInspection(inspectionId) - Downloads and stores full inspection data
-- getCachedInspection(id) - Returns cached inspection with template
-- saveInspectionSection(id, sectionKey, data) - Saves section changes offline
-- addOfflineImage(inspectionId, sectionKey, blob) - Stores image for gallery
-- getOfflineImages(inspectionId, sectionKey) - Retrieves cached images as blob URLs
-- isInspectionCached(id) - Checks if inspection is available offline
-```
+### Step 4: Add Required Imports
 
-### 3. Enhanced Offline Sync Mutations
+Add missing imports:
+- `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription` from ui/dialog
+- `ScrollArea` from ui/scroll-area
+- `Loader2` icon from lucide-react
 
-Add to `useOfflineSync.ts`:
+## Files to Modify
 
-| Mutation Type | Description |
-|---------------|-------------|
-| `UPDATE_INSPECTION_SECTION` | Sync section data changes |
-| `UPLOAD_INSPECTION_IMAGES` | Batch upload offline images |
-| `SAVE_INSPECTION_JSON` | Sync full inspection JSON |
+| File | Changes |
+|------|---------|
+| `src/pages/ClientPortalSubsectionDetail.tsx` | Add state, fetch function, View button, and Dialog component |
 
-### 4. InspectionDetail Offline Mode
+## UI/UX Details
 
-Modify `InspectionDetail.tsx`:
+- **View Button**: Outlined button with Eye icon, positioned on the right side of each inspection card
+- **Dialog**: Max width 3xl, max height 85vh with scrollable content
+- **Consistent Styling**: Uses existing color scheme for status badges (green for completed/pass, amber for in-progress, red for fail)
 
-**On Load:**
-1. Check if online - if yes, fetch from Supabase and cache
-2. If offline, load from IndexedDB cache
-3. Display "Offline Mode" badge when cached
+## Security Considerations
 
-**Image Capture:**
-1. Compress image (800px, 70% JPEG)
-2. Store blob in IndexedDB with section reference
-3. Display in gallery using blob URL
-4. Queue for upload when online
-
-**Tab Navigation:**
-- All tabs work from cached data
-- Section changes saved to IndexedDB
-- Visual indicator for unsaved changes
-
-### 5. Proactive Caching Strategy
-
-When user opens an inspection while online:
-1. Cache the full inspection data
-2. Cache the associated template
-3. Pre-cache up to 20 recent images
-4. Show "Available Offline" indicator
-
-### 6. Offline Image Gallery
-
-New component: `OfflineImageGallery.tsx`
-
-- Displays both online URLs and offline blob URLs
-- Shows sync status for each image
-- Supports adding new images offline
-- Handles mixed online/offline image sources
-
-### 7. Sync Queue Enhancements
-
-Priority order when syncing:
-1. Image uploads (largest payloads first for stable connection)
-2. Inspection section updates
-3. Other queued mutations
-
-Background upload with progress indicator.
-
-## Files to Create/Modify
-
-| File | Action | Description |
-|------|--------|-------------|
-| `src/lib/offlineDB.ts` | Modify | Add `inspection_cache`, `inspection_images`, `template_cache` stores |
-| `src/hooks/useOfflineInspectionDetail.ts` | Create | Core hook for offline inspection management |
-| `src/hooks/useOfflineSync.ts` | Modify | Add new mutation types |
-| `src/pages/InspectionDetail.tsx` | Modify | Integrate offline mode for all tabs |
-| `src/components/OfflineImageGallery.tsx` | Create | Display mixed online/offline images |
-| `src/components/InspectionOfflineBanner.tsx` | Create | Shows offline status and cache info |
-
-## User Experience Flow
-
-### Scenario 1: Poor Reception During Inspection
-
-1. **User opens inspection** while online - data is cached
-2. **Connection drops** - "Offline Mode" banner appears
-3. **User navigates tabs** - all sections work from cache
-4. **User takes photos** - stored locally, shown in gallery
-5. **User makes notes** - saved to IndexedDB, queued for sync
-6. **Connection returns** - automatic background sync
-7. **Sync completes** - toast notification, data updated
-
-### Scenario 2: Starting Offline
-
-1. **User sees inspection list** - shows cached inspections with "Offline" badge
-2. **Opens cached inspection** - full functionality available
-3. **Uncached inspections** - disabled with "Requires connection" message
-
-## Visual Indicators
-
-```text
-+--------------------------------------------------------------+
-|  [Offline Mode]  Last synced: 14:35              [3 pending] |
-+--------------------------------------------------------------+
-|                                                              |
-|  General | Electrical | Safety | Images                      |
-|  --------                                                    |
-|                                                              |
-|  +------------------+  +------------------+                  |
-|  | [img] [sync]     |  | [img] [offline]  |                  |
-|  +------------------+  +------------------+                  |
-|                                                              |
-|  [+ Add Photo]                                               |
-|                                                              |
-+--------------------------------------------------------------+
-```
-
-## Storage Limits and Cleanup
-
-| Data Type | Max Size | Cleanup Strategy |
-|-----------|----------|------------------|
-| Inspection cache | 50 inspections | LRU eviction |
-| Offline images | 100MB total | Compress + sync then delete |
-| Templates | 20 templates | LRU eviction |
-
-## Technical Considerations
-
-### Image Compression
-- Max width: 800px
-- JPEG quality: 70%
-- Average size: ~50-100KB per image
-- Allows ~1000 images in 100MB quota
-
-### IndexedDB Version Migration
-- Increment DB_VERSION to 2
-- Handle upgrade from version 1
-- Preserve existing offline data
-
-### Conflict Resolution
-- Last-write-wins for section data
-- Images are additive (no conflicts)
-- Toast notification for sync issues
-
-## Testing Checklist
-
-- [ ] Cache inspection when online
-- [ ] Navigate all tabs when offline
-- [ ] Capture and display images offline
-- [ ] Edit section data offline
-- [ ] Automatic sync when connection returns
-- [ ] Handle partial sync failures
-- [ ] LRU cache eviction working
-- [ ] Storage quota warning
+- Read-only access enforced - no mutation queries
+- Access validation already handled by existing `ClientProtectedRoute` and client ownership check in the subsection query
+- No sensitive data exposure - only showing inspection results that belong to the client's subsections
