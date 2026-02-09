@@ -50,6 +50,7 @@ const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
 const PDFTemplateTestDashboard = lazy(() => import("./pages/PDFTemplateTestDashboard"));
+const OfflineSyncTest = lazy(() => import("./pages/OfflineSyncTest"));
 
 const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
 const DevelopmentSkills = lazy(() => import("./pages/DevelopmentSkills"));
@@ -450,6 +451,18 @@ const App = () => (
                   <InspectionDetail />
                 </ContractorPortalLayout>
               </ContractorProtectedRoute>
+            }
+          />
+          
+          {/* Offline Sync Testing Dashboard */}
+          <Route
+            path="/offline-sync-test"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout>
+                  <OfflineSyncTest />
+                </DashboardLayout>
+              </ProtectedRoute>
             }
           />
           

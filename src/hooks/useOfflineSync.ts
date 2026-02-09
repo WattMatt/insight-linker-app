@@ -313,9 +313,34 @@ export function useOfflineSync() {
       case 'UPLOAD_INSPECTION_IMAGE': {
         const { imageId, inspectionId, sectionKey, itemKey, blob, fileName } = mutation.data;
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+        const { generateInspectionImagePath, sanitizeForFileName } = await import('@/lib/imageNaming');
+
+        // Get cached inspection for context (client/site/subsection names)
+        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
+        
+        // Generate descriptive file path using the naming utility
+        const fileExtension = fileName.split('.').pop() || 'jpg';
+        let filePath: string;
+        
+        if (cachedInspection?.site_data) {
+          // Use descriptive naming with client/site/subsection context
+          filePath = generateInspectionImagePath({
+            clientName: cachedInspection.site_data.clientName,
+            siteName: cachedInspection.site_data.siteName,
+            subsectionName: cachedInspection.subsection_data?.name,
+            inspectionId,
+            sectionKey,
+            itemKey: itemKey || 'general',
+            fileExtension
+          });
+        } else {
+          // Fallback to simple path if no context available
+          filePath = `${inspectionId}/${sectionKey}/${itemKey || 'general'}/${Date.now()}.${fileExtension}`;
+        }
+
+        console.log('[OfflineSync] Uploading image with path:', filePath);
 
         // Upload to storage
-        const filePath = `${inspectionId}/${sectionKey}/${Date.now()}_${fileName}`;
         const { error: uploadError } = await supabase.storage
           .from('inspection-photos')
           .upload(filePath, blob);
@@ -327,7 +352,6 @@ export function useOfflineSync() {
           .getPublicUrl(filePath);
 
         // Update the inspection's json_data with the new image URL
-        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
         if (cachedInspection) {
           const updatedJsonData = { ...cachedInspection.json_data };
           if (!updatedJsonData[sectionKey]) {
@@ -354,15 +378,38 @@ export function useOfflineSync() {
 
         // Mark image as synced
         await offlineInspectionDB.markImageSynced(imageId, publicUrl);
+        console.log('[OfflineSync] Image synced successfully:', publicUrl);
         break;
       }
 
       case 'BATCH_UPLOAD_INSPECTION_IMAGES': {
         const { inspectionId, images } = mutation.data;
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+        const { generateInspectionImagePath } = await import('@/lib/imageNaming');
+        
+        // Get cached inspection for naming context
+        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
 
-        for (const image of images) {
-          const filePath = `${inspectionId}/${image.sectionKey}/${Date.now()}_${image.fileName}`;
+        for (let index = 0; index < images.length; index++) {
+          const image = images[index];
+          const fileExtension = image.fileName.split('.').pop() || 'jpg';
+          
+          let filePath: string;
+          if (cachedInspection?.site_data) {
+            filePath = generateInspectionImagePath({
+              clientName: cachedInspection.site_data.clientName,
+              siteName: cachedInspection.site_data.siteName,
+              subsectionName: cachedInspection.subsection_data?.name,
+              inspectionId,
+              sectionKey: image.sectionKey,
+              itemKey: image.itemKey || 'general',
+              index,
+              fileExtension
+            });
+          } else {
+            filePath = `${inspectionId}/${image.sectionKey}/${image.itemKey || 'general'}/${Date.now()}_${index}.${fileExtension}`;
+          }
+          
           const { error: uploadError } = await supabase.storage
             .from('inspection-photos')
             .upload(filePath, image.blob);
@@ -372,6 +419,7 @@ export function useOfflineSync() {
               .from('inspection-photos')
               .getPublicUrl(filePath);
             await offlineInspectionDB.markImageSynced(image.id, publicUrl);
+            console.log('[OfflineSync] Batch image synced:', filePath);
           }
         }
         break;
