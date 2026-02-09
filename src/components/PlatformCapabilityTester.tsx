@@ -221,12 +221,18 @@ export function PlatformCapabilityTester() {
         
         // Platform-specific quota warnings
         const platform = platformInfo?.platform || 'unknown';
+        const isPWA = platformInfo?.isPWA || false;
         let status: CapabilityTest['status'] = 'passed';
         let details = `Available: ${quotaMB}MB, Used: ${usageMB}MB (${percentUsed}%)`;
         
-        if (platform === 'ios' && quotaMB < 100) {
-          status = 'warning';
-          details += ' ⚠️ iOS Safari has strict storage limits (~50MB typical). Data may be evicted.';
+        // iOS has different behavior: PWA mode typically grants much larger quota
+        if (platform === 'ios') {
+          if (quotaMB < 100 && !isPWA) {
+            status = 'warning';
+            details += ' ⚠️ iOS Safari browser mode has ~50MB limit. Add to Home Screen for larger quota.';
+          } else if (quotaMB >= 1000) {
+            details += ' ✅ PWA storage quota is healthy.';
+          }
         } else if (quotaMB < 50) {
           status = 'warning';
           details += ' ⚠️ Limited storage available.';
@@ -598,17 +604,36 @@ export function PlatformCapabilityTester() {
     if (!platformInfo) return [];
     
     const recommendations: string[] = [];
+    const quotaMB = storageResult ? Math.round(storageResult.estimatedQuota / (1024 * 1024)) : 0;
+    const isLargeQuota = quotaMB > 1000; // More than 1GB
     
     if (platformInfo.platform === 'ios') {
-      recommendations.push('⚠️ iOS Safari has ~50MB storage limit. Sync frequently to avoid data loss.');
-      recommendations.push('⚠️ Background Sync is not supported. App must be open to sync.');
-      recommendations.push('💡 Consider adding the app to Home Screen for better PWA experience.');
-      if (!platformInfo.isPWA) {
-        recommendations.push('📱 Not running as PWA. Some features may be limited.');
+      // Check if running as PWA with good storage
+      if (platformInfo.isPWA) {
+        recommendations.push('✅ Running as installed PWA - optimal iOS experience.');
+        if (isLargeQuota) {
+          recommendations.push(`✅ Large storage quota available (${Math.round(quotaMB / 1024)}GB) - PWA storage working well.`);
+        } else {
+          recommendations.push('⚠️ Storage quota is limited. Sync frequently to avoid data loss.');
+        }
+      } else {
+        recommendations.push('⚠️ iOS Safari has ~50MB storage limit in browser mode.');
+        recommendations.push('📱 Add to Home Screen for much larger storage quota and better experience.');
+      }
+      
+      recommendations.push('⚠️ Background Sync is not supported on iOS. App must be open to sync.');
+      
+      if (storageResult?.persistentStorageGranted === false || storageResult?.persistentStorageGranted === null) {
+        recommendations.push('⚠️ Persistent storage not confirmed. Sync frequently to prevent data loss.');
       }
     }
     
     if (platformInfo.platform === 'android') {
+      if (platformInfo.isPWA) {
+        recommendations.push('✅ Running as installed PWA with full Android integration.');
+      } else {
+        recommendations.push('💡 Add to Home Screen for app-like experience.');
+      }
       recommendations.push('✅ Android Chrome has excellent offline support with large storage quotas.');
       recommendations.push('✅ Background Sync should work for automatic data upload.');
     }
