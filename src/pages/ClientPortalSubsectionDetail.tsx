@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,7 +7,7 @@ import {
   FileText, Download, Info, Eye, ArrowLeft, 
   CheckCircle2, AlertCircle, Calendar, Hash, User, Zap,
   Building2, MapPin, ChevronRight, Layers, FileBarChart,
-  ShieldCheck, Clock
+  ShieldCheck, Clock, Loader2, ClipboardList
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -16,6 +16,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
 import { format } from "date-fns";
@@ -28,6 +30,9 @@ const ClientPortalSubsectionDetail = () => {
   const { data: clientInfo } = useClientInfo(previewClientId || undefined);
   const [activeTab, setActiveTab] = useState("overview");
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
+  const [selectedInspection, setSelectedInspection] = useState<any | null>(null);
+  const [inspectionDetails, setInspectionDetails] = useState<any | null>(null);
+  const [loadingInspection, setLoadingInspection] = useState(false);
 
   const { data: subsection, isLoading: subsectionLoading } = useQuery({
     queryKey: ["client-subsection", subsectionId, clientInfo?.client_id],
@@ -93,6 +98,42 @@ const ClientPortalSubsectionDetail = () => {
     },
   });
 
+  // Fetch full inspection details when an inspection is selected
+  const fetchInspectionDetails = async (inspectionId: string) => {
+    setLoadingInspection(true);
+    try {
+      const { data, error } = await supabase
+        .from('inspections')
+        .select(`
+          *,
+          inspection_templates (name, sections),
+          inspection_signatures (signer_name, signer_type, signed_at)
+        `)
+        .eq('id', inspectionId)
+        .single();
+      
+      if (error) {
+        console.error('Error fetching inspection:', error);
+        return;
+      }
+      
+      setInspectionDetails(data);
+    } catch (err) {
+      console.error('Error fetching inspection details:', err);
+    } finally {
+      setLoadingInspection(false);
+    }
+  };
+
+  // Trigger fetch when inspection is selected
+  useEffect(() => {
+    if (selectedInspection) {
+      fetchInspectionDetails(selectedInspection.id);
+    } else {
+      setInspectionDetails(null);
+    }
+  }, [selectedInspection]);
+
   const handleDownload = async (url: string, fileName: string) => {
     try {
       await downloadFile(url, fileName);
@@ -104,6 +145,15 @@ const ClientPortalSubsectionDetail = () => {
   const handleBackToSite = () => {
     if (subsection?.site_id) {
       navigate(`/client-portal/sites/${subsection.site_id}${previewClientId ? `?preview=${previewClientId}` : ''}`);
+    }
+  };
+
+  const getInspectionStatusColor = (status: string) => {
+    switch (status?.toLowerCase()) {
+      case 'completed': return 'bg-emerald-500';
+      case 'in_progress': return 'bg-amber-500';
+      case 'scheduled': return 'bg-blue-500';
+      default: return 'bg-muted';
     }
   };
 
@@ -540,12 +590,23 @@ const ClientPortalSubsectionDetail = () => {
                           </div>
                         </div>
                       </div>
-                      <Badge 
-                        variant={inspection.status === "completed" ? "default" : "secondary"}
-                        className={inspection.status === "completed" ? "bg-emerald-500" : ""}
-                      >
-                        {inspection.status}
-                      </Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge 
+                          variant={inspection.status === "completed" ? "default" : "secondary"}
+                          className={inspection.status === "completed" ? "bg-emerald-500" : ""}
+                        >
+                          {inspection.status}
+                        </Badge>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setSelectedInspection(inspection)}
+                          className="gap-1"
+                        >
+                          <Eye className="h-4 w-4" />
+                          View
+                        </Button>
+                      </div>
                     </div>
                   </CardContent>
                 </Card>
@@ -569,6 +630,143 @@ const ClientPortalSubsectionDetail = () => {
         fileUrl={previewDocument?.url || ''}
         fileName={previewDocument?.name || ''}
       />
+
+      {/* Inspection Detail Dialog */}
+      <Dialog open={!!selectedInspection} onOpenChange={(open) => !open && setSelectedInspection(null)}>
+        <DialogContent className="max-w-3xl max-h-[85vh]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <ClipboardList className="h-5 w-5 text-primary" />
+              {selectedInspection?.title || 'Inspection Details'}
+            </DialogTitle>
+            <DialogDescription>
+              View-only inspection details
+            </DialogDescription>
+          </DialogHeader>
+          
+          {loadingInspection ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            </div>
+          ) : inspectionDetails ? (
+            <ScrollArea className="max-h-[60vh]">
+              <div className="space-y-6 pr-4">
+                {/* Inspection Summary */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="p-3 rounded-lg bg-muted/50">
+                    <span className="text-sm text-muted-foreground">Status</span>
+                    <div className="flex items-center gap-2 mt-1">
+                      <div className={`w-2 h-2 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
+                      <span className="font-medium capitalize">{inspectionDetails.status}</span>
+                    </div>
+                  </div>
+                  {inspectionDetails.inspection_date && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Inspection Date</span>
+                      <div className="flex items-center gap-2 mt-1">
+                        <Calendar className="h-4 w-4 text-muted-foreground" />
+                        <span className="font-medium">{format(new Date(inspectionDetails.inspection_date), "dd MMM yyyy")}</span>
+                      </div>
+                    </div>
+                  )}
+                  {inspectionDetails.inspector_name && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Inspector</span>
+                      <p className="font-medium mt-1">{inspectionDetails.inspector_name}</p>
+                    </div>
+                  )}
+                  {inspectionDetails.quality_rating && (
+                    <div className="p-3 rounded-lg bg-muted/50">
+                      <span className="text-sm text-muted-foreground">Quality Rating</span>
+                      <p className="font-medium mt-1">{inspectionDetails.quality_rating}/5</p>
+                    </div>
+                  )}
+                </div>
+
+                {/* Description */}
+                {inspectionDetails.description && (
+                  <div>
+                    <h4 className="font-medium mb-2">Description</h4>
+                    <p className="text-sm text-muted-foreground">{inspectionDetails.description}</p>
+                  </div>
+                )}
+
+                {/* JSON Data Sections */}
+                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (
+                  <div>
+                    <h4 className="font-medium mb-3">Inspection Results</h4>
+                    <div className="space-y-3">
+                      {inspectionDetails.json_data.sections?.map((section: any, idx: number) => (
+                        <Accordion key={idx} type="single" collapsible className="border rounded-lg">
+                          <AccordionItem value={`section-${idx}`} className="border-0">
+                            <AccordionTrigger className="px-4 py-3 hover:no-underline">
+                              <div className="flex items-center gap-3">
+                                <span className="font-medium">{section.name || `Section ${idx + 1}`}</span>
+                                {section.items && (
+                                  <Badge variant="secondary" className="text-xs">
+                                    {section.items.length} items
+                                  </Badge>
+                                )}
+                              </div>
+                            </AccordionTrigger>
+                            <AccordionContent className="px-4 pb-4">
+                              {section.items?.length > 0 ? (
+                                <div className="space-y-2">
+                                  {section.items.map((item: any, itemIdx: number) => (
+                                    <div key={itemIdx} className="flex items-center justify-between p-2 rounded bg-muted/30">
+                                      <span className="text-sm">{item.name || item.label || `Item ${itemIdx + 1}`}</span>
+                                      <Badge 
+                                        variant={item.status?.toLowerCase() === 'pass' ? 'default' : 'secondary'}
+                                        className={item.status?.toLowerCase() === 'pass' ? 'bg-emerald-500 text-white' : 
+                                                  item.status?.toLowerCase() === 'fail' ? 'bg-destructive text-white' : ''}
+                                      >
+                                        {item.status || 'Pending'}
+                                      </Badge>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <p className="text-sm text-muted-foreground">No items in this section</p>
+                              )}
+                            </AccordionContent>
+                          </AccordionItem>
+                        </Accordion>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Signatures */}
+                {inspectionDetails.inspection_signatures?.length > 0 && (
+                  <div>
+                    <h4 className="font-medium mb-3">Signatures</h4>
+                    <div className="space-y-2">
+                      {inspectionDetails.inspection_signatures.map((sig: any, idx: number) => (
+                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
+                          <div>
+                            <p className="font-medium">{sig.signer_name}</p>
+                            <p className="text-sm text-muted-foreground capitalize">{sig.signer_type}</p>
+                          </div>
+                          <div className="flex items-center gap-2 text-emerald-600">
+                            <CheckCircle2 className="h-4 w-4" />
+                            <span className="text-sm">
+                              {sig.signed_at ? format(new Date(sig.signed_at), "dd MMM yyyy") : 'Signed'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          ) : (
+            <div className="text-center py-8 text-muted-foreground">
+              <p>Unable to load inspection details</p>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
