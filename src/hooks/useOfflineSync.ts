@@ -291,6 +291,92 @@ export function useOfflineSync() {
         break;
       }
 
+      // ============ Inspection Offline Mutations ============
+
+      case 'SAVE_INSPECTION_JSON': {
+        const { inspectionId, jsonData } = mutation.data;
+        const { error } = await supabase
+          .from('inspections')
+          .update({
+            json_data: jsonData,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', inspectionId);
+        if (error) throw error;
+
+        // Mark as synced in IndexedDB
+        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+        await offlineInspectionDB.markInspectionSynced(inspectionId);
+        break;
+      }
+
+      case 'UPLOAD_INSPECTION_IMAGE': {
+        const { imageId, inspectionId, sectionKey, itemKey, blob, fileName } = mutation.data;
+        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+
+        // Upload to storage
+        const filePath = `${inspectionId}/${sectionKey}/${Date.now()}_${fileName}`;
+        const { error: uploadError } = await supabase.storage
+          .from('inspection-photos')
+          .upload(filePath, blob);
+        if (uploadError) throw uploadError;
+
+        // Get public URL
+        const { data: { publicUrl } } = supabase.storage
+          .from('inspection-photos')
+          .getPublicUrl(filePath);
+
+        // Update the inspection's json_data with the new image URL
+        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
+        if (cachedInspection) {
+          const updatedJsonData = { ...cachedInspection.json_data };
+          if (!updatedJsonData[sectionKey]) {
+            updatedJsonData[sectionKey] = {};
+          }
+          const targetKey = itemKey || 'images';
+          if (!updatedJsonData[sectionKey][targetKey]) {
+            updatedJsonData[sectionKey][targetKey] = { photos: [] };
+          }
+          if (!updatedJsonData[sectionKey][targetKey].photos) {
+            updatedJsonData[sectionKey][targetKey].photos = [];
+          }
+          updatedJsonData[sectionKey][targetKey].photos.push(publicUrl);
+
+          // Update inspection in Supabase
+          await supabase
+            .from('inspections')
+            .update({
+              json_data: updatedJsonData,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', inspectionId);
+        }
+
+        // Mark image as synced
+        await offlineInspectionDB.markImageSynced(imageId, publicUrl);
+        break;
+      }
+
+      case 'BATCH_UPLOAD_INSPECTION_IMAGES': {
+        const { inspectionId, images } = mutation.data;
+        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+
+        for (const image of images) {
+          const filePath = `${inspectionId}/${image.sectionKey}/${Date.now()}_${image.fileName}`;
+          const { error: uploadError } = await supabase.storage
+            .from('inspection-photos')
+            .upload(filePath, image.blob);
+          
+          if (!uploadError) {
+            const { data: { publicUrl } } = supabase.storage
+              .from('inspection-photos')
+              .getPublicUrl(filePath);
+            await offlineInspectionDB.markImageSynced(image.id, publicUrl);
+          }
+        }
+        break;
+      }
+
       default:
         console.warn('Unknown mutation type:', mutation.type);
     }
