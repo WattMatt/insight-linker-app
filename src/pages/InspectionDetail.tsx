@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -29,6 +29,9 @@ import {
   renameInspectionImages
 } from "@/lib/imageNaming";
 import { InspectionSignatures } from "@/components/InspectionSignatures";
+import { InspectionOfflineBanner } from "@/components/InspectionOfflineBanner";
+import { useOfflineInspectionDetail } from "@/hooks/useOfflineInspectionDetail";
+import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 
 interface InspectionTemplate {
@@ -102,6 +105,23 @@ const InspectionDetail = () => {
   const isContractorPortal = !clientId && !siteId && !subsectionId;
   const { isNative, takePicture, selectImages } = useCamera();
   const { uploadImage, deleteImage, getPathFromUrl } = useImageUpload();
+  
+  // Offline support hooks
+  const {
+    isOnline,
+    isCached,
+    cachedData,
+    offlineImages,
+    hasPendingChanges,
+    lastSyncTime,
+    cacheInspection,
+    saveInspectionSection,
+    addOfflineImage,
+    getCachedInspection
+  } = useOfflineInspectionDetail({ inspectionId: inspectionId || '' });
+  
+  const { queueMutation, isSyncing, processQueue } = useOfflineSync();
+
   const [template, setTemplate] = useState<InspectionTemplate | null>(null);
   const [templateCategory, setTemplateCategory] = useState<string>("");
   const [inspection, setInspection] = useState<InspectionData | null>(null);
@@ -161,6 +181,57 @@ const InspectionDetail = () => {
       .join(' ');
   };
 
+  // Helper function to load inspection from cached data
+  const loadFromCachedData = useCallback((cached: any) => {
+    try {
+      const mappedInspection: InspectionData = {
+        type: cached.status || '',
+        date: cached.inspection_date || '',
+        projectName: cached.json_data?.projectName || '',
+        shopNumber: cached.json_data?.shopNumber || '',
+        shopName: cached.json_data?.shopName || '',
+        inspectorName: cached.inspector_name || '',
+        clientRep: cached.json_data?.clientRep || '',
+        consultant: cached.json_data?.consultant || '',
+        contractor: cached.json_data?.contractor || '',
+        testingParty: cached.json_data?.testingParty || '',
+        location: cached.json_data?.location || '',
+        quality_rating: cached.json_data?.quality_rating || undefined,
+        tenants: cached.json_data?.tenants || [],
+        jsonData: cached.json_data || {}
+      };
+
+      setInspection(mappedInspection);
+      setTenants(cached.json_data?.tenants || []);
+      setSiteData(cached.site_data);
+      setSubsectionData(cached.subsection_data);
+      setTemplateId(cached.template_id);
+      setTemplateCategory(cached.template_category || '');
+
+      if (cached.template) {
+        setTemplate({
+          name: cached.template.name,
+          sections: cached.template.sections
+        });
+        
+        if (cached.template_category === "Site Drawing") {
+          const firstSection = Object.keys(cached.template.sections || {})[0];
+          setActiveTab(firstSection || 'general');
+        } else {
+          setActiveTab('general');
+        }
+      } else {
+        setActiveTab('general');
+      }
+      
+      setLoading(false);
+      toast.info("Loaded from offline cache", { duration: 2000 });
+    } catch (error) {
+      console.error("Error loading cached data:", error);
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
     if (inspectionId) {
@@ -170,7 +241,7 @@ const InspectionDetail = () => {
         fetchSnags();
       }
     }
-  }, [clientId, siteId, subsectionId, inspectionId]);
+  }, [clientId, siteId, subsectionId, inspectionId, isOnline]);
 
   const fetchCompanyLogo = async () => {
     try {
@@ -604,6 +675,20 @@ const InspectionDetail = () => {
     try {
       setLoading(true);
 
+      // If offline, try to load from cache first
+      if (!isOnline) {
+        const cached = await getCachedInspection();
+        if (cached) {
+          console.log("[InspectionDetail] Offline mode - loading from cache");
+          loadFromCachedData(cached);
+          return;
+        } else {
+          toast.error("No cached data available. Please connect to the internet.");
+          navigate(-1);
+          return;
+        }
+      }
+
       // First verify the session is valid
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
@@ -613,6 +698,15 @@ const InspectionDetail = () => {
         const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
         if (refreshError || !refreshData.session) {
           console.error("[InspectionDetail] Session refresh failed:", refreshError);
+          
+          // Try loading from cache as fallback
+          const cached = await getCachedInspection();
+          if (cached) {
+            toast.info("Session expired, loading cached data");
+            loadFromCachedData(cached);
+            return;
+          }
+          
           toast.error("Your session has expired. Please log in again.");
           navigate('/auth');
           return;
@@ -905,6 +999,31 @@ const InspectionDetail = () => {
           setActiveTab('general');
         }
       }
+
+      // Cache the inspection data for offline use
+      const siteDataForCache = inspData.sites ? {
+        clientName: inspData.sites.clients?.name || 'unknown-client',
+        siteName: inspData.sites.name,
+        physicalAddress: inspData.sites.address,
+        siteImageUrl: inspData.sites.site_image_url,
+        clientLogoUrl: inspData.sites.client_logo_url
+      } : null;
+      
+      const subsectionDataForCache = inspData.subsections ? {
+        name: inspData.subsections.name
+      } : null;
+      
+      // Cache for offline access
+      cacheInspection(
+        inspData,
+        templateData,
+        siteDataForCache,
+        subsectionDataForCache
+      ).then(success => {
+        if (success) {
+          console.log("[InspectionDetail] Inspection cached for offline use");
+        }
+      });
 
       // Generate QR code with logo
       const url = `${window.location.origin.replace(/\/$/, '')}/public/subsections/${inspData.subsection_id || subsectionId}`;
@@ -1841,6 +1960,17 @@ const InspectionDetail = () => {
           </Button>
         </div>
       </div>
+
+      {/* Offline Status Banner */}
+      <InspectionOfflineBanner
+        isOnline={isOnline}
+        isCached={isCached}
+        hasPendingChanges={hasPendingChanges}
+        lastSyncTime={lastSyncTime}
+        pendingImageCount={offlineImages.filter(img => !img.synced).length}
+        onSyncNow={processQueue}
+        isSyncing={isSyncing}
+      />
 
       {/* Tabs */}
       <Tabs value={activeTab} onValueChange={setActiveTab}>
