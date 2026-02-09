@@ -5,6 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import { Separator } from '@/components/ui/separator';
 import { toast } from 'sonner';
+import { offlineInspectionDB } from '@/lib/offlineInspectionDB';
 import {
   Smartphone,
   Monitor,
@@ -21,7 +22,8 @@ import {
   CloudOff,
   Image as ImageIcon,
   Clock,
-  Zap
+  Zap,
+  CheckCircle2
 } from 'lucide-react';
 
 interface PlatformInfo {
@@ -111,51 +113,89 @@ export function PlatformCapabilityTester() {
     tests.push(await testIndexedDB());
     setCapabilities([...tests]);
     
-    // 2. Storage Quota Test
+    // 2. Production Offline DB Test - uses actual offlineInspectionDB
+    tests.push(await testProductionOfflineDB());
+    setCapabilities([...tests]);
+    
+    // 3. Storage Quota Test
     const storageTest = await testStorageQuota();
     tests.push(storageTest.capability);
     setStorageResult(storageTest.result);
     setCapabilities([...tests]);
     
-    // 3. Persistent Storage Test
+    // 4. Persistent Storage Test
     tests.push(await testPersistentStorage());
     setCapabilities([...tests]);
     
-    // 4. Service Worker Test
+    // 5. Service Worker Test
     tests.push(await testServiceWorker());
     setCapabilities([...tests]);
     
-    // 5. Background Sync Test
+    // 6. Background Sync Test
     const syncTest = await testBackgroundSync();
     tests.push(syncTest.capability);
     setSyncResult(syncTest.result);
     setCapabilities([...tests]);
     
-    // 6. Camera/Media Capture Test
+    // 7. Camera/Media Capture Test
     tests.push(await testCameraCapability());
     setCapabilities([...tests]);
     
-    // 7. HEIC Support Test (iOS specific)
+    // 8. HEIC Support Test (iOS specific)
     if (platform.platform === 'ios') {
       tests.push(await testHEICSupport());
       setCapabilities([...tests]);
     }
     
-    // 8. Network Information API Test
+    // 9. Network Information API Test
     tests.push(await testNetworkInfo());
     setCapabilities([...tests]);
     
-    // 9. Blob/File API Test
+    // 10. Blob/File API Test
     tests.push(await testBlobAPI());
     setCapabilities([...tests]);
     
-    // 10. Cache API Test
+    // 11. Cache API Test
     tests.push(await testCacheAPI());
     setCapabilities([...tests]);
     
     setIsTesting(false);
     setTestComplete(true);
     toast.success('Platform capability tests complete');
+  };
+
+  // Test the ACTUAL production offline database
+  const testProductionOfflineDB = async (): Promise<CapabilityTest> => {
+    try {
+      // Initialize the production database
+      await offlineInspectionDB.init();
+      
+      // Get stats from the actual production database
+      const stats = await offlineInspectionDB.getCacheStats();
+      const storageEstimate = await offlineInspectionDB.getStorageEstimate();
+      
+      const detailParts = [
+        `Inspections: ${stats.inspectionCount}`,
+        `Images: ${stats.imageCount}`,
+        `Templates: ${stats.templateCount}`,
+        `Pending sync: ${stats.pendingChanges}`,
+        `Storage: ${Math.round(storageEstimate.used / 1024)}KB`
+      ];
+      
+      return {
+        name: 'Production Offline Database',
+        status: 'passed',
+        message: '✅ Production offline DB initialized and accessible',
+        details: detailParts.join(' | ')
+      };
+    } catch (error) {
+      return {
+        name: 'Production Offline Database',
+        status: 'failed',
+        message: `❌ Production DB failed: ${error}`,
+        details: 'The actual offline inspection database could not be initialized.'
+      };
+    }
   };
 
   // Individual test functions
@@ -170,23 +210,80 @@ export function PlatformCapabilityTester() {
         };
       }
       
-      // Try to open a test database
-      const testDB = await new Promise<boolean>((resolve) => {
-        const request = indexedDB.open('_capability_test', 1);
-        request.onerror = () => resolve(false);
-        request.onsuccess = () => {
-          request.result.close();
-          indexedDB.deleteDatabase('_capability_test');
-          resolve(true);
+      // REAL TEST: Write and read data to verify full functionality
+      const testId = `_capability_test_${Date.now()}`;
+      const testData = { id: testId, value: 'offline_test', timestamp: new Date().toISOString() };
+      
+      const fullTest = await new Promise<{ success: boolean; writeOk: boolean; readOk: boolean; matchOk: boolean }>((resolve) => {
+        const request = indexedDB.open('_capability_test_db', 1);
+        
+        request.onerror = () => resolve({ success: false, writeOk: false, readOk: false, matchOk: false });
+        
+        request.onupgradeneeded = (event) => {
+          const db = (event.target as IDBOpenDBRequest).result;
+          if (!db.objectStoreNames.contains('test_store')) {
+            db.createObjectStore('test_store', { keyPath: 'id' });
+          }
+        };
+        
+        request.onsuccess = async () => {
+          const db = request.result;
+          let writeOk = false;
+          let readOk = false;
+          let matchOk = false;
+          
+          try {
+            // WRITE test
+            const writeTx = db.transaction('test_store', 'readwrite');
+            const writeStore = writeTx.objectStore('test_store');
+            await new Promise<void>((res, rej) => {
+              const writeReq = writeStore.put(testData);
+              writeReq.onsuccess = () => { writeOk = true; res(); };
+              writeReq.onerror = () => rej(writeReq.error);
+            });
+            
+            // READ test
+            const readTx = db.transaction('test_store', 'readonly');
+            const readStore = readTx.objectStore('test_store');
+            const readResult = await new Promise<any>((res, rej) => {
+              const readReq = readStore.get(testId);
+              readReq.onsuccess = () => { readOk = true; res(readReq.result); };
+              readReq.onerror = () => rej(readReq.error);
+            });
+            
+            // VERIFY test
+            matchOk = readResult?.value === 'offline_test';
+            
+            // Cleanup
+            const deleteTx = db.transaction('test_store', 'readwrite');
+            deleteTx.objectStore('test_store').delete(testId);
+            
+          } catch (e) {
+            console.error('IndexedDB test error:', e);
+          }
+          
+          db.close();
+          indexedDB.deleteDatabase('_capability_test_db');
+          
+          resolve({ success: writeOk && readOk && matchOk, writeOk, readOk, matchOk });
         };
       });
       
-      return {
-        name: 'IndexedDB Support',
-        status: testDB ? 'passed' : 'failed',
-        message: testDB ? 'IndexedDB is available and functional' : 'IndexedDB open failed',
-        details: testDB ? 'Can store inspection data and images offline.' : 'Cannot store data offline.'
-      };
+      if (fullTest.success) {
+        return {
+          name: 'IndexedDB Support',
+          status: 'passed',
+          message: '✅ Offline storage VERIFIED - Write/Read/Verify passed',
+          details: `Write: ${fullTest.writeOk ? '✓' : '✗'} | Read: ${fullTest.readOk ? '✓' : '✗'} | Match: ${fullTest.matchOk ? '✓' : '✗'} - Full offline capability confirmed.`
+        };
+      } else {
+        return {
+          name: 'IndexedDB Support',
+          status: 'warning',
+          message: 'IndexedDB partial - some operations failed',
+          details: `Write: ${fullTest.writeOk ? '✓' : '✗'} | Read: ${fullTest.readOk ? '✓' : '✗'} | Match: ${fullTest.matchOk ? '✓' : '✗'}`
+        };
+      }
     } catch (error) {
       return {
         name: 'IndexedDB Support',
