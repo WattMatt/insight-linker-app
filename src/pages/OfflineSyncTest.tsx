@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineInspectionDB, CachedInspection, OfflineInspectionImage } from '@/lib/offlineInspectionDB';
 import { useOfflineSync } from '@/hooks/useOfflineSync';
+import { PlatformCapabilityTester } from '@/components/PlatformCapabilityTester';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +23,8 @@ import {
   Clock,
   AlertCircle,
   HardDrive,
-  Camera
+  Camera,
+  Smartphone
 } from 'lucide-react';
 
 interface TestImage {
@@ -468,12 +470,20 @@ export default function OfflineSyncTest() {
         </CardContent>
       </Card>
 
-      <Tabs defaultValue="inspections">
+      <Tabs defaultValue="platform">
         <TabsList>
+          <TabsTrigger value="platform">
+            <Smartphone className="h-4 w-4 mr-2" />
+            Platform Tests
+          </TabsTrigger>
           <TabsTrigger value="inspections">Cached Inspections</TabsTrigger>
           <TabsTrigger value="images">Offline Images</TabsTrigger>
           <TabsTrigger value="log">Test Log</TabsTrigger>
         </TabsList>
+
+        <TabsContent value="platform">
+          <PlatformCapabilityTester />
+        </TabsContent>
 
         <TabsContent value="inspections">
           <Card>
