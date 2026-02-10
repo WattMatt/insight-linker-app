@@ -1,4 +1,5 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { ImageOff, RefreshCw } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -36,6 +37,50 @@ import {
   FAILED_VALIDATION_STATUSES,
   hasValidCocStatus 
 } from "@/lib/complianceCalculations";
+
+/** Simple image component with loading/error states for public pages */
+function PublicImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
+  const [state, setState] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [retrySrc, setRetrySrc] = useState(src);
+
+  useEffect(() => {
+    setState('loading');
+    setRetrySrc(src);
+  }, [src]);
+
+  if (state === 'error') {
+    return (
+      <div className={`flex flex-col items-center justify-center bg-muted gap-1 ${className}`}>
+        <ImageOff className="h-5 w-5 text-muted-foreground" />
+        <span className="text-[10px] text-muted-foreground">Image unavailable</span>
+        <button
+          className="text-[10px] text-primary underline flex items-center gap-1"
+          onClick={() => { setState('loading'); setRetrySrc(`${src.split('?')[0]}?t=${Date.now()}`); }}
+        >
+          <RefreshCw className="h-3 w-3" /> Retry
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`relative ${className}`}>
+      {state === 'loading' && (
+        <div className="absolute inset-0 flex items-center justify-center bg-muted">
+          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+        </div>
+      )}
+      <img
+        key={retrySrc}
+        src={retrySrc}
+        alt={alt}
+        className={`w-full h-full object-contain bg-muted transition-opacity ${state === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
+        onLoad={() => setState('loaded')}
+        onError={() => setState('error')}
+      />
+    </div>
+  );
+}
 
 interface SubsectionData {
   id: string;
@@ -1184,12 +1229,11 @@ const PublicSubsectionReview = () => {
                                         {photos.length > 0 && (
                                           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                             {photos.map((photo: string, pIdx: number) => (
-                                              <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                                <img 
+                                              <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                                                <PublicImage 
                                                   src={photo} 
                                                   alt={`${templateItem.name} - Photo ${pIdx + 1}`}
-                                                  className="w-full h-full object-contain bg-muted"
-                                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                  className="w-full h-full"
                                                 />
                                               </div>
                                             ))}
@@ -1263,9 +1307,8 @@ const PublicSubsectionReview = () => {
                                       {photos.length > 0 && (
                                         <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                           {photos.map((photo: string, pIdx: number) => (
-                                            <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                              <img src={photo} alt={`${itemLabel} photo`} className="w-full h-full object-contain bg-muted"
-                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                            <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                                              <PublicImage src={photo} alt={`${itemLabel} photo`} className="w-full h-full" />
                                             </div>
                                           ))}
                                         </div>
@@ -1318,9 +1361,8 @@ const PublicSubsectionReview = () => {
                             return (
                               <div className="grid grid-cols-3 gap-2">
                                 {tenantPhotos.map((photo: string, pIdx: number) => (
-                                  <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                    <img src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full object-contain bg-muted"
-                                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                                    <PublicImage src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full" />
                                   </div>
                                 ))}
                               </div>
