@@ -691,96 +691,233 @@ const ClientPortalSubsectionDetail = () => {
                 )}
 
                 {/* Full Sections with Items, Notes & Photos */}
-                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && inspectionDetails.json_data.sections?.length > 0 && (
-                  <div className="space-y-4">
-                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                      <ShieldCheck className="h-5 w-5 text-primary" />
-                      Inspection Results
-                    </h3>
-                    {inspectionDetails.json_data.sections.map((section: any, sIdx: number) => (
-                      <div key={sIdx} className="border rounded-lg overflow-hidden">
-                        {/* Section Header */}
-                        <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
-                          <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                            {sIdx + 1}
-                          </div>
-                          <h4 className="font-semibold">{section.name || `Section ${sIdx + 1}`}</h4>
-                          {section.items && (
-                            <Badge variant="secondary" className="ml-auto text-xs">
-                              {section.items.length} items
-                            </Badge>
-                          )}
-                        </div>
-
-                        {/* Section Items */}
-                        <div className="divide-y">
-                          {section.items?.map((item: any, iIdx: number) => {
-                            const statusVal = (item.status || item.value || '').toLowerCase();
-                            const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
-                            const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
-                            const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
-                            const photos = item.photos || (item.image_url ? [item.image_url] : []);
-                            
+                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (() => {
+                  const jsonData = inspectionDetails.json_data;
+                  // Use template sections as schema if available
+                  const templateSections = inspectionDetails.inspection_templates?.sections;
+                  const parsedSections: any[] = typeof templateSections === 'string' 
+                    ? JSON.parse(templateSections) 
+                    : (Array.isArray(templateSections) ? templateSections : []);
+                  
+                  // If we have template sections, cross-reference with json_data
+                  if (parsedSections.length > 0) {
+                    return (
+                      <div className="space-y-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                          <ShieldCheck className="h-5 w-5 text-primary" />
+                          Inspection Results
+                        </h3>
+                        {parsedSections
+                          .filter((s: any) => s.id !== 'observations')
+                          .sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))
+                          .map((section: any, sIdx: number) => {
+                            const sectionData = jsonData[section.id] || {};
                             return (
-                              <div key={iIdx} className="p-3">
-                                {/* Item header with status */}
-                                <div className="flex items-center justify-between gap-2">
-                                  <span className="text-sm font-medium">
-                                    {item.name || item.label || `Item ${iIdx + 1}`}
-                                  </span>
-                                  <Badge 
-                                    variant="outline"
-                                    className={
-                                      isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                      isFail ? 'bg-red-50 text-red-700 border-red-200' :
-                                      isNA ? 'bg-muted text-muted-foreground' :
-                                      'bg-blue-50 text-blue-700 border-blue-200'
-                                    }
-                                  >
-                                    {(item.status || item.value || 'Pending').toUpperCase()}
-                                  </Badge>
+                              <div key={sIdx} className="border rounded-lg overflow-hidden">
+                                <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                    {sIdx + 1}
+                                  </div>
+                                  <h4 className="font-semibold">{section.name}</h4>
+                                  {section.items && (
+                                    <Badge variant="secondary" className="ml-auto text-xs">
+                                      {section.items.length} items
+                                    </Badge>
+                                  )}
                                 </div>
+                                <div className="divide-y">
+                                  {section.items?.map((templateItem: any, iIdx: number) => {
+                                    const itemData = sectionData[templateItem.id] || {};
+                                    const statusVal = (itemData.status || itemData.value || '').toLowerCase();
+                                    const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
+                                    const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
+                                    const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
+                                    const photos: string[] = itemData.photos || [];
+                                    const hasData = statusVal || itemData.notes || photos.length > 0;
 
-                                {/* Notes */}
-                                {(item.notes || item.comment) && (
-                                  <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-100">
-                                    <p className="text-xs text-muted-foreground">
-                                      <span className="font-semibold">Notes:</span>{' '}
-                                      {item.notes || item.comment}
-                                    </p>
-                                  </div>
-                                )}
+                                    return (
+                                      <div key={iIdx} className="p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-medium">{templateItem.name}</span>
+                                          {statusVal ? (
+                                            <Badge 
+                                              variant="outline"
+                                              className={
+                                                isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                isFail ? 'bg-red-50 text-red-700 border-red-200' :
+                                                isNA ? 'bg-muted text-muted-foreground' :
+                                                'bg-blue-50 text-blue-700 border-blue-200'
+                                              }
+                                            >
+                                              {(itemData.status || itemData.value || 'N/A').toUpperCase()}
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-muted text-muted-foreground">
+                                              NOT RECORDED
+                                            </Badge>
+                                          )}
+                                        </div>
 
-                                {/* Photos */}
-                                {photos.length > 0 && (
-                                  <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
-                                    {photos.map((photo: string, pIdx: number) => (
-                                      <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                        <img 
-                                          src={photo} 
-                                          alt={`${item.name || item.label || 'Item'} - Photo ${pIdx + 1}`}
-                                          className="w-full h-full object-cover"
-                                          crossOrigin="anonymous"
-                                          onError={(e) => {
-                                            const target = e.target as HTMLImageElement;
-                                            target.style.display = 'none';
-                                          }}
-                                        />
+                                        {itemData.notes && (
+                                          <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-100">
+                                            <p className="text-xs text-muted-foreground">
+                                              <span className="font-semibold">Notes:</span> {itemData.notes}
+                                            </p>
+                                          </div>
+                                        )}
+
+                                        {photos.length > 0 && (
+                                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {photos.map((photo: string, pIdx: number) => (
+                                              <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
+                                                <img 
+                                                  src={photo} 
+                                                  alt={`${templateItem.name} - Photo ${pIdx + 1}`}
+                                                  className="w-full h-full object-cover"
+                                                  crossOrigin="anonymous"
+                                                  onError={(e) => {
+                                                    const target = e.target as HTMLImageElement;
+                                                    target.style.display = 'none';
+                                                  }}
+                                                />
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
                                       </div>
-                                    ))}
-                                  </div>
-                                )}
+                                    );
+                                  })}
+                                </div>
                               </div>
                             );
                           })}
-                          {(!section.items || section.items.length === 0) && (
-                            <p className="p-3 text-sm text-muted-foreground italic">No items in this section</p>
-                          )}
-                        </div>
+
+                        {/* Observations section if present */}
+                        {jsonData.observations && (
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                ✎
+                              </div>
+                              <h4 className="font-semibold">Observations & Quality</h4>
+                            </div>
+                            <div className="p-4 space-y-3">
+                              {jsonData.observations.comments?.value && (
+                                <div>
+                                  <span className="text-sm font-medium">Comments</span>
+                                  <p className="text-sm text-muted-foreground mt-1">{jsonData.observations.comments.value}</p>
+                                </div>
+                              )}
+                              {jsonData.observations.qualityRating?.value && (
+                                <div>
+                                  <span className="text-sm font-medium">Quality Rating</span>
+                                  <p className="text-sm font-bold mt-1">{jsonData.observations.qualityRating.value}/5</p>
+                                </div>
+                              )}
+                              {jsonData.observations.comments?.notes && (
+                                <div className="p-2 rounded bg-amber-50 border border-amber-100">
+                                  <p className="text-xs text-muted-foreground">
+                                    <span className="font-semibold">Notes:</span> {jsonData.observations.comments.notes}
+                                  </p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
                       </div>
-                    ))}
-                  </div>
-                )}
+                    );
+                  }
+                  
+                  // Fallback: if json_data has a 'sections' array (alternative format)
+                  if (jsonData.sections?.length > 0) {
+                    return (
+                      <div className="space-y-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                          <ShieldCheck className="h-5 w-5 text-primary" />
+                          Inspection Results
+                        </h3>
+                        {jsonData.sections.map((section: any, sIdx: number) => (
+                          <div key={sIdx} className="border rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                {sIdx + 1}
+                              </div>
+                              <h4 className="font-semibold">{section.name || `Section ${sIdx + 1}`}</h4>
+                            </div>
+                            <div className="divide-y">
+                              {section.items?.map((item: any, iIdx: number) => (
+                                <div key={iIdx} className="p-3 flex items-center justify-between">
+                                  <span className="text-sm">{item.name || item.label}</span>
+                                  <Badge variant="outline">{item.status || item.value || 'Pending'}</Badge>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+                  
+                  // Last fallback: render raw json_data keys as sections
+                  const skipKeys = ['tenants', 'generalInfo', 'subsectionId'];
+                  const dataKeys = Object.keys(jsonData).filter(k => !skipKeys.includes(k) && typeof jsonData[k] === 'object' && jsonData[k] !== null);
+                  if (dataKeys.length > 0) {
+                    return (
+                      <div className="space-y-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                          <ShieldCheck className="h-5 w-5 text-primary" />
+                          Inspection Results
+                        </h3>
+                        {dataKeys.map((key, sIdx) => {
+                          const sectionData = jsonData[key];
+                          const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+                          const subItems = Object.entries(sectionData).filter(([, v]) => typeof v === 'object' && v !== null);
+                          return (
+                            <div key={sIdx} className="border rounded-lg overflow-hidden">
+                              <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                  {sIdx + 1}
+                                </div>
+                                <h4 className="font-semibold">{label}</h4>
+                              </div>
+                              <div className="divide-y">
+                                {subItems.map(([itemKey, itemVal]: [string, any]) => {
+                                  const itemLabel = itemKey.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
+                                  const photos: string[] = itemVal?.photos || [];
+                                  return (
+                                    <div key={itemKey} className="p-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium">{itemLabel}</span>
+                                        {itemVal?.status && (
+                                          <Badge variant="outline">{itemVal.status}</Badge>
+                                        )}
+                                      </div>
+                                      {itemVal?.notes && (
+                                        <p className="text-xs text-muted-foreground mt-1">Notes: {itemVal.notes}</p>
+                                      )}
+                                      {photos.length > 0 && (
+                                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                          {photos.map((photo: string, pIdx: number) => (
+                                            <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
+                                              <img src={photo} alt={`${itemLabel} photo`} className="w-full h-full object-cover" crossOrigin="anonymous"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+                  
+                  return null;
+                })()}
 
                 {/* Tenant Information */}
                 {inspectionDetails.json_data?.tenants?.length > 0 && (
