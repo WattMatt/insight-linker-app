@@ -1189,7 +1189,6 @@ const PublicSubsectionReview = () => {
                                                   src={photo} 
                                                   alt={`${templateItem.name} - Photo ${pIdx + 1}`}
                                                   className="w-full h-full object-contain bg-muted"
-                                                  crossOrigin="anonymous"
                                                   onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
                                                 />
                                               </div>
@@ -1265,7 +1264,7 @@ const PublicSubsectionReview = () => {
                                         <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                           {photos.map((photo: string, pIdx: number) => (
                                             <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                              <img src={photo} alt={`${itemLabel} photo`} className="w-full h-full object-contain bg-muted" crossOrigin="anonymous"
+                                              <img src={photo} alt={`${itemLabel} photo`} className="w-full h-full object-contain bg-muted"
                                                 onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                             </div>
                                           ))}
@@ -1320,7 +1319,7 @@ const PublicSubsectionReview = () => {
                               <div className="grid grid-cols-3 gap-2">
                                 {tenantPhotos.map((photo: string, pIdx: number) => (
                                   <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
-                                    <img src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full object-contain bg-muted" crossOrigin="anonymous"
+                                    <img src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full object-contain bg-muted"
                                       onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
                                   </div>
                                 ))}
