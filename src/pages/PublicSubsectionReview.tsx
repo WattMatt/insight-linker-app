@@ -1,5 +1,4 @@
 import { useEffect, useState, useCallback } from "react";
-import { ImageOff, RefreshCw } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -37,42 +36,7 @@ import {
   FAILED_VALIDATION_STATUSES,
   hasValidCocStatus 
 } from "@/lib/complianceCalculations";
-
-/** Simple image component for public pages - just renders img with error fallback */
-function PublicImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
-  const [failed, setFailed] = useState(false);
-  const [retrySrc, setRetrySrc] = useState(src);
-
-  useEffect(() => {
-    setFailed(false);
-    setRetrySrc(src);
-  }, [src]);
-
-  if (failed) {
-    return (
-      <div className={`flex flex-col items-center justify-center bg-muted gap-1 ${className}`}>
-        <ImageOff className="h-5 w-5 text-muted-foreground" />
-        <span className="text-[10px] text-muted-foreground">Image unavailable</span>
-        <button
-          className="text-[10px] text-primary underline flex items-center gap-1"
-          onClick={() => { setFailed(false); setRetrySrc(`${src.split('?')[0]}?t=${Date.now()}`); }}
-        >
-          <RefreshCw className="h-3 w-3" /> Retry
-        </button>
-      </div>
-    );
-  }
-
-  return (
-    <img
-      key={retrySrc}
-      src={retrySrc}
-      alt={alt}
-      className={`object-contain bg-muted ${className}`}
-      onError={() => setFailed(true)}
-    />
-  );
-}
+import { RobustImage } from "@/components/RobustImage";
 
 interface SubsectionData {
   id: string;
@@ -1222,7 +1186,7 @@ const PublicSubsectionReview = () => {
                                           <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                             {photos.map((photo: string, pIdx: number) => (
                                               <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
-                                                <PublicImage 
+                                                <RobustImage 
                                                   src={photo} 
                                                   alt={`${templateItem.name} - Photo ${pIdx + 1}`}
                                                   className="w-full h-full"
@@ -1300,7 +1264,7 @@ const PublicSubsectionReview = () => {
                                         <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
                                           {photos.map((photo: string, pIdx: number) => (
                                             <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
-                                              <PublicImage src={photo} alt={`${itemLabel} photo`} className="w-full h-full" />
+                                              <RobustImage src={photo} alt={`${itemLabel} photo`} className="w-full h-full" />
                                             </div>
                                           ))}
                                         </div>
@@ -1354,7 +1318,7 @@ const PublicSubsectionReview = () => {
                               <div className="grid grid-cols-3 gap-2">
                                 {tenantPhotos.map((photo: string, pIdx: number) => (
                                   <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
-                                    <PublicImage src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full" />
+                                    <RobustImage src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full" />
                                   </div>
                                 ))}
                               </div>
