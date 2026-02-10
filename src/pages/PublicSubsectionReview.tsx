@@ -1052,127 +1052,304 @@ const PublicSubsectionReview = () => {
         />
       )}
 
-      {/* Inspection Detail Dialog */}
+      {/* Inspection Detail Dialog - Full Report View */}
       <Dialog open={!!selectedInspection} onOpenChange={(open) => !open && setSelectedInspection(null)}>
-        <DialogContent className="max-w-3xl max-h-[85vh]">
-          <DialogHeader>
+        <DialogContent className="max-w-4xl max-h-[90vh] p-0">
+          <DialogHeader className="px-6 pt-6 pb-4 border-b">
             <DialogTitle className="flex items-center gap-2">
               <ClipboardList className="h-5 w-5 text-primary" />
-              {selectedInspection?.title || 'Inspection Details'}
+              {selectedInspection?.title || 'Inspection Report'}
             </DialogTitle>
             <DialogDescription>
-              {selectedInspection?.template_name && (
-                <span>Template: {selectedInspection.template_name}</span>
-              )}
+              {inspectionDetails?.inspection_templates?.name 
+                ? `Template: ${inspectionDetails.inspection_templates.name}` 
+                : 'Full read-only inspection report'}
             </DialogDescription>
           </DialogHeader>
           
           {loadingInspection ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="h-6 w-6 animate-spin text-primary" />
+            <div className="flex items-center justify-center py-16">
+              <Loader2 className="h-8 w-8 animate-spin text-primary" />
             </div>
           ) : inspectionDetails ? (
-            <ScrollArea className="max-h-[60vh]">
-              <div className="space-y-6 pr-4">
-                {/* Inspection Summary */}
-                <div className="grid grid-cols-2 gap-4">
+            <ScrollArea className="max-h-[calc(90vh-120px)]">
+              <div className="px-6 py-4 space-y-6">
+                {/* Summary Grid */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="p-3 rounded-lg bg-muted/50">
-                    <span className="text-sm text-muted-foreground">Status</span>
-                    <div className="flex items-center gap-2 mt-1">
-                      <div className={`w-2 h-2 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
-                      <span className="font-medium">{inspectionDetails.status}</span>
+                    <span className="text-xs text-muted-foreground block mb-1">Status</span>
+                    <div className="flex items-center gap-2">
+                      <div className={`w-2.5 h-2.5 rounded-full ${getInspectionStatusColor(inspectionDetails.status)}`} />
+                      <span className="font-semibold capitalize text-sm">{inspectionDetails.status}</span>
                     </div>
                   </div>
                   {inspectionDetails.inspection_date && (
                     <div className="p-3 rounded-lg bg-muted/50">
-                      <span className="text-sm text-muted-foreground">Inspection Date</span>
-                      <div className="flex items-center gap-2 mt-1">
-                        <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <span className="font-medium">{new Date(inspectionDetails.inspection_date).toLocaleDateString()}</span>
-                      </div>
+                      <span className="text-xs text-muted-foreground block mb-1">Date</span>
+                      <span className="font-semibold text-sm">{new Date(inspectionDetails.inspection_date).toLocaleDateString()}</span>
                     </div>
                   )}
                   {inspectionDetails.inspector_name && (
                     <div className="p-3 rounded-lg bg-muted/50">
-                      <span className="text-sm text-muted-foreground">Inspector</span>
-                      <p className="font-medium mt-1">{inspectionDetails.inspector_name}</p>
+                      <span className="text-xs text-muted-foreground block mb-1">Inspector</span>
+                      <span className="font-semibold text-sm">{inspectionDetails.inspector_name}</span>
                     </div>
                   )}
                   {inspectionDetails.quality_rating && (
                     <div className="p-3 rounded-lg bg-muted/50">
-                      <span className="text-sm text-muted-foreground">Quality Rating</span>
-                      <p className="font-medium mt-1">{inspectionDetails.quality_rating}/5</p>
+                      <span className="text-xs text-muted-foreground block mb-1">Quality</span>
+                      <span className="font-semibold text-sm">{inspectionDetails.quality_rating}/5</span>
                     </div>
                   )}
                 </div>
 
-                {/* Description */}
                 {inspectionDetails.description && (
-                  <div>
-                    <h4 className="font-medium mb-2">Description</h4>
+                  <div className="p-4 rounded-lg border bg-muted/20">
+                    <h4 className="text-sm font-semibold mb-1">Description</h4>
                     <p className="text-sm text-muted-foreground">{inspectionDetails.description}</p>
                   </div>
                 )}
 
-                {/* JSON Data Sections */}
-                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (
-                  <div>
-                    <h4 className="font-medium mb-3">Inspection Results</h4>
-                    <div className="space-y-3">
-                      {inspectionDetails.json_data.sections?.map((section: any, idx: number) => (
-                        <Accordion key={idx} type="single" collapsible className="border rounded-lg">
-                          <AccordionItem value={`section-${idx}`} className="border-0">
-                            <AccordionTrigger className="px-4 py-3 hover:no-underline">
-                              <div className="flex items-center gap-3">
-                                <span className="font-medium">{section.name || `Section ${idx + 1}`}</span>
-                                {section.items && (
-                                  <Badge variant="secondary" className="text-xs">
-                                    {section.items.length} items
-                                  </Badge>
-                                )}
-                              </div>
-                            </AccordionTrigger>
-                            <AccordionContent className="px-4 pb-4">
-                              {section.items?.length > 0 ? (
-                                <div className="space-y-2">
-                                  {section.items.map((item: any, itemIdx: number) => (
-                                    <div key={itemIdx} className="flex items-center justify-between p-2 rounded bg-muted/30">
-                                      <span className="text-sm">{item.name || item.label || `Item ${itemIdx + 1}`}</span>
-                                      <Badge 
-                                        variant={item.status?.toLowerCase() === 'pass' ? 'default' : 'secondary'}
-                                        className={item.status?.toLowerCase() === 'pass' ? 'bg-green-500 text-white' : 
-                                                  item.status?.toLowerCase() === 'fail' ? 'bg-destructive text-white' : ''}
-                                      >
-                                        {item.status || 'Pending'}
-                                      </Badge>
-                                    </div>
-                                  ))}
+                {/* Full Sections - Template-aware rendering */}
+                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (() => {
+                  const jsonData = inspectionDetails.json_data;
+                  const templateSections = inspectionDetails.inspection_templates?.sections;
+                  const parsedSections: any[] = typeof templateSections === 'string' 
+                    ? JSON.parse(templateSections) 
+                    : (Array.isArray(templateSections) ? templateSections : []);
+                  
+                  if (parsedSections.length > 0) {
+                    return (
+                      <div className="space-y-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                          <Shield className="h-5 w-5 text-primary" />
+                          Inspection Results
+                        </h3>
+                        {parsedSections
+                          .filter((s: any) => s.id !== 'observations')
+                          .sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))
+                          .map((section: any, sIdx: number) => {
+                            const sectionData = jsonData[section.id] || {};
+                            return (
+                              <div key={sIdx} className="border rounded-lg overflow-hidden">
+                                <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
+                                    {sIdx + 1}
+                                  </div>
+                                  <h4 className="font-semibold">{section.name}</h4>
+                                  {section.items && (
+                                    <Badge variant="secondary" className="ml-auto text-xs">
+                                      {section.items.length} items
+                                    </Badge>
+                                  )}
                                 </div>
-                              ) : (
-                                <p className="text-sm text-muted-foreground">No items in this section</p>
+                                <div className="divide-y">
+                                  {section.items?.map((templateItem: any, iIdx: number) => {
+                                    const itemData = sectionData[templateItem.id] || {};
+                                    const statusVal = (itemData.status || itemData.value || '').toLowerCase();
+                                    const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
+                                    const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
+                                    const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
+                                    const photos: string[] = itemData.photos || [];
+
+                                    return (
+                                      <div key={iIdx} className="p-3">
+                                        <div className="flex items-center justify-between gap-2">
+                                          <span className="text-sm font-medium">{templateItem.name}</span>
+                                          {statusVal ? (
+                                            <Badge 
+                                              variant="outline"
+                                              className={
+                                                isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
+                                                isFail ? 'bg-red-50 text-red-700 border-red-200' :
+                                                isNA ? 'bg-muted text-muted-foreground' :
+                                                'bg-blue-50 text-blue-700 border-blue-200'
+                                              }
+                                            >
+                                              {(itemData.status || itemData.value || 'N/A').toUpperCase()}
+                                            </Badge>
+                                          ) : (
+                                            <Badge variant="outline" className="bg-muted text-muted-foreground">
+                                              NOT RECORDED
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        {itemData.notes && (
+                                          <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-100">
+                                            <p className="text-xs text-muted-foreground">
+                                              <span className="font-semibold">Notes:</span> {itemData.notes}
+                                            </p>
+                                          </div>
+                                        )}
+                                        {photos.length > 0 && (
+                                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                            {photos.map((photo: string, pIdx: number) => (
+                                              <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
+                                                <img 
+                                                  src={photo} 
+                                                  alt={`${templateItem.name} - Photo ${pIdx + 1}`}
+                                                  className="w-full h-full object-cover"
+                                                  crossOrigin="anonymous"
+                                                  onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }}
+                                                />
+                                              </div>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            );
+                          })}
+
+                        {jsonData.observations && (
+                          <div className="border rounded-lg overflow-hidden">
+                            <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">✎</div>
+                              <h4 className="font-semibold">Observations & Quality</h4>
+                            </div>
+                            <div className="p-4 space-y-3">
+                              {jsonData.observations.comments?.value && (
+                                <div>
+                                  <span className="text-sm font-medium">Comments</span>
+                                  <p className="text-sm text-muted-foreground mt-1">{jsonData.observations.comments.value}</p>
+                                </div>
                               )}
-                            </AccordionContent>
-                          </AccordionItem>
-                        </Accordion>
-                      ))}
-                    </div>
+                              {jsonData.observations.qualityRating?.value && (
+                                <div>
+                                  <span className="text-sm font-medium">Quality Rating</span>
+                                  <p className="text-sm font-bold mt-1">{jsonData.observations.qualityRating.value}/5</p>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  }
+                  
+                  // Fallback: raw json_data keys as sections
+                  const skipKeys = ['tenants', 'generalInfo', 'subsectionId'];
+                  const dataKeys = Object.keys(jsonData).filter(k => !skipKeys.includes(k) && typeof jsonData[k] === 'object' && jsonData[k] !== null);
+                  if (dataKeys.length > 0) {
+                    return (
+                      <div className="space-y-4">
+                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                          <Shield className="h-5 w-5 text-primary" />
+                          Inspection Results
+                        </h3>
+                        {dataKeys.map((key, sIdx) => {
+                          const sectionData = jsonData[key];
+                          const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase());
+                          const subItems = Object.entries(sectionData).filter(([, v]) => typeof v === 'object' && v !== null);
+                          return (
+                            <div key={sIdx} className="border rounded-lg overflow-hidden">
+                              <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
+                                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">{sIdx + 1}</div>
+                                <h4 className="font-semibold">{label}</h4>
+                              </div>
+                              <div className="divide-y">
+                                {subItems.map(([itemKey, itemVal]: [string, any]) => {
+                                  const itemLabel = itemKey.replace(/([A-Z])/g, ' $1').replace(/^./, (s: string) => s.toUpperCase());
+                                  const photos: string[] = itemVal?.photos || [];
+                                  return (
+                                    <div key={itemKey} className="p-3">
+                                      <div className="flex items-center justify-between gap-2">
+                                        <span className="text-sm font-medium">{itemLabel}</span>
+                                        {itemVal?.status && <Badge variant="outline">{itemVal.status}</Badge>}
+                                      </div>
+                                      {itemVal?.notes && <p className="text-xs text-muted-foreground mt-1">Notes: {itemVal.notes}</p>}
+                                      {photos.length > 0 && (
+                                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                          {photos.map((photo: string, pIdx: number) => (
+                                            <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
+                                              <img src={photo} alt={`${itemLabel} photo`} className="w-full h-full object-cover" crossOrigin="anonymous"
+                                                onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    );
+                  }
+                  return null;
+                })()}
+
+                {/* Tenant Information */}
+                {inspectionDetails.json_data?.tenants?.length > 0 && (
+                  <div className="space-y-3">
+                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                      <Building2 className="h-5 w-5 text-primary" />
+                      Tenant Information
+                    </h3>
+                    {inspectionDetails.json_data.tenants.map((tenant: any, tIdx: number) => (
+                      <Card key={tIdx}>
+                        <CardContent className="p-4">
+                          <h5 className="font-semibold mb-2">{tenant.shopName || tenant.shop_name || `Tenant ${tIdx + 1}`}</h5>
+                          <div className="grid grid-cols-2 gap-2 text-sm mb-3">
+                            {(tenant.shopNumber || tenant.shop_number) && (
+                              <div><span className="text-muted-foreground">Shop #:</span> {tenant.shopNumber || tenant.shop_number}</div>
+                            )}
+                            {(tenant.meterSerialNumber || tenant.meter_serial_number) && (
+                              <div><span className="text-muted-foreground">Meter S/N:</span> {tenant.meterSerialNumber || tenant.meter_serial_number}</div>
+                            )}
+                            {(tenant.breakerSize || tenant.breaker_size) && (
+                              <div><span className="text-muted-foreground">Breaker:</span> {tenant.breakerSize || tenant.breaker_size}</div>
+                            )}
+                            {(tenant.ctSizeAndRatio || tenant.ct_ratio) && (
+                              <div><span className="text-muted-foreground">CT Ratio:</span> {tenant.ctSizeAndRatio || tenant.ct_ratio}</div>
+                            )}
+                          </div>
+                          {(() => {
+                            const tenantPhotos = [
+                              tenant.meterImage || tenant.meter_image,
+                              tenant.breakerImage || tenant.breaker_image,
+                              tenant.ctRatioImage || tenant.ct_ratio_image,
+                            ].filter(Boolean);
+                            if (tenantPhotos.length === 0) return null;
+                            return (
+                              <div className="grid grid-cols-3 gap-2">
+                                {tenantPhotos.map((photo: string, pIdx: number) => (
+                                  <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden bg-muted border">
+                                    <img src={photo} alt={`Tenant photo ${pIdx + 1}`} className="w-full h-full object-cover" crossOrigin="anonymous"
+                                      onError={(e) => { (e.target as HTMLImageElement).style.display = 'none'; }} />
+                                  </div>
+                                ))}
+                              </div>
+                            );
+                          })()}
+                        </CardContent>
+                      </Card>
+                    ))}
                   </div>
                 )}
 
                 {/* Signatures */}
                 {inspectionDetails.inspection_signatures?.length > 0 && (
-                  <div>
-                    <h4 className="font-medium mb-3">Signatures</h4>
+                  <div className="space-y-3">
+                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
+                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+                      Digital Signatures
+                    </h3>
                     <div className="space-y-2">
                       {inspectionDetails.inspection_signatures.map((sig: any, idx: number) => (
                         <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
                           <div>
-                            <p className="font-medium">{sig.signer_name}</p>
-                            <p className="text-sm text-muted-foreground capitalize">{sig.signer_type}</p>
+                            <p className="font-medium text-sm">{sig.signer_name}</p>
+                            <p className="text-xs text-muted-foreground capitalize">{sig.signer_type}</p>
                           </div>
-                          <div className="flex items-center gap-2 text-green-600">
+                          <div className="flex items-center gap-2 text-emerald-600">
                             <CheckCircle2 className="h-4 w-4" />
-                            <span className="text-sm">
+                            <span className="text-xs">
                               {sig.signed_at ? new Date(sig.signed_at).toLocaleDateString() : 'Signed'}
                             </span>
                           </div>
@@ -1184,7 +1361,8 @@ const PublicSubsectionReview = () => {
               </div>
             </ScrollArea>
           ) : (
-            <div className="text-center py-8 text-muted-foreground">
+            <div className="text-center py-12 text-muted-foreground">
+              <AlertTriangle className="h-8 w-8 mx-auto mb-2 opacity-50" />
               <p>Unable to load inspection details</p>
             </div>
           )}
