@@ -23,24 +23,24 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
 import { format } from "date-fns";
 
-/** Simple image component with loading/error states for portal pages */
+/** Simple image component for portal pages - just renders img with error fallback */
 function PortalImage({ src, alt, className = '' }: { src: string; alt: string; className?: string }) {
-  const [state, setState] = useState<'loading' | 'loaded' | 'error'>('loading');
+  const [failed, setFailed] = useState(false);
   const [retrySrc, setRetrySrc] = useState(src);
 
   useEffect(() => {
-    setState('loading');
+    setFailed(false);
     setRetrySrc(src);
   }, [src]);
 
-  if (state === 'error') {
+  if (failed) {
     return (
       <div className={`flex flex-col items-center justify-center bg-muted gap-1 ${className}`}>
         <ImageOff className="h-5 w-5 text-muted-foreground" />
         <span className="text-[10px] text-muted-foreground">Image unavailable</span>
         <button
           className="text-[10px] text-primary underline flex items-center gap-1"
-          onClick={() => { setState('loading'); setRetrySrc(`${src.split('?')[0]}?t=${Date.now()}`); }}
+          onClick={() => { setFailed(false); setRetrySrc(`${src.split('?')[0]}?t=${Date.now()}`); }}
         >
           <RefreshCw className="h-3 w-3" /> Retry
         </button>
@@ -49,21 +49,13 @@ function PortalImage({ src, alt, className = '' }: { src: string; alt: string; c
   }
 
   return (
-    <div className={`relative ${className}`}>
-      {state === 'loading' && (
-        <div className="absolute inset-0 flex items-center justify-center bg-muted">
-          <div className="h-5 w-5 animate-spin rounded-full border-2 border-primary border-t-transparent" />
-        </div>
-      )}
-      <img
-        key={retrySrc}
-        src={retrySrc}
-        alt={alt}
-        className={`w-full h-full object-contain bg-muted transition-opacity ${state === 'loaded' ? 'opacity-100' : 'opacity-0'}`}
-        onLoad={() => setState('loaded')}
-        onError={() => setState('error')}
-      />
-    </div>
+    <img
+      key={retrySrc}
+      src={retrySrc}
+      alt={alt}
+      className={`object-contain bg-muted ${className}`}
+      onError={() => setFailed(true)}
+    />
   );
 }
 
