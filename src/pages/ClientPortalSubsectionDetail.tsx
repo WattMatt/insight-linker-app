@@ -768,13 +768,13 @@ const ClientPortalSubsectionDetail = () => {
                                         )}
 
                                         {photos.length > 0 && (
-                                          <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                          <div className="mt-3 grid grid-cols-2 gap-2">
                                             {photos.map((photo: string, pIdx: number) => (
-                                              <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                                              <div key={pIdx} className="rounded-lg overflow-hidden border">
                                                 <RobustImage 
                                                   src={photo} 
                                                   alt={`${templateItem.name} - Photo ${pIdx + 1}`}
-                                                  className="w-full h-full"
+                                                  className="w-full h-40 object-cover rounded border"
                                                 />
                                               </div>
                                             ))}
@@ -892,10 +892,10 @@ const ClientPortalSubsectionDetail = () => {
                                         <p className="text-xs text-muted-foreground mt-1">Notes: {itemVal.notes}</p>
                                       )}
                                       {photos.length > 0 && (
-                                        <div className="mt-2 grid grid-cols-2 sm:grid-cols-3 gap-2">
+                                        <div className="mt-2 grid grid-cols-2 gap-2">
                                           {photos.map((photo: string, pIdx: number) => (
-                                            <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
-                                              <RobustImage src={photo} alt={`${itemLabel} photo`} className="w-full h-full" />
+                                            <div key={pIdx} className="rounded-lg overflow-hidden border">
+                                              <RobustImage src={photo} alt={`${itemLabel} photo`} className="w-full h-40 object-cover rounded border" />
                                             </div>
                                           ))}
                                         </div>
@@ -951,11 +951,11 @@ const ClientPortalSubsectionDetail = () => {
                               return (
                                 <div className="grid grid-cols-3 gap-2">
                                   {tenantPhotos.map((photo: string, pIdx: number) => (
-                                    <div key={pIdx} className="aspect-[4/3] rounded-lg overflow-hidden border">
+                                    <div key={pIdx} className="rounded-lg overflow-hidden border">
                                       <RobustImage 
                                         src={photo} 
                                         alt={`Tenant verification ${pIdx + 1}`}
-                                        className="w-full h-full"
+                                        className="w-full h-32 object-cover rounded border"
                                       />
                                     </div>
                                   ))}
