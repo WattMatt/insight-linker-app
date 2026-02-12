@@ -269,12 +269,12 @@ const Auth = () => {
     }
 
     try {
-      const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: `${window.location.origin}/auth`,
+      const { data, error } = await supabase.functions.invoke('send-password-reset', {
+        body: { email: email.trim() },
       });
 
       if (error) {
-        toast.error(error.message);
+        toast.error("Failed to send reset email. Please try again.");
       } else {
         setResetEmailSent(true);
         toast.success("Password reset email sent! Check your inbox.");
