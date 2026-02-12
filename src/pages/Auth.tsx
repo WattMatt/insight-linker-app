@@ -42,6 +42,12 @@ const Auth = () => {
       (event, session) => {
         setSession(session);
         
+        // Handle PASSWORD_RECOVERY event — show password change form
+        if (event === 'PASSWORD_RECOVERY' && session) {
+          setRequiresPasswordChange(true);
+          return;
+        }
+        
         // Check if user needs to change password
         const needsChange = session?.user?.user_metadata?.requires_password_change;
         setRequiresPasswordChange(needsChange || false);
