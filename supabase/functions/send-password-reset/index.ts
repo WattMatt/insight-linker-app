@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     `;
 
     const { error: emailError } = await resend.emails.send({
-      from: `${companyName} <onboarding@resend.dev>`,
+      from: `${companyName} <noreply@watsonmattheus.com>`,
       to: [trimmedEmail],
       subject: `Password Reset - ${companyName}`,
       html: emailHtml,
