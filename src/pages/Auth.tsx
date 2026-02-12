@@ -277,7 +277,7 @@ const Auth = () => {
     setLoading(true);
     
     const formData = new FormData(e.currentTarget);
-    const password = formData.get("password") as string;
+    const password = (formData.get("newPassword") as string) || (formData.get("password") as string);
     const confirmPassword = formData.get("confirmPassword") as string;
 
     // Validation
@@ -422,13 +422,14 @@ const Auth = () => {
                   <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                   <Input
                     id="invite-password"
-                    name="password"
+                    name="newPassword"
                     type="password"
                     required
                     minLength={6}
                     className="pl-10"
                     autoComplete="new-password"
                     placeholder="Minimum 6 characters"
+                    key="new-password-field"
                   />
                 </div>
                 <p className="text-xs text-muted-foreground">
