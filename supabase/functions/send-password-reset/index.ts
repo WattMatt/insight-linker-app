@@ -59,10 +59,10 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build the verify URL pointing to Supabase auth with redirect to production app
+    // Build a direct link to the app with the OTP token — bypasses Supabase Site URL redirect
     const hashedToken = linkData?.properties?.hashed_token;
     const resetUrl = hashedToken 
-      ? `${supabaseUrl}/auth/v1/verify?token=${hashedToken}&type=recovery&redirect_to=${encodeURIComponent(redirectTo)}`
+      ? `https://wm-compliance.lovable.app/auth?type=recovery&token=${hashedToken}`
       : redirectTo;
 
     // Fetch company branding
