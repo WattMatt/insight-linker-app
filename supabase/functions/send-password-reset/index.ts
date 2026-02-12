@@ -59,9 +59,11 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Rewrite the action link to use the production domain
-    const rawUrl = linkData?.properties?.action_link || '';
-    const resetUrl = rawUrl ? rawUrl.replace(/^https?:\/\/[^/]+/, 'https://wm-compliance.lovable.app') : redirectTo;
+    // Build the verify URL pointing to Supabase auth with redirect to production app
+    const hashedToken = linkData?.properties?.hashed_token;
+    const resetUrl = hashedToken 
+      ? `${supabaseUrl}/auth/v1/verify?token=${hashedToken}&type=recovery&redirect_to=${encodeURIComponent(redirectTo)}`
+      : redirectTo;
 
     // Fetch company branding
     const { data: settings } = await supabase
