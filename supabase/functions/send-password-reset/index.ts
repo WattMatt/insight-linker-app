@@ -59,7 +59,9 @@ Deno.serve(async (req) => {
       );
     }
 
-    const resetUrl = linkData?.properties?.action_link || redirectTo;
+    // Rewrite the action link to use the production domain
+    const rawUrl = linkData?.properties?.action_link || '';
+    const resetUrl = rawUrl ? rawUrl.replace(/^https?:\/\/[^/]+/, 'https://wm-compliance.lovable.app') : redirectTo;
 
     // Fetch company branding
     const { data: settings } = await supabase
