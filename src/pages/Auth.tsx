@@ -317,6 +317,15 @@ const Auth = () => {
 
       if (error) {
         console.error("Password update error:", error);
+        // Handle weak password error specifically
+        if (error.message?.includes("weak") || error.message?.includes("pwned") || (error as any)?.code === "weak_password") {
+          toast.error(
+            "This password is too common or has appeared in a data breach. Please choose a stronger, more unique password.",
+            { duration: 8000 }
+          );
+          setLoading(false);
+          return;
+        }
         throw error;
       }
 
