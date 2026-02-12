@@ -32,9 +32,8 @@ Deno.serve(async (req) => {
       throw new Error('Invalid email format');
     }
 
-    // Get origin for redirect
-    const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/');
-    const redirectTo = `${origin}/auth`;
+    // Use production URL for redirect
+    const redirectTo = 'https://wm-compliance.lovable.app/auth';
 
     // Generate password recovery link via admin API
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
