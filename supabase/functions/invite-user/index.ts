@@ -197,8 +197,9 @@ Deno.serve(async (req) => {
       // If user is already confirmed, send password recovery instead of invite
       if (isConfirmed) {
         console.log('User is confirmed, sending password recovery email');
+        const recoveryRedirect = `${origin}/auth`;
         const { error: recoveryError } = await supabase.auth.resetPasswordForEmail(email, {
-          redirectTo,
+          redirectTo: recoveryRedirect,
         });
 
         if (recoveryError) {
