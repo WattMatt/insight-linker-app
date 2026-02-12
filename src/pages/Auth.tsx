@@ -12,6 +12,8 @@ const Auth = () => {
   const navigate = useNavigate();
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [isForgotPassword, setIsForgotPassword] = useState(false);
+  const [resetEmailSent, setResetEmailSent] = useState(false);
   const [isInvite, setIsInvite] = useState(false);
   const [inviteEmail, setInviteEmail] = useState("");
   const [session, setSession] = useState<Session | null>(null);
@@ -253,9 +255,18 @@ const Auth = () => {
     }
   };
 
-  const handleForgotPassword = async () => {
-    const email = prompt("Enter your email address:");
-    if (!email) return;
+  const handleForgotPassword = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    setLoading(true);
+    
+    const formData = new FormData(e.currentTarget);
+    const email = formData.get("resetEmail") as string;
+
+    if (!email) {
+      toast.error("Please enter your email address");
+      setLoading(false);
+      return;
+    }
 
     try {
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -265,10 +276,13 @@ const Auth = () => {
       if (error) {
         toast.error(error.message);
       } else {
+        setResetEmailSent(true);
         toast.success("Password reset email sent! Check your inbox.");
       }
     } catch (error) {
       toast.error("Failed to send reset email");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -404,17 +418,82 @@ const Auth = () => {
               {settings?.company_name || "Watson Mattheus"}
             </h1>
             <p className="text-muted-foreground">
-              {isInvite
-                ? "Welcome! Create your password to complete setup"
-                : isSignUp 
-                  ? "Create your account to get started" 
-                  : "Enter your email below to login to your account"
+              {isForgotPassword
+                ? resetEmailSent
+                  ? "Check your email for the reset link"
+                  : "Enter your email to receive a password reset link"
+                : isInvite
+                  ? "Welcome! Create your password to complete setup"
+                  : isSignUp 
+                    ? "Create your account to get started" 
+                    : "Enter your email below to login to your account"
               }
             </p>
           </div>
 
           {/* Form */}
-          {isInvite || requiresPasswordChange ? (
+          {isForgotPassword ? (
+            // Forgot Password Form
+            resetEmailSent ? (
+              <div className="space-y-4">
+                <div className="rounded-lg bg-muted p-6 text-center space-y-3">
+                  <Mail className="h-10 w-10 mx-auto text-primary" />
+                  <p className="text-sm text-muted-foreground">
+                    We've sent a password reset link to your email address. Please check your inbox and spam folder.
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    The link will expire in 1 hour.
+                  </p>
+                </div>
+                <Button 
+                  type="button"
+                  variant="outline"
+                  className="w-full" 
+                  onClick={() => { setIsForgotPassword(false); setResetEmailSent(false); }}
+                  size="lg"
+                >
+                  Back to Login
+                </Button>
+              </div>
+            ) : (
+              <form onSubmit={handleForgotPassword} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="resetEmail">Email Address</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="resetEmail"
+                      name="resetEmail"
+                      type="email"
+                      placeholder="your@email.com"
+                      required
+                      className="pl-10"
+                      autoComplete="email"
+                    />
+                  </div>
+                </div>
+
+                <Button 
+                  type="submit" 
+                  className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
+                  disabled={loading}
+                  size="lg"
+                >
+                  {loading ? "Sending..." : "Send Reset Link"}
+                </Button>
+
+                <Button 
+                  type="button"
+                  variant="ghost"
+                  className="w-full" 
+                  onClick={() => setIsForgotPassword(false)}
+                  size="lg"
+                >
+                  Back to Login
+                </Button>
+              </form>
+            )
+          ) : isInvite || requiresPasswordChange ? (
             // Password Setup Form for Invited Users or Password Change Required
             <form onSubmit={handleSetPassword} className="space-y-4">
               <div className="rounded-lg bg-muted p-4 mb-4">
@@ -465,7 +544,7 @@ const Auth = () => {
 
               <Button 
                 type="submit" 
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white" 
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                 disabled={loading}
                 size="lg"
               >
@@ -495,7 +574,7 @@ const Auth = () => {
                   <Label htmlFor="password">Password</Label>
                   <button
                     type="button"
-                    onClick={handleForgotPassword}
+                    onClick={() => setIsForgotPassword(true)}
                     className="text-sm text-primary hover:underline"
                   >
                     Forgot your password?
@@ -516,7 +595,7 @@ const Auth = () => {
 
               <Button 
                 type="submit" 
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white" 
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                 disabled={loading}
                 size="lg"
               >
@@ -576,7 +655,7 @@ const Auth = () => {
 
               <Button 
                 type="submit" 
-                className="w-full bg-sky-500 hover:bg-sky-600 text-white" 
+                className="w-full bg-primary hover:bg-primary/90 text-primary-foreground" 
                 disabled={loading}
                 size="lg"
               >
@@ -585,8 +664,8 @@ const Auth = () => {
             </form>
           )}
 
-          {/* Toggle Sign In/Sign Up - Hide when in invite mode */}
-          {!isInvite && (
+          {/* Toggle Sign In/Sign Up - Hide when in invite/forgot mode */}
+          {!isInvite && !isForgotPassword && (
             <div className="text-center text-sm">
               <span className="text-muted-foreground">
                 {isSignUp ? "Already have an account? " : "Don't have an account? "}
