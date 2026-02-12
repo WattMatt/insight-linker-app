@@ -25,17 +25,23 @@ const Auth = () => {
   } | null>(null);
 
   useEffect(() => {
-    // Check if this is an invite flow
+    // Check URL params for recovery or invite flow
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
+    const token = urlParams.get('token');
     
-    // Check for access token in URL (from invite email)
+    // Check for access token in URL hash (from invite email)
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
     
     if (type === 'invite' && accessToken) {
-      // Handle invite flow
       handleInviteToken(accessToken);
+      return;
+    }
+
+    // Handle recovery token from custom reset email
+    if (type === 'recovery' && token) {
+      handleRecoveryToken(token);
       return;
     }
 
@@ -120,6 +126,36 @@ const Auth = () => {
 
     return () => subscription.unsubscribe();
   }, [navigate, isInvite]);
+
+  const handleRecoveryToken = async (token: string) => {
+    try {
+      setLoading(true);
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: token,
+        type: 'recovery',
+      });
+
+      if (error) {
+        console.error("Recovery token error:", error);
+        toast.error("Invalid or expired reset link. Please request a new one.", { duration: 6000 });
+        window.history.replaceState({}, document.title, "/auth");
+        return;
+      }
+
+      if (data.session) {
+        setSession(data.session);
+        setRequiresPasswordChange(true);
+        window.history.replaceState({}, document.title, "/auth");
+        toast.success("Please set your new password.");
+      }
+    } catch (error: any) {
+      console.error("Error handling recovery token:", error);
+      toast.error("Failed to verify reset link. Please try again.");
+      window.history.replaceState({}, document.title, "/auth");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const handleInviteToken = async (token: string) => {
     try {
