@@ -326,13 +326,38 @@ const Users = () => {
   // Resend invite mutation for existing users
   const resendInviteMutation = useMutation({
     mutationFn: async ({ user, temporaryPassword }: { user: UserProfile; temporaryPassword?: string }) => {
+      const role = user.role || 'User';
+      
+      // Fetch existing client/site assignments for the user
+      let clientId: string | undefined;
+      let siteIds: string[] | undefined;
+
+      if (role === 'Client' && user.id) {
+        const { data: clientMapping } = await supabase
+          .from('user_clients')
+          .select('client_id')
+          .eq('user_id', user.id)
+          .maybeSingle();
+        clientId = clientMapping?.client_id || undefined;
+      }
+
+      if (role === 'Contractor' && user.id) {
+        const { data: siteMappings } = await supabase
+          .from('user_sites')
+          .select('site_id')
+          .eq('user_id', user.id);
+        siteIds = siteMappings?.map(s => s.site_id) || [];
+      }
+
       const { data, error } = await supabase.functions.invoke('invite-user', {
         body: {
           email: user.email,
           fullName: user.full_name || '',
-          role: user.role || 'User',
+          role,
           isResend: true,
           temporaryPassword,
+          clientId,
+          siteIds,
         },
       });
 
