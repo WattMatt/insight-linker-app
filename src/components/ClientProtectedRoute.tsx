@@ -2,30 +2,44 @@ import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useQuery } from "@tanstack/react-query";
 import { Skeleton } from "./ui/skeleton";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
 
 const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const [searchParams] = useSearchParams();
   const previewClientId = searchParams.get("preview");
   const { data: userRole, isLoading: roleLoading } = useUserRole();
+
+  const { data: onboardingStatus, refetch: refetchOnboarding } = useQuery({
+    queryKey: ["onboarding-status"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("id", user.id)
+        .single();
+      return data;
+    },
+    enabled: isAuthenticated === true,
+  });
 
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { session } } = await supabase.auth.getSession();
       setIsAuthenticated(!!session);
     };
-
     checkAuth();
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       setIsAuthenticated(!!session);
     });
-
     return () => subscription.unsubscribe();
   }, []);
 
-  // Show loading state while checking auth and role
   if (isAuthenticated === null || roleLoading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -37,22 +51,34 @@ const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
     );
   }
 
-  // Redirect to login if not authenticated
   if (!isAuthenticated) {
     return <Navigate to="/auth" replace />;
   }
 
-  // Allow admins with preview parameter to access client portal
   if (userRole === "Admin" && previewClientId) {
     return <>{children}</>;
   }
 
-  // Redirect to dashboard if user is not a client
   if (userRole !== "Client") {
     return <Navigate to="/dashboard" replace />;
   }
 
-  return <>{children}</>;
+  const showOnboarding = onboardingStatus && !onboardingStatus.onboarding_completed && !onboardingDismissed;
+
+  return (
+    <>
+      {showOnboarding && (
+        <OnboardingWizard
+          open={true}
+          onComplete={() => {
+            setOnboardingDismissed(true);
+            refetchOnboarding();
+          }}
+        />
+      )}
+      {children}
+    </>
+  );
 };
 
 export default ClientProtectedRoute;

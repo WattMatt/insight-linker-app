@@ -54,9 +54,11 @@ const OfflineSyncTest = lazy(() => import("./pages/OfflineSyncTest"));
 
 const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
 const DevelopmentSkills = lazy(() => import("./pages/DevelopmentSkills"));
+const MyProfile = lazy(() => import("./pages/MyProfile"));
 
 // Eagerly load components that appear on every page
 import ClientProtectedRoute from "./components/ClientProtectedRoute";
+import AuthOnlyRoute from "./components/AuthOnlyRoute";
 import { ClientPortalLayout } from "./components/ClientPortalLayout";
 import ContractorProtectedRoute from "./components/ContractorProtectedRoute";
 import ContractorPortalLayout from "./components/ContractorPortalLayout";
@@ -373,6 +375,16 @@ const App = () => (
           <Route
             path="/pdf-template-tests"
             element={<ProtectedRoute><DashboardLayout><PDFTemplateTestDashboard /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
+            path="/profile"
+            element={
+              <AuthOnlyRoute>
+                <DashboardLayout>
+                  <MyProfile />
+                </DashboardLayout>
+              </AuthOnlyRoute>
+            }
           />
           {/* Client Portal Routes */}
           <Route
