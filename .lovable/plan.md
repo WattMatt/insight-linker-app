@@ -1,73 +1,121 @@
 
-# View-Only Inspection Details for Client Portal
 
-## Summary
-Add a view-only inspection details capability to the Client Portal's subsection page, matching the existing functionality in the Public Review portal. This allows clients to view full inspection details (summary, section results, signatures) without any edit capabilities.
+# Full Authentication, Onboarding & User Profile Plan
 
-## Current State Analysis
+## Overview
 
-| Feature | Public Review (`PublicSubsectionReview.tsx`) | Client Portal (`ClientPortalSubsectionDetail.tsx`) |
-|---------|----------------------------------------------|---------------------------------------------------|
-| Inspection List | Shows list with View button | Shows list without View button |
-| Inspection Dialog | Full read-only dialog with sections | Not implemented |
-| Section Results | Accordion with pass/fail items | N/A |
-| Signatures | Displays all signers | N/A |
+This plan addresses four key areas: fixing the password reset flow, improving onboarding for new users, adding a user profile/settings page, and keeping self-registration with proper defaults -- all in accordance with the existing SANS compliance context of this application.
 
-## Implementation Approach
+---
 
-The existing inspection view dialog in `PublicSubsectionReview.tsx` provides a proven pattern. We will replicate this in the Client Portal with matching read-only behaviour.
+## 1. Fix Password Reset Flow
 
-## Technical Implementation
+**Current Problem:** The "Forgot your password?" link calls the `send-password-reset` edge function, but stale sessions on the `/auth` page can interfere, and the recovery token verification sometimes fails silently.
 
-### Step 1: Add State and Fetch Logic to ClientPortalSubsectionDetail.tsx
+**Changes:**
+- **Auth.tsx** -- Clear any existing stale session when the page loads _before_ checking for recovery tokens. Add `supabase.auth.signOut()` if the user lands on `/auth` with no valid purpose (no invite, no recovery token, no active redirect).
+- **Auth.tsx** -- Add better error feedback if `verifyOtp` fails (e.g. expired token), with a "Request new link" button.
+- **send-password-reset edge function** -- No changes needed; the current implementation using `generateLink` + `hashed_token` + direct app URL is correct.
 
-**New state variables:**
-- `selectedInspection` - tracks which inspection is selected for viewing
-- `inspectionDetails` - holds the full inspection data fetched from database
-- `loadingInspection` - loading state for the fetch operation
+---
 
-**New function:**
-- `fetchInspectionDetails(inspectionId)` - fetches complete inspection data including:
-  - All inspection fields
-  - Template sections (`inspection_templates.sections`)
-  - Signatures (`inspection_signatures`)
+## 2. Improve Onboarding for Invited Users
 
-### Step 2: Add View Button to Inspection List
+**Current State:** Invited users land on `/auth` and see a "Set Password" form. After setting their password, they are redirected to the appropriate portal. There is no profile completion step.
 
-Update the Inspections Tab to include a "View" button for each inspection card that triggers the dialog.
+**Changes:**
+- **New component: `OnboardingWizard.tsx`** -- A multi-step onboarding dialog shown on first login:
+  - Step 1: Welcome message with company branding
+  - Step 2: Complete your profile (full name, phone, job title, company)
+  - Step 3: Upload profile photo (optional)
+  - Step 4: Quick platform overview (what they can do based on role)
+- **Profiles table** -- Add an `onboarding_completed` boolean column (default `false`).
+- **ProtectedRoute / ClientProtectedRoute / ContractorProtectedRoute** -- Check `onboarding_completed` flag; if false, show the `OnboardingWizard` overlay before allowing access.
+- **OnboardingWizard** -- On completion, updates the `profiles` table (profile fields + `onboarding_completed = true`) and dismisses.
 
-### Step 3: Create the Inspection Details Dialog
+---
 
-Add a Dialog component that displays:
-1. **Header**: Inspection title and template name
-2. **Summary Grid**: Status, date, inspector, quality rating
-3. **Description**: If available
-4. **Section Results**: Accordion showing each section with items and pass/fail badges
-5. **Signatures**: List of signers with signed dates
+## 3. User Profile Settings Page
 
-All content is strictly read-only with no edit, save, or delete actions.
+**Current State:** No self-service profile page exists. Only admins can edit user profiles via the Users management page.
 
-### Step 4: Add Required Imports
+**Changes:**
+- **New page: `src/pages/MyProfile.tsx`** -- Accessible from the sidebar for all roles (Admin, Client, Contractor). Contains:
+  - Profile picture upload/change (uses existing `profile-images` storage bucket)
+  - Edit personal details: full name, phone, job title, department, company, address, city, country, postal code, bio
+  - Change password section (current password + new password + confirm)
+  - View current role (read-only)
+  - Account info: email (read-only), member since date
+- **AppSidebar.tsx** -- Add "My Profile" link to the sidebar footer area (near the logout button).
+- **Client/Contractor portal layouts** -- Add "My Profile" link to their respective navigation.
+- **App.tsx** -- Add route `/profile` wrapped in a generic auth-protected route (accessible by all roles).
+- **Password change** -- Uses `supabase.auth.updateUser({ password })` with current password verification via `supabase.auth.signInWithPassword` first.
 
-Add missing imports:
-- `Dialog`, `DialogContent`, `DialogHeader`, `DialogTitle`, `DialogDescription` from ui/dialog
-- `ScrollArea` from ui/scroll-area
-- `Loader2` icon from lucide-react
+---
 
-## Files to Modify
+## 4. Self-Registration Improvements
 
-| File | Changes |
-|------|---------|
-| `src/pages/ClientPortalSubsectionDetail.tsx` | Add state, fetch function, View button, and Dialog component |
+**Current State:** The sign-up form exists but the `handle_new_user` trigger assigns "Admin" to all new users.
 
-## UI/UX Details
+**Changes:**
+- **Database migration** -- Update `handle_new_user()` function to assign `'User'` as the default role instead of `'Admin'` for self-registered users (keep Admin for the very first user).
+- **Auth.tsx sign-up flow** -- After successful sign-up, show a message: "Account created! An admin will review and assign your role. You'll receive access once approved."
+- **Users page** -- Add a visual indicator for new self-registered users pending role assignment.
 
-- **View Button**: Outlined button with Eye icon, positioned on the right side of each inspection card
-- **Dialog**: Max width 3xl, max height 85vh with scrollable content
-- **Consistent Styling**: Uses existing color scheme for status badges (green for completed/pass, amber for in-progress, red for fail)
+---
 
-## Security Considerations
+## Technical Details
 
-- Read-only access enforced - no mutation queries
-- Access validation already handled by existing `ClientProtectedRoute` and client ownership check in the subsection query
-- No sensitive data exposure - only showing inspection results that belong to the client's subsections
+### Database Migration
+
+```sql
+-- Add onboarding_completed column to profiles
+ALTER TABLE public.profiles 
+ADD COLUMN IF NOT EXISTS onboarding_completed boolean DEFAULT false;
+
+-- Fix handle_new_user to assign 'User' role by default (not 'Admin')
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = 'public'
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (
+    NEW.id,
+    NEW.email,
+    COALESCE(NEW.raw_user_meta_data->>'full_name', '')
+  );
+  
+  INSERT INTO public.user_roles (user_id, role)
+  VALUES (
+    NEW.id,
+    CASE 
+      WHEN (SELECT COUNT(*) FROM auth.users) = 1 THEN 'Admin'::app_role
+      ELSE 'User'::app_role
+    END
+  );
+  
+  RETURN NEW;
+END;
+$$;
+```
+
+### New Files
+- `src/pages/MyProfile.tsx` -- Profile settings page
+- `src/components/OnboardingWizard.tsx` -- First-login onboarding wizard
+
+### Modified Files
+- `src/pages/Auth.tsx` -- Stale session cleanup, better error handling, sign-up messaging
+- `src/App.tsx` -- Add `/profile` route
+- `src/components/AppSidebar.tsx` -- Add "My Profile" menu item
+- `src/components/ProtectedRoute.tsx` -- Onboarding check
+- `src/components/ClientProtectedRoute.tsx` -- Onboarding check
+- `src/components/ContractorProtectedRoute.tsx` -- Onboarding check
+- `src/components/ClientPortalLayout.tsx` -- Profile link in nav
+- `src/components/ContractorPortalLayout.tsx` -- Profile link in nav
+
+### No New Secrets Required
+All necessary secrets (RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, etc.) are already configured.
+
