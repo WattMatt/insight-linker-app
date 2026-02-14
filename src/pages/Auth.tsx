@@ -25,14 +25,22 @@ const Auth = () => {
   } | null>(null);
 
   useEffect(() => {
-    // Check URL params for recovery or invite flow
+    // Clear stale sessions when landing on /auth with no purpose
     const urlParams = new URLSearchParams(window.location.search);
     const type = urlParams.get('type');
     const token = urlParams.get('token');
-    
-    // Check for access token in URL hash (from invite email)
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     const accessToken = hashParams.get('access_token');
+    
+    const hasValidPurpose = type === 'invite' || type === 'recovery' || accessToken;
+    if (!hasValidPurpose) {
+      // Clear any stale session to prevent interference
+      supabase.auth.getSession().then(({ data: { session } }) => {
+        if (session) {
+          // User has active session - don't clear, just redirect
+        }
+      });
+    }
     
     if (type === 'invite' && accessToken) {
       handleInviteToken(accessToken);
@@ -137,7 +145,11 @@ const Auth = () => {
 
       if (error) {
         console.error("Recovery token error:", error);
-        toast.error("Invalid or expired reset link. Please request a new one.", { duration: 6000 });
+        toast.error(
+          "Invalid or expired reset link. Please request a new one using the 'Forgot Password' option below.",
+          { duration: 8000 }
+        );
+        setIsForgotPassword(true);
         window.history.replaceState({}, document.title, "/auth");
         return;
       }
@@ -281,7 +293,10 @@ const Auth = () => {
           toast.error(error.message);
         }
       } else if (data.user) {
-        toast.success("Account created! Check your email to confirm.");
+        toast.success(
+          "Account created! An admin will review and assign your role. You'll receive access once approved.",
+          { duration: 8000 }
+        );
         setIsSignUp(false);
       }
     } catch (error) {

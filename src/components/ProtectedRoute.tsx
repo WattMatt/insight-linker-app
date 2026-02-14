@@ -3,6 +3,8 @@ import { Navigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Session } from "@supabase/supabase-js";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useQuery } from "@tanstack/react-query";
+import { OnboardingWizard } from "@/components/OnboardingWizard";
 
 interface ProtectedRouteProps {
   children: React.ReactNode;
@@ -11,10 +13,25 @@ interface ProtectedRouteProps {
 const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
   const { data: userRole, isLoading: roleLoading } = useUserRole();
 
+  const { data: onboardingStatus, refetch: refetchOnboarding } = useQuery({
+    queryKey: ["onboarding-status"],
+    queryFn: async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from("profiles")
+        .select("onboarding_completed")
+        .eq("id", user.id)
+        .single();
+      return data;
+    },
+    enabled: !!session,
+  });
+
   useEffect(() => {
-    // Set up auth state listener
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         setSession(session);
@@ -22,7 +39,6 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
       }
     );
 
-    // Check for existing session
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setLoading(false);
@@ -46,17 +62,30 @@ const ProtectedRoute = ({ children }: ProtectedRouteProps) => {
     return <Navigate to="/auth" replace />;
   }
 
-  // Redirect contractors to their portal
   if (userRole === "Contractor") {
     return <Navigate to="/contractor" replace />;
   }
 
-  // Redirect clients to their portal
   if (userRole === "Client") {
     return <Navigate to="/client-portal" replace />;
   }
 
-  return <>{children}</>;
+  const showOnboarding = onboardingStatus && !onboardingStatus.onboarding_completed && !onboardingDismissed;
+
+  return (
+    <>
+      {showOnboarding && (
+        <OnboardingWizard
+          open={true}
+          onComplete={() => {
+            setOnboardingDismissed(true);
+            refetchOnboarding();
+          }}
+        />
+      )}
+      {children}
+    </>
+  );
 };
 
 export default ProtectedRoute;

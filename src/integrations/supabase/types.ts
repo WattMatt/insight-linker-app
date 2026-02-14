@@ -1206,6 +1206,7 @@ export type Database = {
           full_name: string | null
           id: string
           job_title: string | null
+          onboarding_completed: boolean | null
           phone: string | null
           postal_code: string | null
           status: string | null
@@ -1224,6 +1225,7 @@ export type Database = {
           full_name?: string | null
           id: string
           job_title?: string | null
+          onboarding_completed?: boolean | null
           phone?: string | null
           postal_code?: string | null
           status?: string | null
@@ -1242,6 +1244,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           job_title?: string | null
+          onboarding_completed?: boolean | null
           phone?: string | null
           postal_code?: string | null
           status?: string | null

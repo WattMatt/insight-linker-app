@@ -154,6 +154,15 @@ const ContractorSidebar = () => {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => navigate("/profile")}
+              className="w-full justify-start"
+            >
+              <User className="h-4 w-4 mr-2" />
+              My Profile
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleLogout}
               className="w-full justify-start"
             >
