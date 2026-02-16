@@ -22,6 +22,7 @@ const SubsectionDetail = lazy(() => import("./pages/SubsectionDetail"));
 const PublicSubsection = lazy(() => import("./pages/PublicSubsection"));
 const PublicSiteReview = lazy(() => import("./pages/PublicSiteReview"));
 const PublicSubsectionReview = lazy(() => import("./pages/PublicSubsectionReview"));
+const PublicClientPortfolio = lazy(() => import("./pages/PublicClientPortfolio"));
 const Sites = lazy(() => import("./pages/Sites"));
 const Inspections = lazy(() => import("./pages/Inspections"));
 const InspectionDetail = lazy(() => import("./pages/InspectionDetail"));
@@ -117,6 +118,10 @@ const App = () => (
           {/* Public Site Review - Magic link access */}
           <Route path="/review/:token" element={<PublicSiteReview />} />
           <Route path="/review/:token/subsection/:subsectionId" element={<PublicSubsectionReview />} />
+          
+          {/* Public Client Portfolio - view all client sites via token */}
+          <Route path="/portfolio/:token" element={<PublicClientPortfolio />} />
+          <Route path="/portfolio/:token/site/:siteId" element={<PublicSiteReview />} />
           
           <Route
             path="/dashboard"

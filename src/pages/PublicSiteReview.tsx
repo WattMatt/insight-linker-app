@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, Link } from "react-router-dom";
+import { useParams, Link, useNavigate } from "react-router-dom";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -131,7 +131,8 @@ interface LinkData {
 }
 
 const PublicSiteReview = () => {
-  const { token } = useParams<{ token: string }>();
+  const { token, siteId: routeSiteId } = useParams<{ token: string; siteId?: string }>();
+  const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [linkData, setLinkData] = useState<LinkData | null>(null);
@@ -176,6 +177,13 @@ const PublicSiteReview = () => {
       }
 
       const link = linkResult[0];
+      
+      // If this is a client-type link accessed via /review/:token, redirect to portfolio
+      if (link.link_type === 'client' && !routeSiteId) {
+        navigate(`/portfolio/${token}`, { replace: true });
+        return;
+      }
+      
       setLinkData(link);
 
       // Fetch company settings
@@ -188,8 +196,11 @@ const PublicSiteReview = () => {
         setCompanySettings(settings);
       }
 
+      // Determine which site to load: routeSiteId (from portfolio drill-down) or link.site_id
+      const targetSiteId = routeSiteId || link.site_id;
+      
       // Fetch site data
-      if (link.site_id) {
+      if (targetSiteId) {
         const { data: siteData, error: siteError } = await supabase
           .from('sites')
           .select(`
@@ -201,7 +212,7 @@ const PublicSiteReview = () => {
               logo_url
             )
           `)
-          .eq('id', link.site_id)
+          .eq('id', targetSiteId)
           .single();
 
         if (siteError) {
@@ -217,7 +228,7 @@ const PublicSiteReview = () => {
         const { data: subsectionsData } = await supabase
           .from('subsections')
           .select('*')
-          .eq('site_id', link.site_id)
+          .eq('site_id', targetSiteId)
           .order('name');
 
         setSubsections(subsectionsData || []);
@@ -226,7 +237,7 @@ const PublicSiteReview = () => {
         const { data: docsData } = await supabase
           .from('site_documents')
           .select('*')
-          .eq('site_id', link.site_id)
+          .eq('site_id', targetSiteId)
           .order('created_at', { ascending: false });
 
         setSiteDocuments(docsData || []);
@@ -235,7 +246,7 @@ const PublicSiteReview = () => {
         const { data: docCatsData } = await supabase
           .from('site_document_categories')
           .select('id, name')
-          .eq('site_id', link.site_id)
+          .eq('site_id', targetSiteId)
           .order('order_index');
 
         setSiteDocCategories(docCatsData || []);
@@ -244,7 +255,7 @@ const PublicSiteReview = () => {
         const { data: inspectionsData } = await supabase
           .from('inspections')
           .select('*')
-          .eq('site_id', link.site_id)
+          .eq('site_id', targetSiteId)
           .order('created_at', { ascending: false });
 
         setInspections(inspectionsData || []);
