@@ -153,12 +153,30 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
 
                     const textStartY = padding + qrSize + 40;
                     ctx.fillStyle = 'black';
-                    ctx.font = 'bold 38px Arial, sans-serif';
                     ctx.textAlign = 'center';
                     ctx.textBaseline = 'top';
-                    ctx.fillText(site.name.toUpperCase(), totalWidth / 2, textStartY);
-                    ctx.font = '32px Arial, sans-serif';
-                    ctx.fillText(subsection.name, totalWidth / 2, textStartY + 52);
+                    const maxTextWidth = totalWidth - (padding * 2);
+
+                    // fitText helper — shrinks font until text fits
+                    const fitText = (text: string, startSize: number, bold: boolean): number => {
+                        let fontSize = startSize;
+                        const prefix = bold ? 'bold ' : '';
+                        while (fontSize > 16) {
+                            ctx.font = `${prefix}${fontSize}px Arial, sans-serif`;
+                            if (ctx.measureText(text).width <= maxTextWidth) break;
+                            fontSize -= 2;
+                        }
+                        return fontSize;
+                    };
+
+                    const siteNameUpper = site.name.toUpperCase();
+                    const siteFontSize = fitText(siteNameUpper, 38, true);
+                    ctx.font = `bold ${siteFontSize}px Arial, sans-serif`;
+                    ctx.fillText(siteNameUpper, totalWidth / 2, textStartY);
+
+                    const subFontSize = fitText(subsection.name, 32, false);
+                    ctx.font = `${subFontSize}px Arial, sans-serif`;
+                    ctx.fillText(subsection.name, totalWidth / 2, textStartY + siteFontSize + 14);
 
                     const dataUrl = canvas.toDataURL('image/png');
                     qrCodeDataUrls.push({ dataUrl, name: subsection.name });
