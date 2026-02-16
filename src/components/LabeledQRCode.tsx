@@ -80,7 +80,7 @@ export const LabeledQRCode = ({
           
           img.onload = () => {
             // Calculate logo size maintaining aspect ratio
-            const maxLogoSize = qrSize * 0.2; // 20% of QR code size
+            const maxLogoSize = qrSize * 0.3; // 30% of QR code size
             let logoWidth = img.width;
             let logoHeight = img.height;
             
