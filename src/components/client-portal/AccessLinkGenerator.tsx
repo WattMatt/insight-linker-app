@@ -188,7 +188,8 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
       });
 
       // Copy link to clipboard
-      const link = `${window.location.origin}/review/${data.access_token}`;
+      const linkPath = data.link_type === 'client' ? 'portfolio' : 'review';
+      const link = `${window.location.origin}/${linkPath}/${data.access_token}`;
       navigator.clipboard.writeText(link);
       toast.success("Access link created and copied to clipboard!");
     },
@@ -237,14 +238,16 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
     },
   });
 
-  const copyLink = (token: string) => {
-    const link = `${window.location.origin}/review/${token}`;
-    navigator.clipboard.writeText(link);
+  const copyLink = (token: string, linkType: string) => {
+    const linkPath = linkType === 'client' ? 'portfolio' : 'review';
+    const url = `${window.location.origin}/${linkPath}/${token}`;
+    navigator.clipboard.writeText(url);
     toast.success("Link copied to clipboard!");
   };
 
-  const openLink = (token: string) => {
-    window.open(`${window.location.origin}/review/${token}`, "_blank");
+  const openLink = (token: string, linkType: string) => {
+    const linkPath = linkType === 'client' ? 'portfolio' : 'review';
+    window.open(`${window.location.origin}/${linkPath}/${token}`, "_blank");
   };
 
   return (
@@ -464,7 +467,7 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => copyLink(link.access_token)}
+                          onClick={() => copyLink(link.access_token, link.link_type)}
                           title="Copy link"
                         >
                           <Copy className="h-4 w-4" />
@@ -472,7 +475,7 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                         <Button
                           size="icon"
                           variant="ghost"
-                          onClick={() => openLink(link.access_token)}
+                          onClick={() => openLink(link.access_token, link.link_type)}
                           title="Open link"
                         >
                           <ExternalLink className="h-4 w-4" />
