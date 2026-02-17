@@ -137,7 +137,8 @@ const PublicSubsectionReview = () => {
   useEffect(() => {
     if (token && subsectionId) {
       // Sign out any stale session so anonymous RPC calls work cleanly
-      supabase.auth.signOut().then(() => validateAndFetchData());
+      // Catch errors gracefully — signOut can fail on custom domains due to auth-bridge mismatch
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {}).finally(() => validateAndFetchData());
     }
   }, [token, subsectionId]);
 
