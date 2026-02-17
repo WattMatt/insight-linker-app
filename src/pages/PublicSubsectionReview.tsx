@@ -30,6 +30,7 @@ import {
   Info
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
 import { 
@@ -130,6 +131,8 @@ const PublicSubsectionReview = () => {
   const [selectedInspection, setSelectedInspection] = useState<InspectionData | null>(null);
   const [inspectionDetails, setInspectionDetails] = useState<any | null>(null);
   const [loadingInspection, setLoadingInspection] = useState(false);
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [visitorRegistered, setVisitorRegistered] = useState(false);
 
   useEffect(() => {
     if (token && subsectionId) {
@@ -156,6 +159,14 @@ const PublicSubsectionReview = () => {
       if (!linkResult || linkResult.length === 0 || !linkResult[0].is_valid) {
         setError("This link is invalid or has expired");
         return;
+      }
+
+      const validatedLink = linkResult[0];
+      setLinkId(validatedLink.link_id);
+
+      // Check if visitor already registered in this session
+      if (getVisitorSession(validatedLink.link_id)) {
+        setVisitorRegistered(true);
       }
 
       // Fetch company settings
@@ -446,6 +457,18 @@ const PublicSubsectionReview = () => {
           <p className="text-muted-foreground">Loading subsection...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show visitor registration gate before content
+  if (!visitorRegistered && linkId && !error) {
+    return (
+      <VisitorRegistrationGate
+        accessLinkId={linkId}
+        companyLogoUrl={companySettings?.company_logo_url}
+        companyName={companySettings?.company_name}
+        onRegistered={() => setVisitorRegistered(true)}
+      />
     );
   }
 
