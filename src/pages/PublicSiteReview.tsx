@@ -28,6 +28,7 @@ import {
   ChevronRight
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
 import { ComplianceDashboard } from "@/components/ComplianceDashboard";
@@ -149,6 +150,8 @@ const PublicSiteReview = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [subsectionSearch, setSubsectionSearch] = useState("");
   const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [visitorRegistered, setVisitorRegistered] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -186,6 +189,12 @@ const PublicSiteReview = () => {
       }
       
       setLinkData(link);
+      setLinkId(link.link_id);
+
+      // Check if visitor already registered in this session
+      if (getVisitorSession(link.link_id)) {
+        setVisitorRegistered(true);
+      }
 
       // Fetch company settings
       const { data: settings } = await supabase
@@ -456,6 +465,18 @@ const PublicSiteReview = () => {
           <p className="text-muted-foreground">Loading site review...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show visitor registration gate before content
+  if (!visitorRegistered && linkId && !error) {
+    return (
+      <VisitorRegistrationGate
+        accessLinkId={linkId}
+        companyLogoUrl={companySettings?.company_logo_url}
+        companyName={companySettings?.company_name}
+        onRegistered={() => setVisitorRegistered(true)}
+      />
     );
   }
 

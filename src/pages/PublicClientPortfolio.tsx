@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
@@ -49,6 +50,8 @@ const PublicClientPortfolio = () => {
   const [sites, setSites] = useState<SiteWithStats[]>([]);
   const [companySettings, setCompanySettings] = useState<{ company_name?: string; company_logo_url?: string } | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [linkId, setLinkId] = useState<string | null>(null);
+  const [visitorRegistered, setVisitorRegistered] = useState(false);
 
   useEffect(() => {
     if (token) {
@@ -92,6 +95,12 @@ const PublicClientPortfolio = () => {
       }
 
       const link = linkResult[0];
+      setLinkId(link.link_id);
+
+      // Check if visitor already registered in this session
+      if (getVisitorSession(link.link_id)) {
+        setVisitorRegistered(true);
+      }
 
       if (link.link_type !== "client" || !link.client_id) {
         setError("This link is not a client portfolio link");
@@ -221,6 +230,18 @@ const PublicClientPortfolio = () => {
           <p className="text-muted-foreground">Loading portfolio...</p>
         </div>
       </div>
+    );
+  }
+
+  // Show visitor registration gate before content
+  if (!visitorRegistered && linkId && !error) {
+    return (
+      <VisitorRegistrationGate
+        accessLinkId={linkId}
+        companyLogoUrl={companySettings?.company_logo_url}
+        companyName={companySettings?.company_name}
+        onRegistered={() => setVisitorRegistered(true)}
+      />
     );
   }
 

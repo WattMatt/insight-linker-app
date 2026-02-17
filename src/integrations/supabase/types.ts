@@ -14,6 +14,53 @@ export type Database = {
   }
   public: {
     Tables: {
+      access_link_visitors: {
+        Row: {
+          access_link_id: string | null
+          accessed_at: string
+          email: string
+          first_name: string
+          id: string
+          ip_address: string | null
+          last_name: string
+          phone: string
+          role: string
+          user_agent: string | null
+        }
+        Insert: {
+          access_link_id?: string | null
+          accessed_at?: string
+          email: string
+          first_name: string
+          id?: string
+          ip_address?: string | null
+          last_name: string
+          phone: string
+          role: string
+          user_agent?: string | null
+        }
+        Update: {
+          access_link_id?: string | null
+          accessed_at?: string
+          email?: string
+          first_name?: string
+          id?: string
+          ip_address?: string | null
+          last_name?: string
+          phone?: string
+          role?: string
+          user_agent?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "access_link_visitors_access_link_id_fkey"
+            columns: ["access_link_id"]
+            isOneToOne: false
+            referencedRelation: "client_access_links"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       activity_logs: {
         Row: {
           action: string
