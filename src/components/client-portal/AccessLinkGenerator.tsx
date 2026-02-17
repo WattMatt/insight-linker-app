@@ -303,7 +303,7 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="site">Site Review</SelectItem>
-                          <SelectItem value="client">All Client Sites</SelectItem>
+                          <SelectItem value="client">Client Portfolio</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
