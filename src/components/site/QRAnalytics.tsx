@@ -121,7 +121,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                             const img = document.createElement('img');
                             img.crossOrigin = 'anonymous';
                             img.onload = () => {
-                                const maxLogoSize = qrSize * 0.2;
+                                const maxLogoSize = qrSize * 0.3;
                                 let logoWidth = img.width;
                                 let logoHeight = img.height;
 
@@ -281,21 +281,13 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                         {subsections.map((subsection) => (
                             <Card key={subsection.id} className="overflow-hidden">
                                 <CardContent className="p-4">
-                                    <div className="aspect-square bg-muted rounded-lg mb-3 flex items-center justify-center relative">
-                                        {subsection.qr_code_url ? (
-                                            <img
-                                                src={subsection.qr_code_url}
-                                                alt={`QR Code for ${subsection.name}`}
-                                                className="w-full h-full object-contain"
-                                            />
-                                        ) : (
-                                            <LabeledQRCode
-                                                url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${subsection.id}`}
-                                                siteName={site.name}
-                                                subsectionName={subsection.name}
-                                                logoUrl={companyLogo || undefined}
-                                            />
-                                        )}
+                                    <div className="bg-muted rounded-lg mb-3 flex items-center justify-center relative">
+                                        <LabeledQRCode
+                                            url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${subsection.id}`}
+                                            siteName={site.name}
+                                            subsectionName={subsection.name}
+                                            logoUrl={companyLogo || undefined}
+                                        />
                                     </div>
                                     <h3 className="font-semibold text-sm mb-1">{subsection.name}</h3>
                                     {subsection.tenant_name && (
