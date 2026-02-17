@@ -56,7 +56,8 @@ const PublicClientPortfolio = () => {
   useEffect(() => {
     if (token) {
       // Sign out any stale session so anonymous RPC calls work cleanly
-      supabase.auth.signOut().then(() => fetchData());
+      // Catch errors gracefully — signOut can fail on custom domains due to auth-bridge mismatch
+      supabase.auth.signOut({ scope: 'local' }).catch(() => {}).finally(() => fetchData());
     }
   }, [token]);
 
