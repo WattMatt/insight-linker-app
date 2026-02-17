@@ -24,7 +24,7 @@ export async function generateAndUploadQRCode({
     console.log('Settings query result:', { settings, settingsError });
     
     // Use settings qr_base_url, or default to production domain (not window.location.origin for dev/preview)
-    const baseUrl = (settings?.qr_base_url || 'https://watsonmattheus.com').replace(/\/$/, '');
+    const baseUrl = (settings?.qr_base_url || 'https://wm-compliance.lovable.app').replace(/\/$/, '');
     console.log('Using base URL for QR code:', baseUrl);
     
     // Construct the public subsection URL

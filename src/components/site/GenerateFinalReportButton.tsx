@@ -129,7 +129,7 @@ export function GenerateFinalReportButton({
       const subDocs = subsectionDocsRes.data || [];
       const inspections = inspectionsRes.data || [];
       const cocValidations = cocValidationsRes.data || [];
-      const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
+      const qrBaseUrl = settings?.qr_base_url || 'https://wm-compliance.lovable.app';
 
       // Build map of LATEST validation per subsection (same logic as ComplianceDashboard)
       const latestValidationBySubsection = new Map<string, { status: string; violations: any }>();
@@ -423,7 +423,7 @@ export function GenerateFinalReportButton({
         .from('settings')
         .select('qr_base_url')
         .single();
-      const qrBaseUrl = settings?.qr_base_url || 'https://watsonmattheus.com';
+      const qrBaseUrl = settings?.qr_base_url || 'https://wm-compliance.lovable.app';
 
       // Build enabled sections map from reportSections
       const enabledSections: Record<string, boolean> = {};

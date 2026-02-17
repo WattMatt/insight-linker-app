@@ -1,0 +1,1 @@
+UPDATE settings SET qr_base_url = 'https://wm-compliance.lovable.app' WHERE qr_base_url = 'https://watsonmattheus.com' OR qr_base_url IS NULL;
