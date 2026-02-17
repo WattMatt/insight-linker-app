@@ -74,7 +74,7 @@ export async function generateAndUploadQRCode({
         
         img.onload = () => {
           // Calculate logo size maintaining aspect ratio
-          const maxLogoSize = qrSize * 0.2;
+          const maxLogoSize = qrSize * 0.3;
           let logoWidth = img.width;
           let logoHeight = img.height;
           
