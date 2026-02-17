@@ -231,15 +231,25 @@ const ClientPortalSiteDetail = () => {
     json_data: i.json_data,
   }));
 
+  const sitesUrl = `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`;
+
   return (
     <div className="space-y-6">
-      {/* Breadcrumbs */}
-      <Breadcrumbs 
-        items={[
-          { label: "Sites", href: `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`, icon: "site" },
-          { label: site.name, icon: "site" }
-        ]} 
-      />
+      {/* Back button + Breadcrumbs */}
+      <div className="flex items-center gap-3">
+        <Link to={sitesUrl}>
+          <Button variant="outline" size="sm" className="gap-2 min-h-[44px]">
+            <ChevronRight className="h-4 w-4 rotate-180" />
+            <span>All Sites</span>
+          </Button>
+        </Link>
+        <Breadcrumbs 
+          items={[
+            { label: "Sites", href: sitesUrl, icon: "site" },
+            { label: site.name, icon: "site" }
+          ]} 
+        />
+      </div>
 
       {previewClientId && (
         <Alert className="bg-blue-50 border-blue-200">
