@@ -133,7 +133,8 @@ const PublicSubsectionReview = () => {
 
   useEffect(() => {
     if (token && subsectionId) {
-      validateAndFetchData();
+      // Sign out any stale session so anonymous RPC calls work cleanly
+      supabase.auth.signOut().then(() => validateAndFetchData());
     }
   }, [token, subsectionId]);
 

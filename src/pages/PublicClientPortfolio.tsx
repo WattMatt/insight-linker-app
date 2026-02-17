@@ -51,7 +51,10 @@ const PublicClientPortfolio = () => {
   const [searchQuery, setSearchQuery] = useState("");
 
   useEffect(() => {
-    if (token) fetchData();
+    if (token) {
+      // Sign out any stale session so anonymous RPC calls work cleanly
+      supabase.auth.signOut().then(() => fetchData());
+    }
   }, [token]);
 
   const fetchData = async () => {
@@ -59,12 +62,32 @@ const PublicClientPortfolio = () => {
       setLoading(true);
       setError(null);
 
+      // Add a timeout so the page never hangs indefinitely
+      const timeoutMs = 15000;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+
       // Validate the access token
       const { data: linkResult, error: linkError } = await supabase
         .rpc("validate_access_link", { token });
 
-      if (linkError || !linkResult?.length || !linkResult[0].is_valid) {
+      clearTimeout(timeoutId);
+
+      console.log('[Portfolio] Token validation result:', { linkResult, linkError, token });
+
+      if (linkError) {
+        console.error('[Portfolio] RPC error:', linkError);
+        setError("Unable to validate this link. Please try again.");
+        return;
+      }
+
+      if (!linkResult || !Array.isArray(linkResult) || linkResult.length === 0) {
         setError("This link is invalid or has expired");
+        return;
+      }
+
+      if (!linkResult[0].is_valid) {
+        setError("This link has expired or been deactivated");
         return;
       }
 
