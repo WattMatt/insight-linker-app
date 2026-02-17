@@ -147,15 +147,19 @@ const PublicClientPortfolio = () => {
         .select("id, site_id, coc_status, is_coc_required, is_compliant")
         .in("site_id", siteIds);
 
-      // Fetch snags for all subsections
+      // Fetch snags for all subsections (batch to avoid URL length limits)
       const subIds = (subsections || []).map((s) => s.id);
       let snags: { subsection_id: string; status: string }[] = [];
       if (subIds.length > 0) {
-        const { data: snagsData } = await supabase
-          .from("snags")
-          .select("subsection_id, status")
-          .in("subsection_id", subIds);
-        snags = snagsData || [];
+        const BATCH_SIZE = 50;
+        for (let i = 0; i < subIds.length; i += BATCH_SIZE) {
+          const batch = subIds.slice(i, i + BATCH_SIZE);
+          const { data: snagsData } = await supabase
+            .from("snags")
+            .select("subsection_id, status")
+            .in("subsection_id", batch);
+          if (snagsData) snags = snags.concat(snagsData);
+        }
       }
 
       // Generate signed URLs for site images
