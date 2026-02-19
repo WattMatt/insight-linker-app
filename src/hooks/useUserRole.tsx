@@ -1,26 +1,53 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
+import { useEffect, useState } from "react";
 
 export type UserRole = "Admin" | "Client" | "Contractor" | null;
 
 export const useUserRole = () => {
+  const queryClient = useQueryClient();
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Get initial user
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserId(user?.id ?? null);
+    });
+
+    // Listen for auth changes and invalidate role cache when user changes
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      const newUserId = session?.user?.id ?? null;
+      setUserId((prev) => {
+        if (prev !== newUserId) {
+          // User changed — clear all role/onboarding caches immediately
+          queryClient.removeQueries({ queryKey: ["user-role"] });
+          queryClient.removeQueries({ queryKey: ["onboarding-status"] });
+          queryClient.removeQueries({ queryKey: ["user-client-info"] });
+        }
+        return newUserId;
+      });
+    });
+
+    return () => subscription.unsubscribe();
+  }, [queryClient]);
+
   return useQuery({
-    queryKey: ["user-role"],
+    queryKey: ["user-role", userId],
     queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
+      if (!userId) return null;
 
       const { data, error } = await supabase
         .from("user_roles")
         .select("role")
-        .eq("user_id", user.id)
+        .eq("user_id", userId)
         .maybeSingle();
 
       if (error) throw error;
       return data?.role as UserRole;
     },
-    staleTime: 1000 * 60 * 5, // 5 minutes - prevents refetch on hot reload
-    gcTime: 1000 * 60 * 10, // 10 minutes cache
+    enabled: !!userId,
+    staleTime: 1000 * 60 * 5,
+    gcTime: 1000 * 60 * 10,
   });
 };
 
