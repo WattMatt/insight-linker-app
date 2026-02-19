@@ -232,16 +232,27 @@ const InspectionDetail = () => {
     }
   }, []);
 
+  // Track if initial load has happened to prevent re-fetching on isOnline flicker
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
     // Allow loading with just inspectionId (for contractor portal) or with full path
     if (inspectionId) {
+      // Only re-fetch on isOnline change if we were previously offline and just came back online
+      // This prevents race conditions where network flicker during save overwrites local state
+      if (initialLoadDone.current && isOnline) {
+        // Coming back online - gentle re-fetch that won't overwrite unsaved changes
+        console.log("[InspectionDetail] Back online - skipping auto-refetch to preserve local state");
+        return;
+      }
       fetchInspectionData();
       fetchCompanyLogo();
       if (subsectionId) {
         fetchSnags();
       }
+      initialLoadDone.current = true;
     }
-  }, [clientId, siteId, subsectionId, inspectionId, isOnline]);
+  }, [clientId, siteId, subsectionId, inspectionId]);
 
   const fetchCompanyLogo = async () => {
     try {
@@ -1448,12 +1459,10 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Rename existing images to new descriptive format
-      const updatedJsonData = await handleRenameExistingImages();
-
-      // Include tenants in json_data
+      // Include tenants in json_data — skip the rename-on-every-save cycle
+      // which was causing image loss on slow connections
       const jsonDataWithTenants = {
-        ...(updatedJsonData || inspection.jsonData),
+        ...inspection.jsonData,
         tenants: tenants
       } as any;
 
@@ -1479,6 +1488,10 @@ const InspectionDetail = () => {
         .eq('id', inspectionId);
 
       if (error) throw error;
+
+      // Re-fetch from DB to confirm persisted state and keep UI in sync
+      console.log("[InspectionDetail] Save successful, re-fetching to confirm persisted state");
+      await fetchInspectionData();
 
       toast.success("Inspection saved successfully");
     } catch (error) {
@@ -1954,9 +1967,9 @@ const InspectionDetail = () => {
             <X className="mr-2 h-4 w-4" />
             Exit
           </Button>
-          <Button onClick={handleSave} disabled={saving || renamingImages}>
+          <Button onClick={handleSave} disabled={saving}>
             <Save className="mr-2 h-4 w-4" />
-            {saving ? 'Saving...' : renamingImages ? 'Optimizing...' : 'Save'}
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </div>
