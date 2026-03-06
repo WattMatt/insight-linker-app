@@ -1181,6 +1181,9 @@ function applyDeterministicValidation(
   }
 
   // --- 9. PASS-THROUGH remaining AI checks not handled above ---
+  // IMPORTANT: Pass-through checks are informational only.
+  // They do NOT influence the overall pass/fail status.
+  // The deterministic engine (steps 1-8 above) is the SOLE authority for safety-critical decisions.
   const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'POL-001', 'COC-TYPE-001', 
     'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 'CERT-DATE-001']);
   for (const check of aiChecks) {
@@ -1192,11 +1195,11 @@ function applyDeterministicValidation(
         limit: check.limit || '',
         remediation: check.remediation || ''
       });
-      if (check.result === 'Fail' && check.category === 'Safety-Critical') {
-        hasSafetyCriticalFail = true;
-      }
-      if (check.result === 'Fail' && check.category === 'Mandatory') {
-        mandatoryFailCount++;
+      // DO NOT set hasSafetyCriticalFail from AI pass-through checks.
+      // Only deterministic engine checks (steps 1-8) can trigger safety-critical failures.
+      // AI pass-through failures are logged as informational only.
+      if (check.result === 'Fail') {
+        console.log(`  ℹ️ AI pass-through check ${check.checkId} failed (informational, not safety-critical override)`);
       }
     }
   }
@@ -1594,6 +1597,34 @@ Return ONLY the JSON validation result.`
         validationResult.checks = deterministicResult.checks;
         validationResult.criticalFailures = deterministicResult.criticalFailures;
         validationResult.overallStatus = deterministicResult.overallStatus;
+        
+        // ===== CRITICAL FIX: Override AI hierarchy fields with deterministic results =====
+        // The AI often sets hierarchyValidation incorrectly for Initial COCs.
+        // The deterministic engine is authoritative — sync these fields.
+        const normalizedCocType = (validationResult.cocType || '').toLowerCase();
+        if (normalizedCocType === 'initial') {
+          // Initial COCs don't need hierarchy references — force valid
+          validationResult.initialCocValid = true;
+          validationResult.cocTypeMarked = true;
+          if (validationResult.hierarchyValidation) {
+            validationResult.hierarchyValidation.hierarchyStatus = 'Valid';
+            validationResult.hierarchyValidation.cocTypeMarked = true;
+            validationResult.hierarchyValidation.initialCocExists = true;
+            validationResult.hierarchyValidation.initialCocReferenced = null; // N/A for Initial
+          }
+          console.log('🔧 Overrode AI hierarchy fields for Initial COC → Valid');
+        } else if (normalizedCocType === 'supplementary' || normalizedCocType === 'temporary') {
+          // Check deterministic engine result for hierarchy
+          const hierCheck = deterministicResult.checks.find(
+            (c: DeterministicCheckResult) => c.checkId === 'COC-SUPP-001' || c.checkId === 'COC-TEMP-001'
+          );
+          const hierPassed = hierCheck?.result === 'Pass';
+          validationResult.initialCocValid = hierPassed;
+          if (validationResult.hierarchyValidation) {
+            validationResult.hierarchyValidation.hierarchyStatus = hierPassed ? 'Valid' : 'Invalid - Missing Reference';
+            validationResult.hierarchyValidation.initialCocReferenced = hierPassed;
+          }
+        }
         
         // Add settings transparency
         if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
