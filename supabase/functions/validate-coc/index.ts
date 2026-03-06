@@ -189,7 +189,7 @@ Pay special attention to these commonly handwritten electrical symbols:
 - RCD trip times at IΔn and 5×IΔn (in ms)
 - Polarity test results
 - Continuity readings (in Ω)
-- Prospective short-circuit current / PSCC (in kA) — informational
+- Prospective short-circuit current / PSCC (in kA) — MANDATORY
 - MCB/breaker ratings for each circuit (in A)
 - MCB type if visible (Type B, C, or D)
 
