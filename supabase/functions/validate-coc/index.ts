@@ -342,16 +342,24 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
 **PASS:** Cable size ≥ minimum for protection rating
 **FAIL:** Undersized cable creates fire risk
 
-### ⚡ OVERCURRENT PROTECTION (Clause 8.3)
-**Check ID:** OCP-001
+### ⚡ OVERCURRENT PROTECTION & PSCC (Clause 8.3)
+**Check ID:** OCP-001 / PSCC-001
 **Requirements:**
 - In ≤ Iz (device rating ≤ cable current capacity)
 - I2 ≤ 1.45 × Iz (conventional tripping current)
-- Breaking capacity > prospective fault current
+- Breaking capacity > prospective fault current (PSCC)
 - Coordination with upstream devices (discrimination)
 
+**PSCC-001 Specific:**
+- Extract the PSCC value (in kA) from the test results
+- Extract the main breaker/incomer breaking capacity (in kA) — typically 6kA for domestic, 10-25kA for commercial
+- **PASS:** PSCC < breaker breaking capacity
+- **FAIL:** PSCC ≥ breaker breaking capacity (inadequate protection)
+- Common domestic MCBs: 6kA breaking capacity
+- Common commercial MCBs: 10kA or 25kA breaking capacity
+
 **PASS:** All protective devices correctly rated and coordinated
-**FAIL:** Oversized protection, inadequate breaking capacity
+**FAIL:** Oversized protection, inadequate breaking capacity, PSCC exceeds rated capacity
 
 ### 📄 DOCUMENTATION & CERTIFICATION (Clause 22)
 **Check ID:** DOC-001
