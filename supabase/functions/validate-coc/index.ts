@@ -826,13 +826,25 @@ ${skipSection}
 // This runs AFTER the AI extraction to apply mathematical rules server-side.
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
-function parseNumericValue(value: string | undefined | null): number | null | 'N/A' {
+// Text-based pass values commonly written on South African COC forms
+const TEXT_PASS_VALUES = [
+  'compliant', 'pass', 'passed', 'satisfactory', 'ok', 'good', 'acceptable',
+  'correct', 'verified', 'confirmed', 'yes', 'tick', 'ticked', '✓', '✔',
+  'within limits', 'within range', 'safe', 'adequate'
+];
+
+function parseNumericValue(value: string | undefined | null): number | null | 'N/A' | 'TEXT_PASS' {
   if (!value) return null;
   const str = value.toString().trim().toLowerCase();
   
   // Not Applicable values - valid when test doesn't apply to this installation
   if (['n/a', 'not applicable', 'na', 'n.a.', 'n.a', 'not required', 'not tested'].some(v => str.includes(v))) {
     return 'N/A';
+  }
+  
+  // Text-based pass values (common on SA COC forms)
+  if (TEXT_PASS_VALUES.some(v => str.includes(v))) {
+    return 'TEXT_PASS';
   }
   
   // Infinity values (always pass for insulation resistance)
