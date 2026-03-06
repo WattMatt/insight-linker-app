@@ -1384,14 +1384,37 @@ serve(async (req) => {
         }
       } catch (fallbackErr) {
         const errMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
-        throw new Error(`Failed to download document at path "${storagePath}": ${errMsg}`);
+        console.error(`Document not found in storage: ${storagePath}`);
+        
+        // Return a graceful "file not found" response instead of crashing
+        return new Response(
+          JSON.stringify({ 
+            success: false,
+            error: `Document file not found in storage. It may have been deleted or moved. Path: ${storagePath}`,
+            status: 'FileNotFound',
+            complianceStatus: 'Skipped',
+            violations: [],
+            checks: []
+          }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     } else {
       fileData = downloadData;
     }
     
     if (!fileData) {
-      throw new Error(`Document download returned empty data for path: ${storagePath}`);
+      return new Response(
+        JSON.stringify({ 
+          success: false,
+          error: `Document download returned empty data. Path: ${storagePath}`,
+          status: 'FileNotFound',
+          complianceStatus: 'Skipped',
+          violations: [],
+          checks: []
+        }),
+        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
     }
 
     // Check if this is a PDF or image file
