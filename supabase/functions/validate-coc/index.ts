@@ -235,6 +235,12 @@ Scan the entire document and extract:
 - Specifically: 0.6MΩ < 1.0MΩ → FAIL (insulation breakdown risk)
 - Missing/blank values → FAIL (test not performed)
 
+**⚠️ CRITICAL: INFINITY SYMBOL RECOGNITION ⚠️**
+The infinity symbol (∞) is commonly handwritten on COCs as a sideways "8" or a loop shape.
+It may also appear as "OL" (overload), ">500", or ">999".
+These are NOT blank fields — they indicate the meter could not measure a finite value (excellent insulation).
+If you see ANY mark in a test result field that could be ∞, OL, or a loop/figure-8 shape, report it as "∞" NOT as "blank" or "missing".
+
 **⚠️ DO NOT CONFUSE:**
 - "∞" (infinity) = PASS (excellent insulation, beyond meter range)
 - "0.6MΩ" = FAIL (below 1.0MΩ threshold, dangerous)
