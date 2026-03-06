@@ -2143,10 +2143,16 @@ Return ONLY the JSON validation result.`
     if (validationResult.cocIssueDate) {
       documentUpdateData.coc_issue_date = validationResult.cocIssueDate;
     }
-    // Sync coc_type from AI extraction - this ensures the stored type matches what's on the certificate
+    // Sync coc_type from AI extraction - normalize to match DB check constraint
     if (validationResult.cocType) {
-      documentUpdateData.coc_type = validationResult.cocType;
-      console.log('Syncing coc_type from AI extraction:', validationResult.cocType);
+      const rawType = validationResult.cocType.toLowerCase().trim();
+      let normalizedCocType: string | null = null;
+      if (rawType.startsWith('initial')) normalizedCocType = 'Initial';
+      else if (rawType.startsWith('supplementary')) normalizedCocType = 'Supplementary';
+      else if (rawType.startsWith('temporary')) normalizedCocType = 'Temporary';
+      else normalizedCocType = 'Not Marked';
+      documentUpdateData.coc_type = normalizedCocType;
+      console.log('Syncing coc_type from AI extraction:', validationResult.cocType, '→ normalized:', normalizedCocType);
     }
     documentUpdateData.coc_status = mappedDocumentStatus;
 
