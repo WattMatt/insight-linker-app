@@ -401,7 +401,7 @@ Scan the entire document and extract:
       "measuredValue": "Ticked: Initial/Supplementary/Temporary | Not Ticked",
       "category": "Mandatory",
       "severity": "Critical",
-      "remediation": "The certificate type checkbox must be ticked by the issuer. If not marked, the certificate is incomplete and invalid."
+      "remediation": "The certificate type checkbox must be ticked by the issuer."
     },
     {
       "checkId": "COC-INIT-001",
@@ -436,23 +436,11 @@ Scan the entire document and extract:
       "severity": "Critical"
     }
   ],
-      "checkId": "EARTH-001",
-      "clause": "8.4",
-      "description": "Earth resistance",
-      "result": "Pass | Fail | Not Tested | Not Applicable",
-      "measuredValue": "value with unit",
-      "limit": "requirement with unit",
-      "remediation": "specific action if fail",
-      "category": "Safety-Critical | Mandatory | Administrative | Recommended",
-      "severity": "Critical | Major | Minor",
-      "sansReference": "SANS 10142-1:2020 Clause X.X.X"
-    }
-  ],
   "criticalFailures": [
     {
       "category": "Safety | Technical | Administrative",
       "clause": "string",
-      "section": "string (Page X) - REQUIRED: Include page number in format 'Section Name (Page X)'",
+      "section": "string (Page X) - REQUIRED: Include page number",
       "description": "string - what is wrong",
       "reason": "detailed explanation with EXACT quoted evidence",
       "evidence": "Page X, Section Y shows: '[exact quoted text or value]'",
