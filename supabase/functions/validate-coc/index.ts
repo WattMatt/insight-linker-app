@@ -1624,6 +1624,13 @@ function applyDeterministicValidation(
     console.log(`🚨 FAIL: ${mandatoryFailCount} mandatory failures >= threshold ${settings.mandatory_failures_for_fail}`);
   }
 
+  // Incomplete Certificate → Incomplete (unless already Fail)
+  const certIncomplete = deterministicChecks.find(c => c.checkId === 'CERT-INCOMPLETE-001');
+  if (certIncomplete?.result === 'Fail' && overallStatus !== 'Fail') {
+    overallStatus = 'Incomplete';
+    console.log(`📋 INCOMPLETE: Certificate missing mandatory empirical tests`);
+  }
+
   // Low confidence → Incomplete
   if (aiResult.confidenceScore && aiResult.confidenceScore < settings.ai_confidence_threshold_percent) {
     if (overallStatus !== 'Fail') {
