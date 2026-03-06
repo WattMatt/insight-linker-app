@@ -1043,6 +1043,14 @@ function applyDeterministicValidation(
           remediation: '',
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
+      } else if (measured === 'TEXT_PASS') {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Pass',
+          measuredValue: check.measuredValue,
+          limit: `≥ ${limit}MΩ`,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+        });
       } else if (measured === Infinity) {
         deterministicChecks.push({
           checkId: 'INSUL-001', result: 'Pass',
