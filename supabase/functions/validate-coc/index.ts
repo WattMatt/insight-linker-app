@@ -1010,13 +1010,29 @@ function applyDeterministicValidation(
           overrideReason: check.result !== 'Pass' ? 'Server override: ∞ reading = automatic pass' : undefined
         });
       } else if (measured === null) {
-        deterministicChecks.push({
-          checkId: 'INSUL-001', result: 'Fail',
-          measuredValue: check.measuredValue || 'Not recorded',
-          limit: `≥ ${limit}MΩ`,
-          remediation: 'Insulation resistance must be recorded with a numeric measurement.'
-        });
-        mandatoryFailCount++;
+        // Check if the AI description mentions "blank" but the value might actually be ∞
+        const desc = (check.description || '').toLowerCase();
+        const mv = (check.measuredValue || '').toLowerCase();
+        const mightBeInfinity = desc.includes('blank') || desc.includes('empty') || mv.includes('blank') || mv.includes('empty');
+        
+        // If the AI says blank but this is a common misread of ∞, treat as informational only
+        if (mightBeInfinity) {
+          deterministicChecks.push({
+            checkId: 'INSUL-001', result: 'Not Tested',
+            measuredValue: check.measuredValue || 'Possibly ∞ (AI reported blank)',
+            limit: `≥ ${limit}MΩ`,
+            remediation: 'AI may have misread an infinity symbol (∞) as a blank field. Manual verification recommended.',
+            overrideReason: 'Downgraded from Fail: common AI misread of ∞ symbol'
+          });
+        } else {
+          deterministicChecks.push({
+            checkId: 'INSUL-001', result: 'Fail',
+            measuredValue: check.measuredValue || 'Not recorded',
+            limit: `≥ ${limit}MΩ`,
+            remediation: 'Insulation resistance must be recorded with a numeric measurement.'
+          });
+          mandatoryFailCount++;
+        }
       } else {
         const pass = measured >= limit;
         deterministicChecks.push({
