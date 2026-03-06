@@ -1122,12 +1122,21 @@ function applyDeterministicValidation(
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
       } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for insulation resistance
         deterministicChecks.push({
-          checkId: 'INSUL-001', result: 'Pass',
+          checkId: 'INSUL-001', result: 'Fail',
           measuredValue: check.measuredValue,
           limit: `≥ ${limit}MΩ`,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for insulation resistance. A numeric value in MΩ or ∞/OL must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in MΩ'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'INSUL-001',
+          description: `Insulation resistance recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.6 requires a numeric insulation resistance value in MΩ. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test insulation resistance and record the actual measured value in MΩ.',
+          riskLevel: 'Critical'
         });
       } else if (measured === Infinity) {
         deterministicChecks.push({
