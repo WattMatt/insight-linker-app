@@ -1385,12 +1385,197 @@ function applyDeterministicValidation(
     }
   }
 
-  // --- 9. PASS-THROUGH remaining AI checks not handled above ---
+  // --- 9. EARTH LOOP IMPEDANCE (Clause 8.5) — LOOP-001 ---
+  {
+    const loopChecks = aiChecks.filter((c: any) => 
+      c.checkId === 'LOOP-001' || (c.clause === '8.5' && c.description?.toLowerCase().includes('loop'))
+    );
+    
+    for (const check of loopChecks) {
+      const measured = parseNumericValue(check.measuredValue);
+      
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'LOOP-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: 'Per MCB rating',
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
+        });
+      } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for earth loop impedance
+        deterministicChecks.push({
+          checkId: 'LOOP-001', result: 'Fail',
+          measuredValue: check.measuredValue,
+          limit: 'Numeric Zs value required',
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for earth loop impedance. A numeric Zs value in Ω must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical Zs measurement in Ω'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'LOOP-001',
+          description: `Earth loop impedance recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.5 requires a numeric earth loop impedance (Zs) value in Ω. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test earth loop impedance and record the actual measured Zs value in Ω.',
+          riskLevel: 'Critical'
+        });
+      } else if (typeof measured === 'number') {
+        // Try to find MCB rating from the check or circuit schedule
+        const mcbMatch = (check.limit || check.measuredValue || '').match(/(\d+)\s*[aA]/);
+        const mcbRating = mcbMatch ? parseInt(mcbMatch[1]) : null;
+        const mcbTypeMatch = (check.limit || check.measuredValue || '').match(/type\s*([BbCcDd])/i);
+        const mcbType = mcbTypeMatch ? mcbTypeMatch[1].toUpperCase() : 'B';
+        
+        if (mcbRating) {
+          const maxZs = getMaxZs(mcbRating, mcbType);
+          if (maxZs) {
+            const pass = measured <= maxZs;
+            deterministicChecks.push({
+              checkId: 'LOOP-001', result: pass ? 'Pass' : 'Fail',
+              measuredValue: `${measured}Ω`,
+              limit: `≤ ${maxZs}Ω (${mcbRating}A Type ${mcbType})`,
+              remediation: pass ? '' : `Measured Zs ${measured}Ω exceeds ${maxZs}Ω for ${mcbRating}A Type ${mcbType} MCB. Automatic disconnection within 0.4s not guaranteed.`,
+              overrideReason: check.result !== (pass ? 'Pass' : 'Fail') ? `Server override: ${measured}Ω vs ${maxZs}Ω limit` : undefined
+            });
+            if (!pass) {
+              hasSafetyCriticalFail = true;
+              criticalFailures.push({
+                category: 'Safety-Critical', clause: 'LOOP-001',
+                description: `Earth loop impedance ${measured}Ω exceeds ${maxZs}Ω for ${mcbRating}A Type ${mcbType} MCB`,
+                reason: `SANS 10142-1 Clause 8.5: Zs ${measured}Ω > max ${maxZs}Ω — automatic disconnection not guaranteed`,
+                immediateAction: 'Investigate high loop impedance. Check cable runs, connections, and earth path.',
+                riskLevel: 'Critical'
+              });
+            }
+          } else {
+            // MCB rating not in lookup table — pass through AI result
+            deterministicChecks.push({
+              checkId: 'LOOP-001',
+              result: check.result || 'Not Tested',
+              measuredValue: `${measured}Ω`,
+              limit: check.limit || `MCB ${mcbRating}A not in Zs lookup table`,
+              remediation: check.remediation || ''
+            });
+          }
+        } else {
+          // No MCB rating found — record the value, pass through AI result
+          deterministicChecks.push({
+            checkId: 'LOOP-001',
+            result: check.result || 'Not Tested',
+            measuredValue: `${measured}Ω`,
+            limit: check.limit || 'MCB rating not extracted — manual review needed',
+            remediation: check.remediation || ''
+          });
+        }
+      } else {
+        deterministicChecks.push({
+          checkId: 'LOOP-001',
+          result: check.result || 'Not Tested',
+          measuredValue: check.measuredValue || 'Not recorded',
+          limit: check.limit || 'Per MCB rating',
+          remediation: check.remediation || ''
+        });
+      }
+    }
+    // If AI didn't extract any loop impedance checks
+    if (loopChecks.length === 0) {
+      deterministicChecks.push({
+        checkId: 'LOOP-001', result: 'Not Tested',
+        measuredValue: 'No earth loop impedance data extracted',
+        limit: 'Per MCB rating (Zs lookup table)',
+        remediation: 'Earth loop impedance test results not found in document.'
+      });
+    }
+  }
+
+  // --- 10. ISSUER COMPETENCY CHECK — REG-001 ---
+  {
+    const adminDetails = aiResult.administrativeDetails || {};
+    const regType = (adminDetails.registrationType || '').toLowerCase();
+    const supplyPhases = (adminDetails.supplyPhases || '').toLowerCase();
+    
+    if (regType && supplyPhases) {
+      const isSinglePhaseTester = regType.includes('single phase') || regType === 'ets';
+      const isThreePhaseInstall = supplyPhases.includes('three') || supplyPhases === '3';
+      
+      if (isSinglePhaseTester && isThreePhaseInstall) {
+        deterministicChecks.push({
+          checkId: 'REG-001', result: 'Fail',
+          measuredValue: `Issuer: ${adminDetails.registrationType}, Supply: ${adminDetails.supplyPhases}`,
+          limit: 'Issuer registration must match installation type',
+          remediation: 'An Electrical Tester for Single Phase cannot sign off a Three Phase installation. An IE or MIE is required.',
+          overrideReason: 'Issuer competency mismatch — Single Phase tester on Three Phase installation'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Administrative', clause: 'REG-001',
+          description: 'Issuer registration category insufficient for this installation',
+          reason: `Issuer registered as "${adminDetails.registrationType}" but installation is ${adminDetails.supplyPhases} phase. An IE or MIE registration is required for Three Phase installations.`,
+          immediateAction: 'Certificate must be re-issued by a person with appropriate registration (IE or MIE).',
+          riskLevel: 'Critical'
+        });
+      } else {
+        deterministicChecks.push({
+          checkId: 'REG-001', result: 'Pass',
+          measuredValue: `Issuer: ${adminDetails.registrationType || 'Not specified'}, Supply: ${adminDetails.supplyPhases || 'Not specified'}`,
+          limit: 'Issuer registration must match installation type',
+          remediation: ''
+        });
+      }
+    } else {
+      deterministicChecks.push({
+        checkId: 'REG-001', result: 'Not Tested',
+        measuredValue: `Issuer type: ${adminDetails.registrationType || 'Not extracted'}, Supply: ${adminDetails.supplyPhases || 'Not extracted'}`,
+        limit: 'Issuer registration must match installation type',
+        remediation: 'Could not verify issuer competency — registration type or supply phases not extracted from document.'
+      });
+    }
+  }
+
+  // --- 11. INCOMPLETE CERTIFICATE DETECTION — CERT-INCOMPLETE-001 ---
+  {
+    const empiricalCheckIds = ['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001'];
+    const missingTests: string[] = [];
+    
+    for (const checkId of empiricalCheckIds) {
+      const check = deterministicChecks.find(c => c.checkId === checkId);
+      if (check && (check.result === 'Not Tested' || check.result === 'Skipped')) {
+        // Only count as missing if the check is enabled
+        if (checkId === 'EARTH-001' && !settings.earth_continuity_check_enabled) continue;
+        if (checkId === 'INSUL-001' && !settings.insulation_resistance_check_enabled) continue;
+        if (checkId === 'RCD-001' && !settings.rcd_function_check_enabled) continue;
+        // LOOP-001 doesn't have a dedicated enable flag — always check
+        missingTests.push(checkId);
+      }
+    }
+    
+    if (missingTests.length > 0) {
+      deterministicChecks.push({
+        checkId: 'CERT-INCOMPLETE-001', result: 'Fail',
+        measuredValue: `Missing: ${missingTests.join(', ')}`,
+        limit: 'All mandatory instrumental tests must be recorded',
+        remediation: `Incomplete certificate — mandatory test(s) not recorded: ${missingTests.join(', ')}. An incomplete certificate is legally void.`,
+        overrideReason: 'Incomplete Certificate — mandatory empirical test data missing'
+      });
+      // Don't double-count as safety-critical if already failing; just ensure Incomplete status
+      console.log(`📋 Incomplete certificate: missing tests ${missingTests.join(', ')}`);
+    } else {
+      deterministicChecks.push({
+        checkId: 'CERT-INCOMPLETE-001', result: 'Pass',
+        measuredValue: 'All mandatory tests present',
+        limit: 'All mandatory instrumental tests must be recorded',
+        remediation: ''
+      });
+    }
+  }
+
+  // --- 12. PASS-THROUGH remaining AI checks not handled above ---
   // IMPORTANT: Pass-through checks are informational only.
   // They do NOT influence the overall pass/fail status.
-  // The deterministic engine (steps 1-8 above) is the SOLE authority for safety-critical decisions.
-  const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'POL-001', 'COC-TYPE-001', 
-    'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 'CERT-DATE-001']);
+  // The deterministic engine (steps 1-11 above) is the SOLE authority for safety-critical decisions.
+  const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001', 'POL-001', 'COC-TYPE-001', 
+    'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 
+    'CERT-DATE-001', 'REG-001', 'CERT-INCOMPLETE-001']);
   for (const check of aiChecks) {
     if (!handledIds.has(check.checkId)) {
       deterministicChecks.push({
