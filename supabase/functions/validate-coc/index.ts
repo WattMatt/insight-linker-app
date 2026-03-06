@@ -1598,6 +1598,34 @@ Return ONLY the JSON validation result.`
         validationResult.criticalFailures = deterministicResult.criticalFailures;
         validationResult.overallStatus = deterministicResult.overallStatus;
         
+        // ===== CRITICAL FIX: Override AI hierarchy fields with deterministic results =====
+        // The AI often sets hierarchyValidation incorrectly for Initial COCs.
+        // The deterministic engine is authoritative — sync these fields.
+        const normalizedCocType = (validationResult.cocType || '').toLowerCase();
+        if (normalizedCocType === 'initial') {
+          // Initial COCs don't need hierarchy references — force valid
+          validationResult.initialCocValid = true;
+          validationResult.cocTypeMarked = true;
+          if (validationResult.hierarchyValidation) {
+            validationResult.hierarchyValidation.hierarchyStatus = 'Valid';
+            validationResult.hierarchyValidation.cocTypeMarked = true;
+            validationResult.hierarchyValidation.initialCocExists = true;
+            validationResult.hierarchyValidation.initialCocReferenced = null; // N/A for Initial
+          }
+          console.log('🔧 Overrode AI hierarchy fields for Initial COC → Valid');
+        } else if (normalizedCocType === 'supplementary' || normalizedCocType === 'temporary') {
+          // Check deterministic engine result for hierarchy
+          const hierCheck = deterministicResult.checks.find(
+            (c: DeterministicCheckResult) => c.checkId === 'COC-SUPP-001' || c.checkId === 'COC-TEMP-001'
+          );
+          const hierPassed = hierCheck?.result === 'Pass';
+          validationResult.initialCocValid = hierPassed;
+          if (validationResult.hierarchyValidation) {
+            validationResult.hierarchyValidation.hierarchyStatus = hierPassed ? 'Valid' : 'Invalid - Missing Reference';
+            validationResult.hierarchyValidation.initialCocReferenced = hierPassed;
+          }
+        }
+        
         // Add settings transparency
         if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
         validationResult.extractionNotes.push(
