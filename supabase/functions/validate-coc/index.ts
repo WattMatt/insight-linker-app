@@ -1500,392 +1500,74 @@ Return ONLY the JSON validation result.`
         
         validationResult = JSON.parse(jsonStr);
         
-        // ===== USER-APPROVED COC TYPE OVERRIDE (HIGHEST PRIORITY) =====
-        // If the user approved a cocType from extraction UI, use that instead of AI detection
+        // ===== USER-APPROVED COC TYPE OVERRIDE =====
         if (approvedCocType) {
           const normalizedApproved = approvedCocType.charAt(0).toUpperCase() + approvedCocType.slice(1).toLowerCase();
-          console.log('🎯 USER-APPROVED COC TYPE OVERRIDE');
-          console.log(`   AI detected cocType: ${validationResult.cocType}`);
-          console.log(`   User approved cocType: ${normalizedApproved}`);
-          console.log(`   USING user-approved type: ${normalizedApproved}`);
-          
-          if (!validationResult.extractionNotes) {
-            validationResult.extractionNotes = [];
-          }
+          console.log(`🎯 USER OVERRIDE: cocType "${validationResult.cocType}" → "${normalizedApproved}"`);
+          if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
           validationResult.extractionNotes.push(
-            `USER OVERRIDE: cocType set to "${normalizedApproved}" from extraction approval (AI detected: "${validationResult.cocType}")`
+            `USER OVERRIDE: cocType set to "${normalizedApproved}" (AI detected: "${validationResult.cocType}")`
           );
-          
-          // Apply the user-approved override
           validationResult.cocType = normalizedApproved;
-          
-          // Update hierarchyValidation if present
           if (validationResult.hierarchyValidation) {
             validationResult.hierarchyValidation.cocTypeIdentified = normalizedApproved;
           }
+        } else if (validationResult.checkboxStates) {
+          // SERVER-SIDE CHECKBOX CORRECTION
+          const cs = validationResult.checkboxStates;
+          const initialMarked = cs.initialBox?.toUpperCase() === 'MARKED';
+          const supplementaryMarked = cs.supplementaryBox?.toUpperCase() === 'MARKED';
+          const temporaryMarked = cs.temporaryBox?.toUpperCase() === 'MARKED';
           
-          // Skip checkbox analysis since user already confirmed the type
-          console.log('   Skipping checkbox analysis - user approval takes precedence');
-        } else {
-          // ===== CHECKBOX STATES VALIDATION & LOGGING =====
-          // Log the raw checkbox states for debugging
-          console.log('=== CHECKBOX STATES DEBUG ===');
-          console.log('Raw checkboxStates:', JSON.stringify(validationResult.checkboxStates, null, 2));
-          console.log('Reported cocType:', validationResult.cocType);
+          console.log('Checkbox analysis:', { initialMarked, supplementaryMarked, temporaryMarked });
           
-          // Validate checkbox states match cocType - SERVER-SIDE OVERRIDE if mismatch
-          if (validationResult.checkboxStates) {
-            const cs = validationResult.checkboxStates;
-            const initialMarked = cs.initialBox?.toUpperCase() === 'MARKED';
-            const supplementaryMarked = cs.supplementaryBox?.toUpperCase() === 'MARKED';
-            const temporaryMarked = cs.temporaryBox?.toUpperCase() === 'MARKED';
-            
-            console.log('Checkbox analysis:', {
-              initialMarked,
-              supplementaryMarked,
-              temporaryMarked,
-              initialDesc: cs.initialBoxDescription,
-              supplementaryDesc: cs.supplementaryBoxDescription,
-              temporaryDesc: cs.temporaryBoxDescription
-            });
-            
-            // Determine correct cocType from checkbox states
-            let correctCocType: string | null = null;
-            if (initialMarked && !supplementaryMarked && !temporaryMarked) {
-              correctCocType = 'Initial';
-            } else if (supplementaryMarked && !initialMarked && !temporaryMarked) {
-              correctCocType = 'Supplementary';
-            } else if (temporaryMarked && !initialMarked && !supplementaryMarked) {
-              correctCocType = 'Temporary';
-            } else if (!initialMarked && !supplementaryMarked && !temporaryMarked) {
-              correctCocType = null; // No checkbox marked
-            } else {
-              // Multiple marked - unusual, log and use AI's decision
-              console.log('WARNING: Multiple checkboxes reported as marked, using AI decision');
-              correctCocType = validationResult.cocType;
-            }
-            
-            // Check for mismatch and OVERRIDE if necessary
-            if (correctCocType !== validationResult.cocType) {
-              console.log('🚨 COC TYPE MISMATCH DETECTED!');
-              console.log(`   AI reported cocType: ${validationResult.cocType}`);
-              console.log(`   Checkbox states indicate: ${correctCocType}`);
-              console.log(`   OVERRIDING cocType to: ${correctCocType}`);
-              
-              // Add extraction note about the override
-              if (!validationResult.extractionNotes) {
-                validationResult.extractionNotes = [];
-              }
-              validationResult.extractionNotes.push(
-                `SERVER OVERRIDE: cocType changed from "${validationResult.cocType}" to "${correctCocType}" based on checkboxStates analysis`
-              );
-              
-              // Apply the override
-              validationResult.cocType = correctCocType;
-              
-              // Also update hierarchyValidation if present
-              if (validationResult.hierarchyValidation) {
-                validationResult.hierarchyValidation.cocTypeIdentified = correctCocType;
-              }
-            } else {
-              console.log('✓ cocType matches checkboxStates - no override needed');
-            }
-          } else {
-            console.log('⚠️ WARNING: checkboxStates field missing from AI response');
-            if (!validationResult.extractionNotes) {
-              validationResult.extractionNotes = [];
-            }
-            validationResult.extractionNotes.push('WARNING: AI did not provide checkboxStates field');
-          }
-        }
-        
-        // ===== LOG FINAL COC TYPE BEFORE POST-PROCESSING =====
-        console.log('=== FINAL COC TYPE BEFORE POST-PROCESSING ===');
-        console.log('Final cocType:', validationResult.cocType);
-        
-        // ===== POST-PROCESSING: REMOVE INVALID VIOLATIONS FOR INITIAL COCs =====
-        // If this is an Initial COC, remove any "Missing Initial COC Reference" violations
-        // because Initial COCs do NOT need to reference another COC
-        const currentCocType = validationResult.cocType?.toLowerCase();
-        console.log('=== POST-PROCESSING VIOLATIONS ===');
-        console.log('Current COC Type:', currentCocType);
-        console.log('Current COC Type:', currentCocType);
-        
-        if (currentCocType === 'initial') {
-          console.log('🔧 Initial COC detected - filtering out invalid hierarchy violations');
+          let correctCocType: string | null = null;
+          if (initialMarked && !supplementaryMarked && !temporaryMarked) correctCocType = 'Initial';
+          else if (supplementaryMarked && !initialMarked && !temporaryMarked) correctCocType = 'Supplementary';
+          else if (temporaryMarked && !initialMarked && !supplementaryMarked) correctCocType = 'Temporary';
+          else if (!initialMarked && !supplementaryMarked && !temporaryMarked) correctCocType = null;
+          else correctCocType = validationResult.cocType; // Multiple marked — use AI
           
-          // Filter criticalFailures to remove invalid violations
-          if (validationResult.criticalFailures && Array.isArray(validationResult.criticalFailures)) {
-            const originalCount = validationResult.criticalFailures.length;
-            validationResult.criticalFailures = validationResult.criticalFailures.filter((failure: any) => {
-              const description = (failure.description || '').toLowerCase();
-              const reason = (failure.reason || '').toLowerCase();
-              const clause = (failure.clause || '').toLowerCase();
-              
-              // Check if this is a "Missing Initial COC Reference" violation
-              const isMissingRefViolation = 
-                description.includes('missing initial coc') ||
-                description.includes('does not reference') ||
-                description.includes('without referencing') ||
-                description.includes('initial coc reference') ||
-                reason.includes('missing initial coc') ||
-                reason.includes('does not reference') ||
-                reason.includes('without referencing') ||
-                reason.includes('initial coc reference') ||
-                (clause.includes('hierarchy') && (description.includes('supplementary') || description.includes('reference')));
-              
-              if (isMissingRefViolation) {
-                console.log('  ❌ REMOVED invalid violation:', failure.description || failure.reason);
-                return false; // Remove this violation
-              }
-              return true; // Keep this violation
-            });
-            
-            const removedCount = originalCount - validationResult.criticalFailures.length;
-            if (removedCount > 0) {
-              console.log(`  ✓ Removed ${removedCount} invalid violation(s) for Initial COC`);
-              if (!validationResult.extractionNotes) {
-                validationResult.extractionNotes = [];
-              }
-              validationResult.extractionNotes.push(
-                `SERVER FILTER: Removed ${removedCount} "Missing Initial COC Reference" violation(s) - Initial COCs do not need to reference another COC`
-              );
+          if (correctCocType !== validationResult.cocType) {
+            console.log(`🔧 Checkbox override: "${validationResult.cocType}" → "${correctCocType}"`);
+            if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
+            validationResult.extractionNotes.push(
+              `SERVER OVERRIDE: cocType changed from "${validationResult.cocType}" to "${correctCocType}" based on checkboxStates`
+            );
+            validationResult.cocType = correctCocType;
+            if (validationResult.hierarchyValidation) {
+              validationResult.hierarchyValidation.cocTypeIdentified = correctCocType;
             }
           }
-          
-          // Also filter checks array if present
-          if (validationResult.checks && Array.isArray(validationResult.checks)) {
-            validationResult.checks = validationResult.checks.map((check: any) => {
-              const checkDesc = (check.description || check.check || '').toLowerCase();
-              if (
-                check.result === 'Fail' && 
-                (checkDesc.includes('initial coc reference') || 
-                 checkDesc.includes('missing initial coc') ||
-                 checkDesc.includes('supplementary coc') && checkDesc.includes('reference'))
-              ) {
-                console.log('  🔧 Changed check result to Not Applicable:', check.description || check.check);
-                return {
-                  ...check,
-                  result: 'Not Applicable',
-                  notes: (check.notes || '') + ' [SERVER: Not applicable for Initial COC]'
-                };
-              }
-              return check;
-            });
-          }
-          
-          // Update hierarchyValidation if this incorrect violation was reported
-          if (validationResult.hierarchyValidation) {
-            if (validationResult.hierarchyValidation.issues && Array.isArray(validationResult.hierarchyValidation.issues)) {
-              validationResult.hierarchyValidation.issues = validationResult.hierarchyValidation.issues.filter((issue: any) => {
-                const issueStr = (issue || '').toLowerCase();
-                return !issueStr.includes('missing initial') && 
-                       !issueStr.includes('does not reference') &&
-                       !issueStr.includes('without referencing');
-              });
-            }
-            // Recalculate if valid based on remaining issues
-            if (validationResult.hierarchyValidation.issues?.length === 0) {
-              validationResult.hierarchyValidation.isValid = true;
-            }
-          }
-          
-          // Recalculate summary counts
-          if (validationResult.criticalFailures?.length === 0 && validationResult.checks) {
-            const passCount = validationResult.checks.filter((c: any) => c.result === 'Pass').length;
-            const failCount = validationResult.checks.filter((c: any) => c.result === 'Fail').length;
-            if (failCount === 0 && passCount > 0) {
-              validationResult.overallStatus = 'Pass';
-              console.log('  ✓ Updated overallStatus to Pass after removing invalid violations');
-            }
-          }
-          
-          // Update summary
-          if (validationResult.summary) {
-            validationResult.summary.criticalFailures = validationResult.criticalFailures?.length || 0;
-            validationResult.summary.failedChecks = validationResult.checks?.filter((c: any) => c.result === 'Fail').length || 0;
-            validationResult.summary.notApplicable = validationResult.checks?.filter((c: any) => c.result === 'Not Applicable').length || 0;
-          }
-        }
-        // ===== END POST-PROCESSING =====
-        // ===== END CHECKBOX STATES VALIDATION =====
-        
-        // ===== APPLY AUTO-FAIL RULES FROM SETTINGS =====
-        console.log('=== APPLYING AUTO-FAIL RULES ===');
-        if (!validationResult.criticalFailures) {
-          validationResult.criticalFailures = [];
         }
         
-        // Check auto-fail conditions based on settings
-        if (validationSettings.auto_fail_future_dated && validationResult.cocIssueDate) {
-          const issueDate = new Date(validationResult.cocIssueDate);
-          const today = new Date();
-          if (issueDate > today) {
-            console.log('🚨 AUTO-FAIL: Future-dated certificate detected');
-            validationResult.criticalFailures.push({
-              category: 'Administrative',
-              clause: 'CERT-DATE-001',
-              description: 'Future-dated certificate',
-              reason: `Certificate issue date (${validationResult.cocIssueDate}) is in the future`,
-              immediateAction: 'Verify the certificate date with the issuer',
-              riskLevel: 'Critical'
-            });
-            validationResult.overallStatus = 'Fail';
-          }
-        }
+        // ===== DETERMINISTIC VALIDATION ENGINE =====
+        // AI is the extractor; pass/fail decisions are made by mathematical rules
+        console.log('=== APPLYING DETERMINISTIC VALIDATION ENGINE ===');
+        const deterministicResult = applyDeterministicValidation(validationResult, validationSettings);
         
-        if (validationSettings.auto_fail_missing_signature) {
-          const signatureCheck = validationResult.checks?.find((c: any) => 
-            c.checkId === 'SIG-001' || c.description?.toLowerCase().includes('signature')
-          );
-          if (signatureCheck?.result === 'Fail') {
-            console.log('🚨 AUTO-FAIL: Missing signature detected');
-            validationResult.overallStatus = 'Fail';
-          }
-        }
+        // Replace AI checks and critical failures with deterministic results
+        validationResult.checks = deterministicResult.checks;
+        validationResult.criticalFailures = deterministicResult.criticalFailures;
+        validationResult.overallStatus = deterministicResult.overallStatus;
         
-        // Auto-fail on earth resistance threshold - only if actual value exceeds limit
-        // Don't add duplicate "exceeds threshold" error when failure was for other reasons
-        // (e.g., "value not recorded", "Compliant is not a measurement")
-        if (validationSettings.auto_fail_earth_resistance_threshold) {
-          const earthCheck = validationResult.checks?.find((c: any) => 
-            c.checkId === 'EARTH-001' || (c.description?.toLowerCase().includes('earth') && c.description?.toLowerCase().includes('resistance'))
-          );
-          
-          if (earthCheck?.result === 'Fail') {
-            // Check if the failure was specifically about a numeric value exceeding threshold
-            const measuredValue = earthCheck.measuredValue || earthCheck.evidence;
-            const numericMatch = measuredValue?.match?.(/(\d+\.?\d*)\s*[ΩO]/i);
-            const measuredOhms = numericMatch ? parseFloat(numericMatch[1]) : null;
-            
-            // Only add threshold-exceeded critical failure if we have a numeric value that actually exceeds it
-            if (measuredOhms !== null && measuredOhms > validationSettings.earth_continuity_max_ohms) {
-              console.log(`🚨 AUTO-FAIL: Earth resistance ${measuredOhms}Ω exceeds threshold ${validationSettings.earth_continuity_max_ohms}Ω`);
-              if (!validationResult.criticalFailures.some((f: any) => f.clause === 'EARTH-001' && f.description?.includes('exceeds threshold'))) {
-                validationResult.criticalFailures.push({
-                  category: 'Safety-Critical',
-                  clause: 'EARTH-001',
-                  description: 'Earth resistance exceeds threshold',
-                  reason: `Measured earth resistance of ${measuredOhms}Ω exceeds configured maximum of ${validationSettings.earth_continuity_max_ohms}Ω`,
-                  immediateAction: 'Verify earth electrode installation and bonding',
-                  riskLevel: 'Critical'
-                });
-              }
-            }
-            // The overall status is already set to Fail by the AI for earth-related failures
-            validationResult.overallStatus = 'Fail';
-          }
-        }
-        
-        // NEW: Enforce confidence threshold
-        if (validationResult.confidenceScore && validationResult.confidenceScore < validationSettings.ai_confidence_threshold_percent) {
-          console.log(`⚠️ Low confidence: ${validationResult.confidenceScore}% < ${validationSettings.ai_confidence_threshold_percent}% threshold`);
-          if (!validationResult.extractionNotes) {
-            validationResult.extractionNotes = [];
-          }
-          validationResult.extractionNotes.push(
-            `LOW CONFIDENCE WARNING: AI confidence (${validationResult.confidenceScore}%) is below threshold (${validationSettings.ai_confidence_threshold_percent}%). Results may be unreliable.`
-          );
-          // Mark as Incomplete if confidence is too low
-          if (validationResult.overallStatus !== 'Fail') {
-            validationResult.overallStatus = 'Incomplete';
-          }
-        }
-        
-        // NEW: Mark disabled checks as "Skipped" in results for transparency
-        const skippedChecks: string[] = [];
-        if (!validationSettings.hierarchy_check_enabled) skippedChecks.push('Hierarchy');
-        if (!validationSettings.earth_continuity_check_enabled) skippedChecks.push('Earth Continuity');
-        if (!validationSettings.insulation_resistance_check_enabled) skippedChecks.push('Insulation Resistance');
-        if (!validationSettings.protective_conductor_check_enabled) skippedChecks.push('Protective Conductor');
-        if (!validationSettings.certificate_date_validation_enabled) skippedChecks.push('Certificate Date');
-        if (!validationSettings.rcd_function_check_enabled) skippedChecks.push('RCD Function');
-        if (!validationSettings.signature_check_enabled) skippedChecks.push('Signature');
-        
-        if (skippedChecks.length > 0) {
-          if (!validationResult.skippedChecks) {
-            validationResult.skippedChecks = [];
-          }
-          validationResult.skippedChecks = skippedChecks;
-          validationResult.extractionNotes?.push(`Skipped checks (disabled): ${skippedChecks.join(', ')}`);
-          
-          // Filter out failed checks for disabled validation rules
-          if (validationResult.checks) {
-            validationResult.checks = validationResult.checks.map((check: any) => {
-              const checkDesc = (check.description || check.checkId || '').toLowerCase();
-              const shouldSkip = (
-                (!validationSettings.hierarchy_check_enabled && checkDesc.includes('hierarchy')) ||
-                (!validationSettings.earth_continuity_check_enabled && checkDesc.includes('earth')) ||
-                (!validationSettings.insulation_resistance_check_enabled && checkDesc.includes('insulation')) ||
-                (!validationSettings.protective_conductor_check_enabled && checkDesc.includes('conductor')) ||
-                (!validationSettings.certificate_date_validation_enabled && checkDesc.includes('date')) ||
-                (!validationSettings.rcd_function_check_enabled && checkDesc.includes('rcd')) ||
-                (!validationSettings.signature_check_enabled && checkDesc.includes('signature'))
-              );
-              
-              if (shouldSkip && check.result === 'Fail') {
-                console.log(`  🔧 Marking disabled check as Skipped: ${check.description || check.checkId}`);
-                return {
-                  ...check,
-                  result: 'Skipped',
-                  notes: (check.notes || '') + ' [Validation check disabled in settings]'
-                };
-              }
-              return check;
-            });
-          }
-        }
-        
-        // Apply mandatory/safety-critical failure thresholds
-        const mandatoryFailures = validationResult.checks?.filter((c: any) => 
-          c.result === 'Fail' && c.category === 'Mandatory'
-        ).length || 0;
-        
-        const safetyCriticalFailures = validationResult.checks?.filter((c: any) => 
-          c.result === 'Fail' && c.category === 'Safety-Critical'
-        ).length || 0;
-        
-        console.log('Failure counts:', { mandatoryFailures, safetyCriticalFailures });
-        
-        // Determine if status should be FAIL based on thresholds
-        if (safetyCriticalFailures >= validationSettings.safety_critical_failures_for_fail) {
-          console.log(`🚨 FAIL: ${safetyCriticalFailures} safety-critical failures >= threshold ${validationSettings.safety_critical_failures_for_fail}`);
-          validationResult.overallStatus = 'Fail';
-        } else if (mandatoryFailures >= validationSettings.mandatory_failures_for_fail) {
-          console.log(`🚨 FAIL: ${mandatoryFailures} mandatory failures >= threshold ${validationSettings.mandatory_failures_for_fail}`);
-          validationResult.overallStatus = 'Fail';
-        }
-        
-        // Add settings used to extraction notes for transparency
-        if (!validationResult.extractionNotes) {
-          validationResult.extractionNotes = [];
-        }
+        // Add settings transparency
+        if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
         validationResult.extractionNotes.push(
-          `Settings Applied: AI Model=${validationSettings.ai_model}, ` +
-          `Earth Max=${validationSettings.earth_continuity_max_ohms}Ω, ` +
-          `IR Min=${validationSettings.insulation_resistance_min_mohms}MΩ, ` +
-          `Mandatory Fail Threshold=${validationSettings.mandatory_failures_for_fail}, ` +
-          `Confidence Threshold=${validationSettings.ai_confidence_threshold_percent}%`
+          `Deterministic Engine Applied: Model=${validationSettings.ai_model}, ` +
+          `Earth≤${validationSettings.earth_continuity_max_ohms}Ω, IR≥${validationSettings.insulation_resistance_min_mohms}MΩ, ` +
+          `RCD@1x≤${validationSettings.rcd_trip_1x_max_ms}ms, MandatoryFailThreshold=${validationSettings.mandatory_failures_for_fail}`
         );
-        // ===== END AUTO-FAIL RULES =====
         
-        // Validate required fields
-        if (!validationResult.overallStatus) {
-          validationResult.overallStatus = 'Incomplete';
-        }
-        if (!validationResult.checks) {
-          validationResult.checks = [];
-        }
-        if (!validationResult.summary) {
-          validationResult.summary = {
-            totalChecks: validationResult.checks?.length || 0,
-            passedChecks: validationResult.checks?.filter((c: any) => c.result === 'Pass').length || 0,
-            failedChecks: validationResult.checks?.filter((c: any) => c.result === 'Fail').length || 0,
-            notTested: validationResult.checks?.filter((c: any) => c.result === 'Not Tested').length || 0,
-            notApplicable: validationResult.checks?.filter((c: any) => c.result === 'Not Applicable').length || 0,
-            criticalFailures: validationResult.criticalFailures?.length || 0
-          };
-        }
+        // Build summary from deterministic checks
+        validationResult.summary = {
+          totalChecks: validationResult.checks.length,
+          passedChecks: validationResult.checks.filter((c: any) => c.result === 'Pass').length,
+          failedChecks: validationResult.checks.filter((c: any) => c.result === 'Fail').length,
+          notTested: validationResult.checks.filter((c: any) => c.result === 'Not Tested').length,
+          notApplicable: validationResult.checks.filter((c: any) => c.result === 'Not Applicable' || c.result === 'Skipped').length,
+          criticalFailures: validationResult.criticalFailures.length,
+        };
         
         // Successfully parsed, break out of retry loop
         console.log('Validation parsed successfully on attempt', attempt + 1);
