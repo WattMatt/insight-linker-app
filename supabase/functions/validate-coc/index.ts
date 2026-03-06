@@ -617,6 +617,18 @@ Every failure MUST be supported by DIRECT, VISIBLE evidence:
 ✅ "No visible signature in signature block area"
 ✅ "Value unclear/unreadable in this field"
 
+### RULE 2b: SIGNATURE DETECTION GUIDANCE
+A signature IS present if ANY of these appear in the signature area:
+- Handwritten signature (cursive, initials, or any pen mark)
+- Rubber stamp with name/registration number
+- Digital/electronic signature
+- Printed name with a mark or initial beside it
+- Any ink mark that is clearly intentional in the signature block
+
+A signature is ONLY "missing" if the signature block area is **completely blank/empty** with NO marks whatsoever.
+⚠️ If you see ANY mark in the signature area, report the signature as PRESENT.
+⚠️ Do NOT fail signatures just because they are hard to read or partially obscured.
+
 ### RULE 3: VISIBILITY VERIFICATION
 Before including ANY information in your response, verify:
 
