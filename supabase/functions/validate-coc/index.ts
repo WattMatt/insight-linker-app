@@ -1029,7 +1029,15 @@ function applyDeterministicValidation(
       const measured = parseNumericValue(check.measuredValue);
       const limit = settings.insulation_resistance_min_mohms;
       
-      if (measured === Infinity) {
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: `≥ ${limit}MΩ`,
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
+        });
+      } else if (measured === Infinity) {
         deterministicChecks.push({
           checkId: 'INSUL-001', result: 'Pass',
           measuredValue: check.measuredValue || '∞ MΩ',
