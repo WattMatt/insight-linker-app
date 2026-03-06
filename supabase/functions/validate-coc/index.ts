@@ -804,6 +804,448 @@ ${skipSection}
   );
 }
 
+// ============= DETERMINISTIC VALIDATION ENGINE =============
+// This runs AFTER the AI extraction to apply mathematical rules server-side.
+// The AI is treated as an extractor only; pass/fail decisions are made here.
+
+function parseNumericValue(value: string | undefined | null): number | null {
+  if (!value) return null;
+  const str = value.toString().trim().toLowerCase();
+  
+  // Infinity values (always pass for insulation resistance)
+  if (['∞', '>∞', 'ol', '>500', '>999', '>500mω', 'infinite', 'over limit', '>500mohm'].some(v => str.includes(v))) {
+    return Infinity;
+  }
+  
+  // Extract numeric value, ignoring units
+  const match = str.match(/([\d]+\.?\d*)/);
+  return match ? parseFloat(match[1]) : null;
+}
+
+interface DeterministicCheckResult {
+  checkId: string;
+  result: 'Pass' | 'Fail' | 'Not Tested' | 'Not Applicable' | 'Skipped';
+  measuredValue: string;
+  limit: string;
+  remediation: string;
+  overrideReason?: string;
+}
+
+function applyDeterministicValidation(
+  aiResult: any, 
+  settings: ValidationSettings
+): { checks: DeterministicCheckResult[]; overallStatus: string; criticalFailures: any[] } {
+  
+  const deterministicChecks: DeterministicCheckResult[] = [];
+  const criticalFailures: any[] = [];
+  let hasSafetyCriticalFail = false;
+  let mandatoryFailCount = 0;
+  
+  const aiChecks: any[] = aiResult.checks || [];
+  const cocType = (aiResult.cocType || '').toLowerCase();
+  
+  console.log('=== DETERMINISTIC VALIDATION ENGINE ===');
+  console.log('COC Type:', cocType);
+
+  // --- 1. COC TYPE CHECKBOX ---
+  if (settings.hierarchy_check_enabled) {
+    const typeCheck = aiChecks.find((c: any) => c.checkId === 'COC-TYPE-001');
+    const isMarked = aiResult.cocTypeMarked !== false && 
+                     aiResult.cocType && 
+                     !['not marked', 'unknown', 'null'].includes(cocType);
+    
+    deterministicChecks.push({
+      checkId: 'COC-TYPE-001',
+      result: isMarked ? 'Pass' : 'Fail',
+      measuredValue: isMarked ? `Marked: ${aiResult.cocType}` : 'Not marked',
+      limit: 'One checkbox must be marked',
+      remediation: isMarked ? '' : 'Certificate type checkbox must be ticked by the issuer.'
+    });
+    if (!isMarked) {
+      hasSafetyCriticalFail = true;
+      criticalFailures.push({
+        category: 'Administrative',
+        clause: 'COC-TYPE-001',
+        description: 'COC type checkbox not marked',
+        reason: 'No certificate type checkbox (Initial/Supplementary/Temporary) is ticked on this certificate.',
+        immediateAction: 'The issuer must mark exactly one certificate type.',
+        riskLevel: 'Critical'
+      });
+    }
+  }
+
+  // --- 2. HIERARCHY VALIDATION (only for Supplementary/Temporary) ---
+  if (settings.hierarchy_check_enabled) {
+    if (cocType === 'initial') {
+      // Initial COCs don't need a reference — always pass hierarchy
+      deterministicChecks.push({
+        checkId: 'COC-SUPP-001', result: 'Not Applicable',
+        measuredValue: 'N/A — Initial COC', limit: 'N/A', remediation: ''
+      });
+      deterministicChecks.push({
+        checkId: 'COC-TEMP-001', result: 'Not Applicable',
+        measuredValue: 'N/A — Initial COC', limit: 'N/A', remediation: ''
+      });
+    } else if (cocType === 'supplementary') {
+      const hasRef = !!aiResult.initialCocReference;
+      deterministicChecks.push({
+        checkId: 'COC-SUPP-001',
+        result: hasRef ? 'Pass' : 'Fail',
+        measuredValue: hasRef ? `Ref: ${aiResult.initialCocReference}` : 'No reference provided',
+        limit: 'Must reference Initial COC number',
+        remediation: hasRef ? '' : 'Supplementary COC must list the Initial COC reference number.'
+      });
+      if (!hasRef && settings.auto_fail_missing_initial_ref) {
+        hasSafetyCriticalFail = true;
+        criticalFailures.push({
+          category: 'Administrative',
+          clause: 'COC-SUPP-001',
+          description: 'Supplementary COC missing Initial COC reference',
+          reason: 'This Supplementary COC does not reference an Initial COC number, making it invalid.',
+          immediateAction: 'Obtain and reference the valid Initial COC number.',
+          riskLevel: 'Critical'
+        });
+      }
+    } else if (cocType === 'temporary') {
+      const hasRef = !!aiResult.initialCocReference;
+      deterministicChecks.push({
+        checkId: 'COC-TEMP-001',
+        result: hasRef ? 'Pass' : 'Fail',
+        measuredValue: hasRef ? `Ref: ${aiResult.initialCocReference}` : 'No reference provided',
+        limit: 'Must reference Initial COC number',
+        remediation: hasRef ? '' : 'Temporary COC must list the Initial COC reference number.'
+      });
+      if (!hasRef && settings.auto_fail_missing_initial_ref) {
+        hasSafetyCriticalFail = true;
+        criticalFailures.push({
+          category: 'Administrative',
+          clause: 'COC-TEMP-001',
+          description: 'Temporary COC missing Initial COC reference',
+          reason: 'This Temporary COC does not reference an Initial COC number.',
+          immediateAction: 'Obtain and reference the valid Initial COC number.',
+          riskLevel: 'Critical'
+        });
+      }
+    }
+  }
+
+  // --- 3. EARTH RESISTANCE (Clause 8.4) ---
+  if (settings.earth_continuity_check_enabled) {
+    const earthCheck = aiChecks.find((c: any) => c.checkId === 'EARTH-001');
+    if (earthCheck) {
+      const measured = parseNumericValue(earthCheck.measuredValue);
+      const limit = settings.earth_continuity_max_ohms;
+      
+      if (measured === null) {
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: 'Fail',
+          measuredValue: earthCheck.measuredValue || 'Not recorded',
+          limit: `≤ ${limit}Ω`,
+          remediation: 'Earth resistance value must be recorded with a numeric measurement.',
+          overrideReason: 'No numeric value found in AI extraction'
+        });
+        mandatoryFailCount++;
+      } else {
+        const pass = measured <= limit;
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: pass ? 'Pass' : 'Fail',
+          measuredValue: `${measured}Ω`,
+          limit: `≤ ${limit}Ω`,
+          remediation: pass ? '' : `Measured ${measured}Ω exceeds maximum ${limit}Ω. Install additional earth electrodes.`,
+          overrideReason: earthCheck.result !== (pass ? 'Pass' : 'Fail') ? `Server override: ${measured}Ω vs ${limit}Ω limit` : undefined
+        });
+        if (!pass) {
+          hasSafetyCriticalFail = true;
+          criticalFailures.push({
+            category: 'Safety-Critical', clause: 'EARTH-001',
+            description: `Earth resistance ${measured}Ω exceeds ${limit}Ω limit`,
+            reason: `SANS 10142-1 Clause 8.4: Measured ${measured}Ω > maximum ${limit}Ω`,
+            immediateAction: 'Install additional earth electrodes and verify bonding.',
+            riskLevel: 'Critical'
+          });
+        }
+      }
+    }
+  } else {
+    deterministicChecks.push({
+      checkId: 'EARTH-001', result: 'Skipped',
+      measuredValue: 'Check disabled', limit: 'N/A', remediation: ''
+    });
+  }
+
+  // --- 4. INSULATION RESISTANCE (Clause 8.6) ---
+  if (settings.insulation_resistance_check_enabled) {
+    const insulChecks = aiChecks.filter((c: any) => 
+      c.checkId === 'INSUL-001' || (c.clause === '8.6' && c.description?.toLowerCase().includes('insulation'))
+    );
+    
+    for (const check of insulChecks) {
+      const measured = parseNumericValue(check.measuredValue);
+      const limit = settings.insulation_resistance_min_mohms;
+      
+      if (measured === Infinity) {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Pass',
+          measuredValue: check.measuredValue || '∞ MΩ',
+          limit: `≥ ${limit}MΩ`,
+          remediation: '',
+          overrideReason: check.result !== 'Pass' ? 'Server override: ∞ reading = automatic pass' : undefined
+        });
+      } else if (measured === null) {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Fail',
+          measuredValue: check.measuredValue || 'Not recorded',
+          limit: `≥ ${limit}MΩ`,
+          remediation: 'Insulation resistance must be recorded with a numeric measurement.'
+        });
+        mandatoryFailCount++;
+      } else {
+        const pass = measured >= limit;
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: pass ? 'Pass' : 'Fail',
+          measuredValue: `${measured}MΩ`,
+          limit: `≥ ${limit}MΩ`,
+          remediation: pass ? '' : `Measured ${measured}MΩ below minimum ${limit}MΩ. Check for cable damage or moisture.`,
+          overrideReason: check.result !== (pass ? 'Pass' : 'Fail') ? `Server override: ${measured}MΩ vs ${limit}MΩ minimum` : undefined
+        });
+        if (!pass) {
+          hasSafetyCriticalFail = true;
+          criticalFailures.push({
+            category: 'Safety-Critical', clause: 'INSUL-001',
+            description: `Insulation resistance ${measured}MΩ below ${limit}MΩ minimum`,
+            reason: `SANS 10142-1 Clause 8.6: Measured ${measured}MΩ < minimum ${limit}MΩ — insulation breakdown risk`,
+            immediateAction: 'Identify and replace damaged cable insulation. Check for moisture ingress.',
+            riskLevel: 'Critical'
+          });
+        }
+      }
+    }
+    // If AI didn't extract any insulation checks
+    if (insulChecks.length === 0) {
+      deterministicChecks.push({
+        checkId: 'INSUL-001', result: 'Not Tested',
+        measuredValue: 'No insulation resistance data extracted',
+        limit: `≥ ${settings.insulation_resistance_min_mohms}MΩ`,
+        remediation: 'Insulation resistance test results not found in document.'
+      });
+    }
+  } else {
+    deterministicChecks.push({
+      checkId: 'INSUL-001', result: 'Skipped',
+      measuredValue: 'Check disabled', limit: 'N/A', remediation: ''
+    });
+  }
+
+  // --- 5. RCD TRIP TIMES (Clause 8.8) ---
+  if (settings.rcd_function_check_enabled) {
+    const rcdChecks = aiChecks.filter((c: any) => 
+      c.checkId === 'RCD-001' || (c.clause === '8.8' && c.description?.toLowerCase().includes('rcd'))
+    );
+    
+    for (const check of rcdChecks) {
+      const measured = parseNumericValue(check.measuredValue);
+      
+      // Determine which limit to apply based on test multiplier
+      const desc = (check.measuredValue || '').toLowerCase();
+      let limit: number;
+      let limitLabel: string;
+      if (desc.includes('5×') || desc.includes('5x') || desc.includes('@5')) {
+        limit = settings.rcd_trip_5x_max_ms;
+        limitLabel = `≤ ${limit}ms @5×IΔn`;
+      } else if (desc.includes('2×') || desc.includes('2x') || desc.includes('@2')) {
+        limit = settings.rcd_trip_max_ms;
+        limitLabel = `≤ ${limit}ms @2×IΔn`;
+      } else {
+        limit = settings.rcd_trip_1x_max_ms;
+        limitLabel = `≤ ${limit}ms @1×IΔn`;
+      }
+      
+      if (measured !== null && measured !== Infinity) {
+        const pass = measured <= limit;
+        deterministicChecks.push({
+          checkId: 'RCD-001', result: pass ? 'Pass' : 'Fail',
+          measuredValue: `${measured}ms`,
+          limit: limitLabel,
+          remediation: pass ? '' : `RCD trip time ${measured}ms exceeds ${limit}ms. Replace or service RCD.`,
+          overrideReason: check.result !== (pass ? 'Pass' : 'Fail') ? `Server override: ${measured}ms vs ${limit}ms` : undefined
+        });
+        if (!pass) {
+          hasSafetyCriticalFail = true;
+          criticalFailures.push({
+            category: 'Safety-Critical', clause: 'RCD-001',
+            description: `RCD trip time ${measured}ms exceeds ${limit}ms limit`,
+            reason: `SANS 10142-1 Clause 8.8: Measured ${measured}ms > maximum ${limit}ms`,
+            immediateAction: 'Replace or service the RCD immediately.',
+            riskLevel: 'Critical'
+          });
+        }
+      } else {
+        // Preserve AI result for non-numeric RCD checks (e.g., "Trip" or "No Trip")
+        deterministicChecks.push({
+          checkId: 'RCD-001',
+          result: check.result || 'Not Tested',
+          measuredValue: check.measuredValue || 'Not recorded',
+          limit: limitLabel,
+          remediation: check.remediation || ''
+        });
+      }
+    }
+  } else {
+    deterministicChecks.push({
+      checkId: 'RCD-001', result: 'Skipped',
+      measuredValue: 'Check disabled', limit: 'N/A', remediation: ''
+    });
+  }
+
+  // --- 6. POLARITY & CONTINUITY (Clause 8.7) ---
+  if (settings.protective_conductor_check_enabled) {
+    const polCheck = aiChecks.find((c: any) => c.checkId === 'POL-001');
+    if (polCheck) {
+      // For polarity, trust AI extraction (it's text-based, not numeric threshold)
+      deterministicChecks.push({
+        checkId: 'POL-001',
+        result: polCheck.result || 'Not Tested',
+        measuredValue: polCheck.measuredValue || 'Not recorded',
+        limit: polCheck.limit || 'Correct polarity, continuity ≤ 1Ω',
+        remediation: polCheck.remediation || ''
+      });
+      if (polCheck.result === 'Fail') mandatoryFailCount++;
+    }
+  } else {
+    deterministicChecks.push({
+      checkId: 'POL-001', result: 'Skipped',
+      measuredValue: 'Check disabled', limit: 'N/A', remediation: ''
+    });
+  }
+
+  // --- 7. CERTIFICATE DATE VALIDATION ---
+  if (settings.certificate_date_validation_enabled && settings.auto_fail_future_dated && aiResult.cocIssueDate) {
+    const issueDate = new Date(aiResult.cocIssueDate);
+    const today = new Date();
+    today.setHours(23, 59, 59, 999); // End of today for generous comparison
+    
+    if (issueDate > today) {
+      deterministicChecks.push({
+        checkId: 'CERT-DATE-001', result: 'Fail',
+        measuredValue: `Issue date: ${aiResult.cocIssueDate}`,
+        limit: `Must not be after ${today.toISOString().split('T')[0]}`,
+        remediation: 'Certificate issue date is in the future. Verify with the issuer.'
+      });
+      criticalFailures.push({
+        category: 'Administrative', clause: 'CERT-DATE-001',
+        description: 'Future-dated certificate',
+        reason: `Certificate issue date (${aiResult.cocIssueDate}) is after today's date.`,
+        immediateAction: 'Verify the certificate date with the issuer.',
+        riskLevel: 'Critical'
+      });
+      mandatoryFailCount++;
+    } else {
+      deterministicChecks.push({
+        checkId: 'CERT-DATE-001', result: 'Pass',
+        measuredValue: `Issue date: ${aiResult.cocIssueDate}`,
+        limit: `Not future-dated`,
+        remediation: ''
+      });
+    }
+  }
+
+  // --- 8. SIGNATURE CHECK ---
+  if (settings.signature_check_enabled) {
+    const sigCheck = aiChecks.find((c: any) => 
+      c.checkId === 'SIG-001' || c.checkId === 'DOC-001' || c.description?.toLowerCase().includes('signature')
+    );
+    if (sigCheck?.result === 'Fail' && settings.auto_fail_missing_signature) {
+      deterministicChecks.push({
+        checkId: 'SIG-001', result: 'Fail',
+        measuredValue: sigCheck.measuredValue || 'Missing signature',
+        limit: 'Registered person must sign',
+        remediation: 'Certificate must be signed by the registered person.'
+      });
+      criticalFailures.push({
+        category: 'Administrative', clause: 'SIG-001',
+        description: 'Missing signature on certificate',
+        reason: 'No visible signature from the registered person.',
+        immediateAction: 'Have the registered person sign the certificate.',
+        riskLevel: 'High'
+      });
+      mandatoryFailCount++;
+    } else if (sigCheck) {
+      deterministicChecks.push({
+        checkId: 'SIG-001',
+        result: sigCheck.result || 'Pass',
+        measuredValue: sigCheck.measuredValue || 'Signature present',
+        limit: 'Registered person must sign',
+        remediation: ''
+      });
+    }
+  }
+
+  // --- 9. PASS-THROUGH remaining AI checks not handled above ---
+  const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'POL-001', 'COC-TYPE-001', 
+    'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 'CERT-DATE-001']);
+  for (const check of aiChecks) {
+    if (!handledIds.has(check.checkId)) {
+      deterministicChecks.push({
+        checkId: check.checkId,
+        result: check.result || 'Not Tested',
+        measuredValue: check.measuredValue || '',
+        limit: check.limit || '',
+        remediation: check.remediation || ''
+      });
+      if (check.result === 'Fail' && check.category === 'Safety-Critical') {
+        hasSafetyCriticalFail = true;
+      }
+      if (check.result === 'Fail' && check.category === 'Mandatory') {
+        mandatoryFailCount++;
+      }
+    }
+  }
+
+  // --- ALSO pass through AI critical failures that are evidence-based (not overridden) ---
+  const deterministicClauseSet = new Set(criticalFailures.map((f: any) => f.clause));
+  for (const aiFailure of (aiResult.criticalFailures || [])) {
+    // Skip hierarchy violations for Initial COCs (already handled deterministically)
+    if (cocType === 'initial') {
+      const desc = (aiFailure.description || '').toLowerCase();
+      const reason = (aiFailure.reason || '').toLowerCase();
+      if (desc.includes('initial coc reference') || reason.includes('missing initial') || 
+          reason.includes('does not reference') || reason.includes('without referencing')) {
+        console.log('  ❌ FILTERED invalid AI failure for Initial COC:', aiFailure.description);
+        continue;
+      }
+    }
+    // Don't duplicate failures already added deterministically
+    if (!deterministicClauseSet.has(aiFailure.clause)) {
+      criticalFailures.push(aiFailure);
+    }
+  }
+
+  // --- DETERMINE OVERALL STATUS ---
+  let overallStatus = 'Pass';
+  
+  if (hasSafetyCriticalFail) {
+    overallStatus = 'Fail';
+    console.log(`🚨 FAIL: Safety-critical failure detected`);
+  } else if (mandatoryFailCount >= settings.mandatory_failures_for_fail) {
+    overallStatus = 'Fail';
+    console.log(`🚨 FAIL: ${mandatoryFailCount} mandatory failures >= threshold ${settings.mandatory_failures_for_fail}`);
+  }
+
+  // Low confidence → Incomplete
+  if (aiResult.confidenceScore && aiResult.confidenceScore < settings.ai_confidence_threshold_percent) {
+    if (overallStatus !== 'Fail') {
+      overallStatus = 'Incomplete';
+    }
+    console.log(`⚠️ Low confidence: ${aiResult.confidenceScore}% < ${settings.ai_confidence_threshold_percent}%`);
+  }
+
+  const passCount = deterministicChecks.filter(c => c.result === 'Pass').length;
+  const failCount = deterministicChecks.filter(c => c.result === 'Fail').length;
+  console.log(`Deterministic results: ${passCount} pass, ${failCount} fail, ${criticalFailures.length} critical → ${overallStatus}`);
+
+  return { checks: deterministicChecks, overallStatus, criticalFailures };
+}
+
 serve(async (req) => {
   // Handle CORS preflight
   if (req.method === 'OPTIONS') {
