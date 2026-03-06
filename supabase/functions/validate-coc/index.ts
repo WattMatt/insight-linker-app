@@ -202,7 +202,7 @@ NOT legally acceptable substitutes for empirical measurements:
 2. **Insulation Resistance** (INSUL-001): Must be a number in MΩ or ∞/OL (e.g., "1.5MΩ", "∞")
 3. **Earth Loop Impedance** (LOOP-001): Must be a number in Ω (e.g., "0.85Ω")
 4. **RCD Trip Time** (RCD-001): Must be a number in ms (e.g., "28ms")
-5. **PSCC** (informational): Must be a number in kA (e.g., "4.5kA")
+5. **PSCC** (PSCC-001): Must be a number in kA (e.g., "4.5kA") — PSCC must not exceed breaker breaking capacity
 
 If any of these fields contain ONLY text like "OK", "Pass", "Satisfactory", "Compliant",
 or a checkmark instead of a measurement, extract the value AS-IS and the server will flag it.
