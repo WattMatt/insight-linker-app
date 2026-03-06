@@ -1551,9 +1551,117 @@ function applyDeterministicValidation(
     }
   }
 
-  // --- 11. INCOMPLETE CERTIFICATE DETECTION — CERT-INCOMPLETE-001 ---
+  // --- 11. PROSPECTIVE SHORT-CIRCUIT CURRENT — PSCC-001 ---
   {
-    const empiricalCheckIds = ['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001'];
+    const psccChecks = aiChecks.filter((c: any) => 
+      c.checkId === 'PSCC-001' || c.checkId === 'OCP-001' || 
+      (c.description?.toLowerCase().includes('prospective') || c.description?.toLowerCase().includes('pscc') ||
+       c.description?.toLowerCase().includes('short-circuit') || c.description?.toLowerCase().includes('short circuit'))
+    );
+    
+    if (psccChecks.length > 0) {
+      const check = psccChecks[0];
+      const measured = parseNumericValue(check.measuredValue || '');
+      
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'PSCC-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: 'PSCC must be less than breaker breaking capacity',
+          remediation: ''
+        });
+      } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for PSCC
+        deterministicChecks.push({
+          checkId: 'PSCC-001', result: 'Fail',
+          measuredValue: check.measuredValue,
+          limit: 'Numeric kA value required',
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for prospective short-circuit current.',
+          overrideReason: 'FAIL: Text-based value rejected for empirical PSCC measurement'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'PSCC-001',
+          description: `PSCC recorded as "${check.measuredValue}" — empirical kA measurement required`,
+          reason: `SANS 10142-1 Clause 8.3 requires a numeric prospective short-circuit current value in kA.`,
+          immediateAction: 'Measure and record the actual PSCC value in kA at the point of supply.',
+          riskLevel: 'High'
+        });
+      } else if (typeof measured === 'number') {
+        // Extract breaker breaking capacity from AI data
+        // Look for breaking capacity in check limit, or in other OCP checks
+        let breakerCapacity: number | null = null;
+        
+        // Try to extract from the check's limit field
+        const limitStr = (check.limit || '').toLowerCase();
+        const breakerMatch = limitStr.match(/(\d+(?:\.\d+)?)\s*ka/i);
+        if (breakerMatch) {
+          breakerCapacity = parseFloat(breakerMatch[1]);
+        }
+        
+        // Also look in OCP checks for breaking capacity info
+        if (!breakerCapacity) {
+          for (const ocpCheck of aiChecks) {
+            const desc = (ocpCheck.description || '').toLowerCase();
+            const val = (ocpCheck.measuredValue || '').toLowerCase();
+            if (desc.includes('breaking capacity') || desc.includes('breaker capacity')) {
+              const capMatch = val.match(/(\d+(?:\.\d+)?)\s*ka/i);
+              if (capMatch) {
+                breakerCapacity = parseFloat(capMatch[1]);
+                break;
+              }
+            }
+          }
+        }
+
+        // Default breaking capacities if not extracted
+        // Domestic MCBs typically 6kA, commercial 10kA
+        if (!breakerCapacity) {
+          const installationType = (aiResult.administrativeDetails?.installationType || '').toLowerCase();
+          breakerCapacity = (installationType.includes('commercial') || installationType.includes('industrial')) ? 10 : 6;
+        }
+
+        const pass = measured < breakerCapacity;
+        deterministicChecks.push({
+          checkId: 'PSCC-001', result: pass ? 'Pass' : 'Fail',
+          measuredValue: `${measured}kA`,
+          limit: `< ${breakerCapacity}kA (breaker breaking capacity)`,
+          remediation: pass ? '' : `PSCC ${measured}kA exceeds breaker breaking capacity of ${breakerCapacity}kA. Install breakers with adequate breaking capacity or reduce fault level.`,
+          overrideReason: pass ? undefined : `FAIL: PSCC ${measured}kA ≥ breaker capacity ${breakerCapacity}kA`
+        });
+
+        if (!pass) {
+          hasSafetyCriticalFail = true;
+          criticalFailures.push({
+            category: 'Safety-Critical', clause: 'PSCC-001',
+            description: `Prospective short-circuit current ${measured}kA exceeds breaker breaking capacity ${breakerCapacity}kA`,
+            reason: `SANS 10142-1 Clause 8.3: PSCC ${measured}kA ≥ breaker rated capacity ${breakerCapacity}kA — breaker cannot safely interrupt a fault.`,
+            immediateAction: `Replace protective devices with units rated for at least ${measured}kA breaking capacity, or install current-limiting device upstream.`,
+            riskLevel: 'Critical'
+          });
+        }
+      } else {
+        deterministicChecks.push({
+          checkId: 'PSCC-001',
+          result: check.result || 'Not Tested',
+          measuredValue: check.measuredValue || 'Not recorded',
+          limit: 'PSCC must be less than breaker breaking capacity (kA)',
+          remediation: check.remediation || ''
+        });
+      }
+    } else {
+      deterministicChecks.push({
+        checkId: 'PSCC-001', result: 'Not Tested',
+        measuredValue: 'No PSCC data extracted',
+        limit: 'PSCC must be less than breaker breaking capacity (kA)',
+        remediation: 'Prospective short-circuit current (PSCC) test results not found in document.'
+      });
+    }
+  }
+
+  // --- 12. INCOMPLETE CERTIFICATE DETECTION — CERT-INCOMPLETE-001 ---
+  {
+    const empiricalCheckIds = ['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001', 'PSCC-001'];
     const missingTests: string[] = [];
     
     for (const checkId of empiricalCheckIds) {
