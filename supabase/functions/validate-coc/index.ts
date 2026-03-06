@@ -1239,12 +1239,21 @@ function applyDeterministicValidation(
           remediation: ''
         });
       } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for RCD trip times
         deterministicChecks.push({
-          checkId: 'RCD-001', result: 'Pass',
+          checkId: 'RCD-001', result: 'Fail',
           measuredValue: check.measuredValue,
           limit: limitLabel,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for RCD trip times. A numeric value in ms must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in ms'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'RCD-001',
+          description: `RCD trip time recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.8 requires a numeric RCD trip time in ms. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test RCD and record the actual trip time in ms.',
+          riskLevel: 'Critical'
         });
       } else if (typeof measured === 'number' && measured !== Infinity) {
         const pass = measured <= limit;
