@@ -826,13 +826,25 @@ ${skipSection}
 // This runs AFTER the AI extraction to apply mathematical rules server-side.
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
-function parseNumericValue(value: string | undefined | null): number | null | 'N/A' {
+// Text-based pass values commonly written on South African COC forms
+const TEXT_PASS_VALUES = [
+  'compliant', 'pass', 'passed', 'satisfactory', 'ok', 'good', 'acceptable',
+  'correct', 'verified', 'confirmed', 'yes', 'tick', 'ticked', '✓', '✔',
+  'within limits', 'within range', 'safe', 'adequate'
+];
+
+function parseNumericValue(value: string | undefined | null): number | null | 'N/A' | 'TEXT_PASS' {
   if (!value) return null;
   const str = value.toString().trim().toLowerCase();
   
   // Not Applicable values - valid when test doesn't apply to this installation
   if (['n/a', 'not applicable', 'na', 'n.a.', 'n.a', 'not required', 'not tested'].some(v => str.includes(v))) {
     return 'N/A';
+  }
+  
+  // Text-based pass values (common on SA COC forms)
+  if (TEXT_PASS_VALUES.some(v => str.includes(v))) {
+    return 'TEXT_PASS';
   }
   
   // Infinity values (always pass for insulation resistance)
@@ -967,30 +979,24 @@ function applyDeterministicValidation(
           remediation: '',
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
+      } else if (measured === 'TEXT_PASS') {
+        // "Compliant", "Pass", "Satisfactory" etc. are valid entries on COC forms
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: 'Pass',
+          measuredValue: earthCheck.measuredValue,
+          limit: `≤ ${limit}Ω`,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+        });
       } else if (measured === null) {
-        // Check if AI description mentions blank but could be misread
-        const desc = (earthCheck.description || '').toLowerCase();
-        const mv = (earthCheck.measuredValue || '').toLowerCase();
-        const mightBeNA = desc.includes('text') || mv.includes('text') || desc.includes('not applicable') || mv.includes('not applicable');
-        
-        if (mightBeNA) {
-          deterministicChecks.push({
-            checkId: 'EARTH-001', result: 'Not Applicable',
-            measuredValue: earthCheck.measuredValue || 'Possibly N/A',
-            limit: `≤ ${limit}Ω`,
-            remediation: 'AI reported non-numeric value. May be "Not Applicable" for this installation type.',
-            overrideReason: 'Downgraded from Fail: value appears to be N/A designation'
-          });
-        } else {
-          deterministicChecks.push({
-            checkId: 'EARTH-001', result: 'Fail',
-            measuredValue: earthCheck.measuredValue || 'Not recorded',
-            limit: `≤ ${limit}Ω`,
-            remediation: 'Earth resistance value must be recorded with a numeric measurement.',
-            overrideReason: 'No numeric value found in AI extraction'
-          });
-          mandatoryFailCount++;
-        }
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: 'Fail',
+          measuredValue: earthCheck.measuredValue || 'Not recorded',
+          limit: `≤ ${limit}Ω`,
+          remediation: 'Earth resistance value must be recorded.',
+          overrideReason: 'No numeric or text-pass value found'
+        });
+        mandatoryFailCount++;
       } else {
         const pass = measured <= limit;
         deterministicChecks.push({
@@ -1036,6 +1042,14 @@ function applyDeterministicValidation(
           limit: `≥ ${limit}MΩ`,
           remediation: '',
           overrideReason: 'Test marked as Not Applicable for this installation'
+        });
+      } else if (measured === 'TEXT_PASS') {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Pass',
+          measuredValue: check.measuredValue,
+          limit: `≥ ${limit}MΩ`,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
         });
       } else if (measured === Infinity) {
         deterministicChecks.push({
@@ -1130,7 +1144,22 @@ function applyDeterministicValidation(
         limitLabel = `≤ ${limit}ms @1×IΔn`;
       }
       
-      if (measured !== null && measured !== Infinity) {
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'RCD-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: limitLabel,
+          remediation: ''
+        });
+      } else if (measured === 'TEXT_PASS') {
+        deterministicChecks.push({
+          checkId: 'RCD-001', result: 'Pass',
+          measuredValue: check.measuredValue,
+          limit: limitLabel,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted'
+        });
+      } else if (typeof measured === 'number' && measured !== Infinity) {
         const pass = measured <= limit;
         deterministicChecks.push({
           checkId: 'RCD-001', result: pass ? 'Pass' : 'Fail',
