@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const VALIDATION_PROMPT = `# ⚡ SANS 10142-1:2020 Electrical COC Verification Engine (Enhanced)
+const VALIDATION_PROMPT = `# ⚡ SANS 10142-1:2020 Electrical COC Verification Engine (v4 — Strict Empirical)
 
 ## 🎯 Objective
 You are an AI-driven verification engine for South African Electrical Certificates of Compliance (COC) based on SANS 10142-1:2020. 
