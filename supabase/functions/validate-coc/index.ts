@@ -491,6 +491,16 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
       "result": "Pass | Fail",
       "category": "Mandatory",
       "severity": "Critical"
+    },
+    {
+      "checkId": "PSCC-001",
+      "clause": "8.3",
+      "description": "Prospective Short-Circuit Current vs Breaker Breaking Capacity",
+      "result": "Pass | Fail | Not Tested",
+      "measuredValue": "PSCC in kA",
+      "limit": "Must be less than breaker breaking capacity (kA)",
+      "category": "Safety-Critical",
+      "severity": "Critical"
     }
   ],
   "criticalFailures": [
