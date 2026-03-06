@@ -1338,13 +1338,57 @@ serve(async (req) => {
     console.log('Downloading document from storage:', storagePath);
     
     // Download the document using Supabase client
-    const { data: fileData, error: downloadError } = await supabase.storage
+    let fileData: Blob | null = null;
+    
+    // Try download with the extracted path
+    const { data: downloadData, error: downloadError } = await supabase.storage
       .from('documents')
       .download(storagePath);
     
-    if (downloadError || !fileData) {
-      console.error('Storage download error:', downloadError);
-      throw new Error(`Failed to download document: ${downloadError?.message || 'Unknown error'}`);
+    if (downloadError || !downloadData) {
+      console.error('Storage download error:', JSON.stringify(downloadError));
+      
+      // Fallback: try fetching the original URL directly with service role key
+      console.log('Attempting direct URL fetch as fallback...');
+      try {
+        // Create a signed URL for the path
+        const { data: signedUrlData, error: signedUrlError } = await supabase.storage
+          .from('documents')
+          .createSignedUrl(storagePath, 300);
+        
+        if (signedUrlError || !signedUrlData?.signedUrl) {
+          console.error('Signed URL creation failed:', signedUrlError?.message);
+          
+          // Last resort: try the public URL
+          const { data: publicUrlData } = supabase.storage
+            .from('documents')
+            .getPublicUrl(storagePath);
+          
+          console.log('Trying public URL:', publicUrlData.publicUrl);
+          const publicResp = await fetch(publicUrlData.publicUrl);
+          if (!publicResp.ok) {
+            await publicResp.text(); // consume body
+            throw new Error(`Document not found at path: ${storagePath} (HTTP ${publicResp.status})`);
+          }
+          fileData = await publicResp.blob();
+        } else {
+          const signedResp = await fetch(signedUrlData.signedUrl);
+          if (!signedResp.ok) {
+            await signedResp.text();
+            throw new Error(`Failed to download via signed URL (HTTP ${signedResp.status})`);
+          }
+          fileData = await signedResp.blob();
+        }
+      } catch (fallbackErr) {
+        const errMsg = fallbackErr instanceof Error ? fallbackErr.message : String(fallbackErr);
+        throw new Error(`Failed to download document at path "${storagePath}": ${errMsg}`);
+      }
+    } else {
+      fileData = downloadData;
+    }
+    
+    if (!fileData) {
+      throw new Error(`Document download returned empty data for path: ${storagePath}`);
     }
 
     // Check if this is a PDF or image file
