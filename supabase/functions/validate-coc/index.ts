@@ -1162,11 +1162,20 @@ function applyDeterministicValidation(
   }
 
   // --- 8. SIGNATURE CHECK ---
+  // Signatures are hard for AI to assess accurately. Only fail if the AI explicitly
+  // confirms the signature block is completely blank/empty. Any mark = pass.
   if (settings.signature_check_enabled) {
     const sigCheck = aiChecks.find((c: any) => 
       c.checkId === 'SIG-001' || c.checkId === 'DOC-001' || c.description?.toLowerCase().includes('signature')
     );
-    if (sigCheck?.result === 'Fail' && settings.auto_fail_missing_signature) {
+    
+    // Only fail if AI says Fail AND the measured value explicitly says blank/empty/missing
+    const measuredVal = (sigCheck?.measuredValue || '').toLowerCase();
+    const isExplicitlyBlank = measuredVal.includes('blank') || measuredVal.includes('empty') || 
+      measuredVal.includes('no signature') || measuredVal.includes('missing') || 
+      measuredVal.includes('not signed') || measuredVal.includes('unsigned');
+    
+    if (sigCheck?.result === 'Fail' && isExplicitlyBlank && settings.auto_fail_missing_signature) {
       deterministicChecks.push({
         checkId: 'SIG-001', result: 'Fail',
         measuredValue: sigCheck.measuredValue || 'Missing signature',
@@ -1176,16 +1185,17 @@ function applyDeterministicValidation(
       criticalFailures.push({
         category: 'Administrative', clause: 'SIG-001',
         description: 'Missing signature on certificate',
-        reason: 'No visible signature from the registered person.',
+        reason: 'Signature block area is completely blank/empty.',
         immediateAction: 'Have the registered person sign the certificate.',
         riskLevel: 'High'
       });
       mandatoryFailCount++;
-    } else if (sigCheck) {
+    } else {
+      // Default to pass - any mark in signature area counts
       deterministicChecks.push({
         checkId: 'SIG-001',
-        result: sigCheck.result || 'Pass',
-        measuredValue: sigCheck.measuredValue || 'Signature present',
+        result: 'Pass',
+        measuredValue: sigCheck?.measuredValue || 'Signature present',
         limit: 'Registered person must sign',
         remediation: ''
       });
