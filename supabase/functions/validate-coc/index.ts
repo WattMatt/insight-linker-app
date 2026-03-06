@@ -8,7 +8,7 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-const VALIDATION_PROMPT = `# ⚡ SANS 10142-1:2020 Electrical COC Verification Engine (Enhanced)
+const VALIDATION_PROMPT = `# ⚡ SANS 10142-1:2020 Electrical COC Verification Engine (v4 — Strict Empirical)
 
 ## 🎯 Objective
 You are an AI-driven verification engine for South African Electrical Certificates of Compliance (COC) based on SANS 10142-1:2020. 
@@ -159,6 +159,28 @@ Scan the entire document and extract:
 3. **Installation Address**: Full physical address including ERF number
 4. **Registered Person**: Name, ID number, registration number, registration type
 5. **Installation Type**: Domestic, Commercial, Industrial, Mixed use
+6. **Registration Category**: Extract the issuer's registration category:
+   - "Electrical Tester for Single Phase" / "ETS"
+   - "Installation Electrician" / "IE"
+   - "Master Installation Electrician" / "MIE"
+7. **Supply Phases**: "Single" or "Three" (extract from installation details)
+
+### ⚠️ NUMERIC STANDARDIZATION RULES (CRITICAL):
+When extracting test values, apply these normalization rules:
+- Convert "1,5 Meg" → "1.5" (comma = decimal in SA notation)
+- Convert "1.5 MΩ" → "1.5" (strip units, keep numeric)
+- Convert "OL" or "∞" → "∞" (infinity = beyond meter range)
+- Convert ">500" → "∞" (beyond meter range)
+- Convert "OK", "Pass", "✓", "Satisfactory" → report AS-IS (the server will handle these)
+
+### ⚠️ HANDWRITING RECOGNITION GUIDANCE:
+Pay special attention to these commonly handwritten electrical symbols:
+- V (volts), A (amps), mA (milliamps)
+- MΩ (megaohms) — often written as "M Ω", "Meg", "Mohm"
+- Zs (earth loop impedance in ohms)
+- ms (milliseconds for RCD times)
+- kA (kiloamps for PSCC)
+- ∞ (infinity — often a sideways "8" or loop shape)
 
 ### Technical Test Results (EXTRACT ALL VALUES):
 - Earth resistance readings (in Ω)
@@ -167,12 +189,33 @@ Scan the entire document and extract:
 - RCD trip times at IΔn and 5×IΔn (in ms)
 - Polarity test results
 - Continuity readings (in Ω)
-- Prospective fault current (kA)
+- Prospective short-circuit current / PSCC (in kA) — informational
+- MCB/breaker ratings for each circuit (in A)
+- MCB type if visible (Type B, C, or D)
+
+### ⚠️ EMPIRICAL MEASUREMENT MANDATE (LEGALLY REQUIRED):
+For the following test fields, a NUMERIC VALUE is LEGALLY REQUIRED by SANS 10142-1.
+Generic text marks like "OK", "Pass", "Good", "Satisfactory", or checkmarks (✓) are
+NOT legally acceptable substitutes for empirical measurements:
+
+1. **Earth Resistance** (EARTH-001): Must be a number in Ω (e.g., "2.3Ω")
+2. **Insulation Resistance** (INSUL-001): Must be a number in MΩ or ∞/OL (e.g., "1.5MΩ", "∞")
+3. **Earth Loop Impedance** (LOOP-001): Must be a number in Ω (e.g., "0.85Ω")
+4. **RCD Trip Time** (RCD-001): Must be a number in ms (e.g., "28ms")
+5. **PSCC** (informational): Must be a number in kA (e.g., "4.5kA")
+
+If any of these fields contain ONLY text like "OK", "Pass", "Satisfactory", "Compliant",
+or a checkmark instead of a measurement, extract the value AS-IS and the server will flag it.
+
+### QR Code Data (Informational):
+If a QR code is present on the certificate, note its presence.
+Extract any embedded URL if visible (informational only, not validated).
 
 ### Circuit Schedule Data:
 - Circuit numbers and descriptions
 - Cable sizes (mm²)
 - Protective device ratings (A)
+- MCB types (B, C, D) if visible
 - Cable types (PVC, XLPE, etc.)
 
 ## 📋 SANS 10142-1:2020 Verification Rules (STRICT COMPLIANCE)
@@ -827,11 +870,37 @@ ${skipSection}
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
 // Text-based pass values commonly written on South African COC forms
+// IMPORTANT: These are ONLY acceptable for non-empirical checks (POL-001, SIG-001).
+// For empirical measurement fields (EARTH-001, INSUL-001, RCD-001, LOOP-001),
+// text-based values are LEGALLY INSUFFICIENT — numeric measurements are required.
 const TEXT_PASS_VALUES = [
   'compliant', 'pass', 'passed', 'satisfactory', 'ok', 'good', 'acceptable',
   'correct', 'verified', 'confirmed', 'yes', 'tick', 'ticked', '✓', '✔',
   'within limits', 'within range', 'safe', 'adequate'
 ];
+
+// Earth Loop Impedance Zs lookup table — Type B MCB at 0.4s disconnection (SANS 10142-1)
+const ZS_LOOKUP_TYPE_B: Record<number, number> = {
+  6: 7.67,
+  10: 4.60,
+  16: 2.87,
+  20: 2.30,
+  25: 1.84,
+  32: 1.44,
+  40: 1.15,
+  50: 0.92,
+  63: 0.73,
+};
+
+// Type C = Type B × 0.5, Type D = Type B × 0.25
+function getMaxZs(mcbRating: number, mcbType: string = 'B'): number | null {
+  const baseZs = ZS_LOOKUP_TYPE_B[mcbRating];
+  if (!baseZs) return null;
+  const typeUpper = mcbType.toUpperCase();
+  if (typeUpper === 'C') return baseZs * 0.5;
+  if (typeUpper === 'D') return baseZs * 0.25;
+  return baseZs; // Default Type B
+}
 
 function parseNumericValue(value: string | undefined | null): number | null | 'N/A' | 'TEXT_PASS' {
   if (!value) return null;
@@ -852,8 +921,9 @@ function parseNumericValue(value: string | undefined | null): number | null | 'N
     return Infinity;
   }
   
-  // Extract numeric value, ignoring units
-  const match = str.match(/([\d]+\.?\d*)/);
+  // Extract numeric value, ignoring units — handle SA comma-as-decimal notation
+  const cleaned = str.replace(/,/g, '.'); // "1,5" → "1.5"
+  const match = cleaned.match(/([\d]+\.?\d*)/);
   return match ? parseFloat(match[1]) : null;
 }
 
@@ -980,13 +1050,21 @@ function applyDeterministicValidation(
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
       } else if (measured === 'TEXT_PASS') {
-        // "Compliant", "Pass", "Satisfactory" etc. are valid entries on COC forms
+        // STRICT: Empirical measurement REQUIRED for earth resistance — text like "OK"/"Pass" is legally insufficient
         deterministicChecks.push({
-          checkId: 'EARTH-001', result: 'Pass',
+          checkId: 'EARTH-001', result: 'Fail',
           measuredValue: earthCheck.measuredValue,
           limit: `≤ ${limit}Ω`,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for earth resistance. A numeric value in Ω must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in Ω'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'EARTH-001',
+          description: `Earth resistance recorded as "${earthCheck.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.4 requires a numeric earth resistance value in Ω. "${earthCheck.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test earth resistance and record the actual measured value in Ω.',
+          riskLevel: 'Critical'
         });
       } else if (measured === null) {
         deterministicChecks.push({
@@ -1044,12 +1122,21 @@ function applyDeterministicValidation(
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
       } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for insulation resistance
         deterministicChecks.push({
-          checkId: 'INSUL-001', result: 'Pass',
+          checkId: 'INSUL-001', result: 'Fail',
           measuredValue: check.measuredValue,
           limit: `≥ ${limit}MΩ`,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for insulation resistance. A numeric value in MΩ or ∞/OL must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in MΩ'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'INSUL-001',
+          description: `Insulation resistance recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.6 requires a numeric insulation resistance value in MΩ. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test insulation resistance and record the actual measured value in MΩ.',
+          riskLevel: 'Critical'
         });
       } else if (measured === Infinity) {
         deterministicChecks.push({
@@ -1152,12 +1239,21 @@ function applyDeterministicValidation(
           remediation: ''
         });
       } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for RCD trip times
         deterministicChecks.push({
-          checkId: 'RCD-001', result: 'Pass',
+          checkId: 'RCD-001', result: 'Fail',
           measuredValue: check.measuredValue,
           limit: limitLabel,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for RCD trip times. A numeric value in ms must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in ms'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'RCD-001',
+          description: `RCD trip time recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.8 requires a numeric RCD trip time in ms. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test RCD and record the actual trip time in ms.',
+          riskLevel: 'Critical'
         });
       } else if (typeof measured === 'number' && measured !== Infinity) {
         const pass = measured <= limit;
@@ -1289,12 +1385,197 @@ function applyDeterministicValidation(
     }
   }
 
-  // --- 9. PASS-THROUGH remaining AI checks not handled above ---
+  // --- 9. EARTH LOOP IMPEDANCE (Clause 8.5) — LOOP-001 ---
+  {
+    const loopChecks = aiChecks.filter((c: any) => 
+      c.checkId === 'LOOP-001' || (c.clause === '8.5' && c.description?.toLowerCase().includes('loop'))
+    );
+    
+    for (const check of loopChecks) {
+      const measured = parseNumericValue(check.measuredValue);
+      
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'LOOP-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: 'Per MCB rating',
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
+        });
+      } else if (measured === 'TEXT_PASS') {
+        // STRICT: Empirical measurement REQUIRED for earth loop impedance
+        deterministicChecks.push({
+          checkId: 'LOOP-001', result: 'Fail',
+          measuredValue: check.measuredValue,
+          limit: 'Numeric Zs value required',
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for earth loop impedance. A numeric Zs value in Ω must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical Zs measurement in Ω'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'LOOP-001',
+          description: `Earth loop impedance recorded as "${check.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.5 requires a numeric earth loop impedance (Zs) value in Ω. "${check.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test earth loop impedance and record the actual measured Zs value in Ω.',
+          riskLevel: 'Critical'
+        });
+      } else if (typeof measured === 'number') {
+        // Try to find MCB rating from the check or circuit schedule
+        const mcbMatch = (check.limit || check.measuredValue || '').match(/(\d+)\s*[aA]/);
+        const mcbRating = mcbMatch ? parseInt(mcbMatch[1]) : null;
+        const mcbTypeMatch = (check.limit || check.measuredValue || '').match(/type\s*([BbCcDd])/i);
+        const mcbType = mcbTypeMatch ? mcbTypeMatch[1].toUpperCase() : 'B';
+        
+        if (mcbRating) {
+          const maxZs = getMaxZs(mcbRating, mcbType);
+          if (maxZs) {
+            const pass = measured <= maxZs;
+            deterministicChecks.push({
+              checkId: 'LOOP-001', result: pass ? 'Pass' : 'Fail',
+              measuredValue: `${measured}Ω`,
+              limit: `≤ ${maxZs}Ω (${mcbRating}A Type ${mcbType})`,
+              remediation: pass ? '' : `Measured Zs ${measured}Ω exceeds ${maxZs}Ω for ${mcbRating}A Type ${mcbType} MCB. Automatic disconnection within 0.4s not guaranteed.`,
+              overrideReason: check.result !== (pass ? 'Pass' : 'Fail') ? `Server override: ${measured}Ω vs ${maxZs}Ω limit` : undefined
+            });
+            if (!pass) {
+              hasSafetyCriticalFail = true;
+              criticalFailures.push({
+                category: 'Safety-Critical', clause: 'LOOP-001',
+                description: `Earth loop impedance ${measured}Ω exceeds ${maxZs}Ω for ${mcbRating}A Type ${mcbType} MCB`,
+                reason: `SANS 10142-1 Clause 8.5: Zs ${measured}Ω > max ${maxZs}Ω — automatic disconnection not guaranteed`,
+                immediateAction: 'Investigate high loop impedance. Check cable runs, connections, and earth path.',
+                riskLevel: 'Critical'
+              });
+            }
+          } else {
+            // MCB rating not in lookup table — pass through AI result
+            deterministicChecks.push({
+              checkId: 'LOOP-001',
+              result: check.result || 'Not Tested',
+              measuredValue: `${measured}Ω`,
+              limit: check.limit || `MCB ${mcbRating}A not in Zs lookup table`,
+              remediation: check.remediation || ''
+            });
+          }
+        } else {
+          // No MCB rating found — record the value, pass through AI result
+          deterministicChecks.push({
+            checkId: 'LOOP-001',
+            result: check.result || 'Not Tested',
+            measuredValue: `${measured}Ω`,
+            limit: check.limit || 'MCB rating not extracted — manual review needed',
+            remediation: check.remediation || ''
+          });
+        }
+      } else {
+        deterministicChecks.push({
+          checkId: 'LOOP-001',
+          result: check.result || 'Not Tested',
+          measuredValue: check.measuredValue || 'Not recorded',
+          limit: check.limit || 'Per MCB rating',
+          remediation: check.remediation || ''
+        });
+      }
+    }
+    // If AI didn't extract any loop impedance checks
+    if (loopChecks.length === 0) {
+      deterministicChecks.push({
+        checkId: 'LOOP-001', result: 'Not Tested',
+        measuredValue: 'No earth loop impedance data extracted',
+        limit: 'Per MCB rating (Zs lookup table)',
+        remediation: 'Earth loop impedance test results not found in document.'
+      });
+    }
+  }
+
+  // --- 10. ISSUER COMPETENCY CHECK — REG-001 ---
+  {
+    const adminDetails = aiResult.administrativeDetails || {};
+    const regType = (adminDetails.registrationType || '').toLowerCase();
+    const supplyPhases = (adminDetails.supplyPhases || '').toLowerCase();
+    
+    if (regType && supplyPhases) {
+      const isSinglePhaseTester = regType.includes('single phase') || regType === 'ets';
+      const isThreePhaseInstall = supplyPhases.includes('three') || supplyPhases === '3';
+      
+      if (isSinglePhaseTester && isThreePhaseInstall) {
+        deterministicChecks.push({
+          checkId: 'REG-001', result: 'Fail',
+          measuredValue: `Issuer: ${adminDetails.registrationType}, Supply: ${adminDetails.supplyPhases}`,
+          limit: 'Issuer registration must match installation type',
+          remediation: 'An Electrical Tester for Single Phase cannot sign off a Three Phase installation. An IE or MIE is required.',
+          overrideReason: 'Issuer competency mismatch — Single Phase tester on Three Phase installation'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Administrative', clause: 'REG-001',
+          description: 'Issuer registration category insufficient for this installation',
+          reason: `Issuer registered as "${adminDetails.registrationType}" but installation is ${adminDetails.supplyPhases} phase. An IE or MIE registration is required for Three Phase installations.`,
+          immediateAction: 'Certificate must be re-issued by a person with appropriate registration (IE or MIE).',
+          riskLevel: 'Critical'
+        });
+      } else {
+        deterministicChecks.push({
+          checkId: 'REG-001', result: 'Pass',
+          measuredValue: `Issuer: ${adminDetails.registrationType || 'Not specified'}, Supply: ${adminDetails.supplyPhases || 'Not specified'}`,
+          limit: 'Issuer registration must match installation type',
+          remediation: ''
+        });
+      }
+    } else {
+      deterministicChecks.push({
+        checkId: 'REG-001', result: 'Not Tested',
+        measuredValue: `Issuer type: ${adminDetails.registrationType || 'Not extracted'}, Supply: ${adminDetails.supplyPhases || 'Not extracted'}`,
+        limit: 'Issuer registration must match installation type',
+        remediation: 'Could not verify issuer competency — registration type or supply phases not extracted from document.'
+      });
+    }
+  }
+
+  // --- 11. INCOMPLETE CERTIFICATE DETECTION — CERT-INCOMPLETE-001 ---
+  {
+    const empiricalCheckIds = ['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001'];
+    const missingTests: string[] = [];
+    
+    for (const checkId of empiricalCheckIds) {
+      const check = deterministicChecks.find(c => c.checkId === checkId);
+      if (check && (check.result === 'Not Tested' || check.result === 'Skipped')) {
+        // Only count as missing if the check is enabled
+        if (checkId === 'EARTH-001' && !settings.earth_continuity_check_enabled) continue;
+        if (checkId === 'INSUL-001' && !settings.insulation_resistance_check_enabled) continue;
+        if (checkId === 'RCD-001' && !settings.rcd_function_check_enabled) continue;
+        // LOOP-001 doesn't have a dedicated enable flag — always check
+        missingTests.push(checkId);
+      }
+    }
+    
+    if (missingTests.length > 0) {
+      deterministicChecks.push({
+        checkId: 'CERT-INCOMPLETE-001', result: 'Fail',
+        measuredValue: `Missing: ${missingTests.join(', ')}`,
+        limit: 'All mandatory instrumental tests must be recorded',
+        remediation: `Incomplete certificate — mandatory test(s) not recorded: ${missingTests.join(', ')}. An incomplete certificate is legally void.`,
+        overrideReason: 'Incomplete Certificate — mandatory empirical test data missing'
+      });
+      // Don't double-count as safety-critical if already failing; just ensure Incomplete status
+      console.log(`📋 Incomplete certificate: missing tests ${missingTests.join(', ')}`);
+    } else {
+      deterministicChecks.push({
+        checkId: 'CERT-INCOMPLETE-001', result: 'Pass',
+        measuredValue: 'All mandatory tests present',
+        limit: 'All mandatory instrumental tests must be recorded',
+        remediation: ''
+      });
+    }
+  }
+
+  // --- 12. PASS-THROUGH remaining AI checks not handled above ---
   // IMPORTANT: Pass-through checks are informational only.
   // They do NOT influence the overall pass/fail status.
-  // The deterministic engine (steps 1-8 above) is the SOLE authority for safety-critical decisions.
-  const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'POL-001', 'COC-TYPE-001', 
-    'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 'CERT-DATE-001']);
+  // The deterministic engine (steps 1-11 above) is the SOLE authority for safety-critical decisions.
+  const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001', 'POL-001', 'COC-TYPE-001', 
+    'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 
+    'CERT-DATE-001', 'REG-001', 'CERT-INCOMPLETE-001']);
   for (const check of aiChecks) {
     if (!handledIds.has(check.checkId)) {
       deterministicChecks.push({
@@ -1341,6 +1622,13 @@ function applyDeterministicValidation(
   } else if (mandatoryFailCount >= settings.mandatory_failures_for_fail) {
     overallStatus = 'Fail';
     console.log(`🚨 FAIL: ${mandatoryFailCount} mandatory failures >= threshold ${settings.mandatory_failures_for_fail}`);
+  }
+
+  // Incomplete Certificate → Incomplete (unless already Fail)
+  const certIncomplete = deterministicChecks.find(c => c.checkId === 'CERT-INCOMPLETE-001');
+  if (certIncomplete?.result === 'Fail' && overallStatus !== 'Fail') {
+    overallStatus = 'Incomplete';
+    console.log(`📋 INCOMPLETE: Certificate missing mandatory empirical tests`);
   }
 
   // Low confidence → Incomplete
@@ -2025,7 +2313,7 @@ Return ONLY the JSON validation result.`
         report_data: {
           ...validationResult,
           validatedAt: new Date().toISOString(),
-          validationEngine: 'SANS-10142-1-2020-v3',
+          validationEngine: 'SANS-10142-1-2020-v4-strict-empirical',
           modelUsed: validationSettings.ai_model,
           settingsApplied: {
             ai_model: validationSettings.ai_model,
