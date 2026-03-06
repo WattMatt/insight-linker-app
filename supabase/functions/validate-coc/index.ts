@@ -959,15 +959,38 @@ function applyDeterministicValidation(
       const measured = parseNumericValue(earthCheck.measuredValue);
       const limit = settings.earth_continuity_max_ohms;
       
-      if (measured === null) {
+      if (measured === 'N/A') {
         deterministicChecks.push({
-          checkId: 'EARTH-001', result: 'Fail',
-          measuredValue: earthCheck.measuredValue || 'Not recorded',
+          checkId: 'EARTH-001', result: 'Not Applicable',
+          measuredValue: earthCheck.measuredValue || 'N/A',
           limit: `≤ ${limit}Ω`,
-          remediation: 'Earth resistance value must be recorded with a numeric measurement.',
-          overrideReason: 'No numeric value found in AI extraction'
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
         });
-        mandatoryFailCount++;
+      } else if (measured === null) {
+        // Check if AI description mentions blank but could be misread
+        const desc = (earthCheck.description || '').toLowerCase();
+        const mv = (earthCheck.measuredValue || '').toLowerCase();
+        const mightBeNA = desc.includes('text') || mv.includes('text') || desc.includes('not applicable') || mv.includes('not applicable');
+        
+        if (mightBeNA) {
+          deterministicChecks.push({
+            checkId: 'EARTH-001', result: 'Not Applicable',
+            measuredValue: earthCheck.measuredValue || 'Possibly N/A',
+            limit: `≤ ${limit}Ω`,
+            remediation: 'AI reported non-numeric value. May be "Not Applicable" for this installation type.',
+            overrideReason: 'Downgraded from Fail: value appears to be N/A designation'
+          });
+        } else {
+          deterministicChecks.push({
+            checkId: 'EARTH-001', result: 'Fail',
+            measuredValue: earthCheck.measuredValue || 'Not recorded',
+            limit: `≤ ${limit}Ω`,
+            remediation: 'Earth resistance value must be recorded with a numeric measurement.',
+            overrideReason: 'No numeric value found in AI extraction'
+          });
+          mandatoryFailCount++;
+        }
       } else {
         const pass = measured <= limit;
         deterministicChecks.push({
