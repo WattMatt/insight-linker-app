@@ -2313,7 +2313,7 @@ Return ONLY the JSON validation result.`
         report_data: {
           ...validationResult,
           validatedAt: new Date().toISOString(),
-          validationEngine: 'SANS-10142-1-2020-v3',
+          validationEngine: 'SANS-10142-1-2020-v4-strict-empirical',
           modelUsed: validationSettings.ai_model,
           settingsApplied: {
             ai_model: validationSettings.ai_model,
