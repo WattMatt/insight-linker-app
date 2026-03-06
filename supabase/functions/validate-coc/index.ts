@@ -235,6 +235,12 @@ Scan the entire document and extract:
 - Specifically: 0.6MΩ < 1.0MΩ → FAIL (insulation breakdown risk)
 - Missing/blank values → FAIL (test not performed)
 
+**⚠️ CRITICAL: INFINITY SYMBOL RECOGNITION ⚠️**
+The infinity symbol (∞) is commonly handwritten on COCs as a sideways "8" or a loop shape.
+It may also appear as "OL" (overload), ">500", or ">999".
+These are NOT blank fields — they indicate the meter could not measure a finite value (excellent insulation).
+If you see ANY mark in a test result field that could be ∞, OL, or a loop/figure-8 shape, report it as "∞" NOT as "blank" or "missing".
+
 **⚠️ DO NOT CONFUSE:**
 - "∞" (infinity) = PASS (excellent insulation, beyond meter range)
 - "0.6MΩ" = FAIL (below 1.0MΩ threshold, dangerous)
@@ -1004,13 +1010,29 @@ function applyDeterministicValidation(
           overrideReason: check.result !== 'Pass' ? 'Server override: ∞ reading = automatic pass' : undefined
         });
       } else if (measured === null) {
-        deterministicChecks.push({
-          checkId: 'INSUL-001', result: 'Fail',
-          measuredValue: check.measuredValue || 'Not recorded',
-          limit: `≥ ${limit}MΩ`,
-          remediation: 'Insulation resistance must be recorded with a numeric measurement.'
-        });
-        mandatoryFailCount++;
+        // Check if the AI description mentions "blank" but the value might actually be ∞
+        const desc = (check.description || '').toLowerCase();
+        const mv = (check.measuredValue || '').toLowerCase();
+        const mightBeInfinity = desc.includes('blank') || desc.includes('empty') || mv.includes('blank') || mv.includes('empty');
+        
+        // If the AI says blank but this is a common misread of ∞, treat as informational only
+        if (mightBeInfinity) {
+          deterministicChecks.push({
+            checkId: 'INSUL-001', result: 'Not Tested',
+            measuredValue: check.measuredValue || 'Possibly ∞ (AI reported blank)',
+            limit: `≥ ${limit}MΩ`,
+            remediation: 'AI may have misread an infinity symbol (∞) as a blank field. Manual verification recommended.',
+            overrideReason: 'Downgraded from Fail: common AI misread of ∞ symbol'
+          });
+        } else {
+          deterministicChecks.push({
+            checkId: 'INSUL-001', result: 'Fail',
+            measuredValue: check.measuredValue || 'Not recorded',
+            limit: `≥ ${limit}MΩ`,
+            remediation: 'Insulation resistance must be recorded with a numeric measurement.'
+          });
+          mandatoryFailCount++;
+        }
       } else {
         const pass = measured >= limit;
         deterministicChecks.push({
