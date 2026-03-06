@@ -1,121 +1,86 @@
 
 
-# Full Authentication, Onboarding & User Profile Plan
+# Plan: Upgrade COC Validation Engine Based on AI Builder Process Specification
 
-## Overview
+## Analysis Summary
 
-This plan addresses four key areas: fixing the password reset flow, improving onboarding for new users, adding a user profile/settings page, and keeping self-registration with proper defaults -- all in accordance with the existing SANS compliance context of this application.
+The uploaded `COC_AI_Builder_Process.md` defines a stricter, legally-grounded validation philosophy. Comparing it against the current `validate-coc` edge function reveals several critical gaps where the current engine is too lenient or missing checks entirely.
 
----
+## Key Gaps Identified
 
-## 1. Fix Password Reset Flow
+### 1. TEXT_PASS Acceptance is Legally Wrong (Critical)
+The uploaded doc explicitly states: *"You must automatically reject generic marks like 'OK', 'Pass', or checkmarks when numerical values are legally required."*
 
-**Current Problem:** The "Forgot your password?" link calls the `send-password-reset` edge function, but stale sessions on the `/auth` page can interfere, and the recovery token verification sometimes fails silently.
+**Current code does the opposite** — it accepts "Compliant", "Pass", "OK", "Satisfactory" as valid passes for Earth Resistance, Insulation Resistance, and RCD Trip Times via `TEXT_PASS_VALUES`. This is the single biggest compliance gap. For empirical measurement fields (IR, Zs, RCD trip time), the law requires actual numbers.
 
-**Changes:**
-- **Auth.tsx** -- Clear any existing stale session when the page loads _before_ checking for recovery tokens. Add `supabase.auth.signOut()` if the user lands on `/auth` with no valid purpose (no invite, no recovery token, no active redirect).
-- **Auth.tsx** -- Add better error feedback if `verifyOtp` fails (e.g. expired token), with a "Request new link" button.
-- **send-password-reset edge function** -- No changes needed; the current implementation using `generateLink` + `hashed_token` + direct app URL is correct.
+**Fix:** `TEXT_PASS` should only be accepted for non-empirical checks (Polarity, Continuity status). For empirical fields (EARTH-001, INSUL-001, RCD-001, LOOP-001), `TEXT_PASS` must result in `Fail` with a clear message: "Empirical measurement required — generic text like 'OK' or 'Pass' is not legally acceptable."
 
----
+### 2. Missing Deterministic Checks (LOOP-001, COND-001, OCP-001)
+The AI prompt defines Earth Loop Impedance (LOOP-001), Conductor Sizing (COND-001), and Overcurrent Protection (OCP-001), but the deterministic engine only enforces EARTH-001, INSUL-001, RCD-001, POL-001, SIG-001, COC-TYPE, Hierarchy, and Date. LOOP-001 with MCB-rating-specific Zs limits is entirely missing from server-side enforcement.
 
-## 2. Improve Onboarding for Invited Users
+**Fix:** Add LOOP-001 to the deterministic engine with the Zs lookup table from the uploaded doc (6A→7.67Ω, 10A→4.60Ω, 16A→2.87Ω, etc.). COND-001 and OCP-001 can remain AI-informational for now since they require circuit schedule cross-referencing.
 
-**Current State:** Invited users land on `/auth` and see a "Set Password" form. After setting their password, they are redirected to the appropriate portal. There is no profile completion step.
+### 3. Insulation Resistance Threshold Discrepancy
+The uploaded doc specifies ≥ 1.0MΩ for circuits ≤500V (the standard circuit voltage). The current default is 0.25MΩ. While 0.25MΩ is technically the absolute minimum in SANS, the uploaded spec argues for the stricter 1.0MΩ threshold per the standard test voltage tables.
 
-**Changes:**
-- **New component: `OnboardingWizard.tsx`** -- A multi-step onboarding dialog shown on first login:
-  - Step 1: Welcome message with company branding
-  - Step 2: Complete your profile (full name, phone, job title, company)
-  - Step 3: Upload profile photo (optional)
-  - Step 4: Quick platform overview (what they can do based on role)
-- **Profiles table** -- Add an `onboarding_completed` boolean column (default `false`).
-- **ProtectedRoute / ClientProtectedRoute / ContractorProtectedRoute** -- Check `onboarding_completed` flag; if false, show the `OnboardingWizard` overlay before allowing access.
-- **OnboardingWizard** -- On completion, updates the `profiles` table (profile fields + `onboarding_completed = true`) and dismisses.
+**Fix:** Update the AI prompt's insulation resistance section to align with the uploaded doc's voltage-dependent thresholds. The configurable database setting remains at 0.25MΩ as a minimum, but the prompt should instruct the AI to flag values between 0.25–1.0MΩ as warnings.
 
----
+### 4. Incomplete Certificate Rule Missing
+The uploaded doc states: *"If any mandatory instrumental test field is missing or marked null, instantly flag as FAIL — Incomplete Certificate."*
 
-## 3. User Profile Settings Page
+The current engine treats missing test values as "Not Tested" which does not trigger a fail. This is too lenient.
 
-**Current State:** No self-service profile page exists. Only admins can edit user profiles via the Users management page.
+**Fix:** Add an "Incomplete Certificate" sweep after all deterministic checks. Count how many of the core empirical checks (EARTH-001, INSUL-001, RCD-001, LOOP-001) returned "Not Tested" or had null values. If any mandatory test is missing, set status to `Incomplete` (which the current engine already supports but underuses).
 
-**Changes:**
-- **New page: `src/pages/MyProfile.tsx`** -- Accessible from the sidebar for all roles (Admin, Client, Contractor). Contains:
-  - Profile picture upload/change (uses existing `profile-images` storage bucket)
-  - Edit personal details: full name, phone, job title, department, company, address, city, country, postal code, bio
-  - Change password section (current password + new password + confirm)
-  - View current role (read-only)
-  - Account info: email (read-only), member since date
-- **AppSidebar.tsx** -- Add "My Profile" link to the sidebar footer area (near the logout button).
-- **Client/Contractor portal layouts** -- Add "My Profile" link to their respective navigation.
-- **App.tsx** -- Add route `/profile` wrapped in a generic auth-protected route (accessible by all roles).
-- **Password change** -- Uses `supabase.auth.updateUser({ password })` with current password verification via `supabase.auth.signInWithPassword` first.
+### 5. Issuer Competency Check Missing
+The uploaded doc requires verifying the issuer's registration category (Electrical Tester for Single Phase, IE, MIE) against the installation type. A Single Phase tester signing off a 3-phase commercial installation should be flagged.
 
----
+**Fix:** Add a new check `REG-001` to the AI prompt requesting extraction of registration type and supply phases. The deterministic engine can then cross-reference: if `supplyPhases === 'Three'` and `registrationType === 'Electrical Tester for Single Phase'`, flag as Fail.
 
-## 4. Self-Registration Improvements
+### 6. AI Prompt Improvements from Uploaded Doc
+Several prompt refinements from the uploaded doc are superior to the current prompt:
+- **Standardization rules**: "Convert '1,5 Meg' to '1.5'" — explicit numeric normalization guidance
+- **Handwriting recognition guidance**: Specific electrical unit symbols to watch for
+- **QR Code extraction**: Extract embedded URL data if present (informational)
 
-**Current State:** The sign-up form exists but the `handle_new_user` trigger assigns "Admin" to all new users.
+## Implementation Plan
 
-**Changes:**
-- **Database migration** -- Update `handle_new_user()` function to assign `'User'` as the default role instead of `'Admin'` for self-registered users (keep Admin for the very first user).
-- **Auth.tsx sign-up flow** -- After successful sign-up, show a message: "Account created! An admin will review and assign your role. You'll receive access once approved."
-- **Users page** -- Add a visual indicator for new self-registered users pending role assignment.
+### Step 1: Fix TEXT_PASS for Empirical Fields
+Modify `applyDeterministicValidation()` in `validate-coc/index.ts`:
+- For EARTH-001, INSUL-001, RCD-001: Change `TEXT_PASS` from `Pass` to `Fail` with remediation message about empirical measurement requirement
+- For POL-001, SIG-001: Keep `TEXT_PASS` as acceptable (these are non-empirical)
 
----
+### Step 2: Add LOOP-001 Deterministic Check
+Add Earth Loop Impedance check with MCB Zs lookup table:
+- Extract MCB rating and measured Zs from AI checks
+- Compare against the Type B MCB table (with Type C ×0.5 and Type D ×0.25 multipliers)
+- Fail if Zs exceeds maximum for the device rating
 
-## Technical Details
+### Step 3: Add Incomplete Certificate Detection
+After all deterministic checks, count core empirical checks with `Not Tested` / null:
+- If ≥1 mandatory empirical test is missing → set overallStatus to `Incomplete`
+- Add `CERT-INCOMPLETE-001` check to results
 
-### Database Migration
+### Step 4: Add REG-001 Issuer Competency Check
+- Add to AI prompt: extract `registrationType` and `supplyPhases`
+- Deterministic check: Single Phase tester + Three Phase installation = Fail
 
-```sql
--- Add onboarding_completed column to profiles
-ALTER TABLE public.profiles 
-ADD COLUMN IF NOT EXISTS onboarding_completed boolean DEFAULT false;
+### Step 5: Update AI Prompt
+- Add numeric normalization instructions from the uploaded doc
+- Add explicit "reject 'OK'/'Pass' for empirical fields" instruction to the prompt (reinforcing the server-side enforcement)
+- Add PSCC extraction request (informational, not deterministic yet)
+- Add handwriting recognition guidance for electrical units
 
--- Fix handle_new_user to assign 'User' role by default (not 'Admin')
-CREATE OR REPLACE FUNCTION public.handle_new_user()
-RETURNS trigger
-LANGUAGE plpgsql
-SECURITY DEFINER
-SET search_path = 'public'
-AS $$
-BEGIN
-  INSERT INTO public.profiles (id, email, full_name)
-  VALUES (
-    NEW.id,
-    NEW.email,
-    COALESCE(NEW.raw_user_meta_data->>'full_name', '')
-  );
-  
-  INSERT INTO public.user_roles (user_id, role)
-  VALUES (
-    NEW.id,
-    CASE 
-      WHEN (SELECT COUNT(*) FROM auth.users) = 1 THEN 'Admin'::app_role
-      ELSE 'User'::app_role
-    END
-  );
-  
-  RETURN NEW;
-END;
-$$;
-```
+### Step 6: Update Extraction Notes
+- Add audit trail entries for each deterministic override (already partially done)
+- Add "Incomplete Certificate" notation when detected
 
-### New Files
-- `src/pages/MyProfile.tsx` -- Profile settings page
-- `src/components/OnboardingWizard.tsx` -- First-login onboarding wizard
+## Files to Modify
+- `supabase/functions/validate-coc/index.ts` — All changes in this single file (prompt + deterministic engine)
 
-### Modified Files
-- `src/pages/Auth.tsx` -- Stale session cleanup, better error handling, sign-up messaging
-- `src/App.tsx` -- Add `/profile` route
-- `src/components/AppSidebar.tsx` -- Add "My Profile" menu item
-- `src/components/ProtectedRoute.tsx` -- Onboarding check
-- `src/components/ClientProtectedRoute.tsx` -- Onboarding check
-- `src/components/ContractorProtectedRoute.tsx` -- Onboarding check
-- `src/components/ClientPortalLayout.tsx` -- Profile link in nav
-- `src/components/ContractorPortalLayout.tsx` -- Profile link in nav
-
-### No New Secrets Required
-All necessary secrets (RESEND_API_KEY, SUPABASE_SERVICE_ROLE_KEY, etc.) are already configured.
+## What This Does NOT Change
+- Database schema (no migrations needed)
+- UI components (they already handle all status types)
+- COC expiry policy (keeping the existing "COCs don't expire" stance since it matches the current prompt and settings; expiry is configurable via settings)
+- Extract-coc function (unchanged)
 
