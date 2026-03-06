@@ -1554,9 +1554,10 @@ function applyDeterministicValidation(
   // --- 11. PROSPECTIVE SHORT-CIRCUIT CURRENT — PSCC-001 ---
   {
     const psccChecks = aiChecks.filter((c: any) => 
-      c.checkId === 'PSCC-001' || c.checkId === 'OCP-001' || 
+      c.checkId === 'PSCC-001' || 
       (c.description?.toLowerCase().includes('prospective') || c.description?.toLowerCase().includes('pscc') ||
-       c.description?.toLowerCase().includes('short-circuit') || c.description?.toLowerCase().includes('short circuit'))
+       (c.description?.toLowerCase().includes('short-circuit') && c.description?.toLowerCase().includes('current')) ||
+       (c.description?.toLowerCase().includes('short circuit') && c.description?.toLowerCase().includes('current')))
     );
     
     if (psccChecks.length > 0) {
