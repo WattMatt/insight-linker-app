@@ -1050,13 +1050,21 @@ function applyDeterministicValidation(
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
       } else if (measured === 'TEXT_PASS') {
-        // "Compliant", "Pass", "Satisfactory" etc. are valid entries on COC forms
+        // STRICT: Empirical measurement REQUIRED for earth resistance — text like "OK"/"Pass" is legally insufficient
         deterministicChecks.push({
-          checkId: 'EARTH-001', result: 'Pass',
+          checkId: 'EARTH-001', result: 'Fail',
           measuredValue: earthCheck.measuredValue,
           limit: `≤ ${limit}Ω`,
-          remediation: '',
-          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+          remediation: 'Empirical measurement required — generic text like "OK" or "Pass" is not legally acceptable for earth resistance. A numeric value in Ω must be recorded.',
+          overrideReason: 'FAIL: Text-based value rejected — SANS 10142-1 requires empirical measurement in Ω'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Safety-Critical', clause: 'EARTH-001',
+          description: `Earth resistance recorded as "${earthCheck.measuredValue}" — empirical measurement required`,
+          reason: `SANS 10142-1 Clause 8.4 requires a numeric earth resistance value in Ω. "${earthCheck.measuredValue}" is not a valid measurement.`,
+          immediateAction: 'Re-test earth resistance and record the actual measured value in Ω.',
+          riskLevel: 'Critical'
         });
       } else if (measured === null) {
         deterministicChecks.push({
