@@ -826,9 +826,14 @@ ${skipSection}
 // This runs AFTER the AI extraction to apply mathematical rules server-side.
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
-function parseNumericValue(value: string | undefined | null): number | null {
+function parseNumericValue(value: string | undefined | null): number | null | 'N/A' {
   if (!value) return null;
   const str = value.toString().trim().toLowerCase();
+  
+  // Not Applicable values - valid when test doesn't apply to this installation
+  if (['n/a', 'not applicable', 'na', 'n.a.', 'n.a', 'not required', 'not tested'].some(v => str.includes(v))) {
+    return 'N/A';
+  }
   
   // Infinity values (always pass for insulation resistance)
   if (['∞', '>∞', 'ol', '>500', '>999', '>500mω', 'infinite', 'over limit', '>500mohm'].some(v => str.includes(v))) {
