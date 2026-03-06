@@ -1144,7 +1144,22 @@ function applyDeterministicValidation(
         limitLabel = `≤ ${limit}ms @1×IΔn`;
       }
       
-      if (measured !== null && measured !== Infinity) {
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'RCD-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: limitLabel,
+          remediation: ''
+        });
+      } else if (measured === 'TEXT_PASS') {
+        deterministicChecks.push({
+          checkId: 'RCD-001', result: 'Pass',
+          measuredValue: check.measuredValue,
+          limit: limitLabel,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted'
+        });
+      } else if (typeof measured === 'number' && measured !== Infinity) {
         const pass = measured <= limit;
         deterministicChecks.push({
           checkId: 'RCD-001', result: pass ? 'Pass' : 'Fail',
