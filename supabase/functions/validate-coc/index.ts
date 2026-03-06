@@ -826,9 +826,14 @@ ${skipSection}
 // This runs AFTER the AI extraction to apply mathematical rules server-side.
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
-function parseNumericValue(value: string | undefined | null): number | null {
+function parseNumericValue(value: string | undefined | null): number | null | 'N/A' {
   if (!value) return null;
   const str = value.toString().trim().toLowerCase();
+  
+  // Not Applicable values - valid when test doesn't apply to this installation
+  if (['n/a', 'not applicable', 'na', 'n.a.', 'n.a', 'not required', 'not tested'].some(v => str.includes(v))) {
+    return 'N/A';
+  }
   
   // Infinity values (always pass for insulation resistance)
   if (['∞', '>∞', 'ol', '>500', '>999', '>500mω', 'infinite', 'over limit', '>500mohm'].some(v => str.includes(v))) {
@@ -954,15 +959,38 @@ function applyDeterministicValidation(
       const measured = parseNumericValue(earthCheck.measuredValue);
       const limit = settings.earth_continuity_max_ohms;
       
-      if (measured === null) {
+      if (measured === 'N/A') {
         deterministicChecks.push({
-          checkId: 'EARTH-001', result: 'Fail',
-          measuredValue: earthCheck.measuredValue || 'Not recorded',
+          checkId: 'EARTH-001', result: 'Not Applicable',
+          measuredValue: earthCheck.measuredValue || 'N/A',
           limit: `≤ ${limit}Ω`,
-          remediation: 'Earth resistance value must be recorded with a numeric measurement.',
-          overrideReason: 'No numeric value found in AI extraction'
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
         });
-        mandatoryFailCount++;
+      } else if (measured === null) {
+        // Check if AI description mentions blank but could be misread
+        const desc = (earthCheck.description || '').toLowerCase();
+        const mv = (earthCheck.measuredValue || '').toLowerCase();
+        const mightBeNA = desc.includes('text') || mv.includes('text') || desc.includes('not applicable') || mv.includes('not applicable');
+        
+        if (mightBeNA) {
+          deterministicChecks.push({
+            checkId: 'EARTH-001', result: 'Not Applicable',
+            measuredValue: earthCheck.measuredValue || 'Possibly N/A',
+            limit: `≤ ${limit}Ω`,
+            remediation: 'AI reported non-numeric value. May be "Not Applicable" for this installation type.',
+            overrideReason: 'Downgraded from Fail: value appears to be N/A designation'
+          });
+        } else {
+          deterministicChecks.push({
+            checkId: 'EARTH-001', result: 'Fail',
+            measuredValue: earthCheck.measuredValue || 'Not recorded',
+            limit: `≤ ${limit}Ω`,
+            remediation: 'Earth resistance value must be recorded with a numeric measurement.',
+            overrideReason: 'No numeric value found in AI extraction'
+          });
+          mandatoryFailCount++;
+        }
       } else {
         const pass = measured <= limit;
         deterministicChecks.push({
@@ -1001,7 +1029,15 @@ function applyDeterministicValidation(
       const measured = parseNumericValue(check.measuredValue);
       const limit = settings.insulation_resistance_min_mohms;
       
-      if (measured === Infinity) {
+      if (measured === 'N/A') {
+        deterministicChecks.push({
+          checkId: 'INSUL-001', result: 'Not Applicable',
+          measuredValue: check.measuredValue || 'N/A',
+          limit: `≥ ${limit}MΩ`,
+          remediation: '',
+          overrideReason: 'Test marked as Not Applicable for this installation'
+        });
+      } else if (measured === Infinity) {
         deterministicChecks.push({
           checkId: 'INSUL-001', result: 'Pass',
           measuredValue: check.measuredValue || '∞ MΩ',
