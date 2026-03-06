@@ -159,6 +159,28 @@ Scan the entire document and extract:
 3. **Installation Address**: Full physical address including ERF number
 4. **Registered Person**: Name, ID number, registration number, registration type
 5. **Installation Type**: Domestic, Commercial, Industrial, Mixed use
+6. **Registration Category**: Extract the issuer's registration category:
+   - "Electrical Tester for Single Phase" / "ETS"
+   - "Installation Electrician" / "IE"
+   - "Master Installation Electrician" / "MIE"
+7. **Supply Phases**: "Single" or "Three" (extract from installation details)
+
+### ⚠️ NUMERIC STANDARDIZATION RULES (CRITICAL):
+When extracting test values, apply these normalization rules:
+- Convert "1,5 Meg" → "1.5" (comma = decimal in SA notation)
+- Convert "1.5 MΩ" → "1.5" (strip units, keep numeric)
+- Convert "OL" or "∞" → "∞" (infinity = beyond meter range)
+- Convert ">500" → "∞" (beyond meter range)
+- Convert "OK", "Pass", "✓", "Satisfactory" → report AS-IS (the server will handle these)
+
+### ⚠️ HANDWRITING RECOGNITION GUIDANCE:
+Pay special attention to these commonly handwritten electrical symbols:
+- V (volts), A (amps), mA (milliamps)
+- MΩ (megaohms) — often written as "M Ω", "Meg", "Mohm"
+- Zs (earth loop impedance in ohms)
+- ms (milliseconds for RCD times)
+- kA (kiloamps for PSCC)
+- ∞ (infinity — often a sideways "8" or loop shape)
 
 ### Technical Test Results (EXTRACT ALL VALUES):
 - Earth resistance readings (in Ω)
@@ -167,12 +189,33 @@ Scan the entire document and extract:
 - RCD trip times at IΔn and 5×IΔn (in ms)
 - Polarity test results
 - Continuity readings (in Ω)
-- Prospective fault current (kA)
+- Prospective short-circuit current / PSCC (in kA) — informational
+- MCB/breaker ratings for each circuit (in A)
+- MCB type if visible (Type B, C, or D)
+
+### ⚠️ EMPIRICAL MEASUREMENT MANDATE (LEGALLY REQUIRED):
+For the following test fields, a NUMERIC VALUE is LEGALLY REQUIRED by SANS 10142-1.
+Generic text marks like "OK", "Pass", "Good", "Satisfactory", or checkmarks (✓) are
+NOT legally acceptable substitutes for empirical measurements:
+
+1. **Earth Resistance** (EARTH-001): Must be a number in Ω (e.g., "2.3Ω")
+2. **Insulation Resistance** (INSUL-001): Must be a number in MΩ or ∞/OL (e.g., "1.5MΩ", "∞")
+3. **Earth Loop Impedance** (LOOP-001): Must be a number in Ω (e.g., "0.85Ω")
+4. **RCD Trip Time** (RCD-001): Must be a number in ms (e.g., "28ms")
+5. **PSCC** (informational): Must be a number in kA (e.g., "4.5kA")
+
+If any of these fields contain ONLY text like "OK", "Pass", "Satisfactory", "Compliant",
+or a checkmark instead of a measurement, extract the value AS-IS and the server will flag it.
+
+### QR Code Data (Informational):
+If a QR code is present on the certificate, note its presence.
+Extract any embedded URL if visible (informational only, not validated).
 
 ### Circuit Schedule Data:
 - Circuit numbers and descriptions
 - Cable sizes (mm²)
 - Protective device ratings (A)
+- MCB types (B, C, D) if visible
 - Cable types (PVC, XLPE, etc.)
 
 ## 📋 SANS 10142-1:2020 Verification Rules (STRICT COMPLIANCE)
