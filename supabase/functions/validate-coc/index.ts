@@ -870,11 +870,37 @@ ${skipSection}
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
 // Text-based pass values commonly written on South African COC forms
+// IMPORTANT: These are ONLY acceptable for non-empirical checks (POL-001, SIG-001).
+// For empirical measurement fields (EARTH-001, INSUL-001, RCD-001, LOOP-001),
+// text-based values are LEGALLY INSUFFICIENT — numeric measurements are required.
 const TEXT_PASS_VALUES = [
   'compliant', 'pass', 'passed', 'satisfactory', 'ok', 'good', 'acceptable',
   'correct', 'verified', 'confirmed', 'yes', 'tick', 'ticked', '✓', '✔',
   'within limits', 'within range', 'safe', 'adequate'
 ];
+
+// Earth Loop Impedance Zs lookup table — Type B MCB at 0.4s disconnection (SANS 10142-1)
+const ZS_LOOKUP_TYPE_B: Record<number, number> = {
+  6: 7.67,
+  10: 4.60,
+  16: 2.87,
+  20: 2.30,
+  25: 1.84,
+  32: 1.44,
+  40: 1.15,
+  50: 0.92,
+  63: 0.73,
+};
+
+// Type C = Type B × 0.5, Type D = Type B × 0.25
+function getMaxZs(mcbRating: number, mcbType: string = 'B'): number | null {
+  const baseZs = ZS_LOOKUP_TYPE_B[mcbRating];
+  if (!baseZs) return null;
+  const typeUpper = mcbType.toUpperCase();
+  if (typeUpper === 'C') return baseZs * 0.5;
+  if (typeUpper === 'D') return baseZs * 0.25;
+  return baseZs; // Default Type B
+}
 
 function parseNumericValue(value: string | undefined | null): number | null | 'N/A' | 'TEXT_PASS' {
   if (!value) return null;
@@ -895,8 +921,9 @@ function parseNumericValue(value: string | undefined | null): number | null | 'N
     return Infinity;
   }
   
-  // Extract numeric value, ignoring units
-  const match = str.match(/([\d]+\.?\d*)/);
+  // Extract numeric value, ignoring units — handle SA comma-as-decimal notation
+  const cleaned = str.replace(/,/g, '.'); // "1,5" → "1.5"
+  const match = cleaned.match(/([\d]+\.?\d*)/);
   return match ? parseFloat(match[1]) : null;
 }
 
