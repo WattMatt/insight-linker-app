@@ -979,30 +979,24 @@ function applyDeterministicValidation(
           remediation: '',
           overrideReason: 'Test marked as Not Applicable for this installation'
         });
+      } else if (measured === 'TEXT_PASS') {
+        // "Compliant", "Pass", "Satisfactory" etc. are valid entries on COC forms
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: 'Pass',
+          measuredValue: earthCheck.measuredValue,
+          limit: `≤ ${limit}Ω`,
+          remediation: '',
+          overrideReason: 'Text-based pass value accepted (common on SA COC forms)'
+        });
       } else if (measured === null) {
-        // Check if AI description mentions blank but could be misread
-        const desc = (earthCheck.description || '').toLowerCase();
-        const mv = (earthCheck.measuredValue || '').toLowerCase();
-        const mightBeNA = desc.includes('text') || mv.includes('text') || desc.includes('not applicable') || mv.includes('not applicable');
-        
-        if (mightBeNA) {
-          deterministicChecks.push({
-            checkId: 'EARTH-001', result: 'Not Applicable',
-            measuredValue: earthCheck.measuredValue || 'Possibly N/A',
-            limit: `≤ ${limit}Ω`,
-            remediation: 'AI reported non-numeric value. May be "Not Applicable" for this installation type.',
-            overrideReason: 'Downgraded from Fail: value appears to be N/A designation'
-          });
-        } else {
-          deterministicChecks.push({
-            checkId: 'EARTH-001', result: 'Fail',
-            measuredValue: earthCheck.measuredValue || 'Not recorded',
-            limit: `≤ ${limit}Ω`,
-            remediation: 'Earth resistance value must be recorded with a numeric measurement.',
-            overrideReason: 'No numeric value found in AI extraction'
-          });
-          mandatoryFailCount++;
-        }
+        deterministicChecks.push({
+          checkId: 'EARTH-001', result: 'Fail',
+          measuredValue: earthCheck.measuredValue || 'Not recorded',
+          limit: `≤ ${limit}Ω`,
+          remediation: 'Earth resistance value must be recorded.',
+          overrideReason: 'No numeric or text-pass value found'
+        });
+        mandatoryFailCount++;
       } else {
         const pass = measured <= limit;
         deterministicChecks.push({
