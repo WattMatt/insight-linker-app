@@ -889,8 +889,8 @@ ${skipSection}
 // The AI is treated as an extractor only; pass/fail decisions are made here.
 
 // Text-based pass values commonly written on South African COC forms
-// IMPORTANT: These are ONLY acceptable for non-empirical checks (POL-001, SIG-001).
-// For empirical measurement fields (EARTH-001, INSUL-001, RCD-001, LOOP-001),
+// IMPORTANT: These are acceptable for non-empirical checks (POL-001, SIG-001, EARTH-001).
+// For empirical measurement fields (INSUL-001, RCD-001, LOOP-001, PSCC-001),
 // text-based values are LEGALLY INSUFFICIENT — numeric measurements are required.
 const TEXT_PASS_VALUES = [
   'compliant', 'pass', 'passed', 'satisfactory', 'ok', 'good', 'acceptable',
