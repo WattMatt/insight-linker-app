@@ -587,9 +587,9 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
    - Flag missing pages
 
 3. **Mandatory Check Sequence:**
-   - COC-INIT-001: Initial COC exists (for Supplementary/Temporary) (CRITICAL)
-   - COC-SUPP-001: Supplementary COC references Initial (CRITICAL)
-   - COC-TEMP-001: Temporary COC validity period (CRITICAL)
+    - COC-INIT-001: Initial COC exists (for Supplementary/Temporary) (CRITICAL)
+    - COC-SUPP-001: Supplementary COC references Initial (CRITICAL)
+    - COC-TEMP-001: Temporary COC validity period (CRITICAL)
     - COC-VALID-001: Overall hierarchy compliance (CRITICAL)
     - EARTH-001: Earth resistance (CRITICAL)
     - LOOP-001: Earth loop impedance (CRITICAL)
@@ -597,6 +597,9 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
     - RCD-001: RCD functionality (CRITICAL)
     - PSCC-001: Prospective short-circuit current vs breaker capacity (CRITICAL)
     - POL-001: Polarity and continuity (CRITICAL)
+    - REG-001: Issuer competency (registration vs installation type) (MANDATORY)
+    - REG-FORMAT-001: DOEL registration number format validation (MANDATORY)
+    - COC-DUP-001: Unique COC number (server-side duplicate check) (MANDATORY)
     - COND-001: Conductor sizing (MANDATORY)
     - OCP-001: Overcurrent protection (MANDATORY)
     - DOC-001: Documentation (MANDATORY)
