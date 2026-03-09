@@ -5,7 +5,7 @@
  * Uses pdfmake as per project standard (no jsPDF).
  */
 import type { TDocumentDefinitions, Content, TableCell } from 'pdfmake/interfaces';
-import type { COCData, COCTestReport, COCValidationResult, ValidationRuleResult } from '@/utils/cocValidationEngine';
+import type { COCData, COCTestReport, COCValidationResult } from '@/utils/cocValidationEngine';
 
 interface COCPdfInput {
   cocData: COCData;
