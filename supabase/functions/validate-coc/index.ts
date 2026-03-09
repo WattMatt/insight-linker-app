@@ -1551,6 +1551,110 @@ function applyDeterministicValidation(
     }
   }
 
+  // --- 10b. DOEL REGISTRATION FORMAT VALIDATION — REG-FORMAT-001 ---
+  {
+    const adminDetails = aiResult.administrativeDetails || {};
+    const regNumber = (adminDetails.registrationNumber || '').trim();
+    const regType = (adminDetails.registrationType || '').toLowerCase();
+    
+    if (regNumber) {
+      // DOEL registration numbers follow patterns like:
+      // ETS/XXXX, IE/XXXX, MIE/XXXX, or numeric-only (older format)
+      // Also accept: E/XXXX, formats with spaces, dashes
+      const validPatterns = [
+        /^(ETS|ETSP|IE|MIE|E)\s*[\/\-]?\s*\d+/i,          // Standard: ETS/12345, IE-456, MIE/789
+        /^\d{3,8}$/,                                         // Legacy numeric-only: 123456
+        /^[A-Z]{1,4}\s*\d{3,8}$/i,                          // Compact: IE12345
+        /^(ECSA|ECA)\s*[\/\-]?\s*\d+/i,                     // Council registrations
+      ];
+      
+      const isValidFormat = validPatterns.some(p => p.test(regNumber));
+      
+      // Cross-check: registration number prefix should match registration type
+      let prefixMismatch = false;
+      if (isValidFormat && regType) {
+        const numUpper = regNumber.toUpperCase();
+        if (regType.includes('single phase') && !numUpper.match(/^(ETS|ETSP|E)\b/i) && !numUpper.match(/^\d+$/)) {
+          // Single phase testers should have ETS/ETSP prefix (or legacy numeric)
+          prefixMismatch = true;
+        }
+        if ((regType === 'ie' || regType.includes('installation electrician')) && 
+            !numUpper.match(/^IE/i) && !numUpper.match(/^\d+$/)) {
+          prefixMismatch = true;
+        }
+        if ((regType === 'mie' || regType.includes('master')) && 
+            !numUpper.match(/^MIE/i) && !numUpper.match(/^\d+$/)) {
+          prefixMismatch = true;
+        }
+      }
+      
+      if (!isValidFormat) {
+        deterministicChecks.push({
+          checkId: 'REG-FORMAT-001', result: 'Fail',
+          measuredValue: `Registration: ${regNumber}`,
+          limit: 'Must match DOEL format (ETS/XXXX, IE/XXXX, MIE/XXXX)',
+          remediation: `Registration number "${regNumber}" does not match any recognized DOEL format. Verify with the Department of Employment and Labour.`,
+          overrideReason: 'FAIL: Registration number format not recognized'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Administrative', clause: 'REG-FORMAT-001',
+          description: `Registration number "${regNumber}" does not match DOEL format`,
+          reason: `SANS 10142-1 Section 3 requires COCs to be issued by a DOEL-registered person. The registration number format is unrecognized.`,
+          immediateAction: 'Verify the issuer\'s DOEL registration number and re-issue if invalid.',
+          riskLevel: 'Critical'
+        });
+      } else if (prefixMismatch) {
+        deterministicChecks.push({
+          checkId: 'REG-FORMAT-001', result: 'Fail',
+          measuredValue: `Registration: ${regNumber}, Type: ${adminDetails.registrationType}`,
+          limit: 'Registration number prefix must match registration category',
+          remediation: `Registration number prefix does not match the declared registration type "${adminDetails.registrationType}". This may indicate a forged or incorrect registration.`,
+          overrideReason: 'FAIL: Registration number prefix does not match declared type'
+        });
+        mandatoryFailCount++;
+        criticalFailures.push({
+          category: 'Administrative', clause: 'REG-FORMAT-001',
+          description: `Registration number prefix mismatch — "${regNumber}" vs type "${adminDetails.registrationType}"`,
+          reason: `The registration number prefix does not correspond to the declared category. This discrepancy requires verification.`,
+          immediateAction: 'Cross-verify the issuer\'s DOEL registration category against their registration number.',
+          riskLevel: 'High'
+        });
+      } else {
+        deterministicChecks.push({
+          checkId: 'REG-FORMAT-001', result: 'Pass',
+          measuredValue: `Registration: ${regNumber}`,
+          limit: 'Must match DOEL format',
+          remediation: ''
+        });
+      }
+    } else if (regType) {
+      // Registration type declared but no number provided
+      deterministicChecks.push({
+        checkId: 'REG-FORMAT-001', result: 'Fail',
+        measuredValue: 'Registration number not found',
+        limit: 'DOEL registration number is mandatory',
+        remediation: 'The issuer\'s DOEL registration number is missing from the certificate. A COC without a registration number is invalid.',
+        overrideReason: 'FAIL: Missing registration number'
+      });
+      mandatoryFailCount++;
+      criticalFailures.push({
+        category: 'Administrative', clause: 'REG-FORMAT-001',
+        description: 'Missing DOEL registration number',
+        reason: 'SANS 10142-1 Section 3: A COC is only valid if issued by a DOEL-registered person. No registration number was found.',
+        immediateAction: 'The issuer must provide their DOEL registration number on the certificate.',
+        riskLevel: 'Critical'
+      });
+    } else {
+      deterministicChecks.push({
+        checkId: 'REG-FORMAT-001', result: 'Not Tested',
+        measuredValue: 'Registration details not extracted',
+        limit: 'DOEL registration number is mandatory',
+        remediation: 'Could not verify registration number format — details not extracted from document.'
+      });
+    }
+  }
+
   // --- 11. PROSPECTIVE SHORT-CIRCUIT CURRENT — PSCC-001 ---
   {
     const psccChecks = aiChecks.filter((c: any) => 
