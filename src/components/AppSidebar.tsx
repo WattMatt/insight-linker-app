@@ -20,7 +20,8 @@ import {
   FileCode,
   Sparkles,
   BookOpen,
-  Smartphone
+  Smartphone,
+  FlaskConical,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
@@ -50,6 +51,7 @@ const menuItems = [
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
   { title: "Validation Feedback", url: "/validation-feedback", icon: MessageSquarePlus, adminOnly: false },
   { title: "COC Documentation", url: "/coc-documentation", icon: Shield, adminOnly: false },
+  { title: "COC Validation", url: "/coc-validation", icon: FlaskConical, adminOnly: false },
   { title: "Development Skills", url: "/development-skills", icon: BookOpen, adminOnly: false },
   { title: "Platform Testing", url: "/offline-sync-test", icon: Smartphone, adminOnly: true },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
