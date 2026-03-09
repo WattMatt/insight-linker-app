@@ -280,7 +280,7 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
         afdd_installed: data.afddInstalled,
         validation_status: result.status,
         fraud_risk_score: result.fraudRiskScore,
-        validation_results_json: result as unknown as Record<string, unknown>,
+        validation_results_json: JSON.parse(JSON.stringify(result)),
         created_by: userData.user.id,
       };
 
