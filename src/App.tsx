@@ -375,6 +375,10 @@ const App = () => (
             element={<ProtectedRoute><DashboardLayout><COCDocumentation /></DashboardLayout></ProtectedRoute>}
           />
           <Route
+            path="/coc-validation"
+            element={<ProtectedRoute><DashboardLayout><COCValidation /></DashboardLayout></ProtectedRoute>}
+          />
+          <Route
             path="/development-skills"
             element={<ProtectedRoute><DashboardLayout><DevelopmentSkills /></DashboardLayout></ProtectedRoute>}
           />
