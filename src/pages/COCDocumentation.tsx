@@ -27,6 +27,12 @@ const COCDocumentation = () => {
               </div>
             </div>
             <div className="flex items-center gap-2">
+              <Button size="sm" asChild>
+                <Link to="/coc-validation">
+                  <FlaskConical className="h-4 w-4 mr-2" />
+                  Open COC Validation Tool
+                </Link>
+              </Button>
               <Button variant="outline" size="sm" onClick={handlePrint}>
                 <Printer className="h-4 w-4 mr-2" />
                 Print
