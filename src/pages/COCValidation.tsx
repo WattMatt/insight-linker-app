@@ -1,5 +1,5 @@
 import { COCValidationForm } from '@/components/compliance/COCValidationForm';
-import { Breadcrumb } from '@/components/Breadcrumb';
+import { Breadcrumbs } from '@/components/Breadcrumb';
 
 export default function COCValidation() {
   return (
