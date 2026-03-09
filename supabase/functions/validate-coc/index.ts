@@ -1807,7 +1807,7 @@ function applyDeterministicValidation(
   // The deterministic engine (steps 1-12 above) is the SOLE authority for safety-critical decisions.
   const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001', 'PSCC-001', 'POL-001', 'COC-TYPE-001', 
     'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 
-    'CERT-DATE-001', 'REG-001', 'CERT-INCOMPLETE-001']);
+    'CERT-DATE-001', 'REG-001', 'REG-FORMAT-001', 'COC-DUP-001', 'CERT-INCOMPLETE-001']);
   for (const check of aiChecks) {
     if (!handledIds.has(check.checkId)) {
       deterministicChecks.push({
