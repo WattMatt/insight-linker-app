@@ -1,3 +1,6 @@
+// Rules defined in docs/COC_VALIDATION_SPEC.md
+// Runtime logic in supabase/functions/validate-coc/index.ts
+// Prompt in supabase/functions/validate-coc/prompt.ts
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Badge } from "@/components/ui/badge";
