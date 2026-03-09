@@ -1,6 +1,6 @@
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, ExternalLink, Printer } from "lucide-react";
+import { ArrowLeft, ExternalLink, Printer, FlaskConical } from "lucide-react";
 import { COCDocumentationViewer } from "@/components/COCDocumentationViewer";
 
 const COCDocumentation = () => {
