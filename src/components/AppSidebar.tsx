@@ -20,7 +20,8 @@ import {
   FileCode,
   Sparkles,
   BookOpen,
-  Smartphone
+  Smartphone,
+  FlaskConical,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
