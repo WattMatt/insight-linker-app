@@ -2296,6 +2296,85 @@ Return ONLY the JSON validation result.`
           criticalFailures: validationResult.criticalFailures.length,
         };
         
+        // --- COC-DUP-001: DUPLICATE COC NUMBER DETECTION ---
+        if (validationResult.cocNumber) {
+          const cocNum = validationResult.cocNumber.trim();
+          console.log(`🔍 Checking for duplicate COC number: "${cocNum}"`);
+          
+          // Query existing validations for the same COC number (excluding this document)
+          const { data: existingValidations, error: dupError } = await supabase
+            .from('coc_validations')
+            .select('document_id, subsection_id, status, validated_at, report_data')
+            .neq('document_id', documentId)
+            .limit(50);
+          
+          if (!dupError && existingValidations) {
+            // Check report_data.cocNumber for matches
+            const duplicates = existingValidations.filter((v: any) => {
+              const existingCocNum = (v.report_data?.cocNumber || '').trim();
+              return existingCocNum && existingCocNum === cocNum;
+            });
+            
+            if (duplicates.length > 0) {
+              const dupInfo = duplicates.map((d: any) => d.document_id).join(', ');
+              console.log(`⚠️ Duplicate COC number found: "${cocNum}" appears in ${duplicates.length} other document(s)`);
+              
+              validationResult.checks.push({
+                checkId: 'COC-DUP-001', result: 'Fail',
+                measuredValue: `COC #${cocNum} found in ${duplicates.length} other document(s)`,
+                limit: 'Every COC must have a unique traceable number',
+                remediation: `COC number "${cocNum}" is duplicated in the system. This may indicate a forged certificate, data entry error, or re-use of a COC number. Verify the certificate authenticity.`,
+                overrideReason: `FAIL: Duplicate COC number detected in ${duplicates.length} other record(s)`
+              });
+              
+              validationResult.criticalFailures.push({
+                category: 'Administrative', clause: 'COC-DUP-001',
+                description: `Duplicate COC number "${cocNum}" found in system`,
+                reason: `This COC number appears in ${duplicates.length} other validation record(s): ${dupInfo}. Every COC must have a unique traceable number per SANS 10142-1 audit requirements.`,
+                immediateAction: 'Verify the certificate authenticity and investigate the duplicate.',
+                riskLevel: 'High'
+              });
+              
+              if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
+              validationResult.extractionNotes.push(
+                `COC-DUP-001: Duplicate COC number "${cocNum}" found in ${duplicates.length} other record(s)`
+              );
+            } else {
+              validationResult.checks.push({
+                checkId: 'COC-DUP-001', result: 'Pass',
+                measuredValue: `COC #${cocNum} — unique in system`,
+                limit: 'Every COC must have a unique traceable number',
+                remediation: ''
+              });
+            }
+          } else {
+            console.log('⚠️ Could not check for duplicates:', dupError?.message);
+            validationResult.checks.push({
+              checkId: 'COC-DUP-001', result: 'Not Tested',
+              measuredValue: 'Could not query existing records',
+              limit: 'Every COC must have a unique traceable number',
+              remediation: 'Duplicate check could not be performed.'
+            });
+          }
+        } else {
+          validationResult.checks.push({
+            checkId: 'COC-DUP-001', result: 'Not Tested',
+            measuredValue: 'No COC number extracted',
+            limit: 'Every COC must have a unique traceable number',
+            remediation: 'COC number not found in document — cannot check for duplicates.'
+          });
+        }
+        
+        // Rebuild summary after COC-DUP-001 check
+        validationResult.summary = {
+          totalChecks: validationResult.checks.length,
+          passedChecks: validationResult.checks.filter((c: any) => c.result === 'Pass').length,
+          failedChecks: validationResult.checks.filter((c: any) => c.result === 'Fail').length,
+          notTested: validationResult.checks.filter((c: any) => c.result === 'Not Tested').length,
+          notApplicable: validationResult.checks.filter((c: any) => c.result === 'Not Applicable' || c.result === 'Skipped').length,
+          criticalFailures: validationResult.criticalFailures.length,
+        };
+
         // Successfully parsed, break out of retry loop
         console.log('Validation parsed successfully on attempt', attempt + 1);
         break;
