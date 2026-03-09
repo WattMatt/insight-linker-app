@@ -4,7 +4,7 @@ import { Breadcrumbs } from '@/components/Breadcrumb';
 export default function COCValidation() {
   return (
     <div className="space-y-4">
-      <Breadcrumb
+      <Breadcrumbs
         items={[
           { label: 'Dashboard', href: '/dashboard' },
           { label: 'COC Validation' },
