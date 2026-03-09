@@ -587,9 +587,9 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
    - Flag missing pages
 
 3. **Mandatory Check Sequence:**
-    - COC-INIT-001: Initial COC exists (for Supplementary/Temporary) (CRITICAL)
-    - COC-SUPP-001: Supplementary COC references Initial (CRITICAL)
-    - COC-TEMP-001: Temporary COC validity period (CRITICAL)
+   - COC-INIT-001: Initial COC exists (for Supplementary/Temporary) (CRITICAL)
+   - COC-SUPP-001: Supplementary COC references Initial (CRITICAL)
+   - COC-TEMP-001: Temporary COC validity period (CRITICAL)
     - COC-VALID-001: Overall hierarchy compliance (CRITICAL)
     - EARTH-001: Earth resistance (CRITICAL)
     - LOOP-001: Earth loop impedance (CRITICAL)
@@ -597,9 +597,6 @@ If you see ANY mark in a test result field that could be ∞, OL, or a loop/figu
     - RCD-001: RCD functionality (CRITICAL)
     - PSCC-001: Prospective short-circuit current vs breaker capacity (CRITICAL)
     - POL-001: Polarity and continuity (CRITICAL)
-    - REG-001: Issuer competency (registration vs installation type) (MANDATORY)
-    - REG-FORMAT-001: DOEL registration number format validation (MANDATORY)
-    - COC-DUP-001: Unique COC number (server-side duplicate check) (MANDATORY)
     - COND-001: Conductor sizing (MANDATORY)
     - OCP-001: Overcurrent protection (MANDATORY)
     - DOC-001: Documentation (MANDATORY)
@@ -1554,110 +1551,6 @@ function applyDeterministicValidation(
     }
   }
 
-  // --- 10b. DOEL REGISTRATION FORMAT VALIDATION — REG-FORMAT-001 ---
-  {
-    const adminDetails = aiResult.administrativeDetails || {};
-    const regNumber = (adminDetails.registrationNumber || '').trim();
-    const regType = (adminDetails.registrationType || '').toLowerCase();
-    
-    if (regNumber) {
-      // DOEL registration numbers follow patterns like:
-      // ETS/XXXX, IE/XXXX, MIE/XXXX, or numeric-only (older format)
-      // Also accept: E/XXXX, formats with spaces, dashes
-      const validPatterns = [
-        /^(ETS|ETSP|IE|MIE|E)\s*[\/\-]?\s*\d+/i,          // Standard: ETS/12345, IE-456, MIE/789
-        /^\d{3,8}$/,                                         // Legacy numeric-only: 123456
-        /^[A-Z]{1,4}\s*\d{3,8}$/i,                          // Compact: IE12345
-        /^(ECSA|ECA)\s*[\/\-]?\s*\d+/i,                     // Council registrations
-      ];
-      
-      const isValidFormat = validPatterns.some(p => p.test(regNumber));
-      
-      // Cross-check: registration number prefix should match registration type
-      let prefixMismatch = false;
-      if (isValidFormat && regType) {
-        const numUpper = regNumber.toUpperCase();
-        if (regType.includes('single phase') && !numUpper.match(/^(ETS|ETSP|E)\b/i) && !numUpper.match(/^\d+$/)) {
-          // Single phase testers should have ETS/ETSP prefix (or legacy numeric)
-          prefixMismatch = true;
-        }
-        if ((regType === 'ie' || regType.includes('installation electrician')) && 
-            !numUpper.match(/^IE/i) && !numUpper.match(/^\d+$/)) {
-          prefixMismatch = true;
-        }
-        if ((regType === 'mie' || regType.includes('master')) && 
-            !numUpper.match(/^MIE/i) && !numUpper.match(/^\d+$/)) {
-          prefixMismatch = true;
-        }
-      }
-      
-      if (!isValidFormat) {
-        deterministicChecks.push({
-          checkId: 'REG-FORMAT-001', result: 'Fail',
-          measuredValue: `Registration: ${regNumber}`,
-          limit: 'Must match DOEL format (ETS/XXXX, IE/XXXX, MIE/XXXX)',
-          remediation: `Registration number "${regNumber}" does not match any recognized DOEL format. Verify with the Department of Employment and Labour.`,
-          overrideReason: 'FAIL: Registration number format not recognized'
-        });
-        mandatoryFailCount++;
-        criticalFailures.push({
-          category: 'Administrative', clause: 'REG-FORMAT-001',
-          description: `Registration number "${regNumber}" does not match DOEL format`,
-          reason: `SANS 10142-1 Section 3 requires COCs to be issued by a DOEL-registered person. The registration number format is unrecognized.`,
-          immediateAction: 'Verify the issuer\'s DOEL registration number and re-issue if invalid.',
-          riskLevel: 'Critical'
-        });
-      } else if (prefixMismatch) {
-        deterministicChecks.push({
-          checkId: 'REG-FORMAT-001', result: 'Fail',
-          measuredValue: `Registration: ${regNumber}, Type: ${adminDetails.registrationType}`,
-          limit: 'Registration number prefix must match registration category',
-          remediation: `Registration number prefix does not match the declared registration type "${adminDetails.registrationType}". This may indicate a forged or incorrect registration.`,
-          overrideReason: 'FAIL: Registration number prefix does not match declared type'
-        });
-        mandatoryFailCount++;
-        criticalFailures.push({
-          category: 'Administrative', clause: 'REG-FORMAT-001',
-          description: `Registration number prefix mismatch — "${regNumber}" vs type "${adminDetails.registrationType}"`,
-          reason: `The registration number prefix does not correspond to the declared category. This discrepancy requires verification.`,
-          immediateAction: 'Cross-verify the issuer\'s DOEL registration category against their registration number.',
-          riskLevel: 'High'
-        });
-      } else {
-        deterministicChecks.push({
-          checkId: 'REG-FORMAT-001', result: 'Pass',
-          measuredValue: `Registration: ${regNumber}`,
-          limit: 'Must match DOEL format',
-          remediation: ''
-        });
-      }
-    } else if (regType) {
-      // Registration type declared but no number provided
-      deterministicChecks.push({
-        checkId: 'REG-FORMAT-001', result: 'Fail',
-        measuredValue: 'Registration number not found',
-        limit: 'DOEL registration number is mandatory',
-        remediation: 'The issuer\'s DOEL registration number is missing from the certificate. A COC without a registration number is invalid.',
-        overrideReason: 'FAIL: Missing registration number'
-      });
-      mandatoryFailCount++;
-      criticalFailures.push({
-        category: 'Administrative', clause: 'REG-FORMAT-001',
-        description: 'Missing DOEL registration number',
-        reason: 'SANS 10142-1 Section 3: A COC is only valid if issued by a DOEL-registered person. No registration number was found.',
-        immediateAction: 'The issuer must provide their DOEL registration number on the certificate.',
-        riskLevel: 'Critical'
-      });
-    } else {
-      deterministicChecks.push({
-        checkId: 'REG-FORMAT-001', result: 'Not Tested',
-        measuredValue: 'Registration details not extracted',
-        limit: 'DOEL registration number is mandatory',
-        remediation: 'Could not verify registration number format — details not extracted from document.'
-      });
-    }
-  }
-
   // --- 11. PROSPECTIVE SHORT-CIRCUIT CURRENT — PSCC-001 ---
   {
     const psccChecks = aiChecks.filter((c: any) => 
@@ -1810,7 +1703,7 @@ function applyDeterministicValidation(
   // The deterministic engine (steps 1-12 above) is the SOLE authority for safety-critical decisions.
   const handledIds = new Set(['EARTH-001', 'INSUL-001', 'RCD-001', 'LOOP-001', 'PSCC-001', 'POL-001', 'COC-TYPE-001', 
     'COC-INIT-001', 'COC-SUPP-001', 'COC-TEMP-001', 'COC-VALID-001', 'SIG-001', 'DOC-001', 
-    'CERT-DATE-001', 'REG-001', 'REG-FORMAT-001', 'COC-DUP-001', 'CERT-INCOMPLETE-001']);
+    'CERT-DATE-001', 'REG-001', 'CERT-INCOMPLETE-001']);
   for (const check of aiChecks) {
     if (!handledIds.has(check.checkId)) {
       deterministicChecks.push({
@@ -2299,85 +2192,6 @@ Return ONLY the JSON validation result.`
           criticalFailures: validationResult.criticalFailures.length,
         };
         
-        // --- COC-DUP-001: DUPLICATE COC NUMBER DETECTION ---
-        if (validationResult.cocNumber) {
-          const cocNum = validationResult.cocNumber.trim();
-          console.log(`🔍 Checking for duplicate COC number: "${cocNum}"`);
-          
-          // Query existing validations for the same COC number (excluding this document)
-          const { data: existingValidations, error: dupError } = await supabase
-            .from('coc_validations')
-            .select('document_id, subsection_id, status, validated_at, report_data')
-            .neq('document_id', documentId)
-            .limit(50);
-          
-          if (!dupError && existingValidations) {
-            // Check report_data.cocNumber for matches
-            const duplicates = existingValidations.filter((v: any) => {
-              const existingCocNum = (v.report_data?.cocNumber || '').trim();
-              return existingCocNum && existingCocNum === cocNum;
-            });
-            
-            if (duplicates.length > 0) {
-              const dupInfo = duplicates.map((d: any) => d.document_id).join(', ');
-              console.log(`⚠️ Duplicate COC number found: "${cocNum}" appears in ${duplicates.length} other document(s)`);
-              
-              validationResult.checks.push({
-                checkId: 'COC-DUP-001', result: 'Fail',
-                measuredValue: `COC #${cocNum} found in ${duplicates.length} other document(s)`,
-                limit: 'Every COC must have a unique traceable number',
-                remediation: `COC number "${cocNum}" is duplicated in the system. This may indicate a forged certificate, data entry error, or re-use of a COC number. Verify the certificate authenticity.`,
-                overrideReason: `FAIL: Duplicate COC number detected in ${duplicates.length} other record(s)`
-              });
-              
-              validationResult.criticalFailures.push({
-                category: 'Administrative', clause: 'COC-DUP-001',
-                description: `Duplicate COC number "${cocNum}" found in system`,
-                reason: `This COC number appears in ${duplicates.length} other validation record(s): ${dupInfo}. Every COC must have a unique traceable number per SANS 10142-1 audit requirements.`,
-                immediateAction: 'Verify the certificate authenticity and investigate the duplicate.',
-                riskLevel: 'High'
-              });
-              
-              if (!validationResult.extractionNotes) validationResult.extractionNotes = [];
-              validationResult.extractionNotes.push(
-                `COC-DUP-001: Duplicate COC number "${cocNum}" found in ${duplicates.length} other record(s)`
-              );
-            } else {
-              validationResult.checks.push({
-                checkId: 'COC-DUP-001', result: 'Pass',
-                measuredValue: `COC #${cocNum} — unique in system`,
-                limit: 'Every COC must have a unique traceable number',
-                remediation: ''
-              });
-            }
-          } else {
-            console.log('⚠️ Could not check for duplicates:', dupError?.message);
-            validationResult.checks.push({
-              checkId: 'COC-DUP-001', result: 'Not Tested',
-              measuredValue: 'Could not query existing records',
-              limit: 'Every COC must have a unique traceable number',
-              remediation: 'Duplicate check could not be performed.'
-            });
-          }
-        } else {
-          validationResult.checks.push({
-            checkId: 'COC-DUP-001', result: 'Not Tested',
-            measuredValue: 'No COC number extracted',
-            limit: 'Every COC must have a unique traceable number',
-            remediation: 'COC number not found in document — cannot check for duplicates.'
-          });
-        }
-        
-        // Rebuild summary after COC-DUP-001 check
-        validationResult.summary = {
-          totalChecks: validationResult.checks.length,
-          passedChecks: validationResult.checks.filter((c: any) => c.result === 'Pass').length,
-          failedChecks: validationResult.checks.filter((c: any) => c.result === 'Fail').length,
-          notTested: validationResult.checks.filter((c: any) => c.result === 'Not Tested').length,
-          notApplicable: validationResult.checks.filter((c: any) => c.result === 'Not Applicable' || c.result === 'Skipped').length,
-          criticalFailures: validationResult.criticalFailures.length,
-        };
-
         // Successfully parsed, break out of retry loop
         console.log('Validation parsed successfully on attempt', attempt + 1);
         break;
