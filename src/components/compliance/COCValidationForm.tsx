@@ -35,7 +35,12 @@ import {
   FileWarning,
   Sun,
   Battery,
+  Download,
+  Save,
+  Loader2,
 } from 'lucide-react';
+import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 import {
   validateCOC,
   type COCData,
@@ -43,6 +48,7 @@ import {
   type COCValidationResult,
   type ValidationRuleResult,
 } from '@/utils/cocValidationEngine';
+import { buildCOCValidationPdf } from '@/utils/cocValidationPdfBuilder';
 
 // ---------------------------------------------------------------------------
 // Zod schema for the form — mirrors engine interfaces
@@ -122,7 +128,6 @@ function StatusIcon({ status }: { status: string }) {
   }
 }
 
-/** Real-time inline indicator for a numeric test field */
 function ThresholdIndicator({ value, check }: {
   value: number | null | undefined;
   check: (v: number) => 'pass' | 'fail' | 'warn';
@@ -135,11 +140,20 @@ function ThresholdIndicator({ value, check }: {
 }
 
 // ---------------------------------------------------------------------------
+// Props
+// ---------------------------------------------------------------------------
+
+interface COCValidationFormProps {
+  editId?: string | null;
+  onSaved?: () => void;
+}
+
+// ---------------------------------------------------------------------------
 // Component
 // ---------------------------------------------------------------------------
 
-export function COCValidationForm() {
-  const [validationResult, setValidationResult] = useState<COCValidationResult | null>(null);
+export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
+  const [saving, setSaving] = useState(false);
 
   const form = useForm<COCFormValues>({
     resolver: zodResolver(cocFormSchema),
@@ -177,47 +191,139 @@ export function COCValidationForm() {
 
   const watchedValues = form.watch();
 
-  // Live validation as user types
-  const liveResult = useMemo(() => {
+  // Build engine inputs from form
+  const buildEngineInputs = (data: COCFormValues) => {
     const cocData: COCData = {
-      cocReferenceNumber: watchedValues.cocReferenceNumber || '',
-      certificateType: watchedValues.certificateType,
-      installationAddress: watchedValues.installationAddress || '',
-      registeredPersonName: watchedValues.registeredPersonName || '',
-      registrationNumber: watchedValues.registrationNumber || '',
-      registrationCategory: watchedValues.registrationCategory,
-      dateOfIssue: watchedValues.dateOfIssue || '',
-      installationType: watchedValues.installationType,
-      phaseConfiguration: watchedValues.phaseConfiguration,
-      supplyVoltage: watchedValues.supplyVoltage || 230,
-      supplyFrequency: watchedValues.supplyFrequency || 50,
+      cocReferenceNumber: data.cocReferenceNumber || '',
+      certificateType: data.certificateType,
+      installationAddress: data.installationAddress || '',
+      registeredPersonName: data.registeredPersonName || '',
+      registrationNumber: data.registrationNumber || '',
+      registrationCategory: data.registrationCategory,
+      dateOfIssue: data.dateOfIssue || '',
+      installationType: data.installationType,
+      phaseConfiguration: data.phaseConfiguration,
+      supplyVoltage: data.supplyVoltage || 230,
+      supplyFrequency: data.supplyFrequency || 50,
     };
 
     const testReport: COCTestReport = {
-      insulationResistance_MOhm: watchedValues.insulationResistance_MOhm ?? null,
-      earthLoopImpedance_Zs_Ohm: watchedValues.earthLoopImpedance_Zs_Ohm ?? null,
-      rcdTripTime_ms: watchedValues.rcdTripTime_ms ?? null,
-      rcdRatedCurrent_mA: watchedValues.rcdRatedCurrent_mA || 30,
-      pscc_kA: watchedValues.pscc_kA ?? null,
-      earthContinuity_Ohm: watchedValues.earthContinuity_Ohm ?? null,
-      voltageAtMainDB_V: watchedValues.voltageAtMainDB_V ?? null,
-      polarityCorrect: watchedValues.polarityCorrect || false,
-      hasSignature: watchedValues.hasSignature || false,
-      signatureDate: watchedValues.signatureDate || null,
-      hasSolarPV: watchedValues.hasSolarPV || false,
-      hasBESS: watchedValues.hasBESS || false,
-      solarGroundingVerified: watchedValues.solarGroundingVerified ?? null,
-      inverterSyncVerified: watchedValues.inverterSyncVerified ?? null,
-      bessFireProtection: watchedValues.bessFireProtection ?? null,
-      spdOperational: watchedValues.spdOperational ?? null,
-      afddInstalled: watchedValues.afddInstalled ?? null,
+      insulationResistance_MOhm: data.insulationResistance_MOhm ?? null,
+      earthLoopImpedance_Zs_Ohm: data.earthLoopImpedance_Zs_Ohm ?? null,
+      rcdTripTime_ms: data.rcdTripTime_ms ?? null,
+      rcdRatedCurrent_mA: data.rcdRatedCurrent_mA || 30,
+      pscc_kA: data.pscc_kA ?? null,
+      earthContinuity_Ohm: data.earthContinuity_Ohm ?? null,
+      voltageAtMainDB_V: data.voltageAtMainDB_V ?? null,
+      polarityCorrect: data.polarityCorrect || false,
+      hasSignature: data.hasSignature || false,
+      signatureDate: data.signatureDate || null,
+      hasSolarPV: data.hasSolarPV || false,
+      hasBESS: data.hasBESS || false,
+      solarGroundingVerified: data.solarGroundingVerified ?? null,
+      inverterSyncVerified: data.inverterSyncVerified ?? null,
+      bessFireProtection: data.bessFireProtection ?? null,
+      spdOperational: data.spdOperational ?? null,
+      afddInstalled: data.afddInstalled ?? null,
     };
 
+    return { cocData, testReport };
+  };
+
+  // Live validation
+  const liveResult = useMemo(() => {
+    const { cocData, testReport } = buildEngineInputs(watchedValues);
     return validateCOC(cocData, testReport);
   }, [watchedValues]);
 
-  const onSubmit = (data: COCFormValues) => {
-    setValidationResult(liveResult);
+  // Save to Supabase
+  const onSubmit = async (data: COCFormValues) => {
+    setSaving(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) {
+        toast.error('You must be logged in to save');
+        return;
+      }
+
+      const { cocData, testReport } = buildEngineInputs(data);
+      const result = validateCOC(cocData, testReport);
+
+      const record = {
+        coc_reference_number: data.cocReferenceNumber,
+        certificate_type: data.certificateType,
+        installation_address: data.installationAddress,
+        registered_person_name: data.registeredPersonName,
+        registration_number: data.registrationNumber,
+        registration_category: data.registrationCategory,
+        date_of_issue: data.dateOfIssue,
+        installation_type: data.installationType,
+        phase_configuration: data.phaseConfiguration,
+        supply_voltage: data.supplyVoltage,
+        supply_frequency: data.supplyFrequency,
+        insulation_resistance: data.insulationResistance_MOhm ?? null,
+        earth_loop_impedance: data.earthLoopImpedance_Zs_Ohm ?? null,
+        rcd_trip_time: data.rcdTripTime_ms ?? null,
+        rcd_rated_current: data.rcdRatedCurrent_mA,
+        pscc: data.pscc_kA ?? null,
+        earth_continuity: data.earthContinuity_Ohm ?? null,
+        voltage_at_main_db: data.voltageAtMainDB_V ?? null,
+        polarity_correct: data.polarityCorrect,
+        has_signature: data.hasSignature,
+        signature_date: data.signatureDate || null,
+        has_solar_pv: data.hasSolarPV,
+        has_bess: data.hasBESS,
+        solar_grounding_verified: data.solarGroundingVerified,
+        inverter_sync_verified: data.inverterSyncVerified,
+        bess_fire_protection: data.bessFireProtection,
+        spd_operational: data.spdOperational,
+        afdd_installed: data.afddInstalled,
+        validation_status: result.status,
+        fraud_risk_score: result.fraudRiskScore,
+        validation_results_json: result as unknown as Record<string, unknown>,
+        created_by: userData.user.id,
+      };
+
+      if (editId) {
+        const { error } = await supabase
+          .from('coc_local_validations')
+          .update(record)
+          .eq('id', editId);
+        if (error) throw error;
+        toast.success('COC validation updated');
+      } else {
+        const { error } = await supabase
+          .from('coc_local_validations')
+          .insert(record);
+        if (error) throw error;
+        toast.success('COC validation saved');
+      }
+
+      onSaved?.();
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Failed to save';
+      toast.error(message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // PDF Download
+  const handleDownloadPdf = async () => {
+    try {
+      const { cocData, testReport } = buildEngineInputs(watchedValues);
+      const result = validateCOC(cocData, testReport);
+      const docDef = buildCOCValidationPdf({ cocData, testReport, validationResult: result });
+
+      const pdfMake = await import('pdfmake/build/pdfmake');
+      pdfMake.default.createPdf(docDef).download(
+        `COC_Validation_${watchedValues.cocReferenceNumber || 'report'}_${new Date().toISOString().split('T')[0]}.pdf`
+      );
+      toast.success('PDF downloaded');
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      toast.error('Failed to generate PDF');
+    }
   };
 
   const hasMissingTests =
@@ -577,7 +683,6 @@ export function COCValidationForm() {
                 )} />
               </div>
 
-              {/* Conditional Solar fields */}
               {watchedValues.hasSolarPV && (
                 <div className="ml-6 pl-4 border-l-2 border-amber-400/50 space-y-3">
                   <p className="text-sm font-medium text-amber-700">Solar PV Verification Required</p>
@@ -608,7 +713,6 @@ export function COCValidationForm() {
                 </div>
               )}
 
-              {/* Conditional BESS fields */}
               {watchedValues.hasBESS && (
                 <div className="ml-6 pl-4 border-l-2 border-amber-400/50 space-y-3">
                   <p className="text-sm font-medium text-amber-700">BESS Verification Required</p>
@@ -656,9 +760,17 @@ export function COCValidationForm() {
             </CardContent>
           </Card>
 
-          <Button type="submit" size="lg" className="w-full h-12 text-base">
-            Run Full Validation
-          </Button>
+          {/* Action buttons */}
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button type="submit" size="lg" className="flex-1 h-12 text-base" disabled={saving}>
+              {saving ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <Save className="h-4 w-4 mr-2" />}
+              {editId ? 'Update Validation' : 'Save & Validate'}
+            </Button>
+            <Button type="button" variant="outline" size="lg" className="h-12" onClick={handleDownloadPdf}>
+              <Download className="h-4 w-4 mr-2" />
+              Download PDF
+            </Button>
+          </div>
         </form>
       </Form>
 
@@ -684,7 +796,6 @@ export function COCValidationForm() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Failed Rules */}
           {liveResult.failedRules.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-destructive flex items-center gap-1.5">
@@ -698,7 +809,6 @@ export function COCValidationForm() {
             </div>
           )}
 
-          {/* Passed Rules */}
           {liveResult.passedRules.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
