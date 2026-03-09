@@ -4,7 +4,12 @@
  * 
  * Uses pdfmake as per project standard (no jsPDF).
  */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { COCData, COCTestReport, COCValidationResult } from '@/utils/cocValidationEngine';
+
+type Content = any;
+type TableCell = any;
+type TDocumentDefinitions = any;
 
 interface COCPdfInput {
   cocData: COCData;
