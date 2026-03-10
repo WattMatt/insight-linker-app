@@ -430,116 +430,212 @@ export type Database = {
         Row: {
           afdd_installed: boolean | null
           bess_fire_protection: boolean | null
+          building_name: string | null
           certificate_type: string
           coc_reference_number: string
+          comments: string | null
+          continuity_of_bonding: string | null
+          continuity_ring_circuits: string | null
           created_at: string
           created_by: string | null
+          current_rating_a: number | null
           date_of_issue: string
+          db_supply_name: string | null
+          district_town_city: string | null
           earth_continuity: number | null
+          earth_leakage_test_button: boolean | null
           earth_loop_impedance: number | null
+          elevated_voltage_v: number | null
+          erf_lot_no: string | null
+          form_data_json: Json | null
+          form_type: string
           fraud_risk_score: string
+          gps_coordinates: string | null
           has_bess: boolean
           has_signature: boolean
           has_solar_pv: boolean
           id: string
           installation_address: string
+          installation_permanent: boolean | null
           installation_type: string
           insulation_resistance: number | null
           inverter_sync_verified: boolean | null
+          main_switch_type: string | null
+          neutral_loop_impedance_ohm: number | null
+          number_of_poles: number | null
           phase_configuration: string
+          phase_rotation: string | null
+          phase_rotation_correct: boolean | null
           polarity_correct: boolean
           pscc: number | null
           rcd_rated_current: number
           rcd_trip_time: number | null
+          registered_person_id_number: string | null
           registered_person_name: string
+          registered_person_reg_date: string | null
           registration_category: string
           registration_number: string
+          regulation_type: string | null
+          short_circuit_withstand_ka: number | null
           signature_date: string | null
           site_id: string | null
           solar_grounding_verified: boolean | null
           spd_operational: boolean | null
+          suburb_township: string | null
           supply_frequency: number
+          supply_system_type: string | null
           supply_voltage: number
+          switching_devices_correct: boolean | null
           updated_at: string
           validation_results_json: Json | null
           validation_status: string
           voltage_at_main_db: number | null
+          voltage_full_load_b: number | null
+          voltage_full_load_r: number | null
+          voltage_full_load_y: number | null
+          voltage_no_load_b: number | null
+          voltage_no_load_r: number | null
+          voltage_no_load_y: number | null
         }
         Insert: {
           afdd_installed?: boolean | null
           bess_fire_protection?: boolean | null
+          building_name?: string | null
           certificate_type: string
           coc_reference_number: string
+          comments?: string | null
+          continuity_of_bonding?: string | null
+          continuity_ring_circuits?: string | null
           created_at?: string
           created_by?: string | null
+          current_rating_a?: number | null
           date_of_issue: string
+          db_supply_name?: string | null
+          district_town_city?: string | null
           earth_continuity?: number | null
+          earth_leakage_test_button?: boolean | null
           earth_loop_impedance?: number | null
+          elevated_voltage_v?: number | null
+          erf_lot_no?: string | null
+          form_data_json?: Json | null
+          form_type?: string
           fraud_risk_score?: string
+          gps_coordinates?: string | null
           has_bess?: boolean
           has_signature?: boolean
           has_solar_pv?: boolean
           id?: string
           installation_address: string
+          installation_permanent?: boolean | null
           installation_type: string
           insulation_resistance?: number | null
           inverter_sync_verified?: boolean | null
+          main_switch_type?: string | null
+          neutral_loop_impedance_ohm?: number | null
+          number_of_poles?: number | null
           phase_configuration: string
+          phase_rotation?: string | null
+          phase_rotation_correct?: boolean | null
           polarity_correct?: boolean
           pscc?: number | null
           rcd_rated_current?: number
           rcd_trip_time?: number | null
+          registered_person_id_number?: string | null
           registered_person_name: string
+          registered_person_reg_date?: string | null
           registration_category: string
           registration_number: string
+          regulation_type?: string | null
+          short_circuit_withstand_ka?: number | null
           signature_date?: string | null
           site_id?: string | null
           solar_grounding_verified?: boolean | null
           spd_operational?: boolean | null
+          suburb_township?: string | null
           supply_frequency?: number
+          supply_system_type?: string | null
           supply_voltage?: number
+          switching_devices_correct?: boolean | null
           updated_at?: string
           validation_results_json?: Json | null
           validation_status?: string
           voltage_at_main_db?: number | null
+          voltage_full_load_b?: number | null
+          voltage_full_load_r?: number | null
+          voltage_full_load_y?: number | null
+          voltage_no_load_b?: number | null
+          voltage_no_load_r?: number | null
+          voltage_no_load_y?: number | null
         }
         Update: {
           afdd_installed?: boolean | null
           bess_fire_protection?: boolean | null
+          building_name?: string | null
           certificate_type?: string
           coc_reference_number?: string
+          comments?: string | null
+          continuity_of_bonding?: string | null
+          continuity_ring_circuits?: string | null
           created_at?: string
           created_by?: string | null
+          current_rating_a?: number | null
           date_of_issue?: string
+          db_supply_name?: string | null
+          district_town_city?: string | null
           earth_continuity?: number | null
+          earth_leakage_test_button?: boolean | null
           earth_loop_impedance?: number | null
+          elevated_voltage_v?: number | null
+          erf_lot_no?: string | null
+          form_data_json?: Json | null
+          form_type?: string
           fraud_risk_score?: string
+          gps_coordinates?: string | null
           has_bess?: boolean
           has_signature?: boolean
           has_solar_pv?: boolean
           id?: string
           installation_address?: string
+          installation_permanent?: boolean | null
           installation_type?: string
           insulation_resistance?: number | null
           inverter_sync_verified?: boolean | null
+          main_switch_type?: string | null
+          neutral_loop_impedance_ohm?: number | null
+          number_of_poles?: number | null
           phase_configuration?: string
+          phase_rotation?: string | null
+          phase_rotation_correct?: boolean | null
           polarity_correct?: boolean
           pscc?: number | null
           rcd_rated_current?: number
           rcd_trip_time?: number | null
+          registered_person_id_number?: string | null
           registered_person_name?: string
+          registered_person_reg_date?: string | null
           registration_category?: string
           registration_number?: string
+          regulation_type?: string | null
+          short_circuit_withstand_ka?: number | null
           signature_date?: string | null
           site_id?: string | null
           solar_grounding_verified?: boolean | null
           spd_operational?: boolean | null
+          suburb_township?: string | null
           supply_frequency?: number
+          supply_system_type?: string | null
           supply_voltage?: number
+          switching_devices_correct?: boolean | null
           updated_at?: string
           validation_results_json?: Json | null
           validation_status?: string
           voltage_at_main_db?: number | null
+          voltage_full_load_b?: number | null
+          voltage_full_load_r?: number | null
+          voltage_full_load_y?: number | null
+          voltage_no_load_b?: number | null
+          voltage_no_load_r?: number | null
+          voltage_no_load_y?: number | null
         }
         Relationships: [
           {

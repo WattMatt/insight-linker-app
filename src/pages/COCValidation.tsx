@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { COCValidationForm } from '@/components/compliance/COCValidationForm';
+import { AnnexureCOCForm } from '@/components/compliance/AnnexureCOCForm';
 import { Breadcrumbs } from '@/components/Breadcrumb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +18,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-type ViewMode = 'list' | 'new' | 'edit';
+type ViewMode = 'list' | 'select-type' | 'new' | 'new-annexure' | 'edit';
+type FormType = 'quick' | 'annexure1';
 
 function statusBadge(status: string) {
   switch (status) {
@@ -82,14 +84,64 @@ export default function COCValidation() {
     setView('edit');
   };
 
-  if (view === 'new' || view === 'edit') {
+  if (view === 'select-type') {
     return (
       <div className="space-y-4">
         <Breadcrumbs
           items={[
             { label: 'Dashboard', href: '/dashboard' },
             { label: 'COC Validation', href: '/coc-validation' },
-            { label: view === 'new' ? 'New Validation' : 'Edit Validation' },
+            { label: 'Select Form Type' },
+          ]}
+        />
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => setView('list')}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">Select COC Form Type</h1>
+        </div>
+        <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
+          <Card
+            className="cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => setView('new-annexure')}
+          >
+            <CardHeader>
+              <CardTitle className="text-base">Annexure 1 — Full COC</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Department of Labour — General Electrical Installation certificate with full test report (SANS 10142-1). Matches the official 2-page document.
+              </p>
+              <Badge className="mt-3" variant="outline">Recommended</Badge>
+            </CardContent>
+          </Card>
+          <Card
+            className="cursor-pointer hover:border-primary/50 transition-colors"
+            onClick={() => setView('new')}
+          >
+            <CardHeader>
+              <CardTitle className="text-base">Quick Validation</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground">
+                Streamlined validation form with key test measurements only. Best for rapid data entry and batch validation.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
+
+  if (view === 'new-annexure' || (view === 'edit' && editId)) {
+    const isAnnexure = view === 'new-annexure';
+    return (
+      <div className="space-y-4">
+        <Breadcrumbs
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'COC Validation', href: '/coc-validation' },
+            { label: isAnnexure ? 'Annexure 1 COC' : 'Edit Validation' },
           ]}
         />
         <div className="flex items-center gap-3">
@@ -97,13 +149,38 @@ export default function COCValidation() {
             <ArrowLeft className="h-4 w-4 mr-1" /> Back
           </Button>
           <h1 className="text-2xl font-bold tracking-tight">
-            {view === 'new' ? 'New COC Validation' : 'Edit COC Validation'}
+            {isAnnexure ? 'Annexure 1 — Certificate of Compliance' : 'Edit COC Validation'}
           </h1>
+        </div>
+        {isAnnexure ? (
+          <AnnexureCOCForm onSaved={handleSaved} />
+        ) : (
+          <COCValidationForm editId={editId} onSaved={handleSaved} />
+        )}
+      </div>
+    );
+  }
+
+  if (view === 'new') {
+    return (
+      <div className="space-y-4">
+        <Breadcrumbs
+          items={[
+            { label: 'Dashboard', href: '/dashboard' },
+            { label: 'COC Validation', href: '/coc-validation' },
+            { label: 'New Validation' },
+          ]}
+        />
+        <div className="flex items-center gap-3">
+          <Button variant="ghost" size="sm" onClick={() => { setView('list'); setEditId(null); }}>
+            <ArrowLeft className="h-4 w-4 mr-1" /> Back
+          </Button>
+          <h1 className="text-2xl font-bold tracking-tight">New COC Validation</h1>
         </div>
         <p className="text-muted-foreground">
           SANS 10142-1:2020/2024 strict empirical validation — all measurements must be numeric
         </p>
-        <COCValidationForm editId={editId} onSaved={handleSaved} />
+        <COCValidationForm onSaved={handleSaved} />
       </div>
     );
   }
@@ -123,7 +200,7 @@ export default function COCValidation() {
             SANS 10142-1:2020/2024 strict empirical validation records
           </p>
         </div>
-        <Button onClick={() => setView('new')} className="h-11">
+        <Button onClick={() => setView('select-type')} className="h-11">
           <Plus className="h-4 w-4 mr-2" /> New Validation
         </Button>
       </div>
@@ -142,7 +219,7 @@ export default function COCValidation() {
             <p className="text-sm text-muted-foreground mt-1 max-w-md">
               Create your first COC validation to verify electrical certificates against SANS 10142-1 requirements.
             </p>
-            <Button className="mt-4" onClick={() => setView('new')}>
+            <Button className="mt-4" onClick={() => setView('select-type')}>
               <Plus className="h-4 w-4 mr-2" /> Create First Validation
             </Button>
           </CardContent>
