@@ -362,7 +362,7 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
       setRevalidating(false);
     }
   };
-
+  const hasMissingTests =
     watchedValues.insulationResistance_MOhm == null ||
     watchedValues.earthLoopImpedance_Zs_Ohm == null ||
     watchedValues.rcdTripTime_ms == null ||
