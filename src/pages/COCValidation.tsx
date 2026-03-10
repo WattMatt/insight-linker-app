@@ -200,7 +200,7 @@ export default function COCValidation() {
             SANS 10142-1:2020/2024 strict empirical validation records
           </p>
         </div>
-        <Button onClick={() => setView('new')} className="h-11">
+        <Button onClick={() => setView('select-type')} className="h-11">
           <Plus className="h-4 w-4 mr-2" /> New Validation
         </Button>
       </div>
