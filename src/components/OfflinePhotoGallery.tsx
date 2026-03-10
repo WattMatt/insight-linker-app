@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -63,7 +63,6 @@ export function OfflinePhotoGallery({
     syncPhotos,
     deletePhoto,
     getPhotoPreviewUrl,
-    getPhotoFullUrl,
     pauseSync,
     resumeSync,
   } = useOfflinePhotos(contextType, contextId);
@@ -82,7 +81,6 @@ export function OfflinePhotoGallery({
 
   const availableTypes = useMemo(() => {
     if (photoTypes && photoTypes.length > 0) return photoTypes;
-    // Default types per context
     const contextDefaults: Record<OfflinePhotoContextType, OfflinePhotoType[]> = {
       coc: ['coc_document', 'test_equipment_reading', 'db_board', 'installation_overview', 'signature', 'general_evidence'],
       inspection: ['inspection_finding', 'inspection_snag', 'general_evidence'],
@@ -98,6 +96,22 @@ export function OfflinePhotoGallery({
   const [viewingPhoto, setViewingPhoto] = useState<OfflinePhoto | null>(null);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
 
+  // FIX MEDIUM 5: Manage full-size viewer URL in useEffect with proper cleanup
+  const [fullSizeUrl, setFullSizeUrl] = useState<string | null>(null);
+  useEffect(() => {
+    if (!viewingPhoto) {
+      setFullSizeUrl(null);
+      return;
+    }
+    if (viewingPhoto.remote_url) {
+      setFullSizeUrl(viewingPhoto.remote_url);
+      return;
+    }
+    const url = URL.createObjectURL(viewingPhoto.file_blob);
+    setFullSizeUrl(url);
+    return () => { URL.revokeObjectURL(url); };
+  }, [viewingPhoto]);
+
   useEffect(() => {
     const urls: Record<string, string> = {};
     photos.forEach(photo => { urls[photo.id] = getPhotoPreviewUrl(photo); });
@@ -109,13 +123,16 @@ export function OfflinePhotoGallery({
     };
   }, [photos, getPhotoPreviewUrl]);
 
-  // Notify parent when photo syncs
+  // FIX MEDIUM 6: Track already-reported synced photo IDs to avoid repeated onPhotoLinked calls
+  const reportedSyncIds = useRef<Set<string>>(new Set());
   useEffect(() => {
-    if (onPhotoLinked) {
-      photos.filter(p => p.synced && p.remote_url).forEach(p => {
-        onPhotoLinked(p.id, p.remote_url!);
-      });
-    }
+    if (!onPhotoLinked) return;
+    photos.forEach(p => {
+      if (p.synced && p.remote_url && !reportedSyncIds.current.has(p.id)) {
+        reportedSyncIds.current.add(p.id);
+        onPhotoLinked(p.id, p.remote_url);
+      }
+    });
   }, [photos, onPhotoLinked]);
 
   const handleCapture = async () => {
@@ -307,10 +324,10 @@ export function OfflinePhotoGallery({
                 </div>
               </DialogTitle>
             </DialogHeader>
-            {viewingPhoto && (
+            {viewingPhoto && fullSizeUrl && (
               <div className="space-y-3">
                 <img
-                  src={viewingPhoto.remote_url || URL.createObjectURL(viewingPhoto.file_blob)}
+                  src={fullSizeUrl}
                   alt={viewingPhoto.file_name}
                   className="w-full rounded-lg max-h-[60vh] object-contain"
                 />

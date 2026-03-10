@@ -147,8 +147,9 @@ export function useOfflinePhotos(
       const thumbnail = await generateThumbnail(compressed);
       const { data: { user } } = await supabase.auth.getUser();
 
+      // FIX CRITICAL 1: Use crypto.randomUUID() for proper UUID generation
       const photo: OfflinePhoto = {
-        id: `photo_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        id: crypto.randomUUID(),
         context_type: contextType,
         context_id: contextId,
         secondary_context_id: options?.secondaryContextId || null,
@@ -230,7 +231,7 @@ export function useOfflinePhotos(
             .from(PHOTOS_BUCKET)
             .getPublicUrl(storagePath);
 
-          // Insert into Supabase table (coc_compliance_photos for coc context, skip for others as they use different tables)
+          // FIX CRITICAL 2: Insert DB record for ALL photo types
           if (photo.context_type === 'coc') {
             const { error: dbError } = await supabase
               .from('coc_compliance_photos')
@@ -238,6 +239,27 @@ export function useOfflinePhotos(
                 id: photo.id,
                 subsection_id: photo.context_id,
                 coc_validation_id: photo.secondary_context_id,
+                photo_type: photo.photo_type,
+                storage_path: storagePath,
+                file_name: photo.file_name,
+                file_size: photo.file_size,
+                mime_type: photo.mime_type,
+                captured_at: photo.captured_at,
+                captured_by: photo.captured_by,
+                latitude: photo.latitude,
+                longitude: photo.longitude,
+                notes: photo.notes
+              });
+            if (dbError) throw dbError;
+          } else {
+            // Insert into unified offline_photos table for non-COC contexts
+            const { error: dbError } = await supabase
+              .from('offline_photos')
+              .upsert({
+                id: photo.id,
+                context_type: photo.context_type,
+                context_id: photo.context_id,
+                secondary_context_id: photo.secondary_context_id,
                 photo_type: photo.photo_type,
                 storage_path: storagePath,
                 file_name: photo.file_name,
@@ -292,6 +314,8 @@ export function useOfflinePhotos(
         await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
         if (photo.context_type === 'coc') {
           await supabase.from('coc_compliance_photos').delete().eq('id', id);
+        } else {
+          await supabase.from('offline_photos').delete().eq('id', id);
         }
       }
       await offlineDB.deleteOfflinePhoto(id);
