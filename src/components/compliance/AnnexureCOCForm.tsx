@@ -256,6 +256,8 @@ interface AnnexureCOCFormProps {
 export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProps) {
   const [saving, setSaving] = useState(false);
   const [revalidating, setRevalidating] = useState(false);
+  const [overrides, setOverrides] = useState<FieldOverrides>({});
+  const [overrideInput, setOverrideInput] = useState<Record<string, string>>({});
 
   const form = useForm<AnnexureCOCFormValues>({
     resolver: zodResolver(annexureCOCSchema),
