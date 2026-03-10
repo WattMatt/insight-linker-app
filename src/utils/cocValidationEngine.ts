@@ -118,6 +118,10 @@ export function isGenericMark(value: unknown): boolean {
   // Check known generic words
   if (GENERIC_MARKS.has(str.toLowerCase())) return true;
 
+  // Allow infinity — valid insulation resistance reading (∞ MΩ = perfect insulation)
+  const lower = str.toLowerCase();
+  if (lower === 'infinity' || lower === '∞' || lower === 'inf' || str === '\u221E') return false;
+
   // If it's a string that cannot be parsed as a finite number, it's generic
   const num = Number(str);
   if (isNaN(num) || !isFinite(num)) return true;
