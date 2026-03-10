@@ -28,9 +28,6 @@ import {
   CheckCircle2,
   XCircle,
   Clock,
-  Eye,
-  FileWarning,
-  Target,
   RefreshCw,
   RotateCcw,
   Loader2
