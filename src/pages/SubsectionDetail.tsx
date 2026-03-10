@@ -36,6 +36,7 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 import { COCReviewStatus } from "@/components/COCReviewStatus";
 import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
+import { COCPhotoCapture } from "@/components/compliance/COCPhotoCapture";
 
 interface SubsectionData {
   name: string;
