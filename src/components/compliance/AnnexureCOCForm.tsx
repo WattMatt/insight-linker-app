@@ -1178,14 +1178,27 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
                     <span className="text-[10px] text-muted-foreground">V</span>
                   </div>
 
-                  {/* Test 8: Insulation resistance */}
+                  {/* Test 8: Insulation resistance — accepts ∞ */}
                   <div className="grid grid-cols-[auto_1fr_80px_20px] gap-2 items-center p-2 rounded-md bg-primary/5">
                     <span className="text-xs font-bold text-primary w-5">8.</span>
                     <span className="text-xs flex items-center gap-1">
                       Insulation resistance
-                      <ThresholdDot value={w.test8_insulationResistance_MOhm} check={(v) => v > 1.0 ? 'pass' : 'fail'} />
+                      <ThresholdDot value={w.test8_insulationResistance_MOhm} check={(v) => v === Infinity || v > 1.0 ? 'pass' : 'fail'} />
                     </span>
-                    <Input type="number" step="0.01" {...form.register('test8_insulationResistance_MOhm', { valueAsNumber: true })} placeholder="MΩ" className="h-8 text-xs" />
+                    <Input 
+                      {...form.register('test8_insulationResistance_MOhm', {
+                        setValueAs: (v: string) => {
+                          if (!v || v === '') return null;
+                          const s = v.trim().toLowerCase();
+                          if (s === '∞' || s === '\u221E' || s === 'infinity' || s === 'inf') return Infinity;
+                          const n = Number(s);
+                          return isNaN(n) ? null : n;
+                        }
+                      })} 
+                      placeholder="MΩ or ∞" 
+                      className="h-8 text-xs" 
+                      defaultValue={w.test8_insulationResistance_MOhm === Infinity ? '∞' : (w.test8_insulationResistance_MOhm ?? '')}
+                    />
                     <span className="text-[10px] text-muted-foreground">MΩ</span>
                   </div>
 
