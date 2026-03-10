@@ -984,6 +984,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
                           </>
                         )}
                       </div>
+                    </div>
                   </div>
                 );
               })}
