@@ -175,6 +175,17 @@ const annexureCOCSchema = z.object({
 type AnnexureCOCFormValues = z.infer<typeof annexureCOCSchema>;
 
 // ---------------------------------------------------------------------------
+// Override Types
+// ---------------------------------------------------------------------------
+interface FieldOverride {
+  reason: string;
+  overriddenBy: string;
+  overriddenAt: string;
+}
+
+type FieldOverrides = Record<string, FieldOverride>;
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 function InspectionSelect({ value, onChange }: { value?: string; onChange: (v: string) => void }) {
