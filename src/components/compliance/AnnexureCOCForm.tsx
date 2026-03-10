@@ -1389,40 +1389,154 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
         </form>
       </Form>
 
-      {/* Live Validation Results */}
+      {/* Live Validation Results with Override Support */}
       <Card className="border-2">
         <CardHeader>
           <div className="flex items-center justify-between flex-wrap gap-3">
             <CardTitle className="flex items-center gap-2">
-              <StatusIcon status={liveResult.status} />
+              <StatusIcon status={overriddenFailCount === 0 && liveResult.failedRules.length > 0 ? 'REQUIRES_REVIEW' : liveResult.status} />
               Validation Results
             </CardTitle>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <Badge className={getStatusColor(liveResult.status)}>
                 {liveResult.status.replace('_', ' ')}
               </Badge>
+              {overriddenCount > 0 && (
+                <Badge variant="outline" className="border-amber-500/50 text-amber-700 bg-amber-500/10">
+                  <ShieldOff className="h-3 w-3 mr-1" />
+                  {overriddenCount} overridden
+                </Badge>
+              )}
               <Badge className={getFraudColor(liveResult.fraudRiskScore)}>
                 Fraud Risk: {liveResult.fraudRiskScore}
               </Badge>
             </div>
           </div>
           <CardDescription>
-            {liveResult.totalRulesChecked} rules checked • {liveResult.passedRules.length} passed • {liveResult.failedRules.length} failed
+            {liveResult.totalRulesChecked} rules checked • {liveResult.passedRules.length} passed • {overriddenFailCount} failed
+            {overriddenCount > 0 && ` • ${overriddenCount} overridden`}
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {liveResult.failedRules.length > 0 && (
+          {/* Active failures (not overridden) */}
+          {liveResult.failedRules.filter(r => !overrides[r.ruleId]).length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-destructive flex items-center gap-1.5">
-                <XCircle className="h-4 w-4" /> Failed Rules ({liveResult.failedRules.length})
+                <XCircle className="h-4 w-4" /> Failed Rules ({liveResult.failedRules.filter(r => !overrides[r.ruleId]).length})
               </h4>
               <div className="space-y-1.5">
-                {liveResult.failedRules.map((rule) => (
-                  <RuleRow key={rule.ruleId} rule={rule} passed={false} />
+                {liveResult.failedRules.filter(r => !overrides[r.ruleId]).map((rule) => (
+                  <div key={rule.ruleId} className={`p-2.5 rounded-md text-sm ${
+                    rule.severity === 'CRITICAL' ? 'bg-destructive/5' : 'bg-amber-500/5'
+                  }`}>
+                    <div className="flex items-start gap-2">
+                      {rule.severity === 'CRITICAL' ? (
+                        <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
+                      ) : (
+                        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="font-medium">{rule.ruleName}</span>
+                          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{rule.ruleId}</Badge>
+                          {rule.sansClause && <span className="text-[10px] text-muted-foreground">{rule.sansClause}</span>}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-0.5">{rule.message}</p>
+                      </div>
+                    </div>
+                    {/* Override input */}
+                    <div className="mt-2 ml-6">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="ghost" size="sm" className="h-7 text-xs gap-1 text-amber-700 hover:text-amber-800 hover:bg-amber-500/10">
+                            <ShieldOff className="h-3 w-3" />
+                            Override this finding
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-80" align="start">
+                          <div className="space-y-3">
+                            <div>
+                              <p className="text-sm font-medium">Override: {rule.ruleName}</p>
+                              <p className="text-xs text-muted-foreground mt-1">
+                                Provide a reason for overriding this validation finding. This will be recorded in the audit trail.
+                              </p>
+                            </div>
+                            <Textarea
+                              placeholder="e.g. Field crossed out — reading confirmed as ∞ by inspector on-site"
+                              value={overrideInput[rule.ruleId] || ''}
+                              onChange={(e) => setOverrideInput(prev => ({ ...prev, [rule.ruleId]: e.target.value }))}
+                              rows={3}
+                              className="text-sm"
+                            />
+                            <Button
+                              size="sm"
+                              className="w-full"
+                              disabled={!overrideInput[rule.ruleId]?.trim()}
+                              onClick={() => handleOverride(rule.ruleId, overrideInput[rule.ruleId]?.trim() || '')}
+                            >
+                              <ShieldOff className="h-3 w-3 mr-1.5" />
+                              Confirm Override
+                            </Button>
+                          </div>
+                        </PopoverContent>
+                      </Popover>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
           )}
+
+          {/* Overridden rules */}
+          {overriddenCount > 0 && (
+            <div className="space-y-2">
+              <h4 className="text-sm font-semibold text-amber-700 flex items-center gap-1.5">
+                <ShieldOff className="h-4 w-4" /> Overridden ({overriddenCount})
+              </h4>
+              <div className="space-y-1.5">
+                {liveResult.failedRules.filter(r => overrides[r.ruleId]).map((rule) => {
+                  const ov = overrides[rule.ruleId];
+                  return (
+                    <div key={rule.ruleId} className="p-2.5 rounded-md text-sm bg-amber-500/5 border border-amber-500/20">
+                      <div className="flex items-start gap-2">
+                        <ShieldOff className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-medium line-through opacity-60">{rule.ruleName}</span>
+                            <Badge variant="outline" className="text-[10px] px-1.5 py-0 border-amber-500/30 text-amber-700">OVERRIDDEN</Badge>
+                            {rule.sansClause && <span className="text-[10px] text-muted-foreground">{rule.sansClause}</span>}
+                          </div>
+                          <p className="text-xs text-muted-foreground mt-0.5 line-through opacity-60">{rule.message}</p>
+                          <div className="mt-1.5 p-2 rounded bg-background border text-xs">
+                            <div className="flex items-start gap-1.5">
+                              <MessageSquare className="h-3 w-3 text-amber-600 mt-0.5 shrink-0" />
+                              <div>
+                                <p className="font-medium text-foreground">{ov.reason}</p>
+                                <p className="text-muted-foreground mt-0.5">
+                                  by {ov.overriddenBy} • {new Date(ov.overriddenAt).toLocaleString()}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive shrink-0"
+                          onClick={() => handleRemoveOverride(rule.ruleId)}
+                          title="Remove override"
+                        >
+                          <Undo2 className="h-3.5 w-3.5" />
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Passed rules */}
           {liveResult.passedRules.length > 0 && (
             <div className="space-y-2">
               <h4 className="text-sm font-semibold text-emerald-700 flex items-center gap-1.5">
@@ -1430,7 +1544,17 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
               </h4>
               <div className="space-y-1.5">
                 {liveResult.passedRules.map((rule) => (
-                  <RuleRow key={rule.ruleId} rule={rule} passed={true} />
+                  <div key={rule.ruleId} className="flex items-start gap-2 p-2.5 rounded-md text-sm bg-emerald-500/5">
+                    <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-medium">{rule.ruleName}</span>
+                        <Badge variant="outline" className="text-[10px] px-1.5 py-0">{rule.ruleId}</Badge>
+                        {rule.sansClause && <span className="text-[10px] text-muted-foreground">{rule.sansClause}</span>}
+                      </div>
+                      <p className="text-xs text-muted-foreground mt-0.5">{rule.message}</p>
+                    </div>
+                  </div>
                 ))}
               </div>
             </div>
@@ -1440,27 +1564,4 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
     </div>
   );
 }
-
-function RuleRow({ rule, passed }: { rule: ValidationRuleResult; passed: boolean }) {
-  return (
-    <div className={`flex items-start gap-2 p-2.5 rounded-md text-sm ${
-      passed ? 'bg-emerald-500/5' : rule.severity === 'CRITICAL' ? 'bg-destructive/5' : 'bg-amber-500/5'
-    }`}>
-      {passed ? (
-        <CheckCircle className="h-4 w-4 text-emerald-600 mt-0.5 shrink-0" />
-      ) : rule.severity === 'CRITICAL' ? (
-        <XCircle className="h-4 w-4 text-destructive mt-0.5 shrink-0" />
-      ) : (
-        <AlertTriangle className="h-4 w-4 text-amber-600 mt-0.5 shrink-0" />
-      )}
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 flex-wrap">
-          <span className="font-medium">{rule.ruleName}</span>
-          <Badge variant="outline" className="text-[10px] px-1.5 py-0">{rule.ruleId}</Badge>
-          {rule.sansClause && <span className="text-[10px] text-muted-foreground">{rule.sansClause}</span>}
-        </div>
-        <p className="text-xs text-muted-foreground mt-0.5">{rule.message}</p>
-      </div>
-    </div>
-  );
 }
