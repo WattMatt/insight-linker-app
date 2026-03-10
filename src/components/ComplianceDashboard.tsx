@@ -43,6 +43,7 @@ import {
   VALID_COC_STATUSES
 } from "@/lib/complianceCalculations";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
+import { COCValidationLogCard, type ValidationRecord } from "@/components/compliance/COCValidationLogCard";
 import { toast } from "sonner";
 
 interface ComplianceDashboardProps {
