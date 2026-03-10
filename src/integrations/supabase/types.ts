@@ -1457,6 +1457,60 @@ export type Database = {
           },
         ]
       }
+      offline_photos: {
+        Row: {
+          captured_at: string
+          captured_by: string
+          context_id: string
+          context_type: string
+          created_at: string
+          file_name: string
+          file_size: number
+          id: string
+          latitude: number | null
+          longitude: number | null
+          mime_type: string
+          notes: string | null
+          photo_type: string
+          secondary_context_id: string | null
+          storage_path: string
+        }
+        Insert: {
+          captured_at?: string
+          captured_by: string
+          context_id: string
+          context_type: string
+          created_at?: string
+          file_name: string
+          file_size: number
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mime_type: string
+          notes?: string | null
+          photo_type: string
+          secondary_context_id?: string | null
+          storage_path: string
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string
+          context_id?: string
+          context_type?: string
+          created_at?: string
+          file_name?: string
+          file_size?: number
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string
+          notes?: string | null
+          photo_type?: string
+          secondary_context_id?: string | null
+          storage_path?: string
+        }
+        Relationships: []
+      }
       pdf_report_templates: {
         Row: {
           created_at: string
