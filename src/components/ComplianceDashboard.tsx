@@ -983,7 +983,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
                             </Button>
                           </>
                         )}
-                    </div>
+                      </div>
                   </div>
                 );
               })}
