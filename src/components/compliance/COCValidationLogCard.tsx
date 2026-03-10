@@ -127,13 +127,16 @@ export function COCValidationLogCard({
 
       // Persist to report_data
       const existingReportData = (validation.report_data || {}) as Record<string, unknown>;
+      const updatedReportData = {
+        ...existingReportData,
+        violationOverrides: Object.fromEntries(
+          Object.entries(newOverrides).map(([k, v]) => [String(k), v])
+        ),
+      };
       const { error } = await supabase
         .from('coc_validations')
         .update({
-          report_data: {
-            ...existingReportData,
-            violationOverrides: newOverrides,
-          },
+          report_data: updatedReportData as unknown as Record<string, unknown>,
         })
         .eq('id', validation.id);
 
