@@ -445,6 +445,65 @@ class OfflineDatabase {
       request.onerror = () => reject(request.error);
     });
   }
+
+  // === Unified Offline Photos ===
+
+  async saveOfflinePhoto(photo: OfflinePhoto): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readwrite');
+      const store = tx.objectStore('offline_photos');
+      const req = store.put(photo);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getOfflinePhoto(id: string): Promise<OfflinePhoto | undefined> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const req = tx.objectStore('offline_photos').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getOfflinePhotosByContext(contextType: OfflinePhotoContextType, contextId: string): Promise<OfflinePhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const store = tx.objectStore('offline_photos');
+      const index = store.index('context_id');
+      const req = index.getAll(IDBKeyRange.only(contextId));
+      req.onsuccess = () => {
+        const results = (req.result as OfflinePhoto[]).filter(p => p.context_type === contextType);
+        resolve(results);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getUnsyncedOfflinePhotos(): Promise<OfflinePhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const index = tx.objectStore('offline_photos').index('synced');
+      const req = index.getAll(IDBKeyRange.only(false));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteOfflinePhoto(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readwrite');
+      const req = tx.objectStore('offline_photos').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
 }
 
 export const offlineDB = new OfflineDatabase();
