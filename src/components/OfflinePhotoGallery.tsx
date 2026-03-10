@@ -93,7 +93,7 @@ export function OfflinePhotoGallery({
     return contextDefaults[contextType] || ['general_evidence'];
   }, [contextType, photoTypes]);
 
-  const [selectedType, setSelectedType] = useState<OfflinePhotoType>(availableTypes[0]);
+  const [selectedType, setSelectedType] = useState<OfflinePhotoType>(() => availableTypes[0]);
   const [notes, setNotes] = useState('');
   const [viewingPhoto, setViewingPhoto] = useState<OfflinePhoto | null>(null);
   const [previewUrls, setPreviewUrls] = useState<Record<string, string>>({});
