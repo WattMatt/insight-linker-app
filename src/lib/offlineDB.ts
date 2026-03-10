@@ -85,11 +85,37 @@ export interface OfflineFloorPlanPin {
 
 export type COCPhotoType = 'coc_document' | 'test_equipment_reading' | 'db_board' | 'installation_overview' | 'signature' | 'general_evidence';
 
+export type OfflinePhotoType = COCPhotoType | 'inspection_finding' | 'inspection_snag' | 'floor_plan_pin' | 'floor_plan_overview' | 'site_progress' | 'document_scan';
+
+export type OfflinePhotoContextType = 'coc' | 'inspection' | 'floor_plan' | 'site' | 'document';
+
 export interface OfflineCOCPhoto {
   id: string;
   subsection_id: string;
   coc_validation_id: string | null;
   photo_type: COCPhotoType;
+  file_blob: Blob;
+  file_name: string;
+  file_size: number;
+  thumbnail_blob: Blob | null;
+  mime_type: string;
+  captured_at: string;
+  captured_by: string;
+  latitude: number | null;
+  longitude: number | null;
+  notes: string | null;
+  synced: boolean;
+  sync_error: string | null;
+  retry_count: number;
+  remote_url: string | null;
+}
+
+export interface OfflinePhoto {
+  id: string;
+  context_type: OfflinePhotoContextType;
+  context_id: string;
+  secondary_context_id: string | null;
+  photo_type: OfflinePhotoType;
   file_blob: Blob;
   file_name: string;
   file_size: number;
