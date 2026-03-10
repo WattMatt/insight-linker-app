@@ -3737,6 +3737,10 @@ const SubsectionDetail = () => {
                 </Button>
               </CardContent>
             </Card>
+            {/* COC Evidence Photos in COC tab */}
+            {subsectionId && (
+              <COCPhotoCapture subsectionId={subsectionId} />
+            )}
           </div>
         </TabsContent>
       </Tabs>
