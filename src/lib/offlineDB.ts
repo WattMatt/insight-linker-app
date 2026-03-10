@@ -1,6 +1,6 @@
 // IndexedDB wrapper for offline inspection storage
 const DB_NAME = 'wm_compliance_offline';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface OfflineInspection {
   id: string;
@@ -85,11 +85,37 @@ export interface OfflineFloorPlanPin {
 
 export type COCPhotoType = 'coc_document' | 'test_equipment_reading' | 'db_board' | 'installation_overview' | 'signature' | 'general_evidence';
 
+export type OfflinePhotoType = COCPhotoType | 'inspection_finding' | 'inspection_snag' | 'floor_plan_pin' | 'floor_plan_overview' | 'site_progress' | 'document_scan';
+
+export type OfflinePhotoContextType = 'coc' | 'inspection' | 'floor_plan' | 'site' | 'document';
+
 export interface OfflineCOCPhoto {
   id: string;
   subsection_id: string;
   coc_validation_id: string | null;
   photo_type: COCPhotoType;
+  file_blob: Blob;
+  file_name: string;
+  file_size: number;
+  thumbnail_blob: Blob | null;
+  mime_type: string;
+  captured_at: string;
+  captured_by: string;
+  latitude: number | null;
+  longitude: number | null;
+  notes: string | null;
+  synced: boolean;
+  sync_error: string | null;
+  retry_count: number;
+  remote_url: string | null;
+}
+
+export interface OfflinePhoto {
+  id: string;
+  context_type: OfflinePhotoContextType;
+  context_id: string;
+  secondary_context_id: string | null;
+  photo_type: OfflinePhotoType;
   file_blob: Blob;
   file_name: string;
   file_size: number;
@@ -215,6 +241,16 @@ class OfflineDatabase {
           cocPhotosStore.createIndex('subsection_id', 'subsection_id', { unique: false });
           cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
           cocPhotosStore.createIndex('synced', 'synced', { unique: false });
+        }
+
+        // Unified Offline Photos store (v3)
+        if (!db.objectStoreNames.contains('offline_photos')) {
+          const photosStore = db.createObjectStore('offline_photos', { keyPath: 'id' });
+          photosStore.createIndex('context_type', 'context_type', { unique: false });
+          photosStore.createIndex('context_id', 'context_id', { unique: false });
+          photosStore.createIndex('secondary_context_id', 'secondary_context_id', { unique: false });
+          photosStore.createIndex('synced', 'synced', { unique: false });
+          photosStore.createIndex('photo_type', 'photo_type', { unique: false });
         }
       };
     });
@@ -407,6 +443,65 @@ class OfflineDatabase {
       const request = store.get(id);
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
+    });
+  }
+
+  // === Unified Offline Photos ===
+
+  async saveOfflinePhoto(photo: OfflinePhoto): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readwrite');
+      const store = tx.objectStore('offline_photos');
+      const req = store.put(photo);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getOfflinePhoto(id: string): Promise<OfflinePhoto | undefined> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const req = tx.objectStore('offline_photos').get(id);
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getOfflinePhotosByContext(contextType: OfflinePhotoContextType, contextId: string): Promise<OfflinePhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const store = tx.objectStore('offline_photos');
+      const index = store.index('context_id');
+      const req = index.getAll(IDBKeyRange.only(contextId));
+      req.onsuccess = () => {
+        const results = (req.result as OfflinePhoto[]).filter(p => p.context_type === contextType);
+        resolve(results);
+      };
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getUnsyncedOfflinePhotos(): Promise<OfflinePhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readonly');
+      const index = tx.objectStore('offline_photos').index('synced');
+      const req = index.getAll(IDBKeyRange.only(false));
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteOfflinePhoto(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['offline_photos'], 'readwrite');
+      const req = tx.objectStore('offline_photos').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   }
 }
