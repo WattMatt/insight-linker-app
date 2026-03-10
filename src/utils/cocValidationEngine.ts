@@ -92,7 +92,7 @@ export interface COCValidationResult {
 
 const GENERIC_MARKS = new Set([
   'ok', 'pass', 'passed', 'good', 'yes', 'compliant', 'satisfactory',
-  'acceptable', 'done', 'checked', 'correct', 'fine', 'n/a',
+  'acceptable', 'done', 'checked', 'correct', 'fine',
 ]);
 
 const CHECKMARK_CODEPOINTS = new Set([
