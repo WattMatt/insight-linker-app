@@ -133,7 +133,16 @@ const annexureCOCSchema = z.object({
   test6_pscc_kA: z.coerce.number().nullable().optional(),
   test6_pscc_method: z.enum(['calculated', 'measured']).optional(),
   test7_elevatedVoltage_V: z.coerce.number().nullable().optional(),
-  test8_insulationResistance_MOhm: z.coerce.number().nullable().optional(),
+  test8_insulationResistance_MOhm: z.preprocess(
+    (val) => {
+      if (val === null || val === undefined || val === '') return null;
+      const s = String(val).trim().toLowerCase();
+      if (s === '∞' || s === '\u221E' || s === 'infinity' || s === 'inf') return Infinity;
+      const n = Number(s);
+      return isNaN(n) ? null : n;
+    },
+    z.number().nullable().optional()
+  ),
   test9_voltageNoLoad_R: z.coerce.number().nullable().optional(),
   test9_voltageNoLoad_Y: z.coerce.number().nullable().optional(),
   test9_voltageNoLoad_B: z.coerce.number().nullable().optional(),

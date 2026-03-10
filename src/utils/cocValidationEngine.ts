@@ -200,15 +200,20 @@ export function validateCOC(
   // ── Rule 3: Insulation Resistance ──────────────────────────────────────
   const ir = testReport.insulationResistance_MOhm;
   if (ir !== null && !isGenericMark(ir)) {
-    const irPass = ir > 1.0;
+    // Infinity (∞) is a valid reading — perfect insulation, always passes
+    const irValue = typeof ir === 'string'
+      ? (['∞', '\u221E', 'infinity', 'inf'].includes(String(ir).trim().toLowerCase()) ? Infinity : Number(ir))
+      : ir;
+    const irPass = irValue === Infinity || (typeof irValue === 'number' && irValue > 1.0);
+    const displayValue = irValue === Infinity ? '∞' : `${irValue}`;
     addResult({
       ruleId: 'INSUL-001',
       ruleName: 'Insulation Resistance',
       passed: irPass,
       severity: 'CRITICAL',
       message: irPass
-        ? `Insulation resistance ${ir} MΩ exceeds minimum 1.0 MΩ threshold`
-        : `Insulation resistance ${ir} MΩ is below minimum 1.0 MΩ threshold — CRITICAL FAIL`,
+        ? `Insulation resistance ${displayValue} MΩ exceeds minimum 1.0 MΩ threshold`
+        : `Insulation resistance ${displayValue} MΩ is below minimum 1.0 MΩ threshold — CRITICAL FAIL`,
       sansClause: 'SANS 10142-1 Clause 8.5',
     });
   }
