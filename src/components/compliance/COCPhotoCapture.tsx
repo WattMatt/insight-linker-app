@@ -268,7 +268,7 @@ export function COCPhotoCapture({ subsectionId, cocValidationId }: COCPhotoCaptu
                 {viewingPhoto.sync_error && (
                   <Alert variant="destructive">
                     <AlertDescription className="text-xs">
-                      Sync error: {viewingPhoto.sync_error} (Retry {viewingPhoto.retry_count}/{MAX_RETRIES})
+                      Sync error: {viewingPhoto.sync_error} (Retry {viewingPhoto.retry_count}/3)
                     </AlertDescription>
                   </Alert>
                 )}
