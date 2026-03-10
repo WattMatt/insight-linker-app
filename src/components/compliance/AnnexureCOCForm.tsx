@@ -3,7 +3,7 @@
  * Mirrors the physical SA "Certificate of Compliance — General Electrical Installation"
  * OHS Act 1993, Electrical Installation Regulations 2009
  */
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useCallback } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -16,13 +16,14 @@ import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import {
   Form, FormControl, FormField, FormItem, FormLabel, FormMessage, FormDescription,
 } from '@/components/ui/form';
 import {
   CheckCircle, XCircle, AlertTriangle, ShieldCheck, ShieldX, ShieldAlert,
   Zap, FileWarning, Save, Loader2, Download, Building2, MapPin, User, Briefcase,
-  ClipboardList, TestTube, FileText,
+  ClipboardList, TestTube, FileText, MessageSquare, ShieldOff, Undo2,
 } from 'lucide-react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
