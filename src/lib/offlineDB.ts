@@ -208,6 +208,14 @@ class OfflineDatabase {
           measurementsStore.createIndex('floor_plan_id', 'floor_plan_id', { unique: false });
           measurementsStore.createIndex('synced', 'synced', { unique: false });
         }
+
+        // COC Compliance Photos store
+        if (!db.objectStoreNames.contains('coc_compliance_photos')) {
+          const cocPhotosStore = db.createObjectStore('coc_compliance_photos', { keyPath: 'id' });
+          cocPhotosStore.createIndex('subsection_id', 'subsection_id', { unique: false });
+          cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
+          cocPhotosStore.createIndex('synced', 'synced', { unique: false });
+        }
       };
     });
   }
