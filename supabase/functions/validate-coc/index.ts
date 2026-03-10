@@ -1703,6 +1703,7 @@ Still return the FULL JSON structure with ALL checks, but ensure maximum accurac
     return new Response(
       JSON.stringify({
         success: true,
+        revalidation: revalidateFailedOnly ? { mode: 'failed_only', recheckedIds: failedCheckIds } : undefined,
         status: validationResult.overallStatus,
         confidenceScore: validationResult.confidenceScore,
         documentQuality: validationResult.documentQuality,
