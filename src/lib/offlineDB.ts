@@ -83,6 +83,29 @@ export interface OfflineFloorPlanPin {
   synced: boolean;
 }
 
+export type COCPhotoType = 'coc_document' | 'test_equipment_reading' | 'db_board' | 'installation_overview' | 'signature' | 'general_evidence';
+
+export interface OfflineCOCPhoto {
+  id: string;
+  subsection_id: string;
+  coc_validation_id: string | null;
+  photo_type: COCPhotoType;
+  file_blob: Blob;
+  file_name: string;
+  file_size: number;
+  thumbnail_blob: Blob | null;
+  mime_type: string;
+  captured_at: string;
+  captured_by: string;
+  latitude: number | null;
+  longitude: number | null;
+  notes: string | null;
+  synced: boolean;
+  sync_error: string | null;
+  retry_count: number;
+  remote_url: string | null;
+}
+
 export interface OfflineMarkup {
   id: string;
   floor_plan_id: string;
