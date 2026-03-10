@@ -219,7 +219,7 @@ export default function COCValidation() {
             <p className="text-sm text-muted-foreground mt-1 max-w-md">
               Create your first COC validation to verify electrical certificates against SANS 10142-1 requirements.
             </p>
-            <Button className="mt-4" onClick={() => setView('new')}>
+            <Button className="mt-4" onClick={() => setView('select-type')}>
               <Plus className="h-4 w-4 mr-2" /> Create First Validation
             </Button>
           </CardContent>
