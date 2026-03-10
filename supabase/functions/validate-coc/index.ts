@@ -1668,6 +1668,11 @@ Still return the FULL JSON structure with ALL checks, but ensure maximum accurac
           ...validationResult,
           validatedAt: new Date().toISOString(),
           validationEngine: 'SANS-10142-1-2020-v4-strict-empirical',
+          revalidation: revalidateFailedOnly ? {
+            mode: 'failed_only',
+            previousFailedChecks: failedCheckIds,
+            carriedForwardChecks: passedChecksFromPrevious.map((c: any) => c.checkId),
+          } : undefined,
           modelUsed: validationSettings.ai_model,
           settingsApplied: {
             ai_model: validationSettings.ai_model,
