@@ -1,6 +1,6 @@
 // IndexedDB wrapper for offline inspection storage
 const DB_NAME = 'wm_compliance_offline';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 export interface OfflineInspection {
   id: string;
