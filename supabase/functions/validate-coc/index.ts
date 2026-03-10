@@ -1200,6 +1200,49 @@ Return ONLY the JSON validation result.`
       ];
     }
 
+    // ===== RE-VALIDATION MODE: Add focused extraction instruction =====
+    if (revalidateFailedOnly && failedCheckIds.length > 0) {
+      const checkIdToDescription: Record<string, string> = {
+        'EARTH-001': 'Earth continuity/resistance value in Ohms (Clause 8.4)',
+        'INSUL-001': 'Insulation resistance value in MΩ (Clause 8.6)',
+        'RCD-001': 'RCD trip time in ms (Clause 8.8)',
+        'LOOP-001': 'Earth loop impedance Zs in Ω (Clause 8.5)',
+        'PSCC-001': 'Prospective short-circuit current in kA (Clause 8.3)',
+        'POL-001': 'Polarity and protective conductor continuity (Clause 8.7)',
+        'SIG-001': 'Signature of registered person',
+        'COC-TYPE-001': 'Certificate type checkbox (Initial/Supplementary/Temporary)',
+        'COC-SUPP-001': 'Supplementary COC reference to Initial COC',
+        'COC-TEMP-001': 'Temporary COC reference to Initial COC',
+        'REG-001': 'Issuer registration category vs installation type',
+        'CERT-DATE-001': 'Certificate issue date validation',
+        'CERT-INCOMPLETE-001': 'Completeness of mandatory test fields',
+      };
+
+      const focusedChecksDescription = failedCheckIds
+        .map(id => `- ${id}: ${checkIdToDescription[id] || id}`)
+        .join('\n');
+
+      const revalidationInstruction = `\n\n🔄 RE-VALIDATION MODE: This document was previously validated and some checks FAILED. 
+Please pay EXTRA ATTENTION to extracting accurate values for these specific checks:
+${focusedChecksDescription}
+
+For these checks, look VERY carefully at the document. The previous extraction may have missed or misread values.
+Still return the FULL JSON structure with ALL checks, but ensure maximum accuracy on the above items.`;
+
+      // Append to the last user message
+      const lastMsg = messages[messages.length - 1];
+      if (typeof lastMsg.content === 'string') {
+        lastMsg.content += revalidationInstruction;
+      } else if (Array.isArray(lastMsg.content)) {
+        const textPart = lastMsg.content.find((p: any) => p.type === 'text');
+        if (textPart) {
+          textPart.text += revalidationInstruction;
+        }
+      }
+
+      console.log('🔄 Added revalidation focus instruction for:', failedCheckIds);
+    }
+
     console.log('Calling AI for enhanced validation with vision capabilities...');
 
     // Retry logic for AI calls
