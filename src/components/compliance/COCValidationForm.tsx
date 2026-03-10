@@ -806,6 +806,19 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
               <Download className="h-4 w-4 mr-2" />
               Download PDF
             </Button>
+            {editId && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                className="h-12"
+                disabled={revalidating}
+                onClick={handleRevalidate}
+              >
+                {revalidating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+                Re-validate
+              </Button>
+            )}
           </div>
         </form>
       </Form>
