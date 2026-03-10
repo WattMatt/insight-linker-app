@@ -3225,37 +3225,12 @@ const SubsectionDetail = () => {
                                   {new Date(doc.uploaded_at).toLocaleDateString()}
                                 </p>
                                 {cocValidations[doc.id]?.violations && cocValidations[doc.id].violations.length > 0 && (
-                                  <details className="mt-2 text-sm" open>
-                                    <summary className="text-destructive cursor-pointer font-medium">
-                                      ⚠️ {cocValidations[doc.id].violations.length} SANS 10142-1 violation(s) found
-                                    </summary>
-                                    <ul className="mt-2 ml-4 space-y-3">
-                                      {cocValidations[doc.id].violations.map((v: any, i: number) => (
-                                        <li key={i} className="border-l-2 border-destructive pl-3 py-1">
-                                          <div className="flex items-center gap-2 mb-1">
-                                            <strong className="text-foreground">Clause {v.clause}:</strong>
-                                            <span className="text-destructive font-medium">{v.description}</span>
-                                            {v.riskLevel && (
-                                              <Badge variant={v.riskLevel === 'High' ? 'destructive' : v.riskLevel === 'Medium' ? 'secondary' : 'outline'} className="text-xs">
-                                                {v.riskLevel} Risk
-                                              </Badge>
-                                            )}
-                                          </div>
-                                          {v.reason && (
-                                            <div className="text-sm text-muted-foreground mt-1">{v.reason}</div>
-                                          )}
-                                          {v.immediateAction && (
-                                            <div className="text-sm text-orange-600 dark:text-orange-400 mt-1">
-                                              <strong>Action Required:</strong> {v.immediateAction}
-                                            </div>
-                                          )}
-                                          {v.evidence && (
-                                            <div className="text-xs mt-1 italic text-muted-foreground">Evidence: {v.evidence}</div>
-                                          )}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </details>
+                                  <InlineViolationOverrides
+                                    validationId={cocValidations[doc.id].id}
+                                    violations={cocValidations[doc.id].violations}
+                                    reportData={cocValidations[doc.id].report_data}
+                                    onChanged={() => fetchCocValidations()}
+                                  />
                                 )}
                               </div>
                             </div>
