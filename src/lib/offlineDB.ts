@@ -339,6 +339,76 @@ class OfflineDatabase {
       request.onerror = () => reject(request.error);
     });
   }
+
+  // COC Compliance Photos
+  async saveCOCPhoto(photo: OfflineCOCPhoto): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readwrite');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const request = store.put(photo);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getCOCPhotosForSubsection(subsectionId: string): Promise<OfflineCOCPhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const index = store.index('subsection_id');
+      const request = index.getAll(IDBKeyRange.only(subsectionId));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getCOCPhotosForValidation(cocValidationId: string): Promise<OfflineCOCPhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const index = store.index('coc_validation_id');
+      const request = index.getAll(IDBKeyRange.only(cocValidationId));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getUnsyncedCOCPhotos(): Promise<OfflineCOCPhoto[]> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const index = store.index('synced');
+      const request = index.getAll(IDBKeyRange.only(false));
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async deleteCOCPhoto(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readwrite');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const request = store.delete(id);
+      request.onsuccess = () => resolve();
+      request.onerror = () => reject(request.error);
+    });
+  }
+
+  async getCOCPhoto(id: string): Promise<OfflineCOCPhoto | undefined> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
+      const store = transaction.objectStore('coc_compliance_photos');
+      const request = store.get(id);
+      request.onsuccess = () => resolve(request.result);
+      request.onerror = () => reject(request.error);
+    });
+  }
 }
 
 export const offlineDB = new OfflineDatabase();
