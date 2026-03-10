@@ -976,6 +976,56 @@ serve(async (req) => {
 
     console.log('Starting enhanced COC validation for document:', documentId);
 
+    // ===== RE-VALIDATION MODE: Fetch previous results =====
+    let previousValidation: any = null;
+    let failedCheckIds: string[] = [];
+    let passedChecksFromPrevious: any[] = [];
+
+    if (revalidateFailedOnly) {
+      const { data: prevValidation, error: prevError } = await supabase
+        .from('coc_validations')
+        .select('report_data, violations, status')
+        .eq('document_id', documentId)
+        .order('validated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (prevError || !prevValidation) {
+        console.log('⚠️ No previous validation found, falling back to full validation');
+      } else {
+        previousValidation = prevValidation;
+        const prevChecks = (prevValidation.report_data as any)?.checks || [];
+        
+        // Identify failed checks to re-validate
+        failedCheckIds = prevChecks
+          .filter((c: any) => c.result === 'Fail' || c.result === 'Not Tested')
+          .map((c: any) => c.checkId);
+        
+        // Carry forward passed/N/A/skipped checks
+        passedChecksFromPrevious = prevChecks
+          .filter((c: any) => c.result === 'Pass' || c.result === 'Not Applicable' || c.result === 'Skipped');
+
+        console.log(`🔄 Previous validation: ${prevChecks.length} checks total`);
+        console.log(`   Failed/Not Tested (will re-check): ${failedCheckIds.join(', ')}`);
+        console.log(`   Passed (carrying forward): ${passedChecksFromPrevious.length} checks`);
+
+        // If no failed checks, return previous result as-is
+        if (failedCheckIds.length === 0) {
+          console.log('✅ No failed checks to re-validate — returning previous result');
+          return new Response(
+            JSON.stringify({
+              success: true,
+              revalidation: true,
+              revalidationNote: 'No previously failed checks to re-validate. All checks passed in the last validation.',
+              status: prevValidation.status,
+              ...(prevValidation.report_data as any),
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
+
     // Extract the storage path from the signed URL
     let storagePath: string;
     
