@@ -242,6 +242,16 @@ class OfflineDatabase {
           cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
           cocPhotosStore.createIndex('synced', 'synced', { unique: false });
         }
+
+        // Unified Offline Photos store (v3)
+        if (!db.objectStoreNames.contains('offline_photos')) {
+          const photosStore = db.createObjectStore('offline_photos', { keyPath: 'id' });
+          photosStore.createIndex('context_type', 'context_type', { unique: false });
+          photosStore.createIndex('context_id', 'context_id', { unique: false });
+          photosStore.createIndex('secondary_context_id', 'secondary_context_id', { unique: false });
+          photosStore.createIndex('synced', 'synced', { unique: false });
+          photosStore.createIndex('photo_type', 'photo_type', { unique: false });
+        }
       };
     });
   }
