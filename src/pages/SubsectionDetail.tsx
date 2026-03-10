@@ -36,6 +36,7 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 import { COCReviewStatus } from "@/components/COCReviewStatus";
 import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
+import { COCPhotoCapture } from "@/components/compliance/COCPhotoCapture";
 
 interface SubsectionData {
   name: string;
@@ -3132,6 +3133,11 @@ const SubsectionDetail = () => {
               </AlertDialogFooter>
             </AlertDialogContent>
           </AlertDialog>
+
+          {/* COC Evidence Photos */}
+          {subsectionId && (
+            <COCPhotoCapture subsectionId={subsectionId} />
+          )}
         </TabsContent>
 
         {/* Floor Plan Tab */}
@@ -3731,6 +3737,10 @@ const SubsectionDetail = () => {
                 </Button>
               </CardContent>
             </Card>
+            {/* COC Evidence Photos in COC tab */}
+            {subsectionId && (
+              <COCPhotoCapture subsectionId={subsectionId} />
+            )}
           </div>
         </TabsContent>
       </Tabs>

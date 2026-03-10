@@ -369,6 +369,72 @@ export type Database = {
         }
         Relationships: []
       }
+      coc_compliance_photos: {
+        Row: {
+          captured_at: string
+          captured_by: string
+          coc_validation_id: string | null
+          created_at: string
+          file_name: string
+          file_size: number
+          id: string
+          latitude: number | null
+          longitude: number | null
+          mime_type: string
+          notes: string | null
+          photo_type: string
+          storage_path: string
+          subsection_id: string
+        }
+        Insert: {
+          captured_at?: string
+          captured_by: string
+          coc_validation_id?: string | null
+          created_at?: string
+          file_name: string
+          file_size: number
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mime_type: string
+          notes?: string | null
+          photo_type: string
+          storage_path: string
+          subsection_id: string
+        }
+        Update: {
+          captured_at?: string
+          captured_by?: string
+          coc_validation_id?: string | null
+          created_at?: string
+          file_name?: string
+          file_size?: number
+          id?: string
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string
+          notes?: string | null
+          photo_type?: string
+          storage_path?: string
+          subsection_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "coc_compliance_photos_coc_validation_id_fkey"
+            columns: ["coc_validation_id"]
+            isOneToOne: false
+            referencedRelation: "coc_validations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "coc_compliance_photos_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       coc_extractions: {
         Row: {
           confidence: string | null
