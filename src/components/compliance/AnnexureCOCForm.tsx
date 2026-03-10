@@ -397,6 +397,34 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
     return validateCOC(cocData, testReport);
   }, [w]);
 
+  // Override helpers
+  const handleOverride = useCallback(async (ruleId: string, reason: string) => {
+    const { data: userData } = await supabase.auth.getUser();
+    const userName = userData?.user?.email || 'Unknown';
+    setOverrides(prev => ({
+      ...prev,
+      [ruleId]: {
+        reason,
+        overriddenBy: userName,
+        overriddenAt: new Date().toISOString(),
+      }
+    }));
+    setOverrideInput(prev => ({ ...prev, [ruleId]: '' }));
+    toast.success(`Rule ${ruleId} overridden — remember to save`);
+  }, []);
+
+  const handleRemoveOverride = useCallback((ruleId: string) => {
+    setOverrides(prev => {
+      const next = { ...prev };
+      delete next[ruleId];
+      return next;
+    });
+    toast.info(`Override removed for ${ruleId}`);
+  }, []);
+
+  const overriddenFailCount = liveResult.failedRules.filter(r => !overrides[r.ruleId]).length;
+  const overriddenCount = liveResult.failedRules.filter(r => overrides[r.ruleId]).length;
+
   // Save
   const onSubmit = async (data: AnnexureCOCFormValues) => {
     setSaving(true);
