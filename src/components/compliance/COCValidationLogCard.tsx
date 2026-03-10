@@ -182,7 +182,7 @@ export function COCValidationLogCard({
       const { error } = await supabase
         .from('coc_validations')
         .update({
-          report_data: updatedReportData as unknown as Record<string, unknown>,
+          report_data: updatedReportData as never,
         })
         .eq('id', validation.id);
 
