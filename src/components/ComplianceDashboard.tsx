@@ -30,7 +30,10 @@ import {
   Clock,
   Eye,
   FileWarning,
-  Target
+  Target,
+  RefreshCw,
+  RotateCcw,
+  Loader2
 } from "lucide-react";
 import { format, subDays, startOfDay } from "date-fns";
 import { 
@@ -40,6 +43,7 @@ import {
   VALID_COC_STATUSES
 } from "@/lib/complianceCalculations";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
+import { toast } from "sonner";
 
 interface ComplianceDashboardProps {
   siteId: string;
@@ -115,6 +119,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [previewDoc, setPreviewDoc] = useState<ValidationRecord['document']>(null);
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [revalidatingId, setRevalidatingId] = useState<string | null>(null);
+  const [revalidationMode, setRevalidationMode] = useState<'failed' | 'full' | null>(null);
 
   // Fetch ALL COC validations with full details - shows complete history log
   const fetchAllValidations = useCallback(async () => {
@@ -195,6 +201,57 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     );
     setFailedValidations(failedOnly);
   }, [subsections]);
+
+  const handleRevalidate = useCallback(async (validation: ValidationRecord, mode: 'failed' | 'full') => {
+    if (!validation.document) {
+      toast.error('No document associated with this validation');
+      return;
+    }
+
+    setRevalidatingId(validation.id);
+    setRevalidationMode(mode);
+
+    try {
+      const response = await supabase.functions.invoke('validate-coc', {
+        body: {
+          documentId: validation.document_id,
+          documentUrl: validation.document.file_url,
+          subsectionId: validation.subsection_id,
+          revalidateFailedOnly: mode === 'failed',
+        },
+      });
+
+      if (response.error) {
+        throw new Error(response.error.message);
+      }
+
+      const result = response.data;
+      const modeLabel = mode === 'failed' ? 'Re-validation (failed checks)' : 'Full re-scan';
+      
+      if (result.status === 'Pass') {
+        toast.success(`${modeLabel}: PASSED`, {
+          description: `${validation.subsection_name} now passes all checks.`,
+        });
+      } else if (result.status === 'Fail' || result.status === 'Failed') {
+        toast.error(`${modeLabel}: FAILED`, {
+          description: `${validation.subsection_name} still has ${result.violations?.length || 0} issue(s).`,
+        });
+      } else {
+        toast.info(`${modeLabel}: ${result.status}`, {
+          description: validation.subsection_name,
+        });
+      }
+
+      // Refresh validations
+      await fetchAllValidations();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Unknown error';
+      toast.error('Re-validation failed', { description: msg });
+    } finally {
+      setRevalidatingId(null);
+      setRevalidationMode(null);
+    }
+  }, [fetchAllValidations]);
 
   // Fetch validations on mount and when subsections change
   useEffect(() => {
@@ -870,26 +927,63 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
                         )}
                       </div>
                       
-                      {/* Preview Button */}
-                      {validation.document && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0 gap-2"
-                          onClick={() => {
-                            setPreviewDoc(validation.document);
-                            setPreviewValidation({
-                              status: validation.status,
-                              violations: validation.violations,
-                              report_data: validation.report_data
-                            });
-                            setPreviewOpen(true);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                          Preview
-                        </Button>
-                      )}
+                      {/* Action Buttons */}
+                      <div className="flex flex-col gap-1.5 shrink-0 ml-2">
+                        {/* Preview Button */}
+                        {validation.document && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => {
+                              setPreviewDoc(validation.document);
+                              setPreviewValidation({
+                                status: validation.status,
+                                violations: validation.violations,
+                                report_data: validation.report_data
+                              });
+                              setPreviewOpen(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            Preview
+                          </Button>
+                        )}
+                        
+                        {/* Re-validate buttons — only for failed validations with documents */}
+                        {isFailed && validation.document && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-amber-600 border-amber-600/30 hover:bg-amber-500/10"
+                              disabled={revalidatingId === validation.id}
+                              onClick={() => handleRevalidate(validation, 'failed')}
+                            >
+                              {revalidatingId === validation.id && revalidationMode === 'failed' ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              )}
+                              Re-check Failed
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-muted-foreground"
+                              disabled={revalidatingId === validation.id}
+                              onClick={() => handleRevalidate(validation, 'full')}
+                            >
+                              {revalidatingId === validation.id && revalidationMode === 'full' ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                              Full Re-scan
+                            </Button>
+                          </>
+                        )}
+                      </div>
                     </div>
                   </div>
                 );

@@ -903,8 +903,8 @@ serve(async (req) => {
   }
 
   try {
-    // Accept approvedCocType and testSettings as optional parameters
-    const { documentId, documentUrl, subsectionId, approvedCocType, testSettings } = await req.json();
+    // Accept approvedCocType, testSettings, and revalidateFailedOnly as optional parameters
+    const { documentId, documentUrl, subsectionId, approvedCocType, testSettings, revalidateFailedOnly } = await req.json();
     
     if (!documentId || !documentUrl || !subsectionId) {
       return new Response(
@@ -917,6 +917,11 @@ serve(async (req) => {
     if (approvedCocType) {
       console.log('📋 User-approved COC type provided:', approvedCocType);
       console.log('   This will OVERRIDE any AI checkbox analysis');
+    }
+
+    // Log revalidation mode
+    if (revalidateFailedOnly) {
+      console.log('🔄 RE-VALIDATION MODE: Only re-checking previously failed checks');
     }
 
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
@@ -970,6 +975,56 @@ serve(async (req) => {
     }
 
     console.log('Starting enhanced COC validation for document:', documentId);
+
+    // ===== RE-VALIDATION MODE: Fetch previous results =====
+    let previousValidation: any = null;
+    let failedCheckIds: string[] = [];
+    let passedChecksFromPrevious: any[] = [];
+
+    if (revalidateFailedOnly) {
+      const { data: prevValidation, error: prevError } = await supabase
+        .from('coc_validations')
+        .select('report_data, violations, status')
+        .eq('document_id', documentId)
+        .order('validated_at', { ascending: false })
+        .limit(1)
+        .single();
+
+      if (prevError || !prevValidation) {
+        console.log('⚠️ No previous validation found, falling back to full validation');
+      } else {
+        previousValidation = prevValidation;
+        const prevChecks = (prevValidation.report_data as any)?.checks || [];
+        
+        // Identify failed checks to re-validate
+        failedCheckIds = prevChecks
+          .filter((c: any) => c.result === 'Fail' || c.result === 'Not Tested')
+          .map((c: any) => c.checkId);
+        
+        // Carry forward passed/N/A/skipped checks
+        passedChecksFromPrevious = prevChecks
+          .filter((c: any) => c.result === 'Pass' || c.result === 'Not Applicable' || c.result === 'Skipped');
+
+        console.log(`🔄 Previous validation: ${prevChecks.length} checks total`);
+        console.log(`   Failed/Not Tested (will re-check): ${failedCheckIds.join(', ')}`);
+        console.log(`   Passed (carrying forward): ${passedChecksFromPrevious.length} checks`);
+
+        // If no failed checks, return previous result as-is
+        if (failedCheckIds.length === 0) {
+          console.log('✅ No failed checks to re-validate — returning previous result');
+          return new Response(
+            JSON.stringify({
+              success: true,
+              revalidation: true,
+              revalidationNote: 'No previously failed checks to re-validate. All checks passed in the last validation.',
+              status: prevValidation.status,
+              ...(prevValidation.report_data as any),
+            }),
+            { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+      }
+    }
 
     // Extract the storage path from the signed URL
     let storagePath: string;
@@ -1143,6 +1198,49 @@ Return ONLY the JSON validation result.`
           content: `Document content:\n\n${truncatedText}\n\nPlease validate this COC document and return ONLY the JSON validation result.`
         }
       ];
+    }
+
+    // ===== RE-VALIDATION MODE: Add focused extraction instruction =====
+    if (revalidateFailedOnly && failedCheckIds.length > 0) {
+      const checkIdToDescription: Record<string, string> = {
+        'EARTH-001': 'Earth continuity/resistance value in Ohms (Clause 8.4)',
+        'INSUL-001': 'Insulation resistance value in MΩ (Clause 8.6)',
+        'RCD-001': 'RCD trip time in ms (Clause 8.8)',
+        'LOOP-001': 'Earth loop impedance Zs in Ω (Clause 8.5)',
+        'PSCC-001': 'Prospective short-circuit current in kA (Clause 8.3)',
+        'POL-001': 'Polarity and protective conductor continuity (Clause 8.7)',
+        'SIG-001': 'Signature of registered person',
+        'COC-TYPE-001': 'Certificate type checkbox (Initial/Supplementary/Temporary)',
+        'COC-SUPP-001': 'Supplementary COC reference to Initial COC',
+        'COC-TEMP-001': 'Temporary COC reference to Initial COC',
+        'REG-001': 'Issuer registration category vs installation type',
+        'CERT-DATE-001': 'Certificate issue date validation',
+        'CERT-INCOMPLETE-001': 'Completeness of mandatory test fields',
+      };
+
+      const focusedChecksDescription = failedCheckIds
+        .map(id => `- ${id}: ${checkIdToDescription[id] || id}`)
+        .join('\n');
+
+      const revalidationInstruction = `\n\n🔄 RE-VALIDATION MODE: This document was previously validated and some checks FAILED. 
+Please pay EXTRA ATTENTION to extracting accurate values for these specific checks:
+${focusedChecksDescription}
+
+For these checks, look VERY carefully at the document. The previous extraction may have missed or misread values.
+Still return the FULL JSON structure with ALL checks, but ensure maximum accuracy on the above items.`;
+
+      // Append to the last user message
+      const lastMsg = messages[messages.length - 1];
+      if (typeof lastMsg.content === 'string') {
+        lastMsg.content += revalidationInstruction;
+      } else if (Array.isArray(lastMsg.content)) {
+        const textPart = lastMsg.content.find((p: any) => p.type === 'text');
+        if (textPart) {
+          textPart.text += revalidationInstruction;
+        }
+      }
+
+      console.log('🔄 Added revalidation focus instruction for:', failedCheckIds);
     }
 
     console.log('Calling AI for enhanced validation with vision capabilities...');
@@ -1570,6 +1668,11 @@ Return ONLY the JSON validation result.`
           ...validationResult,
           validatedAt: new Date().toISOString(),
           validationEngine: 'SANS-10142-1-2020-v4-strict-empirical',
+          revalidation: revalidateFailedOnly ? {
+            mode: 'failed_only',
+            previousFailedChecks: failedCheckIds,
+            carriedForwardChecks: passedChecksFromPrevious.map((c: any) => c.checkId),
+          } : undefined,
           modelUsed: validationSettings.ai_model,
           settingsApplied: {
             ai_model: validationSettings.ai_model,
@@ -1600,6 +1703,7 @@ Return ONLY the JSON validation result.`
     return new Response(
       JSON.stringify({
         success: true,
+        revalidation: revalidateFailedOnly ? { mode: 'failed_only', recheckedIds: failedCheckIds } : undefined,
         status: validationResult.overallStatus,
         confidenceScore: validationResult.confidenceScore,
         documentQuality: validationResult.documentQuality,
