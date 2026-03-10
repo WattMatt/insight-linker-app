@@ -1564,4 +1564,3 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
     </div>
   );
 }
-}
