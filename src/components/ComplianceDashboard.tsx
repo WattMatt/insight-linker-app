@@ -116,7 +116,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
   const [failedValidations, setFailedValidations] = useState<FailedValidation[]>([]);
   const [allValidations, setAllValidations] = useState<ValidationRecord[]>([]);
-  const [validationFilter, setValidationFilter] = useState<'all' | 'passed' | 'failed'>('all');
+  
   const [previewDoc, setPreviewDoc] = useState<ImportedValidationRecord['document']>(null);
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
