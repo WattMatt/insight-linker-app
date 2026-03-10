@@ -903,8 +903,8 @@ serve(async (req) => {
   }
 
   try {
-    // Accept approvedCocType and testSettings as optional parameters
-    const { documentId, documentUrl, subsectionId, approvedCocType, testSettings } = await req.json();
+    // Accept approvedCocType, testSettings, and revalidateFailedOnly as optional parameters
+    const { documentId, documentUrl, subsectionId, approvedCocType, testSettings, revalidateFailedOnly } = await req.json();
     
     if (!documentId || !documentUrl || !subsectionId) {
       return new Response(
