@@ -154,6 +154,7 @@ interface COCValidationFormProps {
 
 export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
   const [saving, setSaving] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
 
   const form = useForm<COCFormValues>({
     resolver: zodResolver(cocFormSchema),
