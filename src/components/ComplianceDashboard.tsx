@@ -927,26 +927,62 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
                         )}
                       </div>
                       
-                      {/* Preview Button */}
-                      {validation.document && (
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="shrink-0 gap-2"
-                          onClick={() => {
-                            setPreviewDoc(validation.document);
-                            setPreviewValidation({
-                              status: validation.status,
-                              violations: validation.violations,
-                              report_data: validation.report_data
-                            });
-                            setPreviewOpen(true);
-                          }}
-                        >
-                          <Eye className="h-4 w-4" />
-                          Preview
-                        </Button>
-                      )}
+                      {/* Action Buttons */}
+                      <div className="flex flex-col gap-1.5 shrink-0 ml-2">
+                        {/* Preview Button */}
+                        {validation.document && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="gap-2"
+                            onClick={() => {
+                              setPreviewDoc(validation.document);
+                              setPreviewValidation({
+                                status: validation.status,
+                                violations: validation.violations,
+                                report_data: validation.report_data
+                              });
+                              setPreviewOpen(true);
+                            }}
+                          >
+                            <Eye className="h-4 w-4" />
+                            Preview
+                          </Button>
+                        )}
+                        
+                        {/* Re-validate buttons — only for failed validations with documents */}
+                        {isFailed && validation.document && (
+                          <>
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              className="gap-1.5 text-amber-600 border-amber-600/30 hover:bg-amber-500/10"
+                              disabled={revalidatingId === validation.id}
+                              onClick={() => handleRevalidate(validation, 'failed')}
+                            >
+                              {revalidatingId === validation.id && revalidationMode === 'failed' ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RotateCcw className="h-3.5 w-3.5" />
+                              )}
+                              Re-check Failed
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="gap-1.5 text-muted-foreground"
+                              disabled={revalidatingId === validation.id}
+                              onClick={() => handleRevalidate(validation, 'full')}
+                            >
+                              {revalidatingId === validation.id && revalidationMode === 'full' ? (
+                                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                              ) : (
+                                <RefreshCw className="h-3.5 w-3.5" />
+                              )}
+                              Full Re-scan
+                            </Button>
+                          </>
+                        )}
                     </div>
                   </div>
                 );
