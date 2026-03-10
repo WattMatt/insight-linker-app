@@ -327,7 +327,42 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
     }
   };
 
-  const hasMissingTests =
+  // Re-validate: re-runs deterministic engine on current form data and updates stored record
+  const handleRevalidate = async () => {
+    if (!editId) {
+      toast.error('Save the record first before re-validating');
+      return;
+    }
+    setRevalidating(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) { toast.error('You must be logged in'); return; }
+
+      const currentValues = form.getValues();
+      const { cocData, testReport } = buildEngineInputs(currentValues);
+      const result = validateCOC(cocData, testReport);
+
+      const { error } = await supabase
+        .from('coc_local_validations')
+        .update({
+          validation_status: result.status,
+          fraud_risk_score: result.fraudRiskScore,
+          validation_results_json: JSON.parse(JSON.stringify(result)),
+        })
+        .eq('id', editId);
+
+      if (error) throw error;
+
+      toast.success(
+        `Re-validation complete: ${result.status} — ${result.passedRules.length} passed, ${result.failedRules.length} failed`
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Re-validation failed');
+    } finally {
+      setRevalidating(false);
+    }
+  };
+
     watchedValues.insulationResistance_MOhm == null ||
     watchedValues.earthLoopImpedance_Zs_Ohm == null ||
     watchedValues.rcdTripTime_ms == null ||
