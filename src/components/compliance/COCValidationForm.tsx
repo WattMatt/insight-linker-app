@@ -154,6 +154,7 @@ interface COCValidationFormProps {
 
 export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
   const [saving, setSaving] = useState(false);
+  const [revalidating, setRevalidating] = useState(false);
 
   const form = useForm<COCFormValues>({
     resolver: zodResolver(cocFormSchema),
@@ -326,6 +327,41 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
     }
   };
 
+  // Re-validate: re-runs deterministic engine on current form data and updates stored record
+  const handleRevalidate = async () => {
+    if (!editId) {
+      toast.error('Save the record first before re-validating');
+      return;
+    }
+    setRevalidating(true);
+    try {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) { toast.error('You must be logged in'); return; }
+
+      const currentValues = form.getValues();
+      const { cocData, testReport } = buildEngineInputs(currentValues);
+      const result = validateCOC(cocData, testReport);
+
+      const { error } = await supabase
+        .from('coc_local_validations')
+        .update({
+          validation_status: result.status,
+          fraud_risk_score: result.fraudRiskScore,
+          validation_results_json: JSON.parse(JSON.stringify(result)),
+        })
+        .eq('id', editId);
+
+      if (error) throw error;
+
+      toast.success(
+        `Re-validation complete: ${result.status} — ${result.passedRules.length} passed, ${result.failedRules.length} failed`
+      );
+    } catch (err: unknown) {
+      toast.error(err instanceof Error ? err.message : 'Re-validation failed');
+    } finally {
+      setRevalidating(false);
+    }
+  };
   const hasMissingTests =
     watchedValues.insulationResistance_MOhm == null ||
     watchedValues.earthLoopImpedance_Zs_Ohm == null ||
@@ -770,6 +806,19 @@ export function COCValidationForm({ editId, onSaved }: COCValidationFormProps) {
               <Download className="h-4 w-4 mr-2" />
               Download PDF
             </Button>
+            {editId && (
+              <Button
+                type="button"
+                variant="secondary"
+                size="lg"
+                className="h-12"
+                disabled={revalidating}
+                onClick={handleRevalidate}
+              >
+                {revalidating ? <Loader2 className="h-4 w-4 mr-2 animate-spin" /> : <ShieldCheck className="h-4 w-4 mr-2" />}
+                Re-validate
+              </Button>
+            )}
           </div>
         </form>
       </Form>
