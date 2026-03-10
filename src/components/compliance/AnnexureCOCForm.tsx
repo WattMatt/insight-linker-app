@@ -538,7 +538,7 @@ export function AnnexureCOCForm({ editId, siteId, onSaved }: AnnexureCOCFormProp
           lightningProtectionInstalled: data.lightningProtectionInstalled,
           specializedInstallation: data.specializedInstallation,
           aboveOneKV: data.aboveOneKV,
-          fieldOverrides: overrides,
+          fieldOverrides: JSON.parse(JSON.stringify(overrides)),
         },
       };
 
