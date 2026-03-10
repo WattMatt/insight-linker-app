@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/integrations/supabase/client';
 import { COCValidationForm } from '@/components/compliance/COCValidationForm';
+import { AnnexureCOCForm } from '@/components/compliance/AnnexureCOCForm';
 import { Breadcrumbs } from '@/components/Breadcrumb';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -17,7 +18,8 @@ import {
 } from 'lucide-react';
 import { format } from 'date-fns';
 
-type ViewMode = 'list' | 'new' | 'edit';
+type ViewMode = 'list' | 'select-type' | 'new' | 'new-annexure' | 'edit';
+type FormType = 'quick' | 'annexure1';
 
 function statusBadge(status: string) {
   switch (status) {
