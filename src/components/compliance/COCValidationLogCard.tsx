@@ -474,6 +474,24 @@ export function COCValidationLogCard({
                     </Button>
                   )}
 
+                  {/* Review / Verify COC button */}
+                  {validation.document && onReviewCoc && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={reviewingDocId === validation.document_id}
+                      onClick={() => onReviewCoc(validation)}
+                    >
+                      {reviewingDocId === validation.document_id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileCheck className="h-3.5 w-3.5" />
+                      )}
+                      Review COC
+                    </Button>
+                  )}
+
                   {isFailed && validation.document && (
                     <>
                       <Button
