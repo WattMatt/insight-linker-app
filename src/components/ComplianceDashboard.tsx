@@ -259,6 +259,154 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     }
   }, [fetchAllValidations]);
 
+  // Handle Review COC - extract COC data for a validation's document
+  const handleReviewCoc = useCallback(async (validation: ValidationRecord) => {
+    if (!validation.document) {
+      toast.error('No document associated with this validation');
+      return;
+    }
+
+    const doc = validation.document;
+    setReviewingDocId(doc.id);
+
+    try {
+      let signedUrl = doc.file_url;
+      if (doc.file_url.includes('/storage/v1/object/')) {
+        const urlParts = doc.file_url.split('/documents/');
+        if (urlParts.length === 2) {
+          const filePath = decodeURIComponent(urlParts[1]);
+          const { data: signedData, error: signError } = await supabase.storage
+            .from('documents')
+            .createSignedUrl(filePath, 3600);
+          if (signError) {
+            toast.error('Failed to access document');
+            return;
+          }
+          signedUrl = signedData.signedUrl;
+        }
+      }
+
+      toast.info('Extracting COC information...');
+      const { data: { user } } = await supabase.auth.getUser();
+
+      const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
+        body: {
+          documentUrl: signedUrl,
+          fileName: doc.file_name,
+          documentId: doc.id,
+          subsectionId: validation.subsection_id,
+          forceReextract: false,
+          userId: user?.id
+        }
+      });
+
+      if (extractionError) {
+        toast.error(`Failed to extract COC data: ${extractionError.message || 'Unknown error'}`);
+        return;
+      }
+      if (extractionData?.error) {
+        toast.error(`Extraction error: ${extractionData.error}`);
+        return;
+      }
+
+      if (extractionData?.extractedData) {
+        setCocPreviewData(extractionData.extractedData);
+        setPendingReviewDoc({ id: doc.id, url: signedUrl, name: doc.file_name, subsectionId: validation.subsection_id });
+        setShowCocPreview(true);
+        toast.success(extractionData.cached ? 'Loaded cached extraction.' : 'COC information extracted! Review before verification.');
+      } else {
+        toast.error('No data could be extracted from the document');
+      }
+    } catch (error) {
+      toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setReviewingDocId(null);
+    }
+  }, []);
+
+  const normalizeCocType = (type?: string): string => {
+    if (!type) return '';
+    const lower = type.toLowerCase();
+    if (lower === 'initial') return 'Initial';
+    if (lower === 'temporary') return 'Temporary';
+    if (lower === 'supplementary') return 'Supplementary';
+    if (lower.includes('not marked') || lower === 'notmarked') return 'Not Marked';
+    return type;
+  };
+
+  const handleApproveAndVerify = useCallback(async (approvedData: Record<string, unknown>) => {
+    if (!pendingReviewDoc) {
+      toast.error('No document pending verification');
+      return;
+    }
+
+    const docId = pendingReviewDoc.id;
+    setReviewingDocId(docId);
+    setShowCocPreview(false);
+
+    try {
+      toast.info('Starting SANS 10142-1 verification...');
+      const normalizedCocType = normalizeCocType(approvedData.cocType as string);
+
+      const subsectionUpdateData: Record<string, string> = {};
+      if (approvedData.cocNumber) subsectionUpdateData.coc_number = approvedData.cocNumber as string;
+      if (normalizedCocType) subsectionUpdateData.coc_type = normalizedCocType;
+      if (approvedData.cocIssueDate) subsectionUpdateData.coc_issue_date = approvedData.cocIssueDate as string;
+
+      if (Object.keys(subsectionUpdateData).length > 0) {
+        await supabase.from('subsections').update(subsectionUpdateData).eq('id', pendingReviewDoc.subsectionId);
+      }
+
+      const docUpdateData: Record<string, string> = {};
+      if (approvedData.cocNumber) docUpdateData.coc_number = approvedData.cocNumber as string;
+      if (normalizedCocType) docUpdateData.coc_type = normalizedCocType;
+      if (approvedData.cocIssueDate) docUpdateData.coc_issue_date = approvedData.cocIssueDate as string;
+
+      if (Object.keys(docUpdateData).length > 0) {
+        await supabase.from('subsection_documents').update(docUpdateData).eq('id', docId);
+      }
+
+      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
+        body: {
+          documentId: docId,
+          documentUrl: pendingReviewDoc.url,
+          subsectionId: pendingReviewDoc.subsectionId,
+          approvedCocType: normalizedCocType
+        }
+      });
+
+      if (validationError || validationData?.error) {
+        toast.error(`Verification failed: ${validationError?.message || validationData?.error || 'Unknown error'}`);
+        return;
+      }
+
+      if (validationData?.success || validationData?.status) {
+        const status = validationData.status || validationData.report?.overallStatus;
+        if (status === 'Pass') toast.success('✅ COC verification passed!');
+        else if (status === 'Fail') toast.error(`❌ COC verification failed: ${validationData.violations?.length || 0} violations found`);
+        else toast.warning('⚠️ COC verification incomplete');
+
+        const docCocStatus = status === 'Pass' ? 'Approved' : status === 'Fail' ? 'Failed' : '';
+        if (docCocStatus) {
+          await supabase.from('subsection_documents').update({ coc_status: docCocStatus }).eq('id', docId);
+        }
+      }
+
+      await fetchAllValidations();
+    } catch (err) {
+      toast.error(`Verification failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+    } finally {
+      setReviewingDocId(null);
+      setPendingReviewDoc(null);
+    }
+  }, [pendingReviewDoc, fetchAllValidations]);
+
+  const handleRejectReview = useCallback(() => {
+    setShowCocPreview(false);
+    setCocPreviewData(null);
+    setPendingReviewDoc(null);
+  }, []);
+
   // Fetch validations on mount and when subsections change
   useEffect(() => {
     fetchAllValidations();
