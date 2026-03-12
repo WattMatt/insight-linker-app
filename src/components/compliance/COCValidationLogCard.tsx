@@ -63,6 +63,10 @@ interface COCValidationLogCardProps {
   revalidatingId: string | null;
   revalidationMode: 'failed' | 'full' | null;
   onValidationsChanged?: () => void;
+  /** Called when user clicks Review/Verify COC on a validation entry */
+  onReviewCoc?: (validation: ValidationRecord) => void;
+  /** ID of the document currently being reviewed/extracted */
+  reviewingDocId?: string | null;
 }
 
 export function COCValidationLogCard({
@@ -72,6 +76,8 @@ export function COCValidationLogCard({
   revalidatingId,
   revalidationMode,
   onValidationsChanged,
+  onReviewCoc,
+  reviewingDocId,
 }: COCValidationLogCardProps) {
   const [validationFilter, setValidationFilter] = useState<'all' | 'passed' | 'failed'>('all');
   // Map of validationId -> { violationIndex -> override }
@@ -465,6 +471,24 @@ export function COCValidationLogCard({
                     >
                       <Eye className="h-4 w-4" />
                       Preview
+                    </Button>
+                  )}
+
+                  {/* Review / Verify COC button */}
+                  {validation.document && onReviewCoc && (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="gap-1.5"
+                      disabled={reviewingDocId === validation.document_id}
+                      onClick={() => onReviewCoc(validation)}
+                    >
+                      {reviewingDocId === validation.document_id ? (
+                        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                      ) : (
+                        <FileCheck className="h-3.5 w-3.5" />
+                      )}
+                      Review COC
                     </Button>
                   )}
 
