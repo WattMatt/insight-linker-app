@@ -122,6 +122,12 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [revalidatingId, setRevalidatingId] = useState<string | null>(null);
   const [revalidationMode, setRevalidationMode] = useState<'failed' | 'full' | null>(null);
 
+  // Review COC state
+  const [reviewingDocId, setReviewingDocId] = useState<string | null>(null);
+  const [cocPreviewData, setCocPreviewData] = useState<any>(null);
+  const [showCocPreview, setShowCocPreview] = useState(false);
+  const [pendingReviewDoc, setPendingReviewDoc] = useState<{id: string, url: string, name: string, subsectionId: string} | null>(null);
+
   // Fetch ALL COC validations with full details - shows complete history log
   const fetchAllValidations = useCallback(async () => {
     if (subsections.length === 0) {
