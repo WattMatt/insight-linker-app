@@ -63,6 +63,10 @@ interface COCValidationLogCardProps {
   revalidatingId: string | null;
   revalidationMode: 'failed' | 'full' | null;
   onValidationsChanged?: () => void;
+  /** Called when user clicks Review/Verify COC on a validation entry */
+  onReviewCoc?: (validation: ValidationRecord) => void;
+  /** ID of the document currently being reviewed/extracted */
+  reviewingDocId?: string | null;
 }
 
 export function COCValidationLogCard({
