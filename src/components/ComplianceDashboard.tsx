@@ -954,6 +954,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         revalidatingId={revalidatingId}
         revalidationMode={revalidationMode}
         onValidationsChanged={fetchAllValidations}
+        onReviewCoc={handleReviewCoc}
+        reviewingDocId={reviewingDocId}
       />
 
       {/* COC Preview Dialog */}
@@ -967,6 +969,44 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         document={previewDoc}
         validation={previewValidation}
       />
+
+      {/* COC Review & Approval Dialog */}
+      <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
+        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
+          {pendingReviewDoc && (
+            <COCPreviewApproval
+              extractedData={cocPreviewData}
+              documentName={pendingReviewDoc.name}
+              documentUrl={pendingReviewDoc.url}
+              onApprove={handleApproveAndVerify}
+              onReject={handleRejectReview}
+              isProcessing={reviewingDocId === pendingReviewDoc.id}
+              onExtract={() => {
+                if (pendingReviewDoc) {
+                  // Re-extract by creating a temporary validation record to pass
+                  const tempValidation: ValidationRecord = {
+                    id: '',
+                    document_id: pendingReviewDoc.id,
+                    subsection_id: pendingReviewDoc.subsectionId,
+                    subsection_name: '',
+                    status: '',
+                    validated_at: '',
+                    violations: [],
+                    report_data: null,
+                    document: {
+                      id: pendingReviewDoc.id,
+                      file_name: pendingReviewDoc.name,
+                      file_url: pendingReviewDoc.url,
+                      uploaded_at: '',
+                    },
+                  };
+                  handleReviewCoc(tempValidation);
+                }
+              }}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
