@@ -76,6 +76,8 @@ export function COCValidationLogCard({
   revalidatingId,
   revalidationMode,
   onValidationsChanged,
+  onReviewCoc,
+  reviewingDocId,
 }: COCValidationLogCardProps) {
   const [validationFilter, setValidationFilter] = useState<'all' | 'passed' | 'failed'>('all');
   // Map of validationId -> { violationIndex -> override }
