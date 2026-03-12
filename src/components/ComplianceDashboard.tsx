@@ -271,18 +271,39 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
 
     try {
       let signedUrl = doc.file_url;
+      
+      // For storage URLs, get a proper accessible URL
       if (doc.file_url.includes('/storage/v1/object/')) {
-        const urlParts = doc.file_url.split('/documents/');
-        if (urlParts.length === 2) {
-          const filePath = decodeURIComponent(urlParts[1]);
-          const { data: signedData, error: signError } = await supabase.storage
+        // Try to extract the file path from the URL
+        const publicMatch = doc.file_url.match(/\/storage\/v1\/object\/public\/documents\/(.+)/);
+        const privateMatch = doc.file_url.match(/\/storage\/v1\/object\/(?:sign|authenticated)\/documents\/(.+)/);
+        const filePath = publicMatch?.[1] || privateMatch?.[1];
+        
+        if (filePath) {
+          const decodedPath = decodeURIComponent(filePath.split('?')[0]); // strip query params
+          
+          // Since documents bucket is public, use public URL
+          const { data: publicData } = supabase.storage
             .from('documents')
-            .createSignedUrl(filePath, 3600);
-          if (signError) {
-            toast.error('Failed to access document');
-            return;
+            .getPublicUrl(decodedPath);
+          
+          if (publicData?.publicUrl) {
+            signedUrl = publicData.publicUrl;
+          } else {
+            // Fallback to signed URL
+            const { data: signedData, error: signError } = await supabase.storage
+              .from('documents')
+              .createSignedUrl(decodedPath, 3600);
+            if (signError) {
+              console.error('Failed to create signed URL:', signError, 'path:', decodedPath);
+              toast.error('Failed to access document');
+              return;
+            }
+            signedUrl = signedData.signedUrl;
           }
-          signedUrl = signedData.signedUrl;
+        } else {
+          console.error('Could not extract file path from URL:', doc.file_url);
+          // Use the URL as-is as fallback
         }
       }
 
