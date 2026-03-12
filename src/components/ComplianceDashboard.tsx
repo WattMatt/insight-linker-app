@@ -3,6 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   LineChart, 
@@ -40,6 +41,7 @@ import {
   VALID_COC_STATUSES
 } from "@/lib/complianceCalculations";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
+import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { COCValidationLogCard, type ValidationRecord as ImportedValidationRecord } from "@/components/compliance/COCValidationLogCard";
 import { toast } from "sonner";
 
