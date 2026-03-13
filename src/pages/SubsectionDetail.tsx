@@ -3146,8 +3146,6 @@ const SubsectionDetail = () => {
         {/* COC Docs & Metering Data Tab */}
         <TabsContent value="coc-metering" className="space-y-4">
           <div className="space-y-6">
-            {/* COC Compliance Rules Reference - At top for visibility */}
-            <COCComplianceRulesReference />
             
             {/* Certificates of Compliance */}
             <Card>
