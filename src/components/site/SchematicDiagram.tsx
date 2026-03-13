@@ -1571,7 +1571,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : isShiftPressed || scale > 1 ? 'cursor-grab' : 'cursor-default'}`
               : `${isPanning ? 'cursor-grabbing' : scale > 1 ? 'cursor-grab' : 'cursor-default'}`
           }`}
-          style={{ height: containerHeight }}
+          style={{ height: containerHeight, overscrollBehavior: 'none' }}
           onMouseDown={(e) => {
             if (isCalibrating) {
               handleCalibrationMouseDown(e);
