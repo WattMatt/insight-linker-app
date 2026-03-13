@@ -240,44 +240,39 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Native wheel event listener for zoom-to-cursor
-  // Since PDF is rendered at base resolution, zoom is via CSS scale transform
-  useEffect(() => {
+  // Wheel zoom (zoom-to-cursor) for both View and Edit modes
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (!schematic) return;
+    if (e.ctrlKey || e.metaKey) return;
+
+    e.preventDefault();
+
+    const delta = -e.deltaY;
+    const zoomSpeed = 0.002;
+    const zoomChange = delta * zoomSpeed;
+
     const container = containerRef.current;
-    if (!container || !schematic) return;
+    if (!container) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
-      
-      e.preventDefault();
-      
-      const delta = -e.deltaY;
-      const zoomSpeed = 0.002;
-      const zoomChange = delta * zoomSpeed;
-      
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      setScale((prevScale) => {
-        const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
-        
-        const margin = 24;
-        const currentPan = panOffsetRef.current;
-        const contentX = (mouseX - currentPan.x - margin) / prevScale;
-        const contentY = (mouseY - currentPan.y - margin) / prevScale;
-        
-        const newPanX = mouseX - margin - contentX * newScale;
-        const newPanY = mouseY - margin - contentY * newScale;
-        
-        setPanOffset({ x: newPanX, y: newPanY });
-        
-        return newScale;
-      });
-    };
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    setScale((prevScale) => {
+      const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
+
+      const margin = 24;
+      const currentPan = panOffsetRef.current;
+      const contentX = (mouseX - currentPan.x - margin) / prevScale;
+      const contentY = (mouseY - currentPan.y - margin) / prevScale;
+
+      const newPanX = mouseX - margin - contentX * newScale;
+      const newPanY = mouseY - margin - contentY * newScale;
+
+      setPanOffset({ x: newPanX, y: newPanY });
+
+      return newScale;
+    });
   }, [schematic]);
 
   // Calculate the display scale to fit the PDF into the container
