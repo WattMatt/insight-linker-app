@@ -59,9 +59,6 @@ export interface ValidationRecord {
 interface COCValidationLogCardProps {
   allValidations: ValidationRecord[];
   onPreview: (validation: ValidationRecord) => void;
-  onRevalidate: (validation: ValidationRecord, mode: 'failed' | 'full') => void;
-  revalidatingId: string | null;
-  revalidationMode: 'failed' | 'full' | null;
   onValidationsChanged?: () => void;
   /** Called when user clicks Review/Verify COC on a validation entry */
   onReviewCoc?: (validation: ValidationRecord) => void;
@@ -72,9 +69,6 @@ interface COCValidationLogCardProps {
 export function COCValidationLogCard({
   allValidations,
   onPreview,
-  onRevalidate,
-  revalidatingId,
-  revalidationMode,
   onValidationsChanged,
   onReviewCoc,
   reviewingDocId,
