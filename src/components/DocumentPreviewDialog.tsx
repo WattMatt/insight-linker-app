@@ -343,9 +343,20 @@ export function DocumentPreviewDialog({
 
   const renderContent = () => {
     if (isPdf) {
+      if (pdfLoading) {
+        return (
+          <div className="flex items-center justify-center h-64">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            <span className="ml-2 text-muted-foreground">Loading PDF...</span>
+          </div>
+        );
+      }
+
+      const pdfSource = pdfBlobUrl || fileUrl;
+
       return (
         <Document
-          file={fileUrl}
+          file={pdfSource}
           onLoadSuccess={onDocumentLoadSuccess}
           loading={
             <div className="flex items-center justify-center h-64">
@@ -354,7 +365,7 @@ export function DocumentPreviewDialog({
           }
           error={
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <p>Failed to load PDF</p>
+              <p>Failed to load PDF. The document may be inaccessible or corrupted.</p>
               <Button variant="outline" className="mt-2" onClick={() => window.open(fileUrl, '_blank')}>
                 Open in new tab
               </Button>
