@@ -660,6 +660,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setLoading(true);
     setDimensionsLoaded(false);
     setOriginalPdfDimensions({ width: 0, height: 0 });
+    setScale(1);
+    setPanOffset({ x: 0, y: 0 });
     try {
       const { data: schematicData, error: schematicError } = await supabase
         .from("site_schematics")
