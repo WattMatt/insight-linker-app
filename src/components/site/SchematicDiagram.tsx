@@ -240,44 +240,39 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Native wheel event listener for zoom-to-cursor
-  // Since PDF is rendered at base resolution, zoom is via CSS scale transform
-  useEffect(() => {
+  // Wheel zoom (zoom-to-cursor) for both View and Edit modes
+  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+    if (!schematic) return;
+    if (e.ctrlKey || e.metaKey) return;
+
+    e.preventDefault();
+
+    const delta = -e.deltaY;
+    const zoomSpeed = 0.002;
+    const zoomChange = delta * zoomSpeed;
+
     const container = containerRef.current;
-    if (!container || !schematic) return;
+    if (!container) return;
 
-    const handleWheel = (e: WheelEvent) => {
-      if (e.ctrlKey || e.metaKey) return;
-      
-      e.preventDefault();
-      
-      const delta = -e.deltaY;
-      const zoomSpeed = 0.002;
-      const zoomChange = delta * zoomSpeed;
-      
-      const rect = container.getBoundingClientRect();
-      const mouseX = e.clientX - rect.left;
-      const mouseY = e.clientY - rect.top;
-      
-      setScale((prevScale) => {
-        const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
-        
-        const margin = 24;
-        const currentPan = panOffsetRef.current;
-        const contentX = (mouseX - currentPan.x - margin) / prevScale;
-        const contentY = (mouseY - currentPan.y - margin) / prevScale;
-        
-        const newPanX = mouseX - margin - contentX * newScale;
-        const newPanY = mouseY - margin - contentY * newScale;
-        
-        setPanOffset({ x: newPanX, y: newPanY });
-        
-        return newScale;
-      });
-    };
+    const rect = container.getBoundingClientRect();
+    const mouseX = e.clientX - rect.left;
+    const mouseY = e.clientY - rect.top;
 
-    container.addEventListener('wheel', handleWheel, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheel);
+    setScale((prevScale) => {
+      const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
+
+      const margin = 24;
+      const currentPan = panOffsetRef.current;
+      const contentX = (mouseX - currentPan.x - margin) / prevScale;
+      const contentY = (mouseY - currentPan.y - margin) / prevScale;
+
+      const newPanX = mouseX - margin - contentX * newScale;
+      const newPanY = mouseY - margin - contentY * newScale;
+
+      setPanOffset({ x: newPanX, y: newPanY });
+
+      return newScale;
+    });
   }, [schematic]);
 
   // Calculate the display scale to fit the PDF into the container
@@ -366,11 +361,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   }, [schematic?.id]);
 
-  // Pan handlers (like FloorPlanViewer - shift+click or right-click)
-  // Works in both View and Edit modes for navigation
+  // Pan handlers: Shift+drag / right-click drag in all modes, plus left-drag in View mode when zoomed
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Shift + left click OR right click for panning (works in all modes)
-    if (isShiftPressed || e.button === 2) {
+    const canModifierPan = isShiftPressed || e.button === 2;
+    const canViewPan = !isEditMode && scale > 1 && e.button === 0;
+
+    if (canModifierPan || canViewPan) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
@@ -1538,7 +1534,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           className={`relative bg-muted/30 overflow-auto ${
             isEditMode 
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isShiftPressed || isPanning ? 'cursor-grabbing' : 'cursor-default'}`
-              : 'cursor-default'
+              : `${isPanning ? 'cursor-grabbing' : scale > 1 ? 'cursor-grab' : 'cursor-default'}`
           }`}
           style={{ height: containerHeight }}
           onMouseDown={(e) => {
@@ -1566,7 +1562,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             }
           }}
           onMouseLeave={handleMouseLeave}
-          onContextMenu={(e) => { if (isEditMode) e.preventDefault(); }}
+          onWheel={handleWheelZoom}
+          onContextMenu={(e) => e.preventDefault()}
         >
           <div 
             ref={contentRef}
@@ -1579,7 +1576,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               width: 'fit-content',
               margin: '24px',
               position: 'relative',
-              cursor: isPanning ? 'grabbing' : (isShiftPressed ? 'grab' : 'default'),
+              cursor: isPanning ? 'grabbing' : ((!isEditMode && scale > 1) || isShiftPressed ? 'grab' : 'default'),
             }}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
