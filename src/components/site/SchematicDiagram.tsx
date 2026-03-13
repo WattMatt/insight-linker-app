@@ -241,14 +241,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   }, []);
 
   // Native wheel event listener for zoom-to-cursor
-  // Since PDF is rendered at actual zoom resolution, we adjust pan to keep content under cursor
+  // Since PDF is rendered at base resolution, zoom is via CSS scale transform
   useEffect(() => {
     const container = containerRef.current;
     if (!container || !schematic) return;
-    // Pan and zoom work in both View and Edit modes
 
     const handleWheel = (e: WheelEvent) => {
-      // Browser's native zoom with Ctrl/Cmd - don't interfere
       if (e.ctrlKey || e.metaKey) return;
       
       e.preventDefault();
@@ -257,24 +255,18 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       const zoomSpeed = 0.002;
       const zoomChange = delta * zoomSpeed;
       
-      // Get mouse position relative to container
       const rect = container.getBoundingClientRect();
       const mouseX = e.clientX - rect.left;
       const mouseY = e.clientY - rect.top;
       
       setScale((prevScale) => {
         const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
-        const scaleRatio = newScale / prevScale;
         
-        // With CSS scale transform, adjust pan so content under cursor stays put
         const margin = 24;
-        // The point under the cursor in content-space (accounting for pan + margin + scale)
-        const contentX = (mouseX - panOffset.x - margin) / prevScale;
-        const contentY = (mouseY - panOffset.y - margin) / prevScale;
+        const currentPan = panOffsetRef.current;
+        const contentX = (mouseX - currentPan.x - margin) / prevScale;
+        const contentY = (mouseY - currentPan.y - margin) / prevScale;
         
-        // After scale change, that same content point would appear at:
-        // margin + contentX * newScale + newPanX = mouseX
-        // newPanX = mouseX - margin - contentX * newScale
         const newPanX = mouseX - margin - contentX * newScale;
         const newPanY = mouseY - margin - contentY * newScale;
         
@@ -286,7 +278,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
     container.addEventListener('wheel', handleWheel, { passive: false });
     return () => container.removeEventListener('wheel', handleWheel);
-  }, [schematic, panOffset]);
+  }, [schematic]);
 
   // Calculate the display scale to fit the PDF into the container
   const displayScale = useMemo(() => {
