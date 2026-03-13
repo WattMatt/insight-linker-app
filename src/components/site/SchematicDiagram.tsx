@@ -1581,8 +1581,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             className="relative"
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={{
-              // Pan and zoom work in both modes
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+              // Pan via translate, zoom via CSS scale
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
               transformOrigin: 'top left',
               width: 'fit-content',
               margin: '24px',
