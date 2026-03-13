@@ -3155,14 +3155,6 @@ const SubsectionDetail = () => {
                     <CardTitle>Certificates of Compliance</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">Manage COC documents and their details.</p>
                   </div>
-                  <BulkCOCReportSave 
-                    siteId={siteId || ""}
-                    subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
-                    onSaveComplete={() => {
-                      fetchDocumentCategories();
-                      fetchSupabaseDocuments();
-                    }}
-                  />
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
