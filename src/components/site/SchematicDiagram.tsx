@@ -1959,7 +1959,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   <SelectValue placeholder="Select a subsection..." />
                 </SelectTrigger>
                 <SelectContent>
-                  {subsections.filter(sub => sub.id).map(sub => (
+                  {subsections.filter(sub => sub.id && (
+                    !blocks.some(b => b.subsection_id === sub.id && b.id !== selectedBlock?.id)
+                  )).map(sub => (
                     <SelectItem key={sub.id} value={sub.id}>
                       {sub.name} {sub.tenant_name ? `(${sub.tenant_name})` : ''}
                     </SelectItem>
