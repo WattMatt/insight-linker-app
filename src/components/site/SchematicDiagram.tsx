@@ -318,12 +318,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return MIN_CONTAINER_HEIGHT - 32;
   }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
-  // Dynamic container height based on PDF aspect ratio
+  // Dynamic container height based on PDF aspect ratio - no max cap so full PDF is visible
   const containerHeight = useMemo(() => {
     if (dimensionsLoaded && calculatedPageHeight > 0) {
       // Add padding for the content margin
       const needed = calculatedPageHeight + 48;
-      return Math.max(MIN_CONTAINER_HEIGHT, Math.min(MAX_CONTAINER_HEIGHT, needed));
+      return Math.max(MIN_CONTAINER_HEIGHT, needed);
     }
     return MIN_CONTAINER_HEIGHT;
   }, [dimensionsLoaded, calculatedPageHeight]);
