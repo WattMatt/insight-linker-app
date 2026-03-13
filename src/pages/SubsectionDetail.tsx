@@ -3131,10 +3131,6 @@ const SubsectionDetail = () => {
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* COC Evidence Photos */}
-          {subsectionId && (
-            <COCPhotoCapture subsectionId={subsectionId} />
-          )}
         </TabsContent>
 
         {/* Floor Plan Tab */}
