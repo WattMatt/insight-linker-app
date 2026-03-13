@@ -1576,7 +1576,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               width: 'fit-content',
               margin: '24px',
               position: 'relative',
-              cursor: isPanning ? 'grabbing' : (isShiftPressed ? 'grab' : 'default'),
+              cursor: isPanning ? 'grabbing' : ((!isEditMode && scale > 1) || isShiftPressed ? 'grab' : 'default'),
             }}
           >
             {/* PDF and blocks wrapper - positioned relative for block overlay */}
