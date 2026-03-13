@@ -262,23 +262,22 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       const mouseY = e.clientY - rect.top;
       
       setScale((prevScale) => {
-        const newScale = Math.max(0.5, Math.min(10, prevScale + zoomChange));
+        const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
         const scaleRatio = newScale / prevScale;
         
-        // Calculate how far the mouse is from the content origin (accounting for current pan and margin)
+        // With CSS scale transform, adjust pan so content under cursor stays put
         const margin = 24;
-        const contentX = mouseX - panOffset.x - margin;
-        const contentY = mouseY - panOffset.y - margin;
+        // The point under the cursor in content-space (accounting for pan + margin + scale)
+        const contentX = (mouseX - panOffset.x - margin) / prevScale;
+        const contentY = (mouseY - panOffset.y - margin) / prevScale;
         
-        // After zoom, content at mouse position will move by (scaleRatio - 1) * contentPosition
-        // We need to pan in the opposite direction to keep it under the cursor
-        const panAdjustX = contentX * (1 - scaleRatio);
-        const panAdjustY = contentY * (1 - scaleRatio);
+        // After scale change, that same content point would appear at:
+        // margin + contentX * newScale + newPanX = mouseX
+        // newPanX = mouseX - margin - contentX * newScale
+        const newPanX = mouseX - margin - contentX * newScale;
+        const newPanY = mouseY - margin - contentY * newScale;
         
-        setPanOffset((prevPan) => ({
-          x: prevPan.x + panAdjustX,
-          y: prevPan.y + panAdjustY,
-        }));
+        setPanOffset({ x: newPanX, y: newPanY });
         
         return newScale;
       });
