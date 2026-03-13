@@ -180,7 +180,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Snap state - values are percentages now
   const [snapLines, setSnapLines] = useState<{ x: number | null; y: number | null }>({ x: null, y: null });
-  const SNAP_THRESHOLD = 1; // percentage threshold for snapping (~1% of page)
+  const SNAP_THRESHOLD = 0.4; // percentage threshold for snapping (~0.4% of page)
 
   // Resize/drag state
   const [resizing, setResizing] = useState<{ blockId: string; corner: string } | null>(null);
