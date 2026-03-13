@@ -241,11 +241,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   }, []);
 
   // Wheel zoom (zoom-to-cursor) for both View and Edit modes
+  // PDF is re-rendered at zoom resolution so no CSS scale needed - only pan offset
   const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     if (!schematic) return;
     if (e.ctrlKey || e.metaKey) return;
 
     e.preventDefault();
+    e.stopPropagation();
 
     const delta = -e.deltaY;
     const zoomSpeed = 0.002;
@@ -259,15 +261,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const mouseY = e.clientY - rect.top;
 
     setScale((prevScale) => {
-      const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
+      const newScale = Math.max(0.5, Math.min(5, prevScale + zoomChange));
+      const scaleRatio = newScale / prevScale;
 
-      const margin = 24;
+      // Zoom toward cursor: adjust pan so the point under cursor stays in place
       const currentPan = panOffsetRef.current;
-      const contentX = (mouseX - currentPan.x - margin) / prevScale;
-      const contentY = (mouseY - currentPan.y - margin) / prevScale;
-
-      const newPanX = mouseX - margin - contentX * newScale;
-      const newPanY = mouseY - margin - contentY * newScale;
+      const newPanX = mouseX - scaleRatio * (mouseX - currentPan.x);
+      const newPanY = mouseY - scaleRatio * (mouseY - currentPan.y);
 
       setPanOffset({ x: newPanX, y: newPanY });
 
@@ -288,34 +288,50 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return availableWidth / originalPdfDimensions.width;
   }, [containerWidth, originalPdfDimensions]);
 
-  // Calculate the base page width (without zoom - zoom is handled via CSS transform)
+  // Calculate the page width at current zoom - PDF is re-rendered at zoom resolution for sharpness
   const calculatedPageWidth = useMemo(() => {
+    if (dimensionsLoaded && originalPdfDimensions.width > 0) {
+      return originalPdfDimensions.width * displayScale * scale;
+    }
+    if (containerWidth > 0) {
+      return (containerWidth - 32) * scale;
+    }
+    return 800 * scale;
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, scale]);
+
+  // Base page width (at scale=1) for container sizing
+  const basePageWidth = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.width > 0) {
       return originalPdfDimensions.width * displayScale;
     }
-    if (containerWidth > 0) {
-      return containerWidth - 32;
-    }
+    if (containerWidth > 0) return containerWidth - 32;
     return 800;
   }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth]);
 
-  // Calculate the base page height (without zoom)
+  // Calculate the page height at current zoom
   const calculatedPageHeight = useMemo(() => {
+    if (dimensionsLoaded && originalPdfDimensions.height > 0) {
+      return originalPdfDimensions.height * displayScale * scale;
+    }
+    return (MIN_CONTAINER_HEIGHT - 32) * scale;
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, scale]);
+
+  // Base page height (at scale=1) for container sizing
+  const basePageHeight = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.height > 0) {
       return originalPdfDimensions.height * displayScale;
     }
     return MIN_CONTAINER_HEIGHT - 32;
   }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
-  // Dynamic container height based on PDF aspect ratio - no max cap so full PDF is visible
+  // Dynamic container height based on base PDF size (not zoomed)
   const containerHeight = useMemo(() => {
-    if (dimensionsLoaded && calculatedPageHeight > 0) {
-      // Add padding for the content margin
-      const needed = calculatedPageHeight + 48;
+    if (dimensionsLoaded && basePageHeight > 0) {
+      const needed = basePageHeight + 48;
       return Math.max(MIN_CONTAINER_HEIGHT, needed);
     }
     return MIN_CONTAINER_HEIGHT;
-  }, [dimensionsLoaded, calculatedPageHeight]);
+  }, [dimensionsLoaded, basePageHeight]);
 
   // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
@@ -1570,11 +1586,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             className="relative"
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={{
-              // Pan via translate, zoom via CSS scale
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
-              transformOrigin: 'top left',
+              // Pan via translate only - PDF is re-rendered at zoom resolution for sharpness
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
               width: 'fit-content',
-              margin: '24px',
               position: 'relative',
               cursor: isPanning ? 'grabbing' : ((!isEditMode && scale > 1) || isShiftPressed ? 'grab' : 'default'),
             }}
