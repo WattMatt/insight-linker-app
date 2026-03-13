@@ -241,11 +241,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   }, []);
 
   // Wheel zoom (zoom-to-cursor) for both View and Edit modes
+  // PDF is re-rendered at zoom resolution so no CSS scale needed - only pan offset
   const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
     if (!schematic) return;
     if (e.ctrlKey || e.metaKey) return;
 
     e.preventDefault();
+    e.stopPropagation();
 
     const delta = -e.deltaY;
     const zoomSpeed = 0.002;
@@ -259,15 +261,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const mouseY = e.clientY - rect.top;
 
     setScale((prevScale) => {
-      const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
+      const newScale = Math.max(0.5, Math.min(5, prevScale + zoomChange));
+      const scaleRatio = newScale / prevScale;
 
-      const margin = 24;
+      // Zoom toward cursor: adjust pan so the point under cursor stays in place
       const currentPan = panOffsetRef.current;
-      const contentX = (mouseX - currentPan.x - margin) / prevScale;
-      const contentY = (mouseY - currentPan.y - margin) / prevScale;
-
-      const newPanX = mouseX - margin - contentX * newScale;
-      const newPanY = mouseY - margin - contentY * newScale;
+      const newPanX = mouseX - scaleRatio * (mouseX - currentPan.x);
+      const newPanY = mouseY - scaleRatio * (mouseY - currentPan.y);
 
       setPanOffset({ x: newPanX, y: newPanY });
 
