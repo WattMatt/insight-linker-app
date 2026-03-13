@@ -288,19 +288,36 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return availableWidth / originalPdfDimensions.width;
   }, [containerWidth, originalPdfDimensions]);
 
-  // Calculate the base page width (without zoom - zoom is handled via CSS transform)
+  // Calculate the page width at current zoom - PDF is re-rendered at zoom resolution for sharpness
   const calculatedPageWidth = useMemo(() => {
+    if (dimensionsLoaded && originalPdfDimensions.width > 0) {
+      return originalPdfDimensions.width * displayScale * scale;
+    }
+    if (containerWidth > 0) {
+      return (containerWidth - 32) * scale;
+    }
+    return 800 * scale;
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, scale]);
+
+  // Base page width (at scale=1) for container sizing
+  const basePageWidth = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.width > 0) {
       return originalPdfDimensions.width * displayScale;
     }
-    if (containerWidth > 0) {
-      return containerWidth - 32;
-    }
+    if (containerWidth > 0) return containerWidth - 32;
     return 800;
   }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth]);
 
-  // Calculate the base page height (without zoom)
+  // Calculate the page height at current zoom
   const calculatedPageHeight = useMemo(() => {
+    if (dimensionsLoaded && originalPdfDimensions.height > 0) {
+      return originalPdfDimensions.height * displayScale * scale;
+    }
+    return (MIN_CONTAINER_HEIGHT - 32) * scale;
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, scale]);
+
+  // Base page height (at scale=1) for container sizing
+  const basePageHeight = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.height > 0) {
       return originalPdfDimensions.height * displayScale;
     }
