@@ -919,9 +919,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           });
           setPreviewOpen(true);
         }}
-        onRevalidate={handleRevalidate}
-        revalidatingId={revalidatingId}
-        revalidationMode={revalidationMode}
         onValidationsChanged={fetchAllValidations}
         onReviewCoc={handleReviewCoc}
         reviewingDocId={reviewingDocId}
