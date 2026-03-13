@@ -1562,7 +1562,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             }
           }}
           onMouseLeave={handleMouseLeave}
-          onContextMenu={(e) => { if (isEditMode) e.preventDefault(); }}
+          onWheel={handleWheelZoom}
+          onContextMenu={(e) => e.preventDefault()}
         >
           <div 
             ref={contentRef}
