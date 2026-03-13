@@ -42,8 +42,6 @@ verify_jwt = false
 [functions.template-sync]
 verify_jwt = false
 
-[functions.bulk-validate-coc]
-verify_jwt = true
 
 [functions.abacus-code-review]
 verify_jwt = true

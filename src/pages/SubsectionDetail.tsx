@@ -27,17 +27,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { COCValidationReport } from "@/components/COCValidationReport";
 import { InlineViolationOverrides } from "@/components/compliance/InlineViolationOverrides";
 
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 import { COCReviewStatus } from "@/components/COCReviewStatus";
-import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
-import { COCPhotoCapture } from "@/components/compliance/COCPhotoCapture";
 
 interface SubsectionData {
   name: string;

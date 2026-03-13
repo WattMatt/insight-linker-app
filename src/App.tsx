@@ -369,14 +369,6 @@ const App = () => (
           <Route path="/admin-contractor-preview" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
           <Route path="/admin/contractor-access-simulator" element={<ProtectedRoute><DashboardLayout><PortalManagement /></DashboardLayout></ProtectedRoute>} />
           <Route
-            path="/coc-documentation"
-            element={<ProtectedRoute><DashboardLayout><COCDocumentation /></DashboardLayout></ProtectedRoute>}
-          />
-          <Route
-            path="/coc-validation"
-            element={<ProtectedRoute><DashboardLayout><COCValidation /></DashboardLayout></ProtectedRoute>}
-          />
-          <Route
             path="/development-skills"
             element={<ProtectedRoute><DashboardLayout><DevelopmentSkills /></DashboardLayout></ProtectedRoute>}
           />

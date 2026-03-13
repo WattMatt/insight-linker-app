@@ -329,9 +329,6 @@ const Settings = () => {
       </TabsContent>
 
 
-      <TabsContent value="coc-validation">
-        <COCValidationSettings />
-      </TabsContent>
 
       <TabsContent value="image-compression">
         <ImageCompressionManager />

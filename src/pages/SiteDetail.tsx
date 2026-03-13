@@ -669,7 +669,6 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="compliance" className="space-y-6">
-          <BulkCOCValidation siteId={siteId!} siteName={site.name} onComplete={fetchSiteData} />
           <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
         </TabsContent>
 
