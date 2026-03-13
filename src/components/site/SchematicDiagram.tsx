@@ -377,12 +377,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   }, [schematic?.id]);
 
-  // Pan handlers: Shift+drag / right-click drag in all modes, plus left-drag in View mode when zoomed
+  // Pan handlers: Shift+drag / right-click drag / middle-click in all modes, plus left-drag when zoomed
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    const canModifierPan = isShiftPressed || e.button === 2;
-    const canViewPan = !isEditMode && scale > 1 && e.button === 0;
+    const canModifierPan = isShiftPressed || e.button === 2 || e.button === 1;
+    // In both view and edit mode, allow left-click pan when zoomed (on empty area)
+    const canZoomPan = scale > 1 && e.button === 0 && !isAddingBlock && !isCalibrating;
 
-    if (canModifierPan || canViewPan) {
+    if (canModifierPan || canZoomPan) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
@@ -1547,9 +1548,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         
         <div 
           ref={containerRef}
-          className={`relative bg-muted/30 overflow-auto ${
+          className={`relative bg-muted/30 overflow-hidden ${
             isEditMode 
-              ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isShiftPressed || isPanning ? 'cursor-grabbing' : 'cursor-default'}`
+              ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : isShiftPressed || scale > 1 ? 'cursor-grab' : 'cursor-default'}`
               : `${isPanning ? 'cursor-grabbing' : scale > 1 ? 'cursor-grab' : 'cursor-default'}`
           }`}
           style={{ height: containerHeight }}
