@@ -24,6 +24,7 @@ import { downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import { renderAsync } from 'docx-preview';
+import { supabase } from '@/integrations/supabase/client';
 import 'react-pdf/dist/Page/AnnotationLayer.css';
 import 'react-pdf/dist/Page/TextLayer.css';
 
@@ -67,12 +68,57 @@ export function DocumentPreviewDialog({
   const [docxLoading, setDocxLoading] = useState(false);
   const [docxError, setDocxError] = useState<string | null>(null);
   const [docxReady, setDocxReady] = useState(false);
+  const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfLoading, setPdfLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const docxContainerRef = useRef<HTMLDivElement>(null);
 
   const isPdf = fileName.toLowerCase().endsWith('.pdf');
   const isImage = /\.(jpg|jpeg|png|gif|webp|bmp|svg)$/i.test(fileName);
   const isDocx = fileName.toLowerCase().endsWith('.docx');
+
+  // For Supabase storage PDFs, download via SDK to avoid CORS/encoding issues
+  useEffect(() => {
+    if (!open || !isPdf || !fileUrl) {
+      setPdfBlobUrl(null);
+      return;
+    }
+
+    // Check if it's a Supabase storage URL
+    const storageMatch = fileUrl.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)/);
+    if (!storageMatch) {
+      setPdfBlobUrl(null);
+      return;
+    }
+
+    const bucket = storageMatch[1];
+    const filePath = decodeURIComponent(storageMatch[2].split('?')[0]);
+
+    setPdfLoading(true);
+    console.log(`[DocPreview] Downloading PDF via SDK: ${bucket}/${filePath}`);
+
+    supabase.storage
+      .from(bucket)
+      .download(filePath)
+      .then(({ data, error }) => {
+        if (error || !data) {
+          console.error('[DocPreview] SDK download failed:', error?.message);
+          setPdfBlobUrl(null);
+        } else {
+          const url = URL.createObjectURL(data);
+          setPdfBlobUrl(url);
+          console.log(`[DocPreview] PDF blob created: ${(data.size / 1024).toFixed(1)}KB`);
+        }
+      })
+      .finally(() => setPdfLoading(false));
+
+    return () => {
+      setPdfBlobUrl(prev => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+    };
+  }, [open, isPdf, fileUrl]);
 
   // Calculate compliance stats
   const complianceStats = complianceChecks ? {
@@ -297,9 +343,20 @@ export function DocumentPreviewDialog({
 
   const renderContent = () => {
     if (isPdf) {
+      if (pdfLoading) {
+        return (
+          <div className="flex items-center justify-center h-64">
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" />
+            <span className="ml-2 text-muted-foreground">Loading PDF...</span>
+          </div>
+        );
+      }
+
+      const pdfSource = pdfBlobUrl || fileUrl;
+
       return (
         <Document
-          file={fileUrl}
+          file={pdfSource}
           onLoadSuccess={onDocumentLoadSuccess}
           loading={
             <div className="flex items-center justify-center h-64">
@@ -308,7 +365,7 @@ export function DocumentPreviewDialog({
           }
           error={
             <div className="flex flex-col items-center justify-center h-64 text-muted-foreground">
-              <p>Failed to load PDF</p>
+              <p>Failed to load PDF. The document may be inaccessible or corrupted.</p>
               <Button variant="outline" className="mt-2" onClick={() => window.open(fileUrl, '_blank')}>
                 Open in new tab
               </Button>
