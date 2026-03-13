@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { BulkCOCValidation } from "@/components/site/BulkCOCValidation";
+
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { 
   fetchFailedValidationsBySubsection, 
