@@ -123,8 +123,9 @@ interface InspectionTenantMatch {
   breakerImage?: string;
 }
 
-// Fixed container dimensions
-const CONTAINER_HEIGHT = 700;
+// Minimum container height; actual height adapts to PDF
+const MIN_CONTAINER_HEIGHT = 400;
+const MAX_CONTAINER_HEIGHT = 900;
 
 // Size presets
 const SIZE_PRESETS = {
@@ -261,23 +262,22 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       const mouseY = e.clientY - rect.top;
       
       setScale((prevScale) => {
-        const newScale = Math.max(0.5, Math.min(10, prevScale + zoomChange));
+        const newScale = Math.max(0.3, Math.min(10, prevScale + zoomChange));
         const scaleRatio = newScale / prevScale;
         
-        // Calculate how far the mouse is from the content origin (accounting for current pan and margin)
+        // With CSS scale transform, adjust pan so content under cursor stays put
         const margin = 24;
-        const contentX = mouseX - panOffset.x - margin;
-        const contentY = mouseY - panOffset.y - margin;
+        // The point under the cursor in content-space (accounting for pan + margin + scale)
+        const contentX = (mouseX - panOffset.x - margin) / prevScale;
+        const contentY = (mouseY - panOffset.y - margin) / prevScale;
         
-        // After zoom, content at mouse position will move by (scaleRatio - 1) * contentPosition
-        // We need to pan in the opposite direction to keep it under the cursor
-        const panAdjustX = contentX * (1 - scaleRatio);
-        const panAdjustY = contentY * (1 - scaleRatio);
+        // After scale change, that same content point would appear at:
+        // margin + contentX * newScale + newPanX = mouseX
+        // newPanX = mouseX - margin - contentX * newScale
+        const newPanX = mouseX - margin - contentX * newScale;
+        const newPanY = mouseY - margin - contentY * newScale;
         
-        setPanOffset((prevPan) => ({
-          x: prevPan.x + panAdjustX,
-          y: prevPan.y + panAdjustY,
-        }));
+        setPanOffset({ x: newPanX, y: newPanY });
         
         return newScale;
       });
@@ -287,53 +287,47 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return () => container.removeEventListener('wheel', handleWheel);
   }, [schematic, panOffset]);
 
-  // Calculate the display scale for blocks and PDF
-  // Pan and zoom now work in both modes
+  // Calculate the display scale to fit the PDF into the container
   const displayScale = useMemo(() => {
     if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
       return 1;
     }
     
-    const padding = 48; // Consistent padding for transform margin
+    const padding = 48;
     const availableWidth = containerWidth - padding;
-    const availableHeight = CONTAINER_HEIGHT - padding;
     
-    // Calculate scale needed to fit both dimensions
-    const scaleX = availableWidth / originalPdfDimensions.width;
-    const scaleY = availableHeight / originalPdfDimensions.height;
-    const fitScale = Math.min(scaleX, scaleY);
-    
-    // Always use fit scale for the base PDF rendering
-    // CSS transform handles the user's zoom
-    return fitScale;
+    // Fit to width only - let height be natural
+    return availableWidth / originalPdfDimensions.width;
   }, [containerWidth, originalPdfDimensions]);
 
-  // Calculate the target page width - include zoom scale for crisp rendering
+  // Calculate the base page width (without zoom - zoom is handled via CSS transform)
   const calculatedPageWidth = useMemo(() => {
-    // If we have dimensions, use calculated scale multiplied by zoom for crisp rendering
     if (dimensionsLoaded && originalPdfDimensions.width > 0) {
-      const baseWidth = originalPdfDimensions.width * displayScale;
-      // Render at zoomed resolution for crisp text in all modes
-      return baseWidth * scale;
+      return originalPdfDimensions.width * displayScale;
     }
-    // Fallback: use container width minus padding for initial render
     if (containerWidth > 0) {
       return containerWidth - 32;
     }
-    // Last resort: use a reasonable default
     return 800;
-  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth, scale]);
+  }, [originalPdfDimensions.width, displayScale, dimensionsLoaded, containerWidth]);
 
-  // Calculate the scaled height for the PDF container
+  // Calculate the base page height (without zoom)
   const calculatedPageHeight = useMemo(() => {
     if (dimensionsLoaded && originalPdfDimensions.height > 0) {
-      const baseHeight = originalPdfDimensions.height * displayScale;
-      // Render at zoomed resolution for crisp text in all modes
-      return baseHeight * scale;
+      return originalPdfDimensions.height * displayScale;
     }
-    // Fallback based on container height
-    return CONTAINER_HEIGHT - 32;
-  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded, scale]);
+    return MIN_CONTAINER_HEIGHT - 32;
+  }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
+
+  // Dynamic container height based on PDF aspect ratio
+  const containerHeight = useMemo(() => {
+    if (dimensionsLoaded && calculatedPageHeight > 0) {
+      // Add padding for the content margin
+      const needed = calculatedPageHeight + 48;
+      return Math.max(MIN_CONTAINER_HEIGHT, Math.min(MAX_CONTAINER_HEIGHT, needed));
+    }
+    return MIN_CONTAINER_HEIGHT;
+  }, [dimensionsLoaded, calculatedPageHeight]);
 
   // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
@@ -1553,7 +1547,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isShiftPressed || isPanning ? 'cursor-grabbing' : 'cursor-default'}`
               : 'cursor-default'
           }`}
-          style={{ height: CONTAINER_HEIGHT }}
+          style={{ height: containerHeight }}
           onMouseDown={(e) => {
             if (isCalibrating) {
               handleCalibrationMouseDown(e);
@@ -1586,8 +1580,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             className="relative"
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={{
-              // Pan and zoom work in both modes
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
+              // Pan via translate, zoom via CSS scale
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
               transformOrigin: 'top left',
               width: 'fit-content',
               margin: '24px',
