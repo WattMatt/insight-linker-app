@@ -275,12 +275,20 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     });
   }, [schematic]);
 
-  // Attach wheel listener as non-passive to allow preventDefault (stops page scroll)
+  // Attach wheel listener on window (capture + non-passive) so zoom still works
+  // even when nested PDF layers stop event bubbling.
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    container.addEventListener('wheel', handleWheelZoom, { passive: false });
-    return () => container.removeEventListener('wheel', handleWheelZoom);
+    const wheelOptions: AddEventListenerOptions = { passive: false, capture: true };
+
+    const handleWindowWheel = (e: WheelEvent) => {
+      const container = containerRef.current;
+      if (!container) return;
+      if (!(e.target instanceof Node) || !container.contains(e.target)) return;
+      handleWheelZoom(e);
+    };
+
+    window.addEventListener('wheel', handleWindowWheel, wheelOptions);
+    return () => window.removeEventListener('wheel', handleWindowWheel, wheelOptions);
   }, [handleWheelZoom]);
 
   // Calculate the display scale to fit the PDF into the container
@@ -1563,7 +1571,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : isShiftPressed || scale > 1 ? 'cursor-grab' : 'cursor-default'}`
               : `${isPanning ? 'cursor-grabbing' : scale > 1 ? 'cursor-grab' : 'cursor-default'}`
           }`}
-          style={{ height: containerHeight }}
+          style={{ height: containerHeight, overscrollBehavior: 'none' }}
           onMouseDown={(e) => {
             if (isCalibrating) {
               handleCalibrationMouseDown(e);
