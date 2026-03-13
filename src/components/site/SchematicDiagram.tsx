@@ -1535,7 +1535,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         
         <div 
           ref={containerRef}
-          className={`relative bg-muted/30 overflow-hidden ${
+          className={`relative bg-muted/30 overflow-auto ${
             isEditMode 
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isShiftPressed || isPanning ? 'cursor-grabbing' : 'cursor-default'}`
               : 'cursor-default'
