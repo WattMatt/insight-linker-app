@@ -361,11 +361,12 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   }, [schematic?.id]);
 
-  // Pan handlers (like FloorPlanViewer - shift+click or right-click)
-  // Works in both View and Edit modes for navigation
+  // Pan handlers: Shift+drag / right-click drag in all modes, plus left-drag in View mode when zoomed
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    // Shift + left click OR right click for panning (works in all modes)
-    if (isShiftPressed || e.button === 2) {
+    const canModifierPan = isShiftPressed || e.button === 2;
+    const canViewPan = !isEditMode && scale > 1 && e.button === 0;
+
+    if (canModifierPan || canViewPan) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
