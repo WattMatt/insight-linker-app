@@ -53,8 +53,6 @@ const Install = lazy(() => import("./pages/Install"));
 const PDFTemplateTestDashboard = lazy(() => import("./pages/PDFTemplateTestDashboard"));
 const OfflineSyncTest = lazy(() => import("./pages/OfflineSyncTest"));
 
-const COCDocumentation = lazy(() => import("./pages/COCDocumentation"));
-const COCValidation = lazy(() => import("./pages/COCValidation"));
 const DevelopmentSkills = lazy(() => import("./pages/DevelopmentSkills"));
 const MyProfile = lazy(() => import("./pages/MyProfile"));
 
