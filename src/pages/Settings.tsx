@@ -166,10 +166,6 @@ const Settings = () => {
             <Settings2 className="h-4 w-4" />
             General
           </TabsTrigger>
-          <TabsTrigger value="coc-validation" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            COC Validation
-          </TabsTrigger>
           <TabsTrigger value="image-compression" className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4" />
             Images
