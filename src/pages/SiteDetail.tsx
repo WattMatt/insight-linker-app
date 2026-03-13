@@ -25,7 +25,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { BulkCOCValidation } from "@/components/site/BulkCOCValidation";
+
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { 
   fetchFailedValidationsBySubsection, 
@@ -669,7 +669,6 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="compliance" className="space-y-6">
-          <BulkCOCValidation siteId={siteId!} siteName={site.name} onComplete={fetchSiteData} />
           <ComplianceDashboard siteId={siteId!} subsections={subsections} inspections={inspections} />
         </TabsContent>
 

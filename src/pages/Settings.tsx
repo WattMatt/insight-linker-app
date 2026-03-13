@@ -7,7 +7,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { Upload, Loader2, Link as LinkIcon, Settings2, Shield, Eye, UserCog, ImageIcon } from "lucide-react";
-import { COCValidationSettings } from "@/components/settings/COCValidationSettings";
+
 import { ImageCompressionManager } from "@/components/settings/ImageCompressionManager";
 import { AutoLogoutSettings } from "@/components/settings/AutoLogoutSettings";
 import PortalManagement from "./PortalManagement";
@@ -165,10 +165,6 @@ const Settings = () => {
           <TabsTrigger value="general" className="flex items-center gap-2">
             <Settings2 className="h-4 w-4" />
             General
-          </TabsTrigger>
-          <TabsTrigger value="coc-validation" className="flex items-center gap-2">
-            <Shield className="h-4 w-4" />
-            COC Validation
           </TabsTrigger>
           <TabsTrigger value="image-compression" className="flex items-center gap-2">
             <ImageIcon className="h-4 w-4" />
@@ -333,9 +329,6 @@ const Settings = () => {
       </TabsContent>
 
 
-      <TabsContent value="coc-validation">
-        <COCValidationSettings />
-      </TabsContent>
 
       <TabsContent value="image-compression">
         <ImageCompressionManager />

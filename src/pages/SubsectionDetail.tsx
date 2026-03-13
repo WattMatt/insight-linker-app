@@ -27,17 +27,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Calendar } from "@/components/ui/calendar";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
-import { COCValidationReport } from "@/components/COCValidationReport";
 import { InlineViolationOverrides } from "@/components/compliance/InlineViolationOverrides";
 
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { COCComplianceRulesReference } from "@/components/COCComplianceRulesReference";
 import { COCReviewStatus } from "@/components/COCReviewStatus";
-import { BulkCOCReportSave } from "@/components/BulkCOCReportSave";
-import { COCPhotoCapture } from "@/components/compliance/COCPhotoCapture";
 
 interface SubsectionData {
   name: string;
@@ -3135,10 +3131,6 @@ const SubsectionDetail = () => {
             </AlertDialogContent>
           </AlertDialog>
 
-          {/* COC Evidence Photos */}
-          {subsectionId && (
-            <COCPhotoCapture subsectionId={subsectionId} />
-          )}
         </TabsContent>
 
         {/* Floor Plan Tab */}
@@ -3154,8 +3146,6 @@ const SubsectionDetail = () => {
         {/* COC Docs & Metering Data Tab */}
         <TabsContent value="coc-metering" className="space-y-4">
           <div className="space-y-6">
-            {/* COC Compliance Rules Reference - At top for visibility */}
-            <COCComplianceRulesReference />
             
             {/* Certificates of Compliance */}
             <Card>
@@ -3165,14 +3155,6 @@ const SubsectionDetail = () => {
                     <CardTitle>Certificates of Compliance</CardTitle>
                     <p className="text-sm text-muted-foreground mt-1">Manage COC documents and their details.</p>
                   </div>
-                  <BulkCOCReportSave 
-                    siteId={siteId || ""}
-                    subsections={[{ id: subsectionId || "", name: subsection?.name || "" }]}
-                    onSaveComplete={() => {
-                      fetchDocumentCategories();
-                      fetchSupabaseDocuments();
-                    }}
-                  />
                 </div>
               </CardHeader>
               <CardContent className="space-y-6">
@@ -3713,10 +3695,6 @@ const SubsectionDetail = () => {
                 </Button>
               </CardContent>
             </Card>
-            {/* COC Evidence Photos in COC tab */}
-            {subsectionId && (
-              <COCPhotoCapture subsectionId={subsectionId} />
-            )}
           </div>
         </TabsContent>
       </Tabs>
@@ -3875,25 +3853,6 @@ const SubsectionDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Validation Report Dialog */}
-      <Dialog open={validationReportOpen} onOpenChange={setValidationReportOpen}>
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>COC Validation Report & Discussion</DialogTitle>
-          </DialogHeader>
-          {selectedValidation && (
-            <div className="flex-1 overflow-y-auto">
-              <COCValidationReport 
-                validation={{
-                  ...selectedValidation,
-                  subsection_id: subsectionId || ''
-                }} 
-                subsectionName={subsection?.name}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Subsection Confirmation Dialog */}
       <AlertDialog open={deleteSubsectionDialogOpen} onOpenChange={setDeleteSubsectionDialogOpen}>
