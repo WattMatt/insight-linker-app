@@ -119,8 +119,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [previewDoc, setPreviewDoc] = useState<ImportedValidationRecord['document']>(null);
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [revalidatingId, setRevalidatingId] = useState<string | null>(null);
-  const [revalidationMode, setRevalidationMode] = useState<'failed' | 'full' | null>(null);
 
   // Review COC state
   const [reviewingDocId, setReviewingDocId] = useState<string | null>(null);
