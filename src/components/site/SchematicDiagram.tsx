@@ -242,7 +242,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Wheel zoom (zoom-to-cursor) for both View and Edit modes
   // PDF is re-rendered at zoom resolution so no CSS scale needed - only pan offset
-  const handleWheelZoom = useCallback((e: React.WheelEvent<HTMLDivElement>) => {
+  const handleWheelZoom = useCallback((e: WheelEvent) => {
     if (!schematic) return;
     if (e.ctrlKey || e.metaKey) return;
 
@@ -274,6 +274,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       return newScale;
     });
   }, [schematic]);
+
+  // Attach wheel listener as non-passive to allow preventDefault (stops page scroll)
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+    container.addEventListener('wheel', handleWheelZoom, { passive: false });
+    return () => container.removeEventListener('wheel', handleWheelZoom);
+  }, [handleWheelZoom]);
 
   // Calculate the display scale to fit the PDF into the container
   const displayScale = useMemo(() => {
