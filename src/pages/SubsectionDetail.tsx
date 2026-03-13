@@ -3853,25 +3853,6 @@ const SubsectionDetail = () => {
         </DialogContent>
       </Dialog>
 
-      {/* Validation Report Dialog */}
-      <Dialog open={validationReportOpen} onOpenChange={setValidationReportOpen}>
-        <DialogContent className="max-w-7xl max-h-[90vh] overflow-hidden flex flex-col">
-          <DialogHeader>
-            <DialogTitle>COC Validation Report & Discussion</DialogTitle>
-          </DialogHeader>
-          {selectedValidation && (
-            <div className="flex-1 overflow-y-auto">
-              <COCValidationReport 
-                validation={{
-                  ...selectedValidation,
-                  subsection_id: subsectionId || ''
-                }} 
-                subsectionName={subsection?.name}
-              />
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
 
       {/* Delete Subsection Confirmation Dialog */}
       <AlertDialog open={deleteSubsectionDialogOpen} onOpenChange={setDeleteSubsectionDialogOpen}>
