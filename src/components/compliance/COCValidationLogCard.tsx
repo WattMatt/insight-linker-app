@@ -12,8 +12,6 @@ import {
   Clock,
   Eye,
   Target,
-  RefreshCw,
-  RotateCcw,
   Loader2,
   ShieldAlert,
   ShieldCheck,
@@ -59,9 +57,6 @@ export interface ValidationRecord {
 interface COCValidationLogCardProps {
   allValidations: ValidationRecord[];
   onPreview: (validation: ValidationRecord) => void;
-  onRevalidate: (validation: ValidationRecord, mode: 'failed' | 'full') => void;
-  revalidatingId: string | null;
-  revalidationMode: 'failed' | 'full' | null;
   onValidationsChanged?: () => void;
   /** Called when user clicks Review/Verify COC on a validation entry */
   onReviewCoc?: (validation: ValidationRecord) => void;
@@ -72,9 +67,6 @@ interface COCValidationLogCardProps {
 export function COCValidationLogCard({
   allValidations,
   onPreview,
-  onRevalidate,
-  revalidatingId,
-  revalidationMode,
   onValidationsChanged,
   onReviewCoc,
   reviewingDocId,
@@ -492,38 +484,6 @@ export function COCValidationLogCard({
                     </Button>
                   )}
 
-                  {isFailed && validation.document && (
-                    <>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="gap-1.5 text-amber-600 border-amber-600/30 hover:bg-amber-500/10"
-                        disabled={revalidatingId === validation.id}
-                        onClick={() => onRevalidate(validation, 'failed')}
-                      >
-                        {revalidatingId === validation.id && revalidationMode === 'failed' ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RotateCcw className="h-3.5 w-3.5" />
-                        )}
-                        Re-check Failed
-                      </Button>
-                      <Button
-                        variant="ghost"
-                        size="sm"
-                        className="gap-1.5 text-muted-foreground"
-                        disabled={revalidatingId === validation.id}
-                        onClick={() => onRevalidate(validation, 'full')}
-                      >
-                        {revalidatingId === validation.id && revalidationMode === 'full' ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-3.5 w-3.5" />
-                        )}
-                        Full Re-scan
-                      </Button>
-                    </>
-                  )}
                 </div>
               </div>
             </div>

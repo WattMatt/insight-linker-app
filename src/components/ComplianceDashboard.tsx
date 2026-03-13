@@ -119,8 +119,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [previewDoc, setPreviewDoc] = useState<ImportedValidationRecord['document']>(null);
   const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
-  const [revalidatingId, setRevalidatingId] = useState<string | null>(null);
-  const [revalidationMode, setRevalidationMode] = useState<'failed' | 'full' | null>(null);
 
   // Review COC state
   const [reviewingDocId, setReviewingDocId] = useState<string | null>(null);
@@ -208,56 +206,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     setFailedValidations(failedOnly);
   }, [subsections]);
 
-  const handleRevalidate = useCallback(async (validation: ValidationRecord, mode: 'failed' | 'full') => {
-    if (!validation.document) {
-      toast.error('No document associated with this validation');
-      return;
-    }
-
-    setRevalidatingId(validation.id);
-    setRevalidationMode(mode);
-
-    try {
-      const response = await supabase.functions.invoke('validate-coc', {
-        body: {
-          documentId: validation.document_id,
-          documentUrl: validation.document.file_url,
-          subsectionId: validation.subsection_id,
-          revalidateFailedOnly: mode === 'failed',
-        },
-      });
-
-      if (response.error) {
-        throw new Error(response.error.message);
-      }
-
-      const result = response.data;
-      const modeLabel = mode === 'failed' ? 'Re-validation (failed checks)' : 'Full re-scan';
-      
-      if (result.status === 'Pass') {
-        toast.success(`${modeLabel}: PASSED`, {
-          description: `${validation.subsection_name} now passes all checks.`,
-        });
-      } else if (result.status === 'Fail' || result.status === 'Failed') {
-        toast.error(`${modeLabel}: FAILED`, {
-          description: `${validation.subsection_name} still has ${result.violations?.length || 0} issue(s).`,
-        });
-      } else {
-        toast.info(`${modeLabel}: ${result.status}`, {
-          description: validation.subsection_name,
-        });
-      }
-
-      // Refresh validations
-      await fetchAllValidations();
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Unknown error';
-      toast.error('Re-validation failed', { description: msg });
-    } finally {
-      setRevalidatingId(null);
-      setRevalidationMode(null);
-    }
-  }, [fetchAllValidations]);
 
   // Handle Review COC - extract COC data for a validation's document
   const handleReviewCoc = useCallback(async (validation: ValidationRecord) => {
@@ -971,9 +919,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           });
           setPreviewOpen(true);
         }}
-        onRevalidate={handleRevalidate}
-        revalidatingId={revalidatingId}
-        revalidationMode={revalidationMode}
         onValidationsChanged={fetchAllValidations}
         onReviewCoc={handleReviewCoc}
         reviewingDocId={reviewingDocId}
