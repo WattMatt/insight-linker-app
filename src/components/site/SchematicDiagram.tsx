@@ -1586,11 +1586,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             className="relative"
             onClick={isEditMode && !isCalibrating ? handleSchematicClick : undefined}
             style={{
-              // Pan via translate, zoom via CSS scale
-              transform: `translate(${panOffset.x}px, ${panOffset.y}px) scale(${scale})`,
-              transformOrigin: 'top left',
+              // Pan via translate only - PDF is re-rendered at zoom resolution for sharpness
+              transform: `translate(${panOffset.x}px, ${panOffset.y}px)`,
               width: 'fit-content',
-              margin: '24px',
               position: 'relative',
               cursor: isPanning ? 'grabbing' : ((!isEditMode && scale > 1) || isShiftPressed ? 'grab' : 'default'),
             }}
