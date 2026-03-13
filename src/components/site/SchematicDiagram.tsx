@@ -123,8 +123,9 @@ interface InspectionTenantMatch {
   breakerImage?: string;
 }
 
-// Fixed container dimensions
-const CONTAINER_HEIGHT = 700;
+// Minimum container height; actual height adapts to PDF
+const MIN_CONTAINER_HEIGHT = 400;
+const MAX_CONTAINER_HEIGHT = 900;
 
 // Size presets
 const SIZE_PRESETS = {
