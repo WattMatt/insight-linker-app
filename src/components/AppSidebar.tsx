@@ -16,12 +16,10 @@ import {
   AlertCircle,
   QrCode,
   Lightbulb,
-  Shield,
   FileCode,
   Sparkles,
   BookOpen,
   Smartphone,
-  FlaskConical,
 } from "lucide-react";
 import { NavLink, useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
