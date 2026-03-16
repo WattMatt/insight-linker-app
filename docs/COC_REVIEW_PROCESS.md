@@ -7,25 +7,95 @@
 
 ## 📐 System Architecture
 
+### Visual Process Flow
+
+```mermaid
+flowchart TD
+    subgraph S1["Stage 1: Upload and Storage"]
+        A1[User uploads COC PDF/image] --> A2[Store in Supabase Storage]
+        A2 --> A3[Create subsection_documents record]
+    end
+
+    subgraph S2["Stage 2: AI Extraction"]
+        B1[Pass 1 - Page-specific prompts] --> B2[Page 1: Certificate and Admin data]
+        B1 --> B3[Page 2: Test Report and Readings]
+        B2 --> B4[Merge extracted fields]
+        B3 --> B4
+        B4 --> B5{Missing fields?}
+        B5 -- Yes --> B6[Pass 2 - Targeted re-extraction]
+        B6 --> B4
+        B5 -- No --> B7[Cache in coc_extractions table]
+    end
+
+    subgraph S3["Stage 3: Human-in-the-Loop Review"]
+        C1[PDF Preview + Extracted Fields side-by-side] --> C2{User reviews data}
+        C2 -- Corrections needed --> C3[Edit extracted values]
+        C3 --> C2
+        C2 -- Re-extract needed --> C4[Trigger re-extraction]
+        C4 --> C1
+        C2 -- Approved --> C5[Submit for validation]
+    end
+
+    subgraph S4["Stage 4: Deterministic Validation Engine"]
+        D0[AI prompt extracts structured checks] --> D1
+
+        subgraph Admin["Administrative Checks"]
+            D1[COC-TYPE-001: Checkbox marked?]
+            D2[COC-SUPP/TEMP-001: Hierarchy valid?]
+            D3[REG-001: Issuer competency match?]
+            D4[CERT-DATE-001: Not future-dated?]
+            D5[SIG-001: Signature present?]
+        end
+
+        subgraph Safety["Safety-Critical Empirical Tests"]
+            D6["EARTH-001: Resistance <= 5.0 Ohm"]
+            D7["INSUL-001: Resistance >= 0.25 MOhm"]
+            D8["RCD-001: Trip times within limits"]
+            D9["LOOP-001: Zs vs MCB lookup table"]
+            D10["PSCC-001: Fault current less than breaker capacity"]
+        end
+
+        D1 --> D11{Overall Status}
+        D2 --> D11
+        D3 --> D11
+        D4 --> D11
+        D5 --> D11
+        D6 --> D11
+        D7 --> D11
+        D8 --> D11
+        D9 --> D11
+        D10 --> D11
+
+        D11 -- All pass --> D12[Status: PASS]
+        D11 -- Any safety-critical fail --> D13[Status: FAIL]
+        D11 -- Over 30 percent missing data --> D14[Status: INCOMPLETE]
+    end
+
+    subgraph S5["Stage 5: Database Sync"]
+        E1[Insert coc_validations record] --> E2[Update subsection_documents coc_status]
+        E2 --> E3[Update subsections coc_status]
+        E3 --> E4[Trigger: trg_sync_coc_compliance]
+        E4 --> E5[Calculate is_compliant flag]
+    end
+
+    subgraph S6["Stage 6: Post-Validation"]
+        F1[Compliance Dashboard - rates and trends]
+        F2[Violation Overrides - admin audit trail]
+        F3[Validation History Log]
+        F4[complianceCalculations.ts - single source of truth]
+    end
+
+    S1 --> S2
+    S2 --> S3
+    S3 --> S4
+    S4 --> S5
+    S5 --> S6
 ```
-┌─────────────────────────────────────────────────────────────────────┐
-│                    COC REVIEW PIPELINE (6 Stages)                   │
-├─────────────────────────────────────────────────────────────────────┤
-│                                                                     │
-│  ┌──────────┐   ┌──────────────┐   ┌──────────────┐                │
-│  │ Stage 1  │──▶│   Stage 2    │──▶│   Stage 3    │                │
-│  │ Upload & │   │ AI Extraction│   │  Human-in-   │                │
-│  │ Storage  │   │ (Gemini)     │   │  the-Loop    │                │
-│  └──────────┘   └──────────────┘   └──────┬───────┘                │
-│                                           │                         │
-│  ┌──────────┐   ┌──────────────┐   ┌──────▼───────┐                │
-│  │ Stage 6  │◀──│   Stage 5    │◀──│   Stage 4    │                │
-│  │ Post-    │   │  Database    │   │ Deterministic│                │
-│  │ Validation│   │  Sync        │   │ Validation   │                │
-│  └──────────┘   └──────────────┘   └──────────────┘                │
-│                                                                     │
-│  Key Principle: AI EXTRACTS → Human REVIEWS → Server DECIDES        │
-└─────────────────────────────────────────────────────────────────────┘
+
+### Architecture Summary
+
+```
+Key Principle: AI EXTRACTS --> Human REVIEWS --> Server DECIDES
 ```
 
 ### Technology Stack
