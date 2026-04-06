@@ -1,63 +1,40 @@
 
 
-# Fix Image Loading Between Tabs -- Simplify RLS Policies
+# Fix Download Buttons Not Working
 
 ## Problem
-Images and data fail to load when navigating between tabs on the Site Detail page. The console shows the `useUserRole` query returning `undefined`, which cascades into role-based RLS checks failing. Since all storage buckets are already public, the bottleneck is **table-level RLS** on supporting tables that resolve image references.
-
-## Root Cause
-Several tables use role-specific RLS policies (checking `has_role()`) instead of simple authenticated-user checks. When the role query momentarily returns `undefined` or encounters a race condition, all downstream queries that depend on role-based policies silently return empty results -- causing broken images and missing data.
+Download buttons fail silently because `downloadFile()` uses `fetch()` to download from Supabase storage URLs, which can fail due to CORS restrictions. The fallback opens a new tab instead of downloading. Meanwhile, the DocumentPreviewDialog already successfully loads PDFs via the Supabase SDK `download()` method for preview -- but its download button ignores that and re-fetches via `fetch()`.
 
 ## Plan
 
-### Step 1: Fix the `useUserRole` undefined return (code fix)
-The console error `Query data cannot be undefined` indicates the query function can return `undefined` when `data?.role` is null. Change the return to explicitly return `null` instead of casting `undefined`.
+### Step 1: Update `fileDownload.ts` to support Supabase storage URLs
+Modify the `downloadFile` function to detect Supabase storage URLs and use the Supabase SDK `download()` method instead of raw `fetch()`. This mirrors the pattern already working in `DocumentPreviewDialog` for PDF rendering.
 
-**File:** `src/hooks/useUserRole.tsx`
-- Line 46: Change `return data?.role as UserRole` to `return (data?.role as UserRole) ?? null`
+**File:** `src/lib/fileDownload.ts`
+- Import `supabase` client
+- Parse the URL to extract bucket name and file path when it matches the Supabase storage URL pattern
+- Use `supabase.storage.from(bucket).download(path)` for Supabase URLs
+- Keep the existing `fetch()` path as fallback for non-Supabase URLs (blob URLs, external URLs)
 
-### Step 2: Simplify RLS on image-related tables (single migration)
-Replace role-specific policies with a single "all authenticated users" policy on the tables that serve images and cross-tab data. This matches the pattern already used on `inspections` (public SELECT), `subsections`, `sites`, and `clients`.
+### Step 2: Use blob URL in DocumentPreviewDialog when available
+In the preview dialog, the download button should use `pdfBlobUrl` (already fetched via SDK) when available, avoiding a redundant network request.
 
-**Tables to update (one migration):**
+**File:** `src/components/DocumentPreviewDialog.tsx`
+- Line 550: Change `downloadFile(fileUrl, fileName)` to use `pdfBlobUrl || fileUrl`
 
-| Table | Current | Change |
-|---|---|---|
-| `coc_compliance_photos` | 4 role-specific policies | Replace with 1 "All authenticated full access" |
-| `offline_photos` | 4 role-specific policies | Replace with 1 "All authenticated full access" |
-| `floor_plan_pins` | 5 role-specific policies | Replace with 1 "All authenticated full access" + keep public SELECT |
-| `document_categories` | 5 role-specific policies | Replace with 1 "All authenticated full access" + keep public SELECT |
-| `inspection_items` | 3 role-specific policies | Replace with 1 "All authenticated full access" |
-| `inspection_signatures` | 4 policies | Replace with 1 "All authenticated full access" |
-| `floor_plan_pin_comments` | 4 policies | Replace with 1 "All authenticated full access" |
+## Technical Details
 
-**SQL pattern for each table:**
-```sql
--- Drop existing role-specific policies
-DROP POLICY IF EXISTS "policy_name" ON table_name;
--- ... drop all existing
+The Supabase storage URL pattern is:
+`https://{ref}.supabase.co/storage/v1/object/public/{bucket}/{path}`
 
--- Add unified policy
-CREATE POLICY "All authenticated users full access"
-ON public.table_name FOR ALL
-TO authenticated
-USING (true)
-WITH CHECK (true);
-
--- Keep public SELECT where it already exists
-CREATE POLICY "Public can view table_name"
-ON public.table_name FOR SELECT
-TO public
-USING (true);
+The SDK call that already works for preview:
+```ts
+const { data, error } = await supabase.storage.from(bucket).download(filePath);
 ```
 
-### Step 3: Verify storage bucket policies
-All 9 storage buckets are already marked `Is Public: Yes`, so no storage-level changes are needed. Images served via public URLs will continue to work.
-
-## Security Note
-This change means any authenticated user (Admin, User, Contractor, Client) can read/write all records in these tables. This is acceptable per the user's request and matches the existing pattern on `inspections`, `subsections`, `sites`, `clients`, `coc_validations`, `calendar_events`, and `inspection_subsections` which already use this same broad policy.
+This fix applies to all download buttons across the app since they all funnel through `downloadFile()` or the `DocumentPreviewDialog`.
 
 ## Files Changed
-1. `src/hooks/useUserRole.tsx` -- Fix undefined return value
-2. One SQL migration -- Simplify RLS on 7 tables
+1. `src/lib/fileDownload.ts` -- Add Supabase SDK download path
+2. `src/components/DocumentPreviewDialog.tsx` -- Use cached blob URL for download
 
