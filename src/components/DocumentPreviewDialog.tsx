@@ -549,8 +549,25 @@ export function DocumentPreviewDialog({
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Button variant="ghost" size="icon" onClick={() => downloadBlobData ? downloadBlob(downloadBlobData, fileName) : downloadFile(pdfBlobUrl || fileUrl, fileName)} title="Download">
-                <Download className="h-4 w-4" />
+              <Button variant="ghost" size="icon" asChild title="Download">
+                <a
+                  href={(() => {
+                    const url = pdfBlobUrl || fileUrl;
+                    if (!url) return '';
+                    if (url.startsWith('blob:') || url.startsWith('data:')) return url;
+
+                    try {
+                      const downloadUrl = new URL(url, window.location.origin);
+                      downloadUrl.searchParams.set('download', fileName);
+                      return downloadUrl.toString();
+                    } catch {
+                      return url;
+                    }
+                  })()}
+                  download={fileName}
+                >
+                  <Download className="h-4 w-4" />
+                </a>
               </Button>
               {onSaveToDocuments && (
                 <Button 
