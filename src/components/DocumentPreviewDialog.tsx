@@ -36,6 +36,7 @@ interface DocumentPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   fileUrl: string;
   fileName: string;
+  downloadBlobData?: Blob;
   // New props for save functionality
   onSaveToDocuments?: () => Promise<void>;
   saveLocation?: 'site' | 'subsection';
