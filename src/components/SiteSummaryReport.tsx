@@ -798,6 +798,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
         onOpenChange={(open) => !open && handleClosePreview()}
         fileUrl={previewData?.url || ""}
         fileName={previewData?.filename || ""}
+        downloadBlobData={previewData?.blob}
         onSaveToDocuments={handleSaveToDocuments}
         saveLocation="site"
         contextName={siteName}

@@ -20,7 +20,7 @@ import {
   Shield,
   FileText
 } from 'lucide-react';
-import { downloadFile } from '@/lib/fileDownload';
+import { downloadBlob, downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import { renderAsync } from 'docx-preview';
@@ -36,6 +36,7 @@ interface DocumentPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   fileUrl: string;
   fileName: string;
+  downloadBlobData?: Blob;
   // New props for save functionality
   onSaveToDocuments?: () => Promise<void>;
   saveLocation?: 'site' | 'subsection';
@@ -50,6 +51,7 @@ export function DocumentPreviewDialog({
   onOpenChange,
   fileUrl,
   fileName,
+  downloadBlobData,
   onSaveToDocuments,
   saveLocation,
   contextName,
@@ -547,7 +549,7 @@ export function DocumentPreviewDialog({
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Button variant="ghost" size="icon" onClick={() => downloadFile(pdfBlobUrl || fileUrl, fileName)} title="Download">
+              <Button variant="ghost" size="icon" onClick={() => downloadBlobData ? downloadBlob(downloadBlobData, fileName) : downloadFile(pdfBlobUrl || fileUrl, fileName)} title="Download">
                 <Download className="h-4 w-4" />
               </Button>
               {onSaveToDocuments && (
