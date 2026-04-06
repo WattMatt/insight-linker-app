@@ -138,12 +138,15 @@ function triggerBrowserDownload(blob: Blob, fileName: string): void {
   }, 2000);
 }
 
-function triggerDirectUrlDownload(url: string, fileName: string): void {
+export function getDirectDownloadUrl(url: string, fileName: string): string {
   const downloadUrl = new URL(url, window.location.origin);
   downloadUrl.searchParams.set('download', fileName);
+  return downloadUrl.toString();
+}
 
+function triggerDirectUrlDownload(url: string, fileName: string): void {
   const link = document.createElement('a');
-  link.href = downloadUrl.toString();
+  link.href = getDirectDownloadUrl(url, fileName);
   link.target = '_blank';
   link.rel = 'noopener noreferrer';
   link.style.display = 'none';
