@@ -1,8 +1,8 @@
 import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 /**
  * Extract bucket and path from a Supabase storage URL.
- * Returns null if the URL doesn't match the pattern.
  */
 function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
   const match = url.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)/);
@@ -18,10 +18,11 @@ function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } 
  * Uses Supabase SDK for storage URLs to avoid CORS issues.
  */
 export async function downloadFile(url: string, fileName: string): Promise<void> {
+  const toastId = toast.loading(`Downloading ${fileName}...`);
   try {
-    // If it's already a blob URL, fetch directly
     if (url.startsWith('blob:')) {
       triggerDownload(url, fileName);
+      toast.success(`Downloaded ${fileName}`, { id: toastId });
       return;
     }
 
@@ -41,8 +42,10 @@ export async function downloadFile(url: string, fileName: string): Promise<void>
     const blobUrl = URL.createObjectURL(blob);
     triggerDownload(blobUrl, fileName);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
+    toast.success(`Downloaded ${fileName}`, { id: toastId });
   } catch (error) {
     console.error('Download failed:', error);
+    toast.error(`Download failed — opening in new tab`, { id: toastId });
     window.open(url, '_blank');
   }
 }
