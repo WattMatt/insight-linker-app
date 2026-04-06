@@ -51,6 +51,7 @@ export function DocumentPreviewDialog({
   onOpenChange,
   fileUrl,
   fileName,
+  downloadBlobData,
   onSaveToDocuments,
   saveLocation,
   contextName,
