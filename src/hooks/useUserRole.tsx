@@ -43,7 +43,7 @@ export const useUserRole = () => {
         .maybeSingle();
 
       if (error) throw error;
-      return data?.role as UserRole;
+      return (data?.role as UserRole) ?? null;
     },
     enabled: !!userId,
     staleTime: 1000 * 60 * 5,
