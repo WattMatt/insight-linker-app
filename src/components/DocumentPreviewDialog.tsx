@@ -20,7 +20,7 @@ import {
   Shield,
   FileText
 } from 'lucide-react';
-import { downloadFile } from '@/lib/fileDownload';
+import { downloadBlob, downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import { renderAsync } from 'docx-preview';
