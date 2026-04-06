@@ -1,29 +1,57 @@
+import { supabase } from '@/integrations/supabase/client';
+
 /**
- * Force download a file from a URL
- * Fetches the file and triggers a download via blob URL
+ * Extract bucket and path from a Supabase storage URL.
+ * Returns null if the URL doesn't match the pattern.
+ */
+function parseSupabaseStorageUrl(url: string): { bucket: string; path: string } | null {
+  const match = url.match(/\/storage\/v1\/object\/(?:public|sign|authenticated)\/([^/]+)\/(.+)/);
+  if (!match) return null;
+  return {
+    bucket: match[1],
+    path: decodeURIComponent(match[2].split('?')[0]),
+  };
+}
+
+/**
+ * Force download a file from a URL.
+ * Uses Supabase SDK for storage URLs to avoid CORS issues.
  */
 export async function downloadFile(url: string, fileName: string): Promise<void> {
   try {
-    const response = await fetch(url);
-    if (!response.ok) {
-      throw new Error('Failed to fetch file');
+    // If it's already a blob URL, fetch directly
+    if (url.startsWith('blob:')) {
+      triggerDownload(url, fileName);
+      return;
     }
-    
-    const blob = await response.blob();
+
+    const parsed = parseSupabaseStorageUrl(url);
+
+    let blob: Blob;
+    if (parsed) {
+      const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
+      if (error || !data) throw new Error(error?.message || 'SDK download failed');
+      blob = data;
+    } else {
+      const response = await fetch(url);
+      if (!response.ok) throw new Error('Failed to fetch file');
+      blob = await response.blob();
+    }
+
     const blobUrl = URL.createObjectURL(blob);
-    
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    
-    // Clean up blob URL after a short delay
+    triggerDownload(blobUrl, fileName);
     setTimeout(() => URL.revokeObjectURL(blobUrl), 100);
   } catch (error) {
     console.error('Download failed:', error);
-    // Fallback: open in new tab if fetch fails (e.g., CORS issues)
     window.open(url, '_blank');
   }
+}
+
+function triggerDownload(blobUrl: string, fileName: string) {
+  const link = document.createElement('a');
+  link.href = blobUrl;
+  link.download = fileName;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
 }
