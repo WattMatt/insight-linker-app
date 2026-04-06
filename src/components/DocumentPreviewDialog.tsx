@@ -549,7 +549,7 @@ export function DocumentPreviewDialog({
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Button variant="ghost" size="icon" onClick={() => downloadFile(pdfBlobUrl || fileUrl, fileName)} title="Download">
+              <Button variant="ghost" size="icon" onClick={() => downloadBlobData ? downloadBlob(downloadBlobData, fileName) : downloadFile(pdfBlobUrl || fileUrl, fileName)} title="Download">
                 <Download className="h-4 w-4" />
               </Button>
               {onSaveToDocuments && (

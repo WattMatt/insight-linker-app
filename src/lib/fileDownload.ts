@@ -2,11 +2,10 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 type StorageAccessType = 'public' | 'sign' | 'authenticated';
-type ToastId = string | number;
 
 interface SaveFilePickerAcceptType {
-  accept: Record<string, string[]>;
   description: string;
+  accept: Record<string, string[]>;
 }
 
 interface SaveFilePickerOptionsLike {
@@ -28,17 +27,11 @@ interface DownloadCapableWindow extends Window {
   showSaveFilePicker?: (options?: SaveFilePickerOptionsLike) => Promise<FileSystemFileHandleLike>;
 }
 
-/**
- * Extract storage access type, bucket and path from a Supabase storage URL.
- */
 function parseSupabaseStorageUrl(
   url: string,
 ): { accessType: StorageAccessType; bucket: string; path: string } | null {
   const match = url.match(/\/storage\/v1\/object\/(public|sign|authenticated)\/([^/]+)\/(.+)/);
-
-  if (!match) {
-    return null;
-  }
+  if (!match) return null;
 
   return {
     accessType: match[1] as StorageAccessType,
@@ -48,14 +41,12 @@ function parseSupabaseStorageUrl(
 }
 
 function getFileExtension(fileName: string): string {
-  const lastSegment = fileName.split('.').pop();
-  return lastSegment ? lastSegment.toLowerCase() : '';
+  const extension = fileName.split('.').pop();
+  return extension ? extension.toLowerCase() : '';
 }
 
 function getMimeType(fileName: string): string {
-  const extension = getFileExtension(fileName);
-
-  switch (extension) {
+  switch (getFileExtension(fileName)) {
     case 'pdf':
       return 'application/pdf';
     case 'docx':
@@ -114,16 +105,13 @@ async function resolveDownloadBlob(url: string): Promise<Blob> {
 
   if (parsed) {
     const { data, error } = await supabase.storage.from(parsed.bucket).download(parsed.path);
-
     if (error || !data) {
       throw new Error(error?.message || 'Failed to download file from storage');
     }
-
     return data;
   }
 
   const response = await fetch(url);
-
   if (!response.ok) {
     throw new Error('Failed to fetch file');
   }
@@ -150,6 +138,30 @@ function triggerBrowserDownload(blob: Blob, fileName: string): void {
   }, 2000);
 }
 
+function triggerDirectUrlDownload(url: string, fileName: string): void {
+  const downloadUrl = new URL(url, window.location.origin);
+  downloadUrl.searchParams.set('download', fileName);
+
+  const link = document.createElement('a');
+  link.href = downloadUrl.toString();
+  link.target = '_blank';
+  link.rel = 'noopener noreferrer';
+  link.style.display = 'none';
+
+  document.body.appendChild(link);
+  link.click();
+
+  window.setTimeout(() => {
+    if (link.parentNode) {
+      link.parentNode.removeChild(link);
+    }
+  }, 250);
+}
+
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException && error.name === 'AbortError';
+}
+
 async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean> {
   const downloadWindow = window as DownloadCapableWindow;
 
@@ -166,26 +178,10 @@ async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean
   return true;
 }
 
-function isAbortError(error: unknown): boolean {
-  return error instanceof DOMException && error.name === 'AbortError';
-}
-
-function openDirectDownloadUrl(url: string, fileName: string): void {
-  const separator = url.includes('?') ? '&' : '?';
-  window.location.assign(`${url}${separator}download=${encodeURIComponent(fileName)}`);
-}
-
-/**
- * Download a file and save it locally.
- * Prefers the File System Access API so downloads work reliably inside sandboxed previews.
- */
-export async function downloadFile(url: string, fileName: string): Promise<void> {
-  let toastId: ToastId | undefined;
+export async function downloadBlob(blob: Blob, fileName: string): Promise<void> {
+  const toastId = toast.loading(`Saving ${fileName}...`);
 
   try {
-    const blob = await resolveDownloadBlob(url);
-    toastId = toast.loading(`Saving ${fileName}...`);
-
     const savedWithPicker = await saveBlobWithPicker(fileName, blob);
 
     if (savedWithPicker) {
@@ -197,22 +193,53 @@ export async function downloadFile(url: string, fileName: string): Promise<void>
     toast.success(`Download started for ${fileName}`, { id: toastId });
   } catch (error) {
     if (isAbortError(error)) {
-      if (toastId !== undefined) {
-        toast.dismiss(toastId);
-      }
+      toast.dismiss(toastId);
       return;
     }
 
     console.error('Download failed:', error);
+    toast.error(`Failed to save ${fileName}`, { id: toastId });
+  }
+}
 
-    const parsed = parseSupabaseStorageUrl(url);
-    if (parsed?.accessType === 'public') {
-      openDirectDownloadUrl(url, fileName);
+export async function downloadFile(url: string, fileName: string): Promise<void> {
+  const toastId = toast.loading(`Preparing ${fileName}...`);
+  const parsed = parseSupabaseStorageUrl(url);
+  const downloadWindow = window as DownloadCapableWindow;
+
+  try {
+    if (downloadWindow.showSaveFilePicker) {
+      try {
+        const fileHandle = await downloadWindow.showSaveFilePicker(buildSavePickerOptions(fileName));
+        const writable = await fileHandle.createWritable();
+        const blob = await resolveDownloadBlob(url);
+
+        await writable.write(blob);
+        await writable.close();
+
+        toast.success(`Saved ${fileName}`, { id: toastId });
+        return;
+      } catch (error) {
+        if (isAbortError(error)) {
+          toast.dismiss(toastId);
+          return;
+        }
+
+        console.error('Save picker failed:', error);
+      }
+    }
+
+    if (parsed && parsed.accessType !== 'authenticated') {
+      triggerDirectUrlDownload(url, fileName);
+      toast.success(`Download started for ${fileName}`, { id: toastId });
       return;
     }
 
-    toast.error(`Failed to download ${fileName}`, {
-      id: toastId,
-    });
+    const blob = await resolveDownloadBlob(url);
+    triggerBrowserDownload(blob, fileName);
+    toast.success(`Download started for ${fileName}`, { id: toastId });
+  } catch (error) {
+    console.error('Download failed:', error);
+    toast.error(`Failed to download ${fileName}`, { id: toastId });
   }
 }
