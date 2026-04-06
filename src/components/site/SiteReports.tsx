@@ -10,7 +10,7 @@ import { BulkInspectionReportGenerator } from "@/components/site/BulkInspectionR
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
 import { supabase } from "@/integrations/supabase/client";
-import { downloadFile, getDirectDownloadUrl } from "@/lib/fileDownload";
+import { getDirectDownloadUrl } from "@/lib/fileDownload";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
