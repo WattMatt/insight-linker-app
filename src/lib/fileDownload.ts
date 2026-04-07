@@ -1,4 +1,5 @@
 import { supabase } from '@/integrations/supabase/client';
+import { openDownloadHandoffWindow } from '@/lib/downloadHandoff';
 import { toast } from 'sonner';
 
 type StorageAccessType = 'public' | 'sign' | 'authenticated';
@@ -194,18 +195,36 @@ async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean
  *  3. window.open(blobUrl) – last resort for sandboxed environments
  */
 export async function downloadBlob(blob: Blob, fileName: string): Promise<void> {
-  const toastId = toast.loading(`Saving ${fileName}...`);
+  const toastId = toast.loading(`Preparing ${fileName}...`);
+  const downloadWindow = window as DownloadCapableWindow;
 
   try {
-    const savedWithPicker = await saveBlobWithPicker(fileName, blob);
+    if (downloadWindow.showSaveFilePicker) {
+      try {
+        const savedWithPicker = await saveBlobWithPicker(fileName, blob);
 
-    if (savedWithPicker) {
-      toast.success(`Saved ${fileName}`, { id: toastId });
+        if (savedWithPicker) {
+          toast.success(`Saved ${fileName}`, { id: toastId });
+          return;
+        }
+      } catch (error) {
+        if (isAbortError(error)) {
+          toast.dismiss(toastId);
+          return;
+        }
+
+        console.warn('[fileDownload] Save picker unavailable in this context, using top-level handoff', error);
+      }
+    }
+
+    const handedOffToTopLevel = await openDownloadHandoffWindow({ blob, fileName });
+    if (handedOffToTopLevel) {
+      toast.success(`Opened download tab – ${fileName}`, { id: toastId });
       return;
     }
 
     triggerBrowserDownload(blob, fileName);
-    toast.success(`Download started – ${fileName}`, { id: toastId });
+    toast(`Check your browser download prompt for ${fileName}`, { id: toastId });
   } catch (error) {
     if (isAbortError(error)) {
       toast.dismiss(toastId);
@@ -225,6 +244,12 @@ export async function downloadFile(url: string, fileName: string): Promise<void>
   const toastId = toast.loading(`Preparing ${fileName}...`);
 
   try {
+    const handedOffToTopLevel = await openDownloadHandoffWindow({ url, fileName });
+    if (handedOffToTopLevel) {
+      toast.success(`Opened download tab – ${fileName}`, { id: toastId });
+      return;
+    }
+
     const blob = await resolveDownloadBlob(url);
     toast.dismiss(toastId);
     await downloadBlob(blob, fileName);
