@@ -238,6 +238,7 @@ export const TemplateBasedReport = ({
       if (result.success && result.previewUrl) {
         setPreviewUrl(result.previewUrl);
         setPreviewFileName(`${subsectionName}_${selectedTemplate.name}_Report.pdf`);
+        setPreviewBlob(result.blob);
         setPreviewOpen(true);
       } else {
         toast.error(result.error || "Failed to generate report");
