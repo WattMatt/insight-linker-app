@@ -13,7 +13,7 @@ import {
   InspectionReportPreview,
   InspectionReportData,
 } from "@/components/inspection-report";
-import { downloadPdf } from "@/lib/wysiwygPdfGenerator";
+import { downloadBlob } from "@/lib/fileDownload";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
