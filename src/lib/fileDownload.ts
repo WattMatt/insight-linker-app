@@ -119,46 +119,49 @@ async function resolveDownloadBlob(url: string): Promise<Blob> {
   return response.blob();
 }
 
+/**
+ * Trigger a browser download from a Blob.
+ * Uses a user-visible anchor element injected into the DOM with the download attribute.
+ * Falls back to opening the blob in a new tab if the anchor approach is blocked.
+ */
 function triggerBrowserDownload(blob: Blob, fileName: string): void {
   const blobUrl = URL.createObjectURL(blob);
-  const link = document.createElement('a');
 
-  link.href = blobUrl;
-  link.download = fileName;
-  link.style.display = 'none';
+  try {
+    const link = document.createElement('a');
+    link.href = blobUrl;
+    link.download = fileName;
+    link.style.display = 'none';
 
-  document.body.appendChild(link);
-  link.click();
+    document.body.appendChild(link);
 
-  window.setTimeout(() => {
-    if (link.parentNode) {
-      link.parentNode.removeChild(link);
-    }
-    URL.revokeObjectURL(blobUrl);
-  }, 2000);
+    // Use a MouseEvent to simulate a real click – more likely to bypass popup blockers
+    const clickEvent = new MouseEvent('click', {
+      bubbles: true,
+      cancelable: true,
+      view: window,
+    });
+    link.dispatchEvent(clickEvent);
+
+    window.setTimeout(() => {
+      if (link.parentNode) {
+        link.parentNode.removeChild(link);
+      }
+      URL.revokeObjectURL(blobUrl);
+    }, 3000);
+  } catch {
+    // If the anchor approach fails (sandboxed iframe, popup blocked), open in new tab
+    console.warn('[fileDownload] Anchor download blocked, opening blob in new tab');
+    window.open(blobUrl, '_blank');
+    // Revoke after a longer delay so the tab can load
+    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  }
 }
 
 export function getDirectDownloadUrl(url: string, fileName: string): string {
   const downloadUrl = new URL(url, window.location.origin);
   downloadUrl.searchParams.set('download', fileName);
   return downloadUrl.toString();
-}
-
-function triggerDirectUrlDownload(url: string, fileName: string): void {
-  const link = document.createElement('a');
-  link.href = getDirectDownloadUrl(url, fileName);
-  link.target = '_blank';
-  link.rel = 'noopener noreferrer';
-  link.style.display = 'none';
-
-  document.body.appendChild(link);
-  link.click();
-
-  window.setTimeout(() => {
-    if (link.parentNode) {
-      link.parentNode.removeChild(link);
-    }
-  }, 250);
 }
 
 function isAbortError(error: unknown): boolean {
@@ -181,6 +184,15 @@ async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean
   return true;
 }
 
+/**
+ * Download a Blob as a file. This is the primary download entry point for
+ * generated PDFs and other in-memory files.
+ *
+ * Priority:
+ *  1. File System Access API (showSaveFilePicker) – best UX, real save dialog
+ *  2. Anchor download attribute – standard fallback
+ *  3. window.open(blobUrl) – last resort for sandboxed environments
+ */
 export async function downloadBlob(blob: Blob, fileName: string): Promise<void> {
   const toastId = toast.loading(`Saving ${fileName}...`);
 
@@ -193,7 +205,7 @@ export async function downloadBlob(blob: Blob, fileName: string): Promise<void> 
     }
 
     triggerBrowserDownload(blob, fileName);
-    toast.success(`Download started for ${fileName}`, { id: toastId });
+    toast.success(`Download started – ${fileName}`, { id: toastId });
   } catch (error) {
     if (isAbortError(error)) {
       toast.dismiss(toastId);
@@ -205,43 +217,23 @@ export async function downloadBlob(blob: Blob, fileName: string): Promise<void> 
   }
 }
 
+/**
+ * Download a file from a URL. Resolves the blob first (via Supabase SDK for
+ * storage URLs), then delegates to downloadBlob.
+ */
 export async function downloadFile(url: string, fileName: string): Promise<void> {
   const toastId = toast.loading(`Preparing ${fileName}...`);
-  const parsed = parseSupabaseStorageUrl(url);
-  const downloadWindow = window as DownloadCapableWindow;
 
   try {
-    if (downloadWindow.showSaveFilePicker) {
-      try {
-        const fileHandle = await downloadWindow.showSaveFilePicker(buildSavePickerOptions(fileName));
-        const writable = await fileHandle.createWritable();
-        const blob = await resolveDownloadBlob(url);
-
-        await writable.write(blob);
-        await writable.close();
-
-        toast.success(`Saved ${fileName}`, { id: toastId });
-        return;
-      } catch (error) {
-        if (isAbortError(error)) {
-          toast.dismiss(toastId);
-          return;
-        }
-
-        console.error('Save picker failed:', error);
-      }
-    }
-
-    if (parsed && parsed.accessType !== 'authenticated') {
-      triggerDirectUrlDownload(url, fileName);
-      toast.success(`Download started for ${fileName}`, { id: toastId });
+    const blob = await resolveDownloadBlob(url);
+    toast.dismiss(toastId);
+    await downloadBlob(blob, fileName);
+  } catch (error) {
+    if (isAbortError(error)) {
+      toast.dismiss(toastId);
       return;
     }
 
-    const blob = await resolveDownloadBlob(url);
-    triggerBrowserDownload(blob, fileName);
-    toast.success(`Download started for ${fileName}`, { id: toastId });
-  } catch (error) {
     console.error('Download failed:', error);
     toast.error(`Failed to download ${fileName}`, { id: toastId });
   }
