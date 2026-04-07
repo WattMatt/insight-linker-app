@@ -470,10 +470,12 @@ export const TemplateBasedReport = ({
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         onSaveToDocuments={handleSaveToDocuments}
         saveLocation="subsection"
         contextName={subsectionName}
