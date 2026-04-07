@@ -4,6 +4,10 @@ interface DownloadHandoffPayload {
   url?: string;
 }
 
+export interface PendingDownloadHandoff {
+  id: string;
+}
+
 export interface StoredDownloadHandoffRequest extends DownloadHandoffPayload {
   createdAt: number;
   id: string;
@@ -11,6 +15,10 @@ export interface StoredDownloadHandoffRequest extends DownloadHandoffPayload {
 
 const DOWNLOAD_HANDOFF_DB = 'wm-download-handoff';
 const DOWNLOAD_HANDOFF_STORE = 'requests';
+
+function buildDownloadHandoffUrl(id: string): string {
+  return new URL(`/download/${id}`, window.location.origin).toString();
+}
 
 function openDownloadHandoffDatabase(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
@@ -91,24 +99,39 @@ export async function deleteDownloadRequest(id: string): Promise<void> {
   }).finally(() => db.close());
 }
 
-export async function openDownloadHandoffWindow(payload: DownloadHandoffPayload): Promise<boolean> {
-  if (!payload.blob && !payload.url) {
-    throw new Error('A blob or URL is required to hand off a download');
-  }
-
+export function createPendingDownloadHandoff(): PendingDownloadHandoff | null {
   const id = crypto.randomUUID();
-  const handoffUrl = new URL(`/download/${id}`, window.location.origin).toString();
-  const handoffWindow = window.open(handoffUrl, '_blank', 'noopener,noreferrer');
+  const handoffWindow = window.open(buildDownloadHandoffUrl(id), '_blank');
 
   if (!handoffWindow) {
-    return false;
+    return null;
+  }
+
+  return { id };
+}
+
+export async function completeDownloadHandoff(
+  pendingRequest: PendingDownloadHandoff,
+  payload: DownloadHandoffPayload,
+): Promise<void> {
+  if (!payload.blob && !payload.url) {
+    throw new Error('A blob or URL is required to hand off a download');
   }
 
   await putDownloadRequest({
     ...payload,
     createdAt: Date.now(),
-    id,
+    id: pendingRequest.id,
   });
+}
+
+export async function openDownloadHandoffWindow(payload: DownloadHandoffPayload): Promise<boolean> {
+  const pendingRequest = createPendingDownloadHandoff();
+  if (!pendingRequest) {
+    return false;
+  }
+
+  await completeDownloadHandoff(pendingRequest, payload);
 
   return true;
 }
