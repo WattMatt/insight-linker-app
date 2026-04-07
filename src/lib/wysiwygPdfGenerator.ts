@@ -137,15 +137,10 @@ export async function waitForImages(container: HTMLElement): Promise<void> {
 }
 
 /**
- * Download a PDF blob as a file
+ * Download a PDF blob as a file – delegates to the shared download utility
+ * for reliable cross-environment support.
  */
-export function downloadPdf(blob: Blob, filename: string): void {
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement('a');
-  link.href = url;
-  link.download = filename;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+export async function downloadPdf(blob: Blob, filename: string): Promise<void> {
+  const { downloadBlob } = await import('@/lib/fileDownload');
+  await downloadBlob(blob, filename);
 }
