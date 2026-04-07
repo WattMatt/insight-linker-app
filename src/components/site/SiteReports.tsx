@@ -347,15 +347,13 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                             <span className="hidden sm:inline">Preview</span>
                                         </Button>
                                         <Button 
-                                            asChild
                                             size="sm" 
                                             variant="ghost"
                                             className="gap-1"
+                                            onClick={() => downloadFile(report.file_url, report.file_name)}
                                         >
-                                            <a href={getDirectDownloadUrl(report.file_url, report.file_name)} target="_blank" rel="noopener noreferrer">
-                                                <Download className="h-4 w-4" />
-                                                <span className="hidden sm:inline">Download</span>
-                                            </a>
+                                            <Download className="h-4 w-4" />
+                                            <span className="hidden sm:inline">Download</span>
                                         </Button>
                                         {!readOnly && (
                                           <Button
