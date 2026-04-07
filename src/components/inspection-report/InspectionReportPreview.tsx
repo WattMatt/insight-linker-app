@@ -126,7 +126,7 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
   }, [data]);
 
   const handleGeneratePdf = async () => {
-    const pendingDownload = await createPendingDownloadHandoff();
+    const pendingDownload = createPendingDownloadHandoff();
     setIsGenerating(true);
     
     try {

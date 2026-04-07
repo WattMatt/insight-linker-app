@@ -5,8 +5,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { deleteDownloadRequest, getDownloadRequest, type StoredDownloadHandoffRequest } from '@/lib/downloadHandoff';
 import { Download, Loader2 } from 'lucide-react';
 
-const MAX_POLL_ATTEMPTS = 600;
-const POLL_INTERVAL_MS = 1000;
+const MAX_POLL_ATTEMPTS = 60;
+const POLL_INTERVAL_MS = 500;
 
 function buildDirectDownloadUrl(url: string, fileName: string): string {
   const downloadUrl = new URL(url, window.location.origin);
@@ -45,13 +45,9 @@ export default function DownloadHandoff() {
       while (!cancelled && attempts < MAX_POLL_ATTEMPTS) {
         const pendingRequest = await getDownloadRequest(requestId);
 
-        if (pendingRequest && pendingRequest.status === 'ready') {
+        if (pendingRequest) {
           setRequest(pendingRequest);
           return;
-        }
-
-        if (pendingRequest && pendingRequest.status === 'pending') {
-          // Entry exists but payload not yet ready — keep waiting
         }
 
         attempts += 1;
@@ -59,7 +55,7 @@ export default function DownloadHandoff() {
       }
 
       if (!cancelled) {
-        setError('The report generation timed out. Please close this tab and try again.');
+        setError('This download request expired before the file payload arrived.');
       }
     };
 

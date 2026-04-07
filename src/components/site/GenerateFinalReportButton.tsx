@@ -417,7 +417,7 @@ export function GenerateFinalReportButton({
   };
 
   const handleGenerate = async () => {
-    const pendingDownload = await createPendingDownloadHandoff();
+    const pendingDownload = createPendingDownloadHandoff();
 
     try {
       const data = await fetchComprehensiveData();
