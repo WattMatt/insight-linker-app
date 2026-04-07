@@ -258,6 +258,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
     if (result.success && result.url) {
       setPreviewUrl(result.url);
       setPreviewFileName(result.filename || `fortress-checklist-${Date.now()}.pdf`);
+      setPreviewBlob(result.blob);
       setPreviewOpen(true);
     } else {
       toast.error(result.error || 'Failed to generate report');
