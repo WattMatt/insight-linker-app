@@ -37,6 +37,7 @@ export const SiteDrawingReport = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
   
   const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
 
