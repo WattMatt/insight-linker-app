@@ -11,6 +11,7 @@ export interface PendingDownloadHandoff {
 export interface StoredDownloadHandoffRequest extends DownloadHandoffPayload {
   createdAt: number;
   id: string;
+  status?: 'pending' | 'ready';
 }
 
 const DOWNLOAD_HANDOFF_DB = 'wm-download-handoff';
@@ -107,6 +108,14 @@ export function createPendingDownloadHandoff(): PendingDownloadHandoff | null {
     return null;
   }
 
+  // Write a placeholder immediately so the download tab knows we're working
+  void putDownloadRequest({
+    id,
+    fileName: 'Generating report…',
+    createdAt: Date.now(),
+    status: 'pending',
+  });
+
   return { id };
 }
 
@@ -122,6 +131,7 @@ export async function completeDownloadHandoff(
     ...payload,
     createdAt: Date.now(),
     id: pendingRequest.id,
+    status: 'ready',
   });
 }
 
