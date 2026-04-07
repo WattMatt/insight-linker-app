@@ -107,9 +107,11 @@ export function DocumentPreviewDialog({
         if (error || !data) {
           console.error('[DocPreview] SDK download failed:', error?.message);
           setPdfBlobUrl(null);
+          setPdfBlobData(null);
         } else {
           const url = URL.createObjectURL(data);
           setPdfBlobUrl(url);
+          setPdfBlobData(data);
           console.log(`[DocPreview] PDF blob created: ${(data.size / 1024).toFixed(1)}KB`);
         }
       })
@@ -120,6 +122,7 @@ export function DocumentPreviewDialog({
         if (prev) URL.revokeObjectURL(prev);
         return null;
       });
+      setPdfBlobData(null);
     };
   }, [open, isPdf, fileUrl]);
 
