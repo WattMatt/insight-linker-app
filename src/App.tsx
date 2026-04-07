@@ -50,6 +50,7 @@ const ContractorPortal = lazy(() => import("./pages/ContractorPortal"));
 const FeedbackManagement = lazy(() => import("./pages/FeedbackManagement"));
 const QRCodes = lazy(() => import("./pages/QRCodes"));
 const Install = lazy(() => import("./pages/Install"));
+const DownloadHandoff = lazy(() => import("./pages/DownloadHandoff"));
 const PDFTemplateTestDashboard = lazy(() => import("./pages/PDFTemplateTestDashboard"));
 const OfflineSyncTest = lazy(() => import("./pages/OfflineSyncTest"));
 
@@ -109,6 +110,7 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/auth" element={<Auth />} />
           <Route path="/install" element={<Install />} />
+          <Route path="/download/:requestId" element={<DownloadHandoff />} />
           
           {/* Public QR Code Landing Pages - both patterns supported */}
           <Route path="/public/subsections/:subsectionId" element={<PublicSubsection />} />
