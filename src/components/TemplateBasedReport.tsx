@@ -69,6 +69,7 @@ export const TemplateBasedReport = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
