@@ -100,7 +100,7 @@ export async function deleteDownloadRequest(id: string): Promise<void> {
   }).finally(() => db.close());
 }
 
-export function createPendingDownloadHandoff(): PendingDownloadHandoff | null {
+export async function createPendingDownloadHandoff(): Promise<PendingDownloadHandoff | null> {
   const id = crypto.randomUUID();
   const handoffWindow = window.open(buildDownloadHandoffUrl(id), '_blank');
 
@@ -108,8 +108,9 @@ export function createPendingDownloadHandoff(): PendingDownloadHandoff | null {
     return null;
   }
 
-  // Write a placeholder immediately so the download tab knows we're working
-  void putDownloadRequest({
+  // Write a placeholder immediately so the download tab knows we're working.
+  // This must be awaited to avoid racing and overwriting the final payload later.
+  await putDownloadRequest({
     id,
     fileName: 'Generating report…',
     createdAt: Date.now(),
@@ -136,7 +137,7 @@ export async function completeDownloadHandoff(
 }
 
 export async function openDownloadHandoffWindow(payload: DownloadHandoffPayload): Promise<boolean> {
-  const pendingRequest = createPendingDownloadHandoff();
+  const pendingRequest = await createPendingDownloadHandoff();
   if (!pendingRequest) {
     return false;
   }
