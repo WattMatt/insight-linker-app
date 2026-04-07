@@ -385,10 +385,12 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         saveLocation="site"
         contextName={siteName || 'Site'}
       />

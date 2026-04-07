@@ -96,10 +96,12 @@ export const SiteDrawingReport = ({
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         saveLocation="subsection"
         contextName={subsectionName}
       />
