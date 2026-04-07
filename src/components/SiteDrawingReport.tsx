@@ -76,6 +76,7 @@ export const SiteDrawingReport = ({
     if (result.success && result.url) {
       setPreviewUrl(result.url);
       setPreviewFileName(result.filename || `${subsectionName}_Site_Drawing_Inspection.pdf`);
+      setPreviewBlob(result.blob);
       setPreviewOpen(true);
     } else {
       toast.error(result.error || 'Failed to generate report');
