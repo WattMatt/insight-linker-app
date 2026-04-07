@@ -13,6 +13,7 @@ import { SignaturePage } from "./SignaturePage";
 import { generatePdfFromPages, waitForImages } from "@/lib/wysiwygPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
+import { createPendingDownloadHandoff, type PendingDownloadHandoff } from "@/lib/downloadHandoff";
 
 export interface InspectionSection {
   title: string;
@@ -69,7 +70,13 @@ export interface InspectionReportData {
 
 interface InspectionReportPreviewProps {
   data: InspectionReportData;
-  onPdfGenerated?: (result: { success: boolean; url?: string; blob?: Blob; error?: string }) => void;
+  onPdfGenerated?: (result: {
+    success: boolean;
+    url?: string;
+    blob?: Blob;
+    error?: string;
+    pendingDownload?: PendingDownloadHandoff | null;
+  }) => void;
 }
 
 export function InspectionReportPreview({ data, onPdfGenerated }: InspectionReportPreviewProps) {
@@ -119,6 +126,7 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
   }, [data]);
 
   const handleGeneratePdf = async () => {
+    const pendingDownload = createPendingDownloadHandoff();
     setIsGenerating(true);
     
     try {
@@ -142,12 +150,16 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
         },
       });
 
-      onPdfGenerated?.(result);
+      onPdfGenerated?.({
+        ...result,
+        pendingDownload,
+      });
     } catch (error) {
       console.error('[WYSIWYG Preview] PDF generation error:', error);
       onPdfGenerated?.({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to generate PDF',
+        pendingDownload,
       });
     } finally {
       setIsGenerating(false);
