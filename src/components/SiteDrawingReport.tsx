@@ -37,6 +37,7 @@ export const SiteDrawingReport = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
   
   const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
 
@@ -75,6 +76,7 @@ export const SiteDrawingReport = ({
     if (result.success && result.url) {
       setPreviewUrl(result.url);
       setPreviewFileName(result.filename || `${subsectionName}_Site_Drawing_Inspection.pdf`);
+      setPreviewBlob(result.blob);
       setPreviewOpen(true);
     } else {
       toast.error(result.error || 'Failed to generate report');
@@ -94,10 +96,12 @@ export const SiteDrawingReport = ({
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         saveLocation="subsection"
         contextName={subsectionName}
       />

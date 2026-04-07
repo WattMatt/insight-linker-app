@@ -33,6 +33,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
   
   const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
 
@@ -257,6 +258,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
     if (result.success && result.url) {
       setPreviewUrl(result.url);
       setPreviewFileName(result.filename || `fortress-checklist-${Date.now()}.pdf`);
+      setPreviewBlob(result.blob);
       setPreviewOpen(true);
     } else {
       toast.error(result.error || 'Failed to generate report');
@@ -383,10 +385,12 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         saveLocation="site"
         contextName={siteName || 'Site'}
       />

@@ -13,7 +13,7 @@ import {
   InspectionReportPreview,
   InspectionReportData,
 } from "@/components/inspection-report";
-import { downloadPdf } from "@/lib/wysiwygPdfGenerator";
+import { downloadBlob } from "@/lib/fileDownload";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
@@ -254,13 +254,11 @@ export const ComprehensiveInspectionReport = ({
 
   const handlePdfGenerated = async (result: { success: boolean; url?: string; blob?: Blob; error?: string }) => {
     if (result.success && result.blob) {
-      // Create filename
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const fileName = `${subsectionName}_Inspection_Report_${timestamp}.pdf`;
       
-      // Download the PDF
-      downloadPdf(result.blob, fileName);
-      toast.success("PDF downloaded successfully!");
+      // Use shared download utility
+      await downloadBlob(result.blob, fileName);
       
       // Optionally save to Supabase storage
       if (subsectionId) {
