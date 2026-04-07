@@ -71,6 +71,7 @@ export function DocumentPreviewDialog({
   const [docxError, setDocxError] = useState<string | null>(null);
   const [docxReady, setDocxReady] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfBlobData, setPdfBlobData] = useState<Blob | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const docxContainerRef = useRef<HTMLDivElement>(null);
