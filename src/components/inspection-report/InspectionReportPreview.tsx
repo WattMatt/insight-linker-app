@@ -75,7 +75,6 @@ interface InspectionReportPreviewProps {
     url?: string;
     blob?: Blob;
     error?: string;
-    pendingDownload?: PendingDownloadHandoff | null;
   }) => void;
 }
 
