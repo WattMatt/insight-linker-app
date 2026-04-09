@@ -13,7 +13,7 @@ import { SignaturePage } from "./SignaturePage";
 import { generatePdfFromPages, waitForImages } from "@/lib/wysiwygPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
-import { createPendingDownloadHandoff, type PendingDownloadHandoff } from "@/lib/downloadHandoff";
+import { downloadBlob } from "@/lib/fileDownload";
 
 export interface InspectionSection {
   title: string;
