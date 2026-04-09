@@ -125,7 +125,6 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
   }, [data]);
 
   const handleGeneratePdf = async () => {
-    const pendingDownload = createPendingDownloadHandoff();
     setIsGenerating(true);
     
     try {
@@ -149,16 +148,18 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
         },
       });
 
-      onPdfGenerated?.({
-        ...result,
-        pendingDownload,
-      });
+      if (result.success && result.blob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `Inspection_Report_${timestamp}.pdf`;
+        await downloadBlob(result.blob, fileName);
+      }
+
+      onPdfGenerated?.(result);
     } catch (error) {
       console.error('[WYSIWYG Preview] PDF generation error:', error);
       onPdfGenerated?.({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to generate PDF',
-        pendingDownload,
       });
     } finally {
       setIsGenerating(false);
