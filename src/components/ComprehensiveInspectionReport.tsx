@@ -14,7 +14,6 @@ import {
   InspectionReportData,
 } from "@/components/inspection-report";
 import { downloadBlob } from "@/lib/fileDownload";
-import { completeDownloadHandoff, type PendingDownloadHandoff } from "@/lib/downloadHandoff";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
@@ -258,25 +257,10 @@ export const ComprehensiveInspectionReport = ({
     url?: string;
     blob?: Blob;
     error?: string;
-    pendingDownload?: PendingDownloadHandoff | null;
   }) => {
     if (result.success && result.blob) {
       const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
       const fileName = `${subsectionName}_Inspection_Report_${timestamp}.pdf`;
-      
-      try {
-        if (result.pendingDownload) {
-          await completeDownloadHandoff(result.pendingDownload, {
-            blob: result.blob,
-            fileName,
-          });
-        } else {
-          await downloadBlob(result.blob, fileName);
-        }
-      } catch (downloadError) {
-        console.error('[WYSIWYG Report] Download handoff failed:', downloadError);
-        toast.error('Failed to start PDF download');
-      }
       
       // Optionally save to Supabase storage
       if (subsectionId) {

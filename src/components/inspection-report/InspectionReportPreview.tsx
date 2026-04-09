@@ -13,7 +13,7 @@ import { SignaturePage } from "./SignaturePage";
 import { generatePdfFromPages, waitForImages } from "@/lib/wysiwygPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
-import { createPendingDownloadHandoff, type PendingDownloadHandoff } from "@/lib/downloadHandoff";
+import { downloadBlob } from "@/lib/fileDownload";
 
 export interface InspectionSection {
   title: string;
@@ -75,7 +75,6 @@ interface InspectionReportPreviewProps {
     url?: string;
     blob?: Blob;
     error?: string;
-    pendingDownload?: PendingDownloadHandoff | null;
   }) => void;
 }
 
@@ -126,7 +125,6 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
   }, [data]);
 
   const handleGeneratePdf = async () => {
-    const pendingDownload = createPendingDownloadHandoff();
     setIsGenerating(true);
     
     try {
@@ -150,16 +148,18 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
         },
       });
 
-      onPdfGenerated?.({
-        ...result,
-        pendingDownload,
-      });
+      if (result.success && result.blob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `Inspection_Report_${timestamp}.pdf`;
+        await downloadBlob(result.blob, fileName);
+      }
+
+      onPdfGenerated?.(result);
     } catch (error) {
       console.error('[WYSIWYG Preview] PDF generation error:', error);
       onPdfGenerated?.({
         success: false,
         error: error instanceof Error ? error.message : 'Failed to generate PDF',
-        pendingDownload,
       });
     } finally {
       setIsGenerating(false);
