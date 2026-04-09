@@ -14,7 +14,6 @@ import {
   InspectionReportData,
 } from "@/components/inspection-report";
 import { downloadBlob } from "@/lib/fileDownload";
-import { completeDownloadHandoff, type PendingDownloadHandoff } from "@/lib/downloadHandoff";
 
 // Standalone interface for external use
 export interface GenerateReportOptions {
