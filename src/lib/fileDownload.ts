@@ -196,35 +196,11 @@ async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean
  */
 export async function downloadBlob(blob: Blob, fileName: string): Promise<void> {
   const toastId = toast.loading(`Preparing ${fileName}...`);
-  const downloadWindow = window as DownloadCapableWindow;
 
   try {
-    if (downloadWindow.showSaveFilePicker) {
-      try {
-        const savedWithPicker = await saveBlobWithPicker(fileName, blob);
-
-        if (savedWithPicker) {
-          toast.success(`Saved ${fileName}`, { id: toastId });
-          return;
-        }
-      } catch (error) {
-        if (isAbortError(error)) {
-          toast.dismiss(toastId);
-          return;
-        }
-
-        console.warn('[fileDownload] Save picker unavailable in this context, using top-level handoff', error);
-      }
-    }
-
-    const handedOffToTopLevel = await openDownloadHandoffWindow({ blob, fileName });
-    if (handedOffToTopLevel) {
-      toast.success(`Opened download tab – ${fileName}`, { id: toastId });
-      return;
-    }
-
+    // Primary: use the anchor-download approach — works in most browsers
     triggerBrowserDownload(blob, fileName);
-    toast(`Check your browser download prompt for ${fileName}`, { id: toastId });
+    toast.success(`Downloaded ${fileName}`, { id: toastId });
   } catch (error) {
     if (isAbortError(error)) {
       toast.dismiss(toastId);
