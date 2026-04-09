@@ -1816,13 +1816,12 @@ const SubsectionDetail = () => {
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+      
+      // Open in new tab — anchor download is blocked in iframe sandboxes
+      window.open(blobUrl, '_blank');
+      
+      // Revoke after delay so the new tab can load
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
       console.log('Download initiated successfully');
       toast.success(`Downloading ${fileName}`);
     } catch (error) {

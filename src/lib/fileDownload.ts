@@ -128,35 +128,13 @@ async function resolveDownloadBlob(url: string): Promise<Blob> {
 function triggerBrowserDownload(blob: Blob, fileName: string): void {
   const blobUrl = URL.createObjectURL(blob);
 
-  try {
-    const link = document.createElement('a');
-    link.href = blobUrl;
-    link.download = fileName;
-    link.style.display = 'none';
+  // Open in new tab — the anchor download attribute is silently ignored
+  // inside iframe sandboxes (like Lovable preview). window.open reliably
+  // opens the PDF where the user can then save it.
+  window.open(blobUrl, '_blank');
 
-    document.body.appendChild(link);
-
-    // Use a MouseEvent to simulate a real click – more likely to bypass popup blockers
-    const clickEvent = new MouseEvent('click', {
-      bubbles: true,
-      cancelable: true,
-      view: window,
-    });
-    link.dispatchEvent(clickEvent);
-
-    window.setTimeout(() => {
-      if (link.parentNode) {
-        link.parentNode.removeChild(link);
-      }
-      URL.revokeObjectURL(blobUrl);
-    }, 3000);
-  } catch {
-    // If the anchor approach fails (sandboxed iframe, popup blocked), open in new tab
-    console.warn('[fileDownload] Anchor download blocked, opening blob in new tab');
-    window.open(blobUrl, '_blank');
-    // Revoke after a longer delay so the tab can load
-    window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
-  }
+  // Revoke after a long delay so the new tab can fully load the blob
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
 }
 
 export function getDirectDownloadUrl(url: string, fileName: string): string {
