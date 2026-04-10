@@ -857,6 +857,42 @@ export type Database = {
           },
         ]
       }
+      contractor_coc_uploads: {
+        Row: {
+          contractor_email: string | null
+          file_name: string | null
+          file_url: string
+          id: string
+          notes: string | null
+          project_id: string
+          section_name: string
+          status: string
+          submitted_at: string | null
+        }
+        Insert: {
+          contractor_email?: string | null
+          file_name?: string | null
+          file_url: string
+          id?: string
+          notes?: string | null
+          project_id: string
+          section_name: string
+          status?: string
+          submitted_at?: string | null
+        }
+        Update: {
+          contractor_email?: string | null
+          file_name?: string | null
+          file_url?: string
+          id?: string
+          notes?: string | null
+          project_id?: string
+          section_name?: string
+          status?: string
+          submitted_at?: string | null
+        }
+        Relationships: []
+      }
       document_categories: {
         Row: {
           created_at: string
@@ -2168,6 +2204,8 @@ export type Database = {
       }
       snags: {
         Row: {
+          attachment_urls: string[] | null
+          closeout_photo_url: string | null
           created_at: string
           created_by: string | null
           description: string | null
@@ -2176,17 +2214,23 @@ export type Database = {
           inspection_id: string | null
           notes: string | null
           photos: Json | null
+          project_id: string | null
           rectification_notes: string | null
           rectification_photos: Json | null
           rectified_at: string | null
           rectified_by: string | null
           risk_level: string | null
+          sign_off_requested_at: string | null
+          signed_off_at: string | null
+          signed_off_by: string | null
           status: string
           subsection_id: string
           title: string
           updated_at: string
         }
         Insert: {
+          attachment_urls?: string[] | null
+          closeout_photo_url?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -2195,17 +2239,23 @@ export type Database = {
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          project_id?: string | null
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
           rectified_by?: string | null
           risk_level?: string | null
+          sign_off_requested_at?: string | null
+          signed_off_at?: string | null
+          signed_off_by?: string | null
           status?: string
           subsection_id: string
           title: string
           updated_at?: string
         }
         Update: {
+          attachment_urls?: string[] | null
+          closeout_photo_url?: string | null
           created_at?: string
           created_by?: string | null
           description?: string | null
@@ -2214,11 +2264,15 @@ export type Database = {
           inspection_id?: string | null
           notes?: string | null
           photos?: Json | null
+          project_id?: string | null
           rectification_notes?: string | null
           rectification_photos?: Json | null
           rectified_at?: string | null
           rectified_by?: string | null
           risk_level?: string | null
+          sign_off_requested_at?: string | null
+          signed_off_at?: string | null
+          signed_off_by?: string | null
           status?: string
           subsection_id?: string
           title?: string
