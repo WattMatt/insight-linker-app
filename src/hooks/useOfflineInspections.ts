@@ -13,6 +13,9 @@ export interface InspectionData {
   inspection_date?: string | null;
   site_id: string;
   inspector_id?: string;
+  subsection_id?: string | null;
+  shop_name?: string | null;
+  shop_number?: string | null;
 }
 
 export function useOfflineInspections() {
