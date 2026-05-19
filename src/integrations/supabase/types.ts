@@ -435,6 +435,57 @@ export type Database = {
           },
         ]
       }
+      coc_compliance_photos_snap_20260421: {
+        Row: {
+          captured_at: string | null
+          captured_by: string | null
+          coc_validation_id: string | null
+          created_at: string | null
+          file_name: string | null
+          file_size: number | null
+          id: string | null
+          latitude: number | null
+          longitude: number | null
+          mime_type: string | null
+          notes: string | null
+          photo_type: string | null
+          storage_path: string | null
+          subsection_id: string | null
+        }
+        Insert: {
+          captured_at?: string | null
+          captured_by?: string | null
+          coc_validation_id?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string | null
+          notes?: string | null
+          photo_type?: string | null
+          storage_path?: string | null
+          subsection_id?: string | null
+        }
+        Update: {
+          captured_at?: string | null
+          captured_by?: string | null
+          coc_validation_id?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string | null
+          notes?: string | null
+          photo_type?: string | null
+          storage_path?: string | null
+          subsection_id?: string | null
+        }
+        Relationships: []
+      }
       coc_extractions: {
         Row: {
           confidence: string | null
@@ -857,39 +908,102 @@ export type Database = {
           },
         ]
       }
+      compliance_settings: {
+        Row: {
+          description: string | null
+          key: string
+          updated_at: string
+          updated_by: string | null
+          value: Json
+        }
+        Insert: {
+          description?: string | null
+          key: string
+          updated_at?: string
+          updated_by?: string | null
+          value: Json
+        }
+        Update: {
+          description?: string | null
+          key?: string
+          updated_at?: string
+          updated_by?: string | null
+          value?: Json
+        }
+        Relationships: []
+      }
+      compliance_settings_audit: {
+        Row: {
+          changed_at: string
+          changed_by: string | null
+          id: string
+          key: string
+          new_value: Json | null
+          old_value: Json | null
+          reason: string | null
+        }
+        Insert: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          key: string
+          new_value?: Json | null
+          old_value?: Json | null
+          reason?: string | null
+        }
+        Update: {
+          changed_at?: string
+          changed_by?: string | null
+          id?: string
+          key?: string
+          new_value?: Json | null
+          old_value?: Json | null
+          reason?: string | null
+        }
+        Relationships: []
+      }
       contractor_coc_uploads: {
         Row: {
           contractor_email: string | null
           file_name: string | null
           file_url: string
           id: string
+          legend_card_id: string | null
           notes: string | null
           project_id: string
           section_name: string
+          site_id: string | null
           status: string
           submitted_at: string | null
+          subsection_id: string | null
         }
         Insert: {
           contractor_email?: string | null
           file_name?: string | null
           file_url: string
           id?: string
+          legend_card_id?: string | null
           notes?: string | null
           project_id: string
           section_name: string
+          site_id?: string | null
           status?: string
           submitted_at?: string | null
+          subsection_id?: string | null
         }
         Update: {
           contractor_email?: string | null
           file_name?: string | null
           file_url?: string
           id?: string
+          legend_card_id?: string | null
           notes?: string | null
           project_id?: string
           section_name?: string
+          site_id?: string | null
           status?: string
           submitted_at?: string | null
+          subsection_id?: string | null
         }
         Relationships: []
       }
@@ -1179,6 +1293,45 @@ export type Database = {
           },
         ]
       }
+      inspection_signatures_snap_20260421: {
+        Row: {
+          created_at: string | null
+          id: string | null
+          inspection_id: string | null
+          ip_address: string | null
+          signature_data: string | null
+          signature_url: string | null
+          signed_at: string | null
+          signer_email: string | null
+          signer_name: string | null
+          signer_type: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string | null
+          inspection_id?: string | null
+          ip_address?: string | null
+          signature_data?: string | null
+          signature_url?: string | null
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_type?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string | null
+          inspection_id?: string | null
+          ip_address?: string | null
+          signature_data?: string | null
+          signature_url?: string | null
+          signed_at?: string | null
+          signer_email?: string | null
+          signer_name?: string | null
+          signer_type?: string | null
+        }
+        Relationships: []
+      }
       inspection_subsections: {
         Row: {
           created_at: string
@@ -1263,6 +1416,7 @@ export type Database = {
           consultant: string | null
           contractor: string | null
           created_at: string
+          deleted_at: string | null
           description: string | null
           end_date: string | null
           firebase_id: string | null
@@ -1292,6 +1446,7 @@ export type Database = {
           consultant?: string | null
           contractor?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           end_date?: string | null
           firebase_id?: string | null
@@ -1321,6 +1476,7 @@ export type Database = {
           consultant?: string | null
           contractor?: string | null
           created_at?: string
+          deleted_at?: string | null
           description?: string | null
           end_date?: string | null
           firebase_id?: string | null
@@ -1367,6 +1523,186 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      inspections_snap_20260421: {
+        Row: {
+          assigned_to: string[] | null
+          client_rep: string | null
+          consultant: string | null
+          contractor: string | null
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          firebase_id: string | null
+          id: string | null
+          inspection_date: string | null
+          inspector_id: string | null
+          inspector_name: string | null
+          json_data: Json | null
+          location: string | null
+          priority: string | null
+          project_name: string | null
+          qr_code_url: string | null
+          quality_rating: number | null
+          shop_name: string | null
+          shop_number: string | null
+          site_id: string | null
+          status: string | null
+          subsection_id: string | null
+          template_id: string | null
+          testing_party: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_date?: string | null
+          inspector_id?: string | null
+          inspector_name?: string | null
+          json_data?: Json | null
+          location?: string | null
+          priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          quality_rating?: number | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_id?: string | null
+          status?: string | null
+          subsection_id?: string | null
+          template_id?: string | null
+          testing_party?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_date?: string | null
+          inspector_id?: string | null
+          inspector_name?: string | null
+          json_data?: Json | null
+          location?: string | null
+          priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          quality_rating?: number | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_id?: string | null
+          status?: string | null
+          subsection_id?: string | null
+          template_id?: string | null
+          testing_party?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      inspections_snap_20260422_pre_relink: {
+        Row: {
+          assigned_to: string[] | null
+          client_rep: string | null
+          consultant: string | null
+          contractor: string | null
+          created_at: string | null
+          description: string | null
+          end_date: string | null
+          firebase_id: string | null
+          id: string | null
+          inspection_date: string | null
+          inspector_id: string | null
+          inspector_name: string | null
+          json_data: Json | null
+          location: string | null
+          priority: string | null
+          project_name: string | null
+          qr_code_url: string | null
+          quality_rating: number | null
+          shop_name: string | null
+          shop_number: string | null
+          site_id: string | null
+          status: string | null
+          subsection_id: string | null
+          template_id: string | null
+          testing_party: string | null
+          title: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_date?: string | null
+          inspector_id?: string | null
+          inspector_name?: string | null
+          json_data?: Json | null
+          location?: string | null
+          priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          quality_rating?: number | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_id?: string | null
+          status?: string | null
+          subsection_id?: string | null
+          template_id?: string | null
+          testing_party?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          assigned_to?: string[] | null
+          client_rep?: string | null
+          consultant?: string | null
+          contractor?: string | null
+          created_at?: string | null
+          description?: string | null
+          end_date?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_date?: string | null
+          inspector_id?: string | null
+          inspector_name?: string | null
+          json_data?: Json | null
+          location?: string | null
+          priority?: string | null
+          project_name?: string | null
+          qr_code_url?: string | null
+          quality_rating?: number | null
+          shop_name?: string | null
+          shop_number?: string | null
+          site_id?: string | null
+          status?: string | null
+          subsection_id?: string | null
+          template_id?: string | null
+          testing_party?: string | null
+          title?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       issue_reports: {
         Row: {
@@ -1544,6 +1880,60 @@ export type Database = {
           photo_type?: string
           secondary_context_id?: string | null
           storage_path?: string
+        }
+        Relationships: []
+      }
+      offline_photos_snap_20260421: {
+        Row: {
+          captured_at: string | null
+          captured_by: string | null
+          context_id: string | null
+          context_type: string | null
+          created_at: string | null
+          file_name: string | null
+          file_size: number | null
+          id: string | null
+          latitude: number | null
+          longitude: number | null
+          mime_type: string | null
+          notes: string | null
+          photo_type: string | null
+          secondary_context_id: string | null
+          storage_path: string | null
+        }
+        Insert: {
+          captured_at?: string | null
+          captured_by?: string | null
+          context_id?: string | null
+          context_type?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string | null
+          notes?: string | null
+          photo_type?: string | null
+          secondary_context_id?: string | null
+          storage_path?: string | null
+        }
+        Update: {
+          captured_at?: string | null
+          captured_by?: string | null
+          context_id?: string | null
+          context_type?: string | null
+          created_at?: string | null
+          file_name?: string | null
+          file_size?: number | null
+          id?: string | null
+          latitude?: number | null
+          longitude?: number | null
+          mime_type?: string | null
+          notes?: string | null
+          photo_type?: string | null
+          secondary_context_id?: string | null
+          storage_path?: string | null
         }
         Relationships: []
       }
@@ -1765,6 +2155,76 @@ export type Database = {
         Relationships: [
           {
             foreignKeyName: "qr_scans_subsection_id_fkey"
+            columns: ["subsection_id"]
+            isOneToOne: false
+            referencedRelation: "subsections"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      reports: {
+        Row: {
+          created_at: string
+          created_by: string | null
+          file_name: string
+          file_size_bytes: number | null
+          file_url: string
+          id: string
+          inspection_id: string | null
+          metadata: Json | null
+          report_type: string
+          site_id: string | null
+          subsection_id: string | null
+          title: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          created_by?: string | null
+          file_name: string
+          file_size_bytes?: number | null
+          file_url: string
+          id?: string
+          inspection_id?: string | null
+          metadata?: Json | null
+          report_type: string
+          site_id?: string | null
+          subsection_id?: string | null
+          title: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          created_by?: string | null
+          file_name?: string
+          file_size_bytes?: number | null
+          file_url?: string
+          id?: string
+          inspection_id?: string | null
+          metadata?: Json | null
+          report_type?: string
+          site_id?: string | null
+          subsection_id?: string | null
+          title?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reports_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "inspections"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "reports_subsection_id_fkey"
             columns: ["subsection_id"]
             isOneToOne: false
             referencedRelation: "subsections"
@@ -2204,10 +2664,13 @@ export type Database = {
       }
       snags: {
         Row: {
+          assignee: string | null
           attachment_urls: string[] | null
           closeout_photo_url: string | null
+          coc_validation_id: string | null
           created_at: string
           created_by: string | null
+          deleted_at: string | null
           description: string | null
           estimated_cost: number | null
           id: string
@@ -2223,16 +2686,21 @@ export type Database = {
           sign_off_requested_at: string | null
           signed_off_at: string | null
           signed_off_by: string | null
+          snag_type: string
           status: string
           subsection_id: string
           title: string
+          trade: string | null
           updated_at: string
         }
         Insert: {
+          assignee?: string | null
           attachment_urls?: string[] | null
           closeout_photo_url?: string | null
+          coc_validation_id?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           estimated_cost?: number | null
           id?: string
@@ -2248,16 +2716,21 @@ export type Database = {
           sign_off_requested_at?: string | null
           signed_off_at?: string | null
           signed_off_by?: string | null
+          snag_type?: string
           status?: string
           subsection_id: string
           title: string
+          trade?: string | null
           updated_at?: string
         }
         Update: {
+          assignee?: string | null
           attachment_urls?: string[] | null
           closeout_photo_url?: string | null
+          coc_validation_id?: string | null
           created_at?: string
           created_by?: string | null
+          deleted_at?: string | null
           description?: string | null
           estimated_cost?: number | null
           id?: string
@@ -2273,9 +2746,11 @@ export type Database = {
           sign_off_requested_at?: string | null
           signed_off_at?: string | null
           signed_off_by?: string | null
+          snag_type?: string
           status?: string
           subsection_id?: string
           title?: string
+          trade?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -2402,10 +2877,13 @@ export type Database = {
           coc_type: string | null
           created_at: string
           ct_ratio: string | null
+          deleted_at: string | null
           description: string | null
           firebase_id: string | null
           id: string
           inspection_template_id: string | null
+          installation_score: number | null
+          installation_status: string | null
           is_coc_required: boolean | null
           is_compliant: boolean | null
           meter_serial_number: string | null
@@ -2424,10 +2902,13 @@ export type Database = {
           coc_type?: string | null
           created_at?: string
           ct_ratio?: string | null
+          deleted_at?: string | null
           description?: string | null
           firebase_id?: string | null
           id?: string
           inspection_template_id?: string | null
+          installation_score?: number | null
+          installation_status?: string | null
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
           meter_serial_number?: string | null
@@ -2446,10 +2927,13 @@ export type Database = {
           coc_type?: string | null
           created_at?: string
           ct_ratio?: string | null
+          deleted_at?: string | null
           description?: string | null
           firebase_id?: string | null
           id?: string
           inspection_template_id?: string | null
+          installation_score?: number | null
+          installation_status?: string | null
           is_coc_required?: boolean | null
           is_compliant?: boolean | null
           meter_serial_number?: string | null
@@ -2476,6 +2960,75 @@ export type Database = {
             referencedColumns: ["id"]
           },
         ]
+      }
+      subsections_snap_20260421: {
+        Row: {
+          category: string | null
+          coc_issue_date: string | null
+          coc_number: string | null
+          coc_status: string | null
+          coc_type: string | null
+          created_at: string | null
+          ct_ratio: string | null
+          description: string | null
+          firebase_id: string | null
+          id: string | null
+          inspection_template_id: string | null
+          is_coc_required: boolean | null
+          is_compliant: boolean | null
+          meter_serial_number: string | null
+          metering_status: string | null
+          name: string | null
+          qr_code_url: string | null
+          site_id: string | null
+          tenant_name: string | null
+          updated_at: string | null
+        }
+        Insert: {
+          category?: string | null
+          coc_issue_date?: string | null
+          coc_number?: string | null
+          coc_status?: string | null
+          coc_type?: string | null
+          created_at?: string | null
+          ct_ratio?: string | null
+          description?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_template_id?: string | null
+          is_coc_required?: boolean | null
+          is_compliant?: boolean | null
+          meter_serial_number?: string | null
+          metering_status?: string | null
+          name?: string | null
+          qr_code_url?: string | null
+          site_id?: string | null
+          tenant_name?: string | null
+          updated_at?: string | null
+        }
+        Update: {
+          category?: string | null
+          coc_issue_date?: string | null
+          coc_number?: string | null
+          coc_status?: string | null
+          coc_type?: string | null
+          created_at?: string | null
+          ct_ratio?: string | null
+          description?: string | null
+          firebase_id?: string | null
+          id?: string | null
+          inspection_template_id?: string | null
+          is_coc_required?: boolean | null
+          is_compliant?: boolean | null
+          meter_serial_number?: string | null
+          metering_status?: string | null
+          name?: string | null
+          qr_code_url?: string | null
+          site_id?: string | null
+          tenant_name?: string | null
+          updated_at?: string | null
+        }
+        Relationships: []
       }
       suggestions: {
         Row: {
@@ -2941,13 +3494,94 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      inspection_orphan_summary: {
+        Row: {
+          buckets: string[] | null
+          inspection_id: string | null
+          inspection_title: string | null
+          ok_count: number | null
+          orphan_count: number | null
+          orphan_pct: number | null
+          subsection_id: string | null
+          total_photo_refs: number | null
+        }
+        Relationships: []
+      }
+      inspection_photo_refs: {
+        Row: {
+          bucket: string | null
+          exists_in_storage: boolean | null
+          inspection_id: string | null
+          inspection_title: string | null
+          object_path: string | null
+          photo_url: string | null
+          subsection_id: string | null
+        }
+        Relationships: []
+      }
+      orphan_photo_refs: {
+        Row: {
+          bucket: string | null
+          exists_in_storage: boolean | null
+          inspection_id: string | null
+          inspection_title: string | null
+          object_path: string | null
+          photo_url: string | null
+          subsection_id: string | null
+        }
+        Relationships: []
+      }
     }
     Functions: {
+      apply_subsection_recompute: {
+        Args: { p_subsection_id: string }
+        Returns: undefined
+      }
+      audit_orphan_photo_refs: {
+        Args: never
+        Returns: {
+          bucket: string
+          exists_in_storage: boolean
+          inspection_id: string
+          inspection_title: string
+          object_path: string
+          photo_url: string
+          subsection_id: string
+        }[]
+      }
+      classify_field_status: { Args: { p_raw: Json }; Returns: string }
       cleanup_old_pending_invites: { Args: never; Returns: number }
       contractor_has_site_access: {
         Args: { _site_id: string; _user_id: string }
         Returns: boolean
+      }
+      debug_site_health_snapshot: {
+        Args: { p_site_id: string }
+        Returns: {
+          inspections_count: number
+          name: string
+          open_physical: number
+          score: number
+          status: string
+          subsection_id: string
+        }[]
+      }
+      get_compliance_setting_bool: {
+        Args: { p_default: boolean; p_key: string }
+        Returns: boolean
+      }
+      get_compliance_setting_numeric: {
+        Args: { p_default: number; p_key: string }
+        Returns: number
+      }
+      get_compliance_settings: {
+        Args: never
+        Returns: {
+          description: string
+          key: string
+          updated_at: string
+          value: Json
+        }[]
       }
       get_pending_verifications: {
         Args: { user_uuid: string }
@@ -2976,6 +3610,31 @@ export type Database = {
           _user_id: string
         }
         Returns: boolean
+      }
+      prune_orphan_photo_urls: {
+        Args: { input: Json; orphans: string[] }
+        Returns: Json
+      }
+      recompute_subsection_installation_status: {
+        Args: { p_subsection_id: string }
+        Returns: {
+          open_physical: number
+          passed_items: number
+          score: number
+          status: string
+          total_answered: number
+        }[]
+      }
+      set_compliance_setting: {
+        Args: {
+          p_changed_by?: string
+          p_key: string
+          p_reason?: string
+          p_value: Json
+        }
+        Returns: {
+          rows_recomputed: number
+        }[]
       }
       validate_access_link: {
         Args: { token: string }
