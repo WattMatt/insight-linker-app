@@ -30,7 +30,7 @@ const ContractorSubsectionDetail = () => {
   });
 
   const { data: inspections, isLoading: inspectionsLoading } = useQuery({
-    queryKey: ["contractor-subsection-inspections", subsectionId],
+    queryKey: ["contractor-subsection-inspections", subsectionId, (subsection as any)?.site_id, (subsection as any)?.name],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inspections")
@@ -39,9 +39,27 @@ const ContractorSubsectionDetail = () => {
         .order("inspection_date", { ascending: false });
 
       if (error) throw error;
-      return data;
+      const linked = data || [];
+
+      const normalize = (v?: string | null) =>
+        (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const target = normalize((subsection as any)?.name);
+      if (!target || !(subsection as any)?.site_id) return linked;
+      const { data: orphans } = await supabase
+        .from("inspections")
+        .select("*, inspection_templates(name)")
+        .eq("site_id", (subsection as any).site_id)
+        .is("subsection_id", null);
+      const matched = (orphans || []).filter((insp: any) => {
+        const shop = insp?.json_data?.generalInfo?.shopNumber
+          || insp?.json_data?.generalInfo?.shopName
+          || insp?.shop_number
+          || insp?.shop_name;
+        return normalize(shop) === target;
+      });
+      return [...linked, ...matched];
     },
-    enabled: !!subsectionId,
+    enabled: !!subsectionId && !!subsection,
   });
 
   const getStatusColor = (status: string) => {

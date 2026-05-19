@@ -71,7 +71,7 @@ const ClientPortalSubsectionDetail = () => {
   });
 
   const { data: inspections = [] } = useQuery({
-    queryKey: ["client-subsection-inspections", subsectionId],
+    queryKey: ["client-subsection-inspections", subsectionId, subsection?.site_id, subsection?.name],
     enabled: !!subsectionId && !!subsection,
     queryFn: async () => {
       const { data, error } = await supabase
@@ -81,7 +81,26 @@ const ClientPortalSubsectionDetail = () => {
         .order("created_at", { ascending: false });
 
       if (error) throw error;
-      return data || [];
+      const linked = data || [];
+
+      // Fallback: pull orphan inspections on same site whose json_data shop matches this subsection
+      const normalize = (v?: string | null) =>
+        (v || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+      const target = normalize(subsection?.name);
+      if (!target || !subsection?.site_id) return linked;
+      const { data: orphans } = await supabase
+        .from("inspections")
+        .select("*")
+        .eq("site_id", subsection.site_id)
+        .is("subsection_id", null);
+      const matched = (orphans || []).filter((insp: any) => {
+        const shop = insp?.json_data?.generalInfo?.shopNumber
+          || insp?.json_data?.generalInfo?.shopName
+          || insp?.shop_number
+          || insp?.shop_name;
+        return normalize(shop) === target;
+      });
+      return [...linked, ...matched];
     },
   });
 

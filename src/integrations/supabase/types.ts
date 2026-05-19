@@ -1246,6 +1246,42 @@ export type Database = {
           },
         ]
       }
+      inspection_relink_audit: {
+        Row: {
+          attempted_firebase_key: string | null
+          attempted_shop_number: string | null
+          created_at: string
+          id: string
+          inspection_id: string
+          match_count: number
+          resolution: string
+          resolved_subsection_id: string | null
+          site_id: string | null
+        }
+        Insert: {
+          attempted_firebase_key?: string | null
+          attempted_shop_number?: string | null
+          created_at?: string
+          id?: string
+          inspection_id: string
+          match_count?: number
+          resolution: string
+          resolved_subsection_id?: string | null
+          site_id?: string | null
+        }
+        Update: {
+          attempted_firebase_key?: string | null
+          attempted_shop_number?: string | null
+          created_at?: string
+          id?: string
+          inspection_id?: string
+          match_count?: number
+          resolution?: string
+          resolved_subsection_id?: string | null
+          site_id?: string | null
+        }
+        Relationships: []
+      }
       inspection_signatures: {
         Row: {
           created_at: string
@@ -3611,6 +3647,7 @@ export type Database = {
         }
         Returns: boolean
       }
+      normalize_shop_key: { Args: { _input: string }; Returns: string }
       prune_orphan_photo_urls: {
         Args: { input: Json; orphans: string[] }
         Returns: Json
@@ -3623,6 +3660,15 @@ export type Database = {
           score: number
           status: string
           total_answered: number
+        }[]
+      }
+      resolve_inspection_subsection: {
+        Args: { _json: Json; _site_id: string }
+        Returns: {
+          firebase_key: string
+          match_count: number
+          resolved_id: string
+          shop_number: string
         }[]
       }
       set_compliance_setting: {
