@@ -1024,7 +1024,7 @@ const SubsectionDetail = () => {
         return;
       }
 
-      // Fetch inspections from Supabase
+      // Fetch inspections from Supabase (linked by subsection_id)
       const { data: inspectionsData, error: inspectionsError } = await supabase
         .from('inspections')
         .select('*')
@@ -1035,15 +1035,38 @@ const SubsectionDetail = () => {
         console.error("Error fetching inspections:", inspectionsError);
       }
 
+      // Fallback: also pull orphan inspections for the same site whose
+      // json_data shop number matches this subsection's name (handles records
+      // synced from the mobile app without a resolved subsection_id).
+      const normalize = (v?: string | null) =>
+        (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const normalizedSubName = normalize(fullSubsection.name);
+      let orphanInspections: any[] = [];
+      if (normalizedSubName) {
+        const { data: orphans } = await supabase
+          .from('inspections')
+          .select('*')
+          .eq('site_id', fullSubsection.site_id)
+          .is('subsection_id', null);
+        orphanInspections = (orphans || []).filter((insp: any) => {
+          const shop = insp?.json_data?.generalInfo?.shopNumber
+            || insp?.json_data?.generalInfo?.shopName
+            || insp?.shop_number
+            || insp?.shop_name;
+          return normalize(shop) === normalizedSubName;
+        });
+      }
+
       // Convert inspections to object format - use UUID id as key
       const inspectionsObj: Record<string, any> = {};
-      inspectionsData?.forEach(inspection => {
+      [...(inspectionsData || []), ...orphanInspections].forEach(inspection => {
         inspectionsObj[inspection.id] = {
           templateId: inspection.template_id,
           date: inspection.inspection_date,
           status: inspection.status,
           priority: inspection.priority,
           title: inspection.title,
+          needsRelink: inspection.subsection_id == null,
         };
       });
 
