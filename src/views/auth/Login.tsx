@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Mail, Lock } from "lucide-react";
+import { Mail, Lock, KeyRound } from "lucide-react";
 import { toast } from "sonner";
 
 import { useNavigate } from "@/lib/navigation";
@@ -13,24 +13,38 @@ import { AuthLayout } from "@/views/auth/AuthLayout";
 import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
 import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
-import { signInSchema, type SignInInput } from "@/lib/validation-schemas";
+import { signInSchema, forgotPasswordSchema, type SignInInput, type ForgotPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
+// Login — supports two modes (EC-6):
+//   "password"   : email + password (default)
+//   "magic-link" : email-only; Supabase emails a 6-digit code; verify code
+//                  to sign in. Useful for users who forgot their password
+//                  AND for first-time users who just got an invite-style
+//                  account creation flow.
+//
+// Captcha (EC-5) is required for both modes when NEXT_PUBLIC_TURNSTILE_SITE_KEY
+// is set. Audit events (EC-3) logged on both submit + (for magic link) on
+// the request-code step.
+
+type Mode = "password" | "magic-link";
+type MagicLinkStep = "email" | "code";
+
 export default function Login() {
   const navigate = useNavigate();
   const { redirectByRole } = useRoleRedirect();
+
+  const [mode, setMode] = useState<Mode>("password");
   const [serverError, setServerError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const [mlStep, setMlStep] = useState<MagicLinkStep>("email");
+  const [mlEmail, setMlEmail] = useState("");
+  const [mlCode, setMlCode] = useState("");
+  const [mlVerifying, setMlVerifying] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<SignInInput>({ resolver: zodResolver(signInSchema) });
-
-  // If the user is already signed in, route them home immediately.
+  // Already-signed-in redirect
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
       if (data.session) {
@@ -44,7 +58,10 @@ export default function Login() {
     });
   }, [navigate, redirectByRole]);
 
-  async function onSubmit({ email, password }: SignInInput) {
+  const pw = useForm<SignInInput>({ resolver: zodResolver(signInSchema) });
+  const ml = useForm<ForgotPasswordInput>({ resolver: zodResolver(forgotPasswordSchema) });
+
+  async function onPasswordSubmit({ email, password }: SignInInput) {
     setServerError(null);
     if (CAPTCHA_ENABLED && !captchaToken) {
       setServerError("Please complete the verification challenge.");
@@ -72,74 +89,245 @@ export default function Login() {
         navigate("/auth/reset-password");
         return;
       }
-      toast.success("Signed in successfully");
+      toast.success("Signed in");
       await redirectByRole(data.user!.id);
     }
   }
 
+  async function onMagicLinkRequest({ email }: ForgotPasswordInput) {
+    setServerError(null);
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setServerError("Please complete the verification challenge.");
+      return;
+    }
+    const trimmed = email.trim().toLowerCase();
+    const { error } = await supabase.auth.signInWithOtp({
+      email: trimmed,
+      options: {
+        shouldCreateUser: false,
+        ...(captchaToken ? { captchaToken } : {}),
+      },
+    });
+
+    recordAuthEvent("magic_link_requested", { method: "magic_link" });
+
+    if (error && process.env.NODE_ENV === "development") {
+      console.warn("[login] signInWithOtp error", error);
+    }
+
+    // Never reveal if the address exists. Always show the code step.
+    setMlEmail(trimmed);
+    setMlStep("code");
+    toast.success("Check your email for the 6-digit code");
+  }
+
+  async function onMagicLinkVerify(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setServerError(null);
+    setMlVerifying(true);
+
+    const { data, error } = await supabase.auth.verifyOtp({
+      email: mlEmail,
+      token: mlCode.trim(),
+      type: "email",
+    });
+
+    if (error || !data.session) {
+      const msg = error?.message?.includes("expired")
+        ? "Code expired. Request a new one."
+        : "Invalid code. Check the email and try again.";
+      setServerError(msg);
+      toast.error(msg);
+      setMlVerifying(false);
+      return;
+    }
+
+    recordAuthEvent("login", { method: "magic_link" });
+    toast.success("Signed in");
+    await redirectByRole(data.user!.id);
+  }
+
+  // ---------- Magic-link code-entry step ----------
+  if (mode === "magic-link" && mlStep === "code") {
+    return (
+      <AuthLayout subtitle={`Enter the 6-digit code sent to ${mlEmail}`}>
+        <form onSubmit={onMagicLinkVerify} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ml-code">Verification Code</Label>
+            <div className="relative">
+              <KeyRound className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="ml-code"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]{6}"
+                maxLength={6}
+                placeholder="123456"
+                className="pl-10 text-lg tracking-widest"
+                value={mlCode}
+                onChange={(e) => setMlCode(e.target.value.replace(/\D/g, ""))}
+                required
+              />
+            </div>
+          </div>
+
+          {serverError && (
+            <p className="text-sm text-destructive" role="alert">
+              {serverError}
+            </p>
+          )}
+
+          <Button
+            type="submit"
+            className="w-full"
+            size="lg"
+            disabled={mlVerifying || mlCode.length !== 6}
+          >
+            {mlVerifying ? "Verifying..." : "Verify & Sign In"}
+          </Button>
+
+          <Button
+            type="button"
+            variant="ghost"
+            className="w-full"
+            size="lg"
+            onClick={() => {
+              setMlStep("email");
+              setMlCode("");
+              setServerError(null);
+            }}
+          >
+            Back
+          </Button>
+        </form>
+      </AuthLayout>
+    );
+  }
+
+  // ---------- Default: mode tabs + form ----------
   return (
     <AuthLayout subtitle="Enter your email below to login to your account">
-      <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-        <div className="space-y-2">
-          <Label htmlFor="email">Email</Label>
-          <div className="relative">
-            <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="email"
-              type="email"
-              placeholder="your@email.com"
-              autoComplete="email"
-              className="pl-10"
-              {...register("email")}
-            />
-          </div>
-          {errors.email && <p className="text-sm text-destructive">{errors.email.message}</p>}
-        </div>
+      <div className="grid grid-cols-2 gap-1 p-1 bg-muted rounded-md text-sm">
+        <button
+          type="button"
+          onClick={() => { setMode("password"); setServerError(null); }}
+          className={`py-2 rounded ${mode === "password" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+        >
+          Password
+        </button>
+        <button
+          type="button"
+          onClick={() => { setMode("magic-link"); setServerError(null); }}
+          className={`py-2 rounded ${mode === "magic-link" ? "bg-background shadow-sm font-medium" : "text-muted-foreground"}`}
+        >
+          Magic Link
+        </button>
+      </div>
 
-        <div className="space-y-2">
-          <div className="flex items-center justify-between">
-            <Label htmlFor="password">Password</Label>
-            <Link
-              href="/auth/forgot-password"
-              className="text-sm text-primary hover:underline"
-            >
-              Forgot password?
+      {mode === "password" ? (
+        <form onSubmit={pw.handleSubmit(onPasswordSubmit)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="email"
+                type="email"
+                placeholder="your@email.com"
+                autoComplete="email"
+                className="pl-10"
+                {...pw.register("email")}
+              />
+            </div>
+            {pw.formState.errors.email && (
+              <p className="text-sm text-destructive">{pw.formState.errors.email.message}</p>
+            )}
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="password">Password</Label>
+              <Link href="/auth/forgot-password" className="text-sm text-primary hover:underline">
+                Forgot password?
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                className="pl-10"
+                {...pw.register("password")}
+              />
+            </div>
+            {pw.formState.errors.password && (
+              <p className="text-sm text-destructive">{pw.formState.errors.password.message}</p>
+            )}
+          </div>
+
+          {serverError && (
+            <p className="text-sm text-destructive" role="alert">
+              {serverError}
+            </p>
+          )}
+
+          <CaptchaTurnstile onTokenChange={setCaptchaToken} />
+
+          <Button type="submit" className="w-full" size="lg" disabled={pw.formState.isSubmitting}>
+            {pw.formState.isSubmitting ? "Signing in..." : "Sign in"}
+          </Button>
+
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">Don&apos;t have an account? </span>
+            <Link href="/auth/signup" className="text-primary hover:underline font-medium">
+              Sign up
             </Link>
           </div>
-          <div className="relative">
-            <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              id="password"
-              type="password"
-              autoComplete="current-password"
-              className="pl-10"
-              {...register("password")}
-            />
+        </form>
+      ) : (
+        <form onSubmit={ml.handleSubmit(onMagicLinkRequest)} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="ml-email">Email</Label>
+            <div className="relative">
+              <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                id="ml-email"
+                type="email"
+                placeholder="your@email.com"
+                autoComplete="email"
+                className="pl-10"
+                {...ml.register("email")}
+              />
+            </div>
+            {ml.formState.errors.email && (
+              <p className="text-sm text-destructive">{ml.formState.errors.email.message}</p>
+            )}
+            <p className="text-xs text-muted-foreground">
+              We&apos;ll email you a 6-digit code. No password needed.
+            </p>
           </div>
-          {errors.password && (
-            <p className="text-sm text-destructive">{errors.password.message}</p>
+
+          {serverError && (
+            <p className="text-sm text-destructive" role="alert">
+              {serverError}
+            </p>
           )}
-        </div>
 
-        {serverError && (
-          <p className="text-sm text-destructive" role="alert">
-            {serverError}
-          </p>
-        )}
+          <CaptchaTurnstile onTokenChange={setCaptchaToken} />
 
-        <CaptchaTurnstile onTokenChange={setCaptchaToken} />
+          <Button type="submit" className="w-full" size="lg" disabled={ml.formState.isSubmitting}>
+            {ml.formState.isSubmitting ? "Sending..." : "Send Code"}
+          </Button>
 
-        <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
-          {isSubmitting ? "Signing in..." : "Sign in"}
-        </Button>
-
-        <div className="text-center text-sm">
-          <span className="text-muted-foreground">Don&apos;t have an account? </span>
-          <Link href="/auth/signup" className="text-primary hover:underline font-medium">
-            Sign up
-          </Link>
-        </div>
-      </form>
+          <div className="text-center text-sm">
+            <span className="text-muted-foreground">Don&apos;t have an account? </span>
+            <Link href="/auth/signup" className="text-primary hover:underline font-medium">
+              Sign up
+            </Link>
+          </div>
+        </form>
+      )}
     </AuthLayout>
   );
 }
