@@ -10,7 +10,9 @@ import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
 import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
+import { PasswordStrengthMeter } from "@/views/auth/PasswordStrengthMeter";
 import { recordAuthEvent } from "@/lib/auth-audit";
+import { evaluatePassword } from "@/lib/password-strength";
 import { setPasswordSchema, type SetPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -28,8 +30,12 @@ export default function SetPassword() {
   const {
     register,
     handleSubmit,
+    watch,
+    setError,
     formState: { errors, isSubmitting },
   } = useForm<SetPasswordInput>({ resolver: zodResolver(setPasswordSchema) });
+
+  const passwordValue = watch("password") ?? "";
 
   useEffect(() => {
     void supabase.auth.getSession().then(({ data }) => {
@@ -49,6 +55,19 @@ export default function SetPassword() {
     const { data: sessionData } = await supabase.auth.getSession();
     if (!sessionData.session) {
       setServerError("Session expired. Please use the invite link again.");
+      return;
+    }
+
+    // Strength + breach gate (best-effort; HIBP network failure does not block).
+    const evalRes = await evaluatePassword(password);
+    if (evalRes.score < 2) {
+      setError("password", { message: "Password is too weak. Mix words, length, and symbols." });
+      return;
+    }
+    if (evalRes.pwned) {
+      setError("password", {
+        message: `Found in ${evalRes.pwnCount?.toLocaleString() ?? "known"} data breaches. Choose a unique password.`,
+      });
       return;
     }
 
@@ -87,6 +106,7 @@ export default function SetPassword() {
           {...register("password")}
           error={errors.password?.message}
         />
+        <PasswordStrengthMeter password={passwordValue} />
         <PasswordField
           id="confirmPassword"
           label="Confirm Password"
