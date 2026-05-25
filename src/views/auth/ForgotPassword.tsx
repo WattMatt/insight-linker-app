@@ -10,6 +10,7 @@ import { toast } from "sonner";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
+import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
@@ -39,6 +40,7 @@ export default function ForgotPassword() {
   const [code, setCode] = useState("");
   const [verifying, setVerifying] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const {
     register,
@@ -48,11 +50,18 @@ export default function ForgotPassword() {
 
   async function sendCode({ email: emailInput }: ForgotPasswordInput) {
     setServerError(null);
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setServerError("Please complete the verification challenge.");
+      return;
+    }
     const trimmed = emailInput.trim().toLowerCase();
 
     // Supabase email contains both the OTP and a clickable link as fallback.
     const redirectTo = `${window.location.origin}/auth`;
-    const { error } = await supabase.auth.resetPasswordForEmail(trimmed, { redirectTo });
+    const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
+      redirectTo,
+      ...(captchaToken ? { captchaToken } : {}),
+    });
 
     // Don't reveal whether the address exists. Always show the code step.
     recordAuthEvent("password_reset_requested", { method: "recovery" });
@@ -174,6 +183,8 @@ export default function ForgotPassword() {
             {serverError}
           </p>
         )}
+
+        <CaptchaTurnstile onTokenChange={setCaptchaToken} />
 
         <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
           {isSubmitting ? "Sending..." : "Send Code"}

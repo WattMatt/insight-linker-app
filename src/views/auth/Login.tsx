@@ -11,6 +11,7 @@ import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
 import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
+import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { signInSchema, type SignInInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
@@ -21,6 +22,7 @@ export default function Login() {
   const navigate = useNavigate();
   const { redirectByRole } = useRoleRedirect();
   const [serverError, setServerError] = useState<string | null>(null);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const {
     register,
@@ -44,7 +46,15 @@ export default function Login() {
 
   async function onSubmit({ email, password }: SignInInput) {
     setServerError(null);
-    const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setServerError("Please complete the verification challenge.");
+      return;
+    }
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+      ...(captchaToken ? { options: { captchaToken } } : {}),
+    });
 
     if (error) {
       const msg = error.message.includes("Invalid login credentials")
@@ -116,6 +126,8 @@ export default function Login() {
             {serverError}
           </p>
         )}
+
+        <CaptchaTurnstile onTokenChange={setCaptchaToken} />
 
         <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
           {isSubmitting ? "Signing in..." : "Sign in"}

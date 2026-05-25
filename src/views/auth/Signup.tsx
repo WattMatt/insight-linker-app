@@ -9,6 +9,7 @@ import { toast } from "sonner";
 
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
+import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { signUpSchema, type SignUpInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,7 @@ import { Label } from "@/components/ui/label";
 export default function Signup() {
   const [serverError, setServerError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
   const {
     register,
@@ -27,12 +29,17 @@ export default function Signup() {
 
   async function onSubmit({ email, password, fullName }: SignUpInput) {
     setServerError(null);
+    if (CAPTCHA_ENABLED && !captchaToken) {
+      setServerError("Please complete the verification challenge.");
+      return;
+    }
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         data: { full_name: fullName },
         emailRedirectTo: `${window.location.origin}/dashboard`,
+        ...(captchaToken ? { captchaToken } : {}),
       },
     });
 
@@ -132,6 +139,8 @@ export default function Signup() {
             {serverError}
           </p>
         )}
+
+        <CaptchaTurnstile onTokenChange={setCaptchaToken} />
 
         <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
           {isSubmitting ? "Creating account..." : "Sign up"}
