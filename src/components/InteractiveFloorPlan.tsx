@@ -71,7 +71,6 @@ export const InteractiveFloorPlan = ({
           table: 'floor_plan_pins'
         },
         (payload) => {
-          console.log('Floor plan pin changed:', payload);
           
           // Reload pins to reflect changes
           if (floorPlan) {
@@ -103,7 +102,6 @@ export const InteractiveFloorPlan = ({
           filter: `subsection_id=eq.${subsectionId}`
         },
         (payload) => {
-          console.log('Floor plan changed:', payload);
           loadFloorPlan();
         }
       )
@@ -118,7 +116,6 @@ export const InteractiveFloorPlan = ({
 
   useEffect(() => {
     if (floorPlan) {
-      console.log("Floor plan state updated, file_url:", floorPlan.file_url);
     }
   }, [floorPlan]);
 
@@ -138,7 +135,6 @@ export const InteractiveFloorPlan = ({
       if (floorPlanError) throw floorPlanError;
 
       setFloorPlan(floorPlanData);
-      console.log("Floor plan loaded:", floorPlanData);
 
       if (floorPlanData) {
         // Fetch pins for this floor plan
@@ -162,7 +158,7 @@ export const InteractiveFloorPlan = ({
         }
       }
     } catch (error) {
-      console.error("Error loading floor plan:", error);
+      if (import.meta.env.DEV) console.error("Error loading floor plan:", error);
       toast.error("Failed to load floor plan");
     } finally {
       setIsLoading(false);
@@ -212,10 +208,9 @@ export const InteractiveFloorPlan = ({
 
       setFloorPlan(newFloorPlan);
       setPins([]);
-      console.log("Floor plan uploaded successfully:", newFloorPlan);
       toast.success("Floor plan uploaded successfully");
     } catch (error) {
-      console.error("Error uploading floor plan:", error);
+      if (import.meta.env.DEV) console.error("Error uploading floor plan:", error);
       toast.error("Failed to upload floor plan");
     } finally {
       setIsUploading(false);
@@ -244,7 +239,7 @@ export const InteractiveFloorPlan = ({
         setMoveMode(null);
         toast.success("Pin moved successfully");
       } catch (error) {
-        console.error("Error moving pin:", error);
+        if (import.meta.env.DEV) console.error("Error moving pin:", error);
         toast.error("Failed to move pin");
       }
       return;
@@ -270,16 +265,15 @@ export const InteractiveFloorPlan = ({
         setIsModalOpen(true);
       }
     } catch (error) {
-      console.error("Error adding pin:", error);
+      if (import.meta.env.DEV) console.error("Error adding pin:", error);
       toast.error("Failed to add pin");
     }
   };
 
   const handleSavePin = async (pinData: any, photo?: File) => {
-    console.log("handleSavePin called with:", { pinData, photo, selectedPin });
     
     if (!selectedPin?.id) {
-      console.error("No selectedPin.id found");
+      if (import.meta.env.DEV) console.error("No selectedPin.id found");
       toast.error("Cannot save: Pin ID is missing");
       return;
     }
@@ -292,7 +286,7 @@ export const InteractiveFloorPlan = ({
       setIsModalOpen(false);
       setSelectedPin(null);
     } catch (error) {
-      console.error("Error saving pin:", error);
+      if (import.meta.env.DEV) console.error("Error saving pin:", error);
       throw error;
     }
   };
@@ -310,7 +304,7 @@ export const InteractiveFloorPlan = ({
         setIsModalOpen(false);
       }
     } catch (error) {
-      console.error("Error deleting pin:", error);
+      if (import.meta.env.DEV) console.error("Error deleting pin:", error);
       throw error;
     }
   };
@@ -351,7 +345,7 @@ export const InteractiveFloorPlan = ({
         await deletePin(pin.id);
         clearPendingUndo();
       } catch (error) {
-        console.error("Error deleting pin:", error);
+        if (import.meta.env.DEV) console.error("Error deleting pin:", error);
         // Restore the pin if delete failed
         setPins(prevPins => [...prevPins, pinData].sort((a, b) => a.pin_number - b.pin_number));
         toast.error("Failed to delete pin");
@@ -391,7 +385,7 @@ export const InteractiveFloorPlan = ({
       await loadFloorPlan();
       toast.success("Rectification photo saved");
     } catch (error) {
-      console.error("Error saving rectification:", error);
+      if (import.meta.env.DEV) console.error("Error saving rectification:", error);
       toast.error("Failed to save rectification photo");
       throw error;
     }
@@ -414,7 +408,7 @@ export const InteractiveFloorPlan = ({
       await loadFloorPlan();
       toast.success("Rectification photo removed");
     } catch (error) {
-      console.error("Error removing rectification:", error);
+      if (import.meta.env.DEV) console.error("Error removing rectification:", error);
       toast.error("Failed to remove rectification photo");
       throw error;
     }
@@ -438,7 +432,7 @@ export const InteractiveFloorPlan = ({
       
       toast.success(`Status updated to ${newStatus.replace('_', ' ')}`);
     } catch (error) {
-      console.error("Error updating status:", error);
+      if (import.meta.env.DEV) console.error("Error updating status:", error);
       toast.error("Failed to update status");
       throw error;
     }
@@ -489,7 +483,7 @@ export const InteractiveFloorPlan = ({
       const filename = `floor-plan-report-${subsectionName}-${new Date().toISOString().split('T')[0]}.pdf`;
       setPdfPreview({ url, blob, filename });
     } catch (error) {
-      console.error("Error generating report:", error);
+      if (import.meta.env.DEV) console.error("Error generating report:", error);
       toast.error("Failed to generate report");
     } finally {
       setIsGeneratingReport(false);
@@ -516,7 +510,7 @@ export const InteractiveFloorPlan = ({
         toast.error(result.error || "Failed to save report");
       }
     } catch (error) {
-      console.error("Error saving report:", error);
+      if (import.meta.env.DEV) console.error("Error saving report:", error);
       toast.error("Failed to save report");
     } finally {
       setSavingToDocuments(false);

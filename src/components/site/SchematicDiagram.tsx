@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -357,7 +357,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       const canvas = contentRef.current?.querySelector('canvas');
       if (canvas) {
         pdfCanvasRef.current = canvas;
-        console.log('[SchematicDiagram] PDF canvas captured for smart snap');
       }
     }, 100);
     
@@ -368,7 +367,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const originalWidth = page.originalWidth || page.width;
     const originalHeight = page.originalHeight || page.height;
     
-    console.log('PDF original dimensions captured:', { originalWidth, originalHeight });
     
     if (originalWidth > 0 && originalHeight > 0) {
       setOriginalPdfDimensions({
@@ -462,7 +460,6 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const block = blocks.find(b => b.id === blockId);
     if (!block) return;
     
-    console.log('[Schematic] Block drag start:', blockId);
     setDragging({ blockId });
     setDragStart({ x: e.clientX, y: e.clientY });
     setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
@@ -649,7 +646,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (error) throw error;
     } catch (error) {
-      console.error("Error updating block:", error);
+      if (import.meta.env.DEV) console.error("Error updating block:", error);
       toast.error("Failed to update block position");
     }
 
@@ -720,7 +717,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (inspError) throw inspError;
       setInspections(inspData || []);
     } catch (error) {
-      console.error("Error loading schematic data:", error);
+      if (import.meta.env.DEV) console.error("Error loading schematic data:", error);
       toast.error("Failed to load schematic data");
     } finally {
       setLoading(false);
@@ -838,7 +835,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setSchematic(newSchematic);
       toast.success("Schematic uploaded successfully");
     } catch (error: any) {
-      console.error("Error uploading schematic:", error);
+      if (import.meta.env.DEV) console.error("Error uploading schematic:", error);
       toast.error(error.message || "Failed to upload schematic");
     } finally {
       setUploading(false);
@@ -864,7 +861,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setBlocks([]);
       toast.success("Schematic deleted");
     } catch (error) {
-      console.error("Error deleting schematic:", error);
+      if (import.meta.env.DEV) console.error("Error deleting schematic:", error);
       toast.error("Failed to delete schematic");
     }
   };
@@ -933,7 +930,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         toast.info("Block placed - consider calibrating for accurate sizing");
       }
     } catch (error) {
-      console.error("Error adding block:", error);
+      if (import.meta.env.DEV) console.error("Error adding block:", error);
       toast.error("Failed to add block");
     }
   };
@@ -1026,7 +1023,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setLinkDialogOpen(false);
       toast.success(matchedSubsectionId ? "Block linked to subsection" : "Block updated");
     } catch (error) {
-      console.error("Error saving block:", error);
+      if (import.meta.env.DEV) console.error("Error saving block:", error);
       toast.error("Failed to save block");
     }
   };
@@ -1054,7 +1051,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setSizeDialogOpen(false);
       toast.success(`Applied ${SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.label || 'custom'} size to all ${blocks.length} blocks`);
     } catch (error) {
-      console.error("Error applying size to blocks:", error);
+      if (import.meta.env.DEV) console.error("Error applying size to blocks:", error);
       toast.error("Failed to apply size to blocks");
     }
   };
@@ -1075,7 +1072,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setEditDialogOpen(false);
       toast.success("Block deleted");
     } catch (error) {
-      console.error("Error deleting block:", error);
+      if (import.meta.env.DEV) console.error("Error deleting block:", error);
       toast.error("Failed to delete block");
     }
   };
@@ -1096,7 +1093,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success("Block unlinked");
     } catch (error) {
-      console.error("Error unlinking block:", error);
+      if (import.meta.env.DEV) console.error("Error unlinking block:", error);
       toast.error("Failed to unlink block");
     }
   };
@@ -1143,7 +1140,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success(`Auto-matched ${matchedCount} blocks`);
     } catch (error) {
-      console.error("Error auto-matching:", error);
+      if (import.meta.env.DEV) console.error("Error auto-matching:", error);
       toast.error("Failed to auto-match blocks");
     }
   };
@@ -1250,7 +1247,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success(`Calibrated! Block size: ${calibrationRect.width.toFixed(1)}% × ${calibrationRect.height.toFixed(1)}%`);
     } catch (error) {
-      console.error("Error saving calibration:", error);
+      if (import.meta.env.DEV) console.error("Error saving calibration:", error);
       toast.error("Failed to save calibration");
     }
     
@@ -1283,7 +1280,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success("Calibration cleared");
     } catch (error) {
-      console.error("Error clearing calibration:", error);
+      if (import.meta.env.DEV) console.error("Error clearing calibration:", error);
       toast.error("Failed to clear calibration");
     }
   };

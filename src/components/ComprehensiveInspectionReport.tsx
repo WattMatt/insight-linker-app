@@ -74,13 +74,11 @@ export const ComprehensiveInspectionReport = ({
 
   const handlePreviewReport = async () => {
     setIsLoading(true);
-    console.log('[WYSIWYG Report] Starting preview generation...');
     
     try {
       // Fetch template
       let template: any = null;
       if (templateId) {
-        console.log('[WYSIWYG Report] Fetching template:', templateId);
         const { data: templateData, error: templateError } = await supabase
           .from('inspection_templates')
           .select('*')
@@ -88,18 +86,17 @@ export const ComprehensiveInspectionReport = ({
           .maybeSingle();
         
         if (templateError) {
-          console.error('[WYSIWYG Report] Template fetch error:', templateError);
+          if (import.meta.env.DEV) console.error('[WYSIWYG Report] Template fetch error:', templateError);
         }
         template = templateData;
       }
 
       if (!template) {
-        console.error('[WYSIWYG Report] No template found');
+        if (import.meta.env.DEV) console.error('[WYSIWYG Report] No template found');
         toast.error("Cannot generate report without a template");
         return;
       }
 
-      console.log('[WYSIWYG Report] Template loaded:', template.name);
 
       // Fetch signatures if we have an inspection ID
       let signatures: any[] = [];
@@ -116,12 +113,9 @@ export const ComprehensiveInspectionReport = ({
       let jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
       const generalInfo = jsonData.generalInfo || {};
 
-      console.log('[WYSIWYG Report] inspectionData keys:', Object.keys(inspectionData || {}));
-      console.log('[WYSIWYG Report] jsonData keys:', Object.keys(jsonData));
       
       // If jsonData is empty but we have an inspection ID, fetch it directly
       if (Object.keys(jsonData).length === 0 && inspId) {
-        console.log('[WYSIWYG Report] jsonData empty, fetching from DB for inspection:', inspId);
         const { data: freshInspection } = await supabase
           .from('inspections')
           .select('json_data')
@@ -130,7 +124,6 @@ export const ComprehensiveInspectionReport = ({
         
         if (freshInspection?.json_data) {
           jsonData = freshInspection.json_data as Record<string, any>;
-          console.log('[WYSIWYG Report] Fetched jsonData keys:', Object.keys(jsonData));
         }
       }
 
@@ -153,7 +146,6 @@ export const ComprehensiveInspectionReport = ({
             const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
             
             if (photos.length > 0) {
-              console.log(`[WYSIWYG Report] Found ${photos.length} photos for ${sectionId}/${itemId}`);
               totalPhotosFound += photos.length;
             }
             
@@ -168,14 +160,12 @@ export const ComprehensiveInspectionReport = ({
         };
       });
       
-      console.log(`[WYSIWYG Report] Total photos found across all sections: ${totalPhotosFound}`);
 
       // Extract tenant data - jsonData.tenants is stored as an ARRAY, not an object map
       const rawTenants = jsonData.tenants;
       let tenantsForReport: any[] = [];
       
       if (Array.isArray(rawTenants) && rawTenants.length > 0) {
-        console.log('[WYSIWYG Report] Extracting tenants from array:', rawTenants.length);
         tenantsForReport = rawTenants.map((tenant: any, idx: number) => ({
           shopName: tenant.shopName || `Tenant ${idx + 1}`,
           shopNumber: tenant.shopNumber || '',
@@ -205,7 +195,6 @@ export const ComprehensiveInspectionReport = ({
         });
       }
       
-      console.log('[WYSIWYG Report] Tenants for report:', tenantsForReport.length);
 
       // Build WYSIWYG report data
       const data: InspectionReportData = {
@@ -235,7 +224,6 @@ export const ComprehensiveInspectionReport = ({
         })),
       };
 
-      console.log('[WYSIWYG Report] Report data prepared:', { 
         sectionsCount: sectionsForReport.length, 
         snagsCount: snags.length,
         signaturesCount: signatures.length,
@@ -245,7 +233,7 @@ export const ComprehensiveInspectionReport = ({
       setReportData(data);
       setPreviewOpen(true);
     } catch (error) {
-      console.error('[WYSIWYG Report] Preview error:', error);
+      if (import.meta.env.DEV) console.error('[WYSIWYG Report] Preview error:', error);
       toast.error("Failed to generate preview");
     } finally {
       setIsLoading(false);
@@ -311,11 +299,10 @@ export const ComprehensiveInspectionReport = ({
                 file_name: fileName,
                 file_url: urlData.publicUrl,
               });
-              console.log('[WYSIWYG Report] Document saved to storage');
             }
           }
         } catch (saveError) {
-          console.warn('[WYSIWYG Report] Failed to save to storage:', saveError);
+          if (import.meta.env.DEV) console.warn('[WYSIWYG Report] Failed to save to storage:', saveError);
           // Don't show error to user - the PDF was still downloaded
         }
       }
@@ -366,7 +353,7 @@ export async function generateAndSaveComprehensiveReport(
 ): Promise<GenerateReportResult> {
   // This function now requires browser rendering context
   // Return error for non-interactive use
-  console.warn('[WYSIWYG Report] generateAndSaveComprehensiveReport called outside UI context');
+  if (import.meta.env.DEV) console.warn('[WYSIWYG Report] generateAndSaveComprehensiveReport called outside UI context');
   return { 
     success: false, 
     error: "WYSIWYG reports require UI context. Use ComprehensiveInspectionReport component instead." 

@@ -1,5 +1,5 @@
 import { ChevronRight, Home, Building2, MapPin, Layers } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 interface BreadcrumbItem {

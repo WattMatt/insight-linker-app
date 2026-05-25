@@ -1,5 +1,5 @@
 import { Home, MapPin, LogOut, User, Briefcase } from "lucide-react";
-import { NavLink, useNavigate, useSearchParams } from "react-router-dom";
+import { NavLink, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";

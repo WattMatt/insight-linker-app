@@ -9,7 +9,9 @@ import { extractDocumentContent, PageTextContent, DetectedTable, TextBlock } fro
 import { extractAllImages, extractCoverPageImages, ExtractedImage, ImageExtractionOptions } from './imageExtractor';
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+if (typeof window !== 'undefined') {
+  pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.js`;
+}
 
 export interface ProcessingOptions {
   maxPages?: number;

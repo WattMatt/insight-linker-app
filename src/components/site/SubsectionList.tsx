@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Eye, Trash2, Shield, ClipboardCheck, AlertCircle, ChevronDown, ChevronRight, Layers, AlertTriangle } from "lucide-react";
 import { Subsection } from "@/types/site";
-import { useNavigate } from "react-router-dom";
+import { useNavigate } from "@/lib/navigation";
 import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";

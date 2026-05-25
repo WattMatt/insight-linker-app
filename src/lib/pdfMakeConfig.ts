@@ -387,20 +387,17 @@ function validateCanvasElements(obj: any, path: string = 'root'): string[] {
  * Uses Promise-based getStream for browser environments
  */
 export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Promise<Blob> {
-  console.log('Creating PDF with pdfmake...');
   
   // Validate canvas elements before generating
   const canvasIssues = validateCanvasElements(docDefinition);
   if (canvasIssues.length > 0) {
-    console.error('Canvas validation issues found:', canvasIssues);
+    if (import.meta.env.DEV) console.error('Canvas validation issues found:', canvasIssues);
     throw new Error(`Invalid canvas elements: ${canvasIssues.join(', ')}`);
   }
-  console.log('Canvas validation passed');
   
   // Verify fonts are loaded
   const instance = pdfMake as any;
   const vfsKeys = Object.keys(instance.vfs || {});
-  console.log('VFS available:', vfsKeys.length > 0);
   
   if (!instance.vfs || vfsKeys.length === 0) {
     throw new Error('PDF fonts not loaded. Please refresh the page and try again.');
@@ -411,7 +408,6 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
   // In browser, getStream returns a Promise that resolves to a readable stream
   try {
     const stream = await pdfDocGenerator.getStream();
-    console.log('Got stream:', typeof stream);
     
     // Read the stream
     const reader = stream.getReader();
@@ -423,7 +419,6 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
       chunks.push(value);
     }
     
-    console.log('Stream chunks collected:', chunks.length);
     
     // Combine chunks into blob
     const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
@@ -435,11 +430,9 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
     }
     
     const blob = new Blob([result], { type: 'application/pdf' });
-    console.log('PDF blob created, size:', blob.size);
     return blob;
     
   } catch (streamError) {
-    console.log('Stream method failed, trying Promise-based getBlob...');
     
     // pdfmake 0.3 uses Promise-based getBlob()
     try {
@@ -447,13 +440,12 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
       const blob: Blob = await pdfDocGenerator.getBlob();
       
       if (blob && blob.size > 0) {
-        console.log('PDF blob via getBlob, size:', blob.size);
         return blob;
       } else {
         throw new Error('Generated PDF is empty');
       }
     } catch (blobError) {
-      console.error('getBlob failed:', blobError);
+      if (import.meta.env.DEV) console.error('getBlob failed:', blobError);
       throw blobError;
     }
   }
@@ -493,7 +485,6 @@ export function openPdfInNewWindow(docDefinition: TDocumentDefinitions): void {
  * Downloads a simple PDF to verify pdfmake is working
  */
 export async function testPdfGeneration(): Promise<void> {
-  console.log('Testing PDF generation...');
   
   const testDoc: TDocumentDefinitions = {
     content: [
@@ -511,7 +502,6 @@ export async function testPdfGeneration(): Promise<void> {
     
     // pdfmake 0.3 uses Promise-based getBlob()
     const blob: Blob = await pdfDocGenerator.getBlob();
-    console.log('Test PDF blob generated, size:', blob.size);
     
     // Create a download link
     const url = URL.createObjectURL(blob);
@@ -523,10 +513,9 @@ export async function testPdfGeneration(): Promise<void> {
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
     
-    console.log('Test PDF download started');
     alert('PDF downloaded successfully! Check your downloads folder.');
   } catch (error) {
-    console.error('Test PDF generation failed:', error);
+    if (import.meta.env.DEV) console.error('Test PDF generation failed:', error);
     alert('PDF generation failed: ' + (error instanceof Error ? error.message : String(error)));
   }
 }
@@ -535,7 +524,6 @@ export async function testPdfGeneration(): Promise<void> {
  * Generate a test PDF blob to verify blob generation works
  */
 export async function testPdfBlobGeneration(): Promise<Blob> {
-  console.log('Testing PDF blob generation...');
   
   const testDoc: TDocumentDefinitions = {
     content: [

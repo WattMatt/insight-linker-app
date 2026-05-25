@@ -110,7 +110,7 @@ async function imageToBase64(url: string): Promise<string | null> {
     // Fetch the image
     const response = await fetch(url, { mode: 'cors' });
     if (!response.ok) {
-      console.warn(`[imageToBase64] Failed to fetch: ${url.substring(0, 50)}...`);
+      if (import.meta.env.DEV) console.warn(`[imageToBase64] Failed to fetch: ${url.substring(0, 50)}...`);
       return null;
     }
 
@@ -118,7 +118,7 @@ async function imageToBase64(url: string): Promise<string | null> {
 
     // Skip if too large (>2MB original likely means uncompressed)
     if (blob.size > 2 * 1024 * 1024) {
-      console.warn(`[imageToBase64] Skipping large image: ${Math.round(blob.size / 1024)}KB`);
+      if (import.meta.env.DEV) console.warn(`[imageToBase64] Skipping large image: ${Math.round(blob.size / 1024)}KB`);
       return null;
     }
 
@@ -156,14 +156,14 @@ async function imageToBase64(url: string): Promise<string | null> {
         // Check final size
         const base64Size = Math.round((dataUrl.length * 3) / 4 / 1024);
         if (base64Size > MAX_SIZE_KB) {
-          console.warn(`[imageToBase64] Compressed but still large: ${base64Size}KB`);
+          if (import.meta.env.DEV) console.warn(`[imageToBase64] Compressed but still large: ${base64Size}KB`);
         }
 
         resolve(dataUrl);
       };
 
       img.onerror = () => {
-        console.warn(`[imageToBase64] Failed to load image: ${url.substring(0, 50)}...`);
+        if (import.meta.env.DEV) console.warn(`[imageToBase64] Failed to load image: ${url.substring(0, 50)}...`);
         resolve(null);
       };
 
@@ -171,7 +171,7 @@ async function imageToBase64(url: string): Promise<string | null> {
       img.src = URL.createObjectURL(blob);
     });
   } catch (error) {
-    console.warn(`[imageToBase64] Error processing: ${url.substring(0, 50)}...`, error);
+    if (import.meta.env.DEV) console.warn(`[imageToBase64] Error processing: ${url.substring(0, 50)}...`, error);
     return null;
   }
 }
@@ -202,10 +202,6 @@ export async function generatePdfShiftInspectionReport(
   const { inspection, siteName, clientName, siteLogoUrl, accentColor = '#2563eb', subsectionId } = options;
 
   try {
-    console.log('[InspectionPDF] Starting HTML+Browserless generation...');
-    console.log('[InspectionPDF] Sections:', inspection.sections?.length || 0);
-    console.log('[InspectionPDF] Tenants:', inspection.tenants?.length || 0);
-    console.log('[InspectionPDF] Snags:', inspection.snags?.length || 0);
 
     // Get current user for document ownership
     const { data: { user } } = await supabase.auth.getUser();
@@ -226,7 +222,6 @@ export async function generatePdfShiftInspectionReport(
         }
       }
     }
-    console.log('[InspectionPDF] Total photos:', totalPhotos);
 
     // Build payload - send Base64 images
     const payload = {
@@ -252,7 +247,6 @@ export async function generatePdfShiftInspectionReport(
       userId: user?.id,
     };
 
-    console.log('[InspectionPDF] Calling generate-inspection-pdf Edge Function...');
 
     // Call Edge Function for HTML + Browserless PDF generation
     const { data, error } = await supabase.functions.invoke('generate-inspection-pdf', {
@@ -260,22 +254,20 @@ export async function generatePdfShiftInspectionReport(
     });
 
     if (error) {
-      console.error('[InspectionPDF] Edge Function error:', error);
+      if (import.meta.env.DEV) console.error('[InspectionPDF] Edge Function error:', error);
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
 
-    console.log('[InspectionPDF] Edge Function response:', {
       success: data?.success,
       url: data?.url,
       fileName: data?.fileName
     });
 
     if (!data?.url) {
-      console.error('[InspectionPDF] No URL returned:', data);
+      if (import.meta.env.DEV) console.error('[InspectionPDF] No URL returned:', data);
       return { success: false, error: data?.error || 'No PDF URL returned' };
     }
 
-    console.log('[InspectionPDF] ✓ PDF generated successfully:', data.url);
 
     return {
       success: true,
@@ -285,7 +277,7 @@ export async function generatePdfShiftInspectionReport(
     };
 
   } catch (error) {
-    console.error('[InspectionPDF] Error generating report:', error);
+    if (import.meta.env.DEV) console.error('[InspectionPDF] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -339,7 +331,7 @@ export async function generateAndSavePdfShiftInspectionReport(
     };
 
   } catch (error) {
-    console.error('[PDFShift] Save error:', error);
+    if (import.meta.env.DEV) console.error('[PDFShift] Save error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

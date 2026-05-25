@@ -268,7 +268,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     const allInspections = inspectionsRes.data || [];
     const siteAssets = assetsRes.data || [];
-    const qrBaseUrl = settingsRes.data?.qr_base_url || 'https://wm-compliance.lovable.app';
+    const qrBaseUrl = settingsRes.data?.qr_base_url || (typeof window !== 'undefined' ? window.location.origin : 'https://insight-linker-app.vercel.app');
 
     // Fetch snags with full details for card rendering
     const snagsRes = subsectionIds.length > 0 

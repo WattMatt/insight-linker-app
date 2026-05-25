@@ -1,5 +1,5 @@
 import { useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from '@/lib/navigation';
 import { supabase } from '@/integrations/supabase/client';
 import { clearAllCaches } from '@/lib/cacheUtils';
 import { toast } from 'sonner';

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useNavigate, useLocation } from '@/lib/navigation';
 
 /**
  * Component to handle and redirect URLs with double slashes (from legacy QR codes)

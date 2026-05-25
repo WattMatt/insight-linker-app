@@ -1,11 +1,11 @@
 import { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'app.lovable.7b7a829f65664e31a58f428ee0cc1c75',
+  appId: 'com.wattmatt.compliance',
   appName: 'wm-compliance',
-  webDir: 'dist',
+  webDir: 'out',
   server: {
-    url: 'https://7b7a829f-6566-4e31-a58f-428ee0cc1c75.lovableproject.com?forceHideBadge=true',
+    url: 'https://insight-linker-app.vercel.app',
     cleartext: true
   },
   plugins: {

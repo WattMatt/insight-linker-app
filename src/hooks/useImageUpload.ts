@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import heic2any from 'heic2any';
+// heic2any dynamically imported to avoid SSR issues (references window at load)
 
 interface UploadResult {
   url: string;
@@ -52,7 +52,7 @@ export const useImageUpload = () => {
 
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          console.warn('Canvas context unavailable, using original file');
+          if (import.meta.env.DEV) console.warn('Canvas context unavailable, using original file');
           resolve(file);
           return;
         }
@@ -65,7 +65,6 @@ export const useImageUpload = () => {
         canvas.toBlob(
           (blob) => {
             if (blob) {
-              console.log(`Image compressed: ${(file.size / 1024).toFixed(0)}KB → ${(blob.size / 1024).toFixed(0)}KB`);
               resolve(blob);
             } else {
               resolve(file);
@@ -78,7 +77,7 @@ export const useImageUpload = () => {
 
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        console.warn('Image load failed, using original file');
+        if (import.meta.env.DEV) console.warn('Image load failed, using original file');
         resolve(file);
       };
 
@@ -94,7 +93,7 @@ export const useImageUpload = () => {
     
     if (ext === 'heic' || ext === 'heif') {
       try {
-        console.log('Converting HEIC image to JPG...');
+        const heic2any = (await import('heic2any')).default;
         const convertedBlob = await heic2any({
           blob: file,
           toType: 'image/jpeg',
@@ -106,7 +105,7 @@ export const useImageUpload = () => {
         
         return new File([blob], newFileName, { type: 'image/jpeg' });
       } catch (error) {
-        console.error('HEIC conversion failed:', error);
+        if (import.meta.env.DEV) console.error('HEIC conversion failed:', error);
         toast.error('Failed to convert HEIC image. Please use JPG or PNG format.');
         throw error;
       }
@@ -173,7 +172,7 @@ export const useImageUpload = () => {
             });
 
           if (verifyError || !verifyData || verifyData.length === 0) {
-            console.warn('Upload verification failed, file may not exist:', data.path);
+            if (import.meta.env.DEV) console.warn('Upload verification failed, file may not exist:', data.path);
           }
 
           // Use public URL (doesn't expire) - use the exact path returned by storage
@@ -186,10 +185,9 @@ export const useImageUpload = () => {
           const urlPath = publicData.publicUrl.split(`${bucket}/`).pop()?.split('?')[0];
           
           if (urlPath && decodeURIComponent(urlPath) !== storedPath) {
-            console.warn('URL path mismatch detected:', { urlPath, storedPath });
+            if (import.meta.env.DEV) console.warn('URL path mismatch detected:', { urlPath, storedPath });
           }
           
-          console.log('Image uploaded and verified:', { url: publicData.publicUrl, path: storedPath });
           
           // Trigger server-side compression for PDF optimization (non-blocking)
           if (!options?.skipServerCompression && bucket === 'inspection-photos') {
@@ -203,7 +201,7 @@ export const useImageUpload = () => {
           };
 
         } catch (error: any) {
-          console.error(`Upload attempt ${attempt} failed:`, error);
+          if (import.meta.env.DEV) console.error(`Upload attempt ${attempt} failed:`, error);
           
           if (attempt === retries) {
             // Last attempt failed
@@ -224,7 +222,7 @@ export const useImageUpload = () => {
         }
       }
     } catch (error: any) {
-      console.error('Image upload error:', error);
+      if (import.meta.env.DEV) console.error('Image upload error:', error);
       setUploading(false);
       return null;
     }
@@ -249,16 +247,15 @@ export const useImageUpload = () => {
         }
       }).then(({ data, error }) => {
         if (error) {
-          console.warn('[ServerCompression] Failed:', error.message);
+          if (import.meta.env.DEV) console.warn('[ServerCompression] Failed:', error.message);
         } else if (data?.success) {
-          console.log(`[ServerCompression] Optimized: ${Math.round(data.originalSize / 1024)}KB → ${Math.round(data.compressedSize / 1024)}KB`);
         }
       }).catch(err => {
-        console.warn('[ServerCompression] Error:', err);
+        if (import.meta.env.DEV) console.warn('[ServerCompression] Error:', err);
       });
     } catch (err) {
       // Silently ignore - this is a background optimization
-      console.warn('[ServerCompression] Trigger failed:', err);
+      if (import.meta.env.DEV) console.warn('[ServerCompression] Trigger failed:', err);
     }
   };
 
@@ -272,14 +269,14 @@ export const useImageUpload = () => {
         .remove([path]);
 
       if (error) {
-        console.error('Error deleting image:', error);
+        if (import.meta.env.DEV) console.error('Error deleting image:', error);
         toast.error('Failed to delete image');
         return false;
       }
 
       return true;
     } catch (error) {
-      console.error('Error deleting image:', error);
+      if (import.meta.env.DEV) console.error('Error deleting image:', error);
       toast.error('Failed to delete image');
       return false;
     }
@@ -295,13 +292,13 @@ export const useImageUpload = () => {
         .createSignedUrl(path, 31536000); // 365 days
 
       if (error) {
-        console.error('Error refreshing signed URL:', error);
+        if (import.meta.env.DEV) console.error('Error refreshing signed URL:', error);
         return null;
       }
 
       return data.signedUrl;
     } catch (error) {
-      console.error('Error refreshing signed URL:', error);
+      if (import.meta.env.DEV) console.error('Error refreshing signed URL:', error);
       return null;
     }
   };
@@ -321,7 +318,7 @@ export const useImageUpload = () => {
       const match = url.match(new RegExp(`${bucket}/([^?]+)`));
       return match ? match[1] : null;
     } catch (error) {
-      console.error('Error extracting path from URL:', error);
+      if (import.meta.env.DEV) console.error('Error extracting path from URL:', error);
       return null;
     }
   };
@@ -364,13 +361,12 @@ export const useImageUpload = () => {
         const { data: urlData } = supabase.storage
           .from(bucket)
           .getPublicUrl(`${folderPath}/${imageFile.name}`);
-        console.log('Corrected image URL:', { original: url, corrected: urlData.publicUrl });
         return urlData.publicUrl;
       }
 
       return null;
     } catch (error) {
-      console.error('Error validating image URL:', error);
+      if (import.meta.env.DEV) console.error('Error validating image URL:', error);
       return null;
     }
   };
