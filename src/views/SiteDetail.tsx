@@ -101,7 +101,7 @@ const SiteDetail = () => {
         setCompanyLogo(data.company_logo_url);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error fetching company logo:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error fetching company logo:', error);
     }
   };
 
@@ -116,7 +116,7 @@ const SiteDetail = () => {
       if (error) throw error;
       setSiteDocuments(data || []);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching site documents:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching site documents:", error);
     }
   };
 
@@ -162,7 +162,7 @@ const SiteDetail = () => {
 
       setSubsectionDocuments(enrichedDocs);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching subsection documents:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching subsection documents:", error);
     }
   };
 
@@ -176,7 +176,7 @@ const SiteDetail = () => {
       if (error) throw error;
       setAvailableTemplates(data || []);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching templates:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching templates:", error);
     }
   };
 
@@ -220,7 +220,7 @@ const SiteDetail = () => {
         setDocumentCategories(data);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching document categories:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching document categories:", error);
     }
   };
 
@@ -253,7 +253,7 @@ const SiteDetail = () => {
       setNewCategoryName("");
       fetchDocumentCategories();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error creating category:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error creating category:", error);
       toast.error("Failed to create category");
     }
   };
@@ -281,7 +281,7 @@ const SiteDetail = () => {
       fetchDocumentCategories();
       fetchSiteDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting category:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
     }
   };
@@ -318,7 +318,7 @@ const SiteDetail = () => {
       fetchDocumentCategories();
       fetchSiteDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error bulk deleting categories:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error bulk deleting categories:", error);
       toast.error("Failed to delete categories");
     }
   };
@@ -349,7 +349,7 @@ const SiteDetail = () => {
       toast.success(`All files in ${categoryName} deleted successfully`);
       fetchSiteDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error bulk deleting documents:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error bulk deleting documents:", error);
       toast.error("Failed to delete files");
     }
   };
@@ -382,7 +382,7 @@ const SiteDetail = () => {
       toast.success(`${subsectionName} deleted successfully`);
       fetchSiteData(); // Refresh all data
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting subsection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting subsection:", error);
       toast.error("Failed to delete subsection");
     }
   };
@@ -461,7 +461,7 @@ const SiteDetail = () => {
             }
           }
         } catch (error) {
-          if (import.meta.env.DEV) console.error('Error generating signed URL for site image:', error);
+          if (process.env.NODE_ENV === 'development') console.error('Error generating signed URL for site image:', error);
         }
       }
 
@@ -514,7 +514,7 @@ const SiteDetail = () => {
         openSnags: (snagsRes || []).filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length,
       });
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching site data:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching site data:", error);
       toast.error("Failed to fetch site data");
     } finally {
       setLoading(false);

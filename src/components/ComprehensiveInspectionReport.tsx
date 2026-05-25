@@ -86,13 +86,13 @@ export const ComprehensiveInspectionReport = ({
           .maybeSingle();
         
         if (templateError) {
-          if (import.meta.env.DEV) console.error('[WYSIWYG Report] Template fetch error:', templateError);
+          if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] Template fetch error:', templateError);
         }
         template = templateData;
       }
 
       if (!template) {
-        if (import.meta.env.DEV) console.error('[WYSIWYG Report] No template found');
+        if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] No template found');
         toast.error("Cannot generate report without a template");
         return;
       }
@@ -224,16 +224,19 @@ export const ComprehensiveInspectionReport = ({
         })),
       };
 
-        sectionsCount: sectionsForReport.length, 
-        snagsCount: snags.length,
-        signaturesCount: signatures.length,
-        tenantsCount: tenantsForReport.length,
-      });
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[WYSIWYG Report] Building report data', {
+          sectionsCount: sectionsForReport.length,
+          snagsCount: snags.length,
+          signaturesCount: signatures.length,
+          tenantsCount: tenantsForReport.length,
+        });
+      }
 
       setReportData(data);
       setPreviewOpen(true);
     } catch (error) {
-      if (import.meta.env.DEV) console.error('[WYSIWYG Report] Preview error:', error);
+      if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] Preview error:', error);
       toast.error("Failed to generate preview");
     } finally {
       setIsLoading(false);
@@ -302,7 +305,7 @@ export const ComprehensiveInspectionReport = ({
             }
           }
         } catch (saveError) {
-          if (import.meta.env.DEV) console.warn('[WYSIWYG Report] Failed to save to storage:', saveError);
+          if (process.env.NODE_ENV === 'development') console.warn('[WYSIWYG Report] Failed to save to storage:', saveError);
           // Don't show error to user - the PDF was still downloaded
         }
       }
@@ -353,7 +356,7 @@ export async function generateAndSaveComprehensiveReport(
 ): Promise<GenerateReportResult> {
   // This function now requires browser rendering context
   // Return error for non-interactive use
-  if (import.meta.env.DEV) console.warn('[WYSIWYG Report] generateAndSaveComprehensiveReport called outside UI context');
+  if (process.env.NODE_ENV === 'development') console.warn('[WYSIWYG Report] generateAndSaveComprehensiveReport called outside UI context');
   return { 
     success: false, 
     error: "WYSIWYG reports require UI context. Use ComprehensiveInspectionReport component instead." 

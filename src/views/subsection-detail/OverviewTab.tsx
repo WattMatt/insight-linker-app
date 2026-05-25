@@ -117,7 +117,7 @@ export function OverviewTab({
                     setEditFormData({ ...editFormData, is_coc_required: newValue });
                     toast.success(`COC requirement ${newValue ? 'enabled' : 'disabled'}`);
                   } catch (error) {
-                    if (import.meta.env.DEV) console.error('Error toggling COC requirement:', error);
+                    if (process.env.NODE_ENV === 'development') console.error('Error toggling COC requirement:', error);
                     toast.error('Failed to update COC requirement');
                   }
                 }}

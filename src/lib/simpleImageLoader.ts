@@ -29,7 +29,7 @@ function parseSupabaseUrl(url: string): { bucket: string; path: string } | null 
     
     return null;
   } catch (e) {
-    if (import.meta.env.DEV) console.warn(`[SimpleLoader] Failed to parse URL: ${url}`, e);
+    if (process.env.NODE_ENV === 'development') console.warn(`[SimpleLoader] Failed to parse URL: ${url}`, e);
     return null;
   }
 }
@@ -45,7 +45,7 @@ function blobToDataUrl(blob: Blob): Promise<string | null> {
       resolve(result);
     };
     reader.onerror = () => {
-      if (import.meta.env.DEV) console.error(`[SimpleLoader] FileReader failed`);
+      if (process.env.NODE_ENV === 'development') console.error(`[SimpleLoader] FileReader failed`);
       resolve(null);
     };
     reader.readAsDataURL(blob);
@@ -77,7 +77,7 @@ export async function loadImageSimple(url: string): Promise<string | null> {
         .download(storageInfo.path);
       
       if (error) {
-        if (import.meta.env.DEV) console.warn(`[SimpleLoader] Supabase download failed for ${storageInfo.bucket}/${storageInfo.path}:`, error.message);
+        if (process.env.NODE_ENV === 'development') console.warn(`[SimpleLoader] Supabase download failed for ${storageInfo.bucket}/${storageInfo.path}:`, error.message);
       } else if (data) {
         return await blobToDataUrl(data);
       }
@@ -90,16 +90,16 @@ export async function loadImageSimple(url: string): Promise<string | null> {
         const blob = await response.blob();
         return await blobToDataUrl(blob);
       } else {
-        if (import.meta.env.DEV) console.warn(`[SimpleLoader] Fetch failed with status: ${response.status}`);
+        if (process.env.NODE_ENV === 'development') console.warn(`[SimpleLoader] Fetch failed with status: ${response.status}`);
       }
     } catch (fetchError) {
-      if (import.meta.env.DEV) console.warn(`[SimpleLoader] Direct fetch failed:`, fetchError);
+      if (process.env.NODE_ENV === 'development') console.warn(`[SimpleLoader] Direct fetch failed:`, fetchError);
     }
     
-    if (import.meta.env.DEV) console.error(`[SimpleLoader] All methods failed for: ${url.substring(0, 80)}...`);
+    if (process.env.NODE_ENV === 'development') console.error(`[SimpleLoader] All methods failed for: ${url.substring(0, 80)}...`);
     return null;
   } catch (error) {
-    if (import.meta.env.DEV) console.error(`[SimpleLoader] Unexpected error:`, error);
+    if (process.env.NODE_ENV === 'development') console.error(`[SimpleLoader] Unexpected error:`, error);
     return null;
   }
 }

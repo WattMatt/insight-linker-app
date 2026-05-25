@@ -646,7 +646,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (error) throw error;
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error updating block:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error updating block:", error);
       toast.error("Failed to update block position");
     }
 
@@ -717,7 +717,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (inspError) throw inspError;
       setInspections(inspData || []);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error loading schematic data:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error loading schematic data:", error);
       toast.error("Failed to load schematic data");
     } finally {
       setLoading(false);
@@ -835,7 +835,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setSchematic(newSchematic);
       toast.success("Schematic uploaded successfully");
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error uploading schematic:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading schematic:", error);
       toast.error(error.message || "Failed to upload schematic");
     } finally {
       setUploading(false);
@@ -861,7 +861,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setBlocks([]);
       toast.success("Schematic deleted");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting schematic:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting schematic:", error);
       toast.error("Failed to delete schematic");
     }
   };
@@ -930,7 +930,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         toast.info("Block placed - consider calibrating for accurate sizing");
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error adding block:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error adding block:", error);
       toast.error("Failed to add block");
     }
   };
@@ -1023,7 +1023,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setLinkDialogOpen(false);
       toast.success(matchedSubsectionId ? "Block linked to subsection" : "Block updated");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error saving block:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error saving block:", error);
       toast.error("Failed to save block");
     }
   };
@@ -1051,7 +1051,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setSizeDialogOpen(false);
       toast.success(`Applied ${SIZE_PRESETS[selectedSizePreset as keyof typeof SIZE_PRESETS]?.label || 'custom'} size to all ${blocks.length} blocks`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error applying size to blocks:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error applying size to blocks:", error);
       toast.error("Failed to apply size to blocks");
     }
   };
@@ -1072,7 +1072,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setEditDialogOpen(false);
       toast.success("Block deleted");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting block:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting block:", error);
       toast.error("Failed to delete block");
     }
   };
@@ -1093,7 +1093,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success("Block unlinked");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error unlinking block:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error unlinking block:", error);
       toast.error("Failed to unlink block");
     }
   };
@@ -1140,7 +1140,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success(`Auto-matched ${matchedCount} blocks`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error auto-matching:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error auto-matching:", error);
       toast.error("Failed to auto-match blocks");
     }
   };
@@ -1247,7 +1247,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success(`Calibrated! Block size: ${calibrationRect.width.toFixed(1)}% × ${calibrationRect.height.toFixed(1)}%`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error saving calibration:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error saving calibration:", error);
       toast.error("Failed to save calibration");
     }
     
@@ -1280,7 +1280,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       toast.success("Calibration cleared");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error clearing calibration:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error clearing calibration:", error);
       toast.error("Failed to clear calibration");
     }
   };

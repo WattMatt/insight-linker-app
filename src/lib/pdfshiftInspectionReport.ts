@@ -110,7 +110,7 @@ async function imageToBase64(url: string): Promise<string | null> {
     // Fetch the image
     const response = await fetch(url, { mode: 'cors' });
     if (!response.ok) {
-      if (import.meta.env.DEV) console.warn(`[imageToBase64] Failed to fetch: ${url.substring(0, 50)}...`);
+      if (process.env.NODE_ENV === 'development') console.warn(`[imageToBase64] Failed to fetch: ${url.substring(0, 50)}...`);
       return null;
     }
 
@@ -118,7 +118,7 @@ async function imageToBase64(url: string): Promise<string | null> {
 
     // Skip if too large (>2MB original likely means uncompressed)
     if (blob.size > 2 * 1024 * 1024) {
-      if (import.meta.env.DEV) console.warn(`[imageToBase64] Skipping large image: ${Math.round(blob.size / 1024)}KB`);
+      if (process.env.NODE_ENV === 'development') console.warn(`[imageToBase64] Skipping large image: ${Math.round(blob.size / 1024)}KB`);
       return null;
     }
 
@@ -156,14 +156,14 @@ async function imageToBase64(url: string): Promise<string | null> {
         // Check final size
         const base64Size = Math.round((dataUrl.length * 3) / 4 / 1024);
         if (base64Size > MAX_SIZE_KB) {
-          if (import.meta.env.DEV) console.warn(`[imageToBase64] Compressed but still large: ${base64Size}KB`);
+          if (process.env.NODE_ENV === 'development') console.warn(`[imageToBase64] Compressed but still large: ${base64Size}KB`);
         }
 
         resolve(dataUrl);
       };
 
       img.onerror = () => {
-        if (import.meta.env.DEV) console.warn(`[imageToBase64] Failed to load image: ${url.substring(0, 50)}...`);
+        if (process.env.NODE_ENV === 'development') console.warn(`[imageToBase64] Failed to load image: ${url.substring(0, 50)}...`);
         resolve(null);
       };
 
@@ -171,7 +171,7 @@ async function imageToBase64(url: string): Promise<string | null> {
       img.src = URL.createObjectURL(blob);
     });
   } catch (error) {
-    if (import.meta.env.DEV) console.warn(`[imageToBase64] Error processing: ${url.substring(0, 50)}...`, error);
+    if (process.env.NODE_ENV === 'development') console.warn(`[imageToBase64] Error processing: ${url.substring(0, 50)}...`, error);
     return null;
   }
 }
@@ -254,17 +254,20 @@ export async function generatePdfShiftInspectionReport(
     });
 
     if (error) {
-      if (import.meta.env.DEV) console.error('[InspectionPDF] Edge Function error:', error);
+      if (process.env.NODE_ENV === 'development') console.error('[InspectionPDF] Edge Function error:', error);
       return { success: false, error: error.message || 'Failed to generate PDF' };
     }
 
-      success: data?.success,
-      url: data?.url,
-      fileName: data?.fileName
-    });
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[InspectionPDF] Edge Function response', {
+        success: data?.success,
+        url: data?.url,
+        fileName: data?.fileName,
+      });
+    }
 
     if (!data?.url) {
-      if (import.meta.env.DEV) console.error('[InspectionPDF] No URL returned:', data);
+      if (process.env.NODE_ENV === 'development') console.error('[InspectionPDF] No URL returned:', data);
       return { success: false, error: data?.error || 'No PDF URL returned' };
     }
 
@@ -277,7 +280,7 @@ export async function generatePdfShiftInspectionReport(
     };
 
   } catch (error) {
-    if (import.meta.env.DEV) console.error('[InspectionPDF] Error generating report:', error);
+    if (process.env.NODE_ENV === 'development') console.error('[InspectionPDF] Error generating report:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
@@ -331,7 +334,7 @@ export async function generateAndSavePdfShiftInspectionReport(
     };
 
   } catch (error) {
-    if (import.meta.env.DEV) console.error('[PDFShift] Save error:', error);
+    if (process.env.NODE_ENV === 'development') console.error('[PDFShift] Save error:', error);
     return {
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',

@@ -52,7 +52,7 @@ export const useImageUpload = () => {
 
         const ctx = canvas.getContext('2d');
         if (!ctx) {
-          if (import.meta.env.DEV) console.warn('Canvas context unavailable, using original file');
+          if (process.env.NODE_ENV === 'development') console.warn('Canvas context unavailable, using original file');
           resolve(file);
           return;
         }
@@ -77,7 +77,7 @@ export const useImageUpload = () => {
 
       img.onerror = () => {
         URL.revokeObjectURL(url);
-        if (import.meta.env.DEV) console.warn('Image load failed, using original file');
+        if (process.env.NODE_ENV === 'development') console.warn('Image load failed, using original file');
         resolve(file);
       };
 
@@ -105,7 +105,7 @@ export const useImageUpload = () => {
         
         return new File([blob], newFileName, { type: 'image/jpeg' });
       } catch (error) {
-        if (import.meta.env.DEV) console.error('HEIC conversion failed:', error);
+        if (process.env.NODE_ENV === 'development') console.error('HEIC conversion failed:', error);
         toast.error('Failed to convert HEIC image. Please use JPG or PNG format.');
         throw error;
       }
@@ -172,7 +172,7 @@ export const useImageUpload = () => {
             });
 
           if (verifyError || !verifyData || verifyData.length === 0) {
-            if (import.meta.env.DEV) console.warn('Upload verification failed, file may not exist:', data.path);
+            if (process.env.NODE_ENV === 'development') console.warn('Upload verification failed, file may not exist:', data.path);
           }
 
           // Use public URL (doesn't expire) - use the exact path returned by storage
@@ -185,7 +185,7 @@ export const useImageUpload = () => {
           const urlPath = publicData.publicUrl.split(`${bucket}/`).pop()?.split('?')[0];
           
           if (urlPath && decodeURIComponent(urlPath) !== storedPath) {
-            if (import.meta.env.DEV) console.warn('URL path mismatch detected:', { urlPath, storedPath });
+            if (process.env.NODE_ENV === 'development') console.warn('URL path mismatch detected:', { urlPath, storedPath });
           }
           
           
@@ -201,7 +201,7 @@ export const useImageUpload = () => {
           };
 
         } catch (error: any) {
-          if (import.meta.env.DEV) console.error(`Upload attempt ${attempt} failed:`, error);
+          if (process.env.NODE_ENV === 'development') console.error(`Upload attempt ${attempt} failed:`, error);
           
           if (attempt === retries) {
             // Last attempt failed
@@ -222,7 +222,7 @@ export const useImageUpload = () => {
         }
       }
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error('Image upload error:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Image upload error:', error);
       setUploading(false);
       return null;
     }
@@ -247,15 +247,15 @@ export const useImageUpload = () => {
         }
       }).then(({ data, error }) => {
         if (error) {
-          if (import.meta.env.DEV) console.warn('[ServerCompression] Failed:', error.message);
+          if (process.env.NODE_ENV === 'development') console.warn('[ServerCompression] Failed:', error.message);
         } else if (data?.success) {
         }
       }).catch(err => {
-        if (import.meta.env.DEV) console.warn('[ServerCompression] Error:', err);
+        if (process.env.NODE_ENV === 'development') console.warn('[ServerCompression] Error:', err);
       });
     } catch (err) {
       // Silently ignore - this is a background optimization
-      if (import.meta.env.DEV) console.warn('[ServerCompression] Trigger failed:', err);
+      if (process.env.NODE_ENV === 'development') console.warn('[ServerCompression] Trigger failed:', err);
     }
   };
 
@@ -269,14 +269,14 @@ export const useImageUpload = () => {
         .remove([path]);
 
       if (error) {
-        if (import.meta.env.DEV) console.error('Error deleting image:', error);
+        if (process.env.NODE_ENV === 'development') console.error('Error deleting image:', error);
         toast.error('Failed to delete image');
         return false;
       }
 
       return true;
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error deleting image:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error deleting image:', error);
       toast.error('Failed to delete image');
       return false;
     }
@@ -292,13 +292,13 @@ export const useImageUpload = () => {
         .createSignedUrl(path, 31536000); // 365 days
 
       if (error) {
-        if (import.meta.env.DEV) console.error('Error refreshing signed URL:', error);
+        if (process.env.NODE_ENV === 'development') console.error('Error refreshing signed URL:', error);
         return null;
       }
 
       return data.signedUrl;
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error refreshing signed URL:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error refreshing signed URL:', error);
       return null;
     }
   };
@@ -318,7 +318,7 @@ export const useImageUpload = () => {
       const match = url.match(new RegExp(`${bucket}/([^?]+)`));
       return match ? match[1] : null;
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error extracting path from URL:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error extracting path from URL:', error);
       return null;
     }
   };
@@ -366,7 +366,7 @@ export const useImageUpload = () => {
 
       return null;
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error validating image URL:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error validating image URL:', error);
       return null;
     }
   };

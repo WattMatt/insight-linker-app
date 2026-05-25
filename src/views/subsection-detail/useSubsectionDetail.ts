@@ -113,7 +113,7 @@ export function useSubsectionDetail() {
         setOfflineFloorPlans(offlineData.floorPlans);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error loading offline data:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error loading offline data:', error);
     }
   };
 
@@ -154,7 +154,7 @@ export function useSubsectionDetail() {
         setDocumentCategories(data);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching document categories:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching document categories:", error);
     }
   };
 
@@ -186,7 +186,7 @@ export function useSubsectionDetail() {
         }
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching Supabase documents:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching Supabase documents:", error);
     }
   };
 
@@ -204,7 +204,7 @@ export function useSubsectionDetail() {
       setSnags(allSnags);
       setOpenSnagsCount(allSnags.filter(s => s.status === 'Open').length);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching snags:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching snags:", error);
     }
   };
 
@@ -223,7 +223,7 @@ export function useSubsectionDetail() {
       });
       setCocValidations(validationsMap);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching COC validations:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching COC validations:", error);
     }
   };
 
@@ -283,7 +283,7 @@ export function useSubsectionDetail() {
         });
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching COC extractions:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching COC extractions:", error);
     }
   };
 
@@ -306,7 +306,7 @@ export function useSubsectionDetail() {
       });
       setTemplateNameMap(nameMap);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching templates:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching templates:", error);
     }
   };
 
@@ -340,7 +340,7 @@ export function useSubsectionDetail() {
         .maybeSingle();
 
       if (subsectionError || !supabaseSubsection) {
-        if (import.meta.env.DEV) console.error("Error fetching subsection from Supabase:", subsectionError);
+        if (process.env.NODE_ENV === 'development') console.error("Error fetching subsection from Supabase:", subsectionError);
         toast.error("Subsection not found");
         return;
       }
@@ -370,7 +370,7 @@ export function useSubsectionDetail() {
         .order('inspection_date', { ascending: false });
 
       if (inspectionsError) {
-        if (import.meta.env.DEV) console.error("Error fetching inspections:", inspectionsError);
+        if (process.env.NODE_ENV === 'development') console.error("Error fetching inspections:", inspectionsError);
       }
 
       const inspectionsObj: Record<string, any> = {};
@@ -427,7 +427,7 @@ export function useSubsectionDetail() {
         });
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching subsection data:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching subsection data:", error);
       toast.error("Failed to load subsection data");
     } finally {
       setLoading(false);
@@ -442,7 +442,7 @@ export function useSubsectionDetail() {
         .maybeSingle();
 
       if (error) {
-        if (import.meta.env.DEV) console.error("Error fetching company logo:", error);
+        if (process.env.NODE_ENV === 'development') console.error("Error fetching company logo:", error);
         throw error;
       }
 
@@ -450,7 +450,7 @@ export function useSubsectionDetail() {
         setCompanyLogo(data.company_logo_url);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching company logo:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching company logo:", error);
     }
   };
 
@@ -542,13 +542,13 @@ export function useSubsectionDetail() {
       });
 
       if (validationError) {
-        if (import.meta.env.DEV) console.error('Validation error:', validationError);
+        if (process.env.NODE_ENV === 'development') console.error('Validation error:', validationError);
         toast.error(`Validation failed: ${validationError.message || 'Unknown error'}`);
         return;
       }
 
       if (validationData?.error) {
-        if (import.meta.env.DEV) console.error('Function returned error:', validationData.error);
+        if (process.env.NODE_ENV === 'development') console.error('Function returned error:', validationData.error);
         toast.error(`Validation error: ${validationData.error}`);
         return;
       }
@@ -592,7 +592,7 @@ export function useSubsectionDetail() {
               .eq('id', subsectionId);
 
             if (updateError) {
-              if (import.meta.env.DEV) console.error('Error auto-updating COC fields:', updateError);
+              if (process.env.NODE_ENV === 'development') console.error('Error auto-updating COC fields:', updateError);
             } else {
               if (subsection) {
                 setSubsection({
@@ -604,7 +604,7 @@ export function useSubsectionDetail() {
               }
             }
           } catch (error) {
-            if (import.meta.env.DEV) console.error('Error during auto-population:', error);
+            if (process.env.NODE_ENV === 'development') console.error('Error during auto-population:', error);
           }
         }
 
@@ -632,7 +632,7 @@ export function useSubsectionDetail() {
             }
           }
         } catch (docError) {
-          if (import.meta.env.DEV) console.error('Error creating validation report document:', docError);
+          if (process.env.NODE_ENV === 'development') console.error('Error creating validation report document:', docError);
         }
 
         if (result.overallStatus === 'Pass' || result.status === 'Pass') {
@@ -652,7 +652,7 @@ export function useSubsectionDetail() {
         toast.error('No validation result returned');
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error during manual validation:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error during manual validation:', error);
       toast.error(`Failed to validate: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setValidatingDocId(null);
@@ -674,7 +674,7 @@ export function useSubsectionDetail() {
             .from('documents')
             .createSignedUrl(filePath, 3600);
           if (signError) {
-            if (import.meta.env.DEV) console.error('Error creating signed URL:', signError);
+            if (process.env.NODE_ENV === 'development') console.error('Error creating signed URL:', signError);
             toast.error('Failed to access document');
             return;
           }
@@ -689,13 +689,13 @@ export function useSubsectionDetail() {
       });
 
       if (extractionError) {
-        if (import.meta.env.DEV) console.error('Extraction error:', extractionError);
+        if (process.env.NODE_ENV === 'development') console.error('Extraction error:', extractionError);
         toast.error(`Failed to extract COC data: ${extractionError.message || 'Unknown error'}`);
         return;
       }
 
       if (extractionData?.error) {
-        if (import.meta.env.DEV) console.error('Function returned error:', extractionData.error);
+        if (process.env.NODE_ENV === 'development') console.error('Function returned error:', extractionData.error);
         toast.error(`Extraction error: ${extractionData.error}`);
         return;
       }
@@ -729,7 +729,7 @@ export function useSubsectionDetail() {
         toast.error('No data could be extracted from the document');
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error during COC extraction:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error during COC extraction:', error);
       toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setValidatingDocId(null);
@@ -894,7 +894,7 @@ export function useSubsectionDetail() {
         await fetchSupabaseDocuments();
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error('Error during verification:', error);
+      if (process.env.NODE_ENV === 'development') console.error('Error during verification:', error);
       toast.error(`Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
     } finally {
       setValidatingDocId(null);
@@ -965,14 +965,14 @@ export function useSubsectionDetail() {
           subsectionName: newSubsection.name,
           logoUrl: companyLogo || undefined
         }).catch((err) => {
-          if (import.meta.env.DEV) console.error('Failed to generate QR code:', err);
+          if (process.env.NODE_ENV === 'development') console.error('Failed to generate QR code:', err);
         });
       }
 
       const basePath = clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`;
       navigate(`${basePath}/subsections/${newSubsection.id}`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error creating subsection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error creating subsection:", error);
       toast.error("Failed to create subsection");
     } finally {
       setSaving(false);
@@ -1000,7 +1000,7 @@ export function useSubsectionDetail() {
       setIsEditDialogOpen(false);
       await fetchSubsectionData();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error updating subsection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error updating subsection:", error);
       toast.error("Failed to update subsection");
     } finally {
       setSaving(false);
@@ -1036,7 +1036,7 @@ export function useSubsectionDetail() {
         : `/sites/${siteId}`;
       navigate(`${basePath}?tab=subsections`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting subsection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting subsection:", error);
       toast.error("Failed to delete subsection");
     }
   };
@@ -1054,7 +1054,7 @@ export function useSubsectionDetail() {
         .maybeSingle();
 
       if (findError) {
-        if (import.meta.env.DEV) console.error("Error finding subsection:", findError);
+        if (process.env.NODE_ENV === 'development') console.error("Error finding subsection:", findError);
         toast.error("Database error: " + findError.message);
         return;
       }
@@ -1073,7 +1073,7 @@ export function useSubsectionDetail() {
         .eq('id', supabaseSubsection.id);
 
       if (updateError) {
-        if (import.meta.env.DEV) console.error("Error updating subsection:", updateError);
+        if (process.env.NODE_ENV === 'development') console.error("Error updating subsection:", updateError);
         throw updateError;
       }
 
@@ -1084,7 +1084,7 @@ export function useSubsectionDetail() {
       });
       toast.success("Metering details saved successfully");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error saving metering details:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error saving metering details:", error);
       toast.error("Failed to save metering details");
     } finally {
       setSaving(false);
@@ -1111,7 +1111,7 @@ export function useSubsectionDetail() {
         .eq('id', documentId);
 
       if (updateError) {
-        if (import.meta.env.DEV) console.error("Error updating document COC details:", updateError);
+        if (process.env.NODE_ENV === 'development') console.error("Error updating document COC details:", updateError);
         throw updateError;
       }
 
@@ -1129,13 +1129,13 @@ export function useSubsectionDetail() {
         .eq('id', subsectionId);
 
       if (subsectionError) {
-        if (import.meta.env.DEV) console.error("Error updating subsection COC details:", subsectionError);
+        if (process.env.NODE_ENV === 'development') console.error("Error updating subsection COC details:", subsectionError);
       }
 
       toast.success("COC details saved successfully");
       await fetchSupabaseDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error saving COC details:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error saving COC details:", error);
       toast.error("Failed to save COC details");
     } finally {
       setSaving(false);
@@ -1212,7 +1212,7 @@ export function useSubsectionDetail() {
       setNewCategoryName("");
       fetchDocumentCategories();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error creating category:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error creating category:", error);
       toast.error("Failed to create category");
     }
   };
@@ -1229,7 +1229,7 @@ export function useSubsectionDetail() {
       fetchDocumentCategories();
       fetchSupabaseDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting category:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting category:", error);
       toast.error("Failed to delete category");
     }
   };
@@ -1263,7 +1263,7 @@ export function useSubsectionDetail() {
         .upload(fileName, uploadFile);
 
       if (uploadError) {
-        if (import.meta.env.DEV) console.error("Storage upload error:", uploadError);
+        if (process.env.NODE_ENV === 'development') console.error("Storage upload error:", uploadError);
         throw new Error(`Upload failed: ${uploadError.message}`);
       }
 
@@ -1287,7 +1287,7 @@ export function useSubsectionDetail() {
         });
 
       if (insertError) {
-        if (import.meta.env.DEV) console.error("Database insert error:", insertError);
+        if (process.env.NODE_ENV === 'development') console.error("Database insert error:", insertError);
         throw new Error(`Failed to save document record: ${insertError.message}`);
       }
 
@@ -1296,7 +1296,7 @@ export function useSubsectionDetail() {
       setUploadFile(null);
       fetchSupabaseDocuments();
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error uploading document:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading document:", error);
       let errorMessage = "Failed to upload document";
       if (error?.message) errorMessage = error.message;
       else if (typeof error === 'string') errorMessage = error;
@@ -1317,7 +1317,7 @@ export function useSubsectionDetail() {
         .single();
 
       if (fetchError) {
-        if (import.meta.env.DEV) console.error("Error fetching document:", fetchError);
+        if (process.env.NODE_ENV === 'development') console.error("Error fetching document:", fetchError);
         throw fetchError;
       }
 
@@ -1327,7 +1327,7 @@ export function useSubsectionDetail() {
         const filePath = pathParts.slice(pathParts.indexOf('documents') + 1).join('/');
         const { error: storageError } = await supabase.storage.from('documents').remove([filePath]);
         if (storageError) {
-          if (import.meta.env.DEV) console.error("Error deleting file from storage:", storageError);
+          if (process.env.NODE_ENV === 'development') console.error("Error deleting file from storage:", storageError);
         }
       }
 
@@ -1337,7 +1337,7 @@ export function useSubsectionDetail() {
         .eq('id', documentId);
 
       if (deleteError) {
-        if (import.meta.env.DEV) console.error("Database deletion error:", deleteError);
+        if (process.env.NODE_ENV === 'development') console.error("Database deletion error:", deleteError);
         throw deleteError;
       }
 
@@ -1350,7 +1350,7 @@ export function useSubsectionDetail() {
         fetchSupabaseDocuments();
       }, 500);
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error in handleDeleteDocument:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error in handleDeleteDocument:", error);
       toast.error(`Failed to delete document: ${error.message || 'Unknown error'}`);
       fetchSupabaseDocuments();
     } finally {
@@ -1373,7 +1373,7 @@ export function useSubsectionDetail() {
       window.URL.revokeObjectURL(blobUrl);
       toast.success(`Downloading ${fileName}`);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error downloading document:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error downloading document:", error);
       toast.error("Failed to download document");
     }
   };
@@ -1419,7 +1419,7 @@ export function useSubsectionDetail() {
             .update({ category_id: matchedCategory.id })
             .eq('id', doc.id);
           if (updateError) {
-            if (import.meta.env.DEV) console.error(`Error updating document ${doc.id}:`, updateError);
+            if (process.env.NODE_ENV === 'development') console.error(`Error updating document ${doc.id}:`, updateError);
           }
         }
       }
@@ -1428,7 +1428,7 @@ export function useSubsectionDetail() {
       await fetchDocumentCategories();
       await fetchSupabaseDocuments();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fixing categories:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fixing categories:", error);
       toast.error("Failed to fix categories");
     } finally {
       setFixingCategories(false);
@@ -1481,7 +1481,7 @@ export function useSubsectionDetail() {
       setNewInspectionDate("");
       fetchSubsectionData();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error creating inspection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error creating inspection:", error);
       toast.error("Failed to create inspection");
     }
   };
@@ -1512,7 +1512,7 @@ export function useSubsectionDetail() {
       toast.success("Inspection status updated");
       fetchSubsectionData();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error updating inspection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error updating inspection:", error);
       toast.error("Failed to update inspection status");
     }
   };
@@ -1530,7 +1530,7 @@ export function useSubsectionDetail() {
       setDeleteInspectionId(null);
       fetchSubsectionData();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting inspection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting inspection:", error);
       toast.error("Failed to delete inspection");
     }
   };
@@ -1564,7 +1564,7 @@ export function useSubsectionDetail() {
             .update({ template_id: matchingTemplate.id })
             .eq('id', inspection.id);
           if (!updateError) linkedCount++;
-          else if (import.meta.env.DEV) console.error('Update error:', updateError);
+          else if (process.env.NODE_ENV === 'development') console.error('Update error:', updateError);
         }
       }
 
@@ -1575,7 +1575,7 @@ export function useSubsectionDetail() {
         toast.info("No matching templates found for inspections");
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fixing template links:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fixing template links:", error);
       toast.error("Failed to fix template links");
     } finally {
       setFixingTemplates(false);

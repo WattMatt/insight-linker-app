@@ -327,7 +327,7 @@ export function CocMeteringTab({
                           .upload(fileName, file);
 
                         if (uploadError) {
-                          if (import.meta.env.DEV) console.error("Storage upload error:", uploadError);
+                          if (process.env.NODE_ENV === 'development') console.error("Storage upload error:", uploadError);
                           throw new Error(`Upload failed: ${uploadError.message}`);
                         }
                         if (!uploadData?.path) throw new Error("Upload succeeded but no path returned");
@@ -352,7 +352,7 @@ export function CocMeteringTab({
                           .single();
 
                         if (insertError) {
-                          if (import.meta.env.DEV) console.error("Database insert error:", insertError);
+                          if (process.env.NODE_ENV === 'development') console.error("Database insert error:", insertError);
                           throw new Error(`Failed to save document record: ${insertError.message}`);
                         }
                         if (!newDoc) throw new Error("Document saved but no record returned");
@@ -380,7 +380,7 @@ export function CocMeteringTab({
                         fetchSupabaseDocuments();
                         e.target.value = '';
                       } catch (error: any) {
-                        if (import.meta.env.DEV) console.error("Error uploading COC document:", error);
+                        if (process.env.NODE_ENV === 'development') console.error("Error uploading COC document:", error);
                         let errorMessage = "Failed to upload COC document";
                         if (error?.message) errorMessage = error.message;
                         else if (typeof error === 'string') errorMessage = error;
@@ -580,7 +580,7 @@ export function CocMeteringTab({
                         fetchSupabaseDocuments();
                         e.target.value = '';
                       } catch (error) {
-                        if (import.meta.env.DEV) console.error("Error uploading metering document:", error);
+                        if (process.env.NODE_ENV === 'development') console.error("Error uploading metering document:", error);
                         toast.error("Failed to upload metering document");
                       } finally {
                         setUploadingFile(false);

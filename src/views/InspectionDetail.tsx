@@ -227,7 +227,7 @@ const InspectionDetail = () => {
       setLoading(false);
       toast.info("Loaded from offline cache", { duration: 2000 });
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error loading cached data:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error loading cached data:", error);
       setLoading(false);
     }
   }, []);
@@ -266,7 +266,7 @@ const InspectionDetail = () => {
         setCompanyLogo(data.company_logo_url);
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching company logo:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching company logo:", error);
     }
   };
 
@@ -287,7 +287,7 @@ const InspectionDetail = () => {
       if (error) throw error;
       setSnags(data || []);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching snags:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching snags:", error);
       toast.error("Failed to load snags");
     } finally {
       setLoadingSnags(false);
@@ -328,7 +328,7 @@ const InspectionDetail = () => {
       setNewSnag({ title: '', description: '', notes: '', photos: [], risk_level: '', estimated_cost: '' });
       fetchSnags();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error creating snag:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error creating snag:", error);
       toast.error("Failed to create snag");
     }
   };
@@ -369,7 +369,7 @@ const InspectionDetail = () => {
       setEditingSnag(null);
       fetchSnags();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error updating snag:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error updating snag:", error);
       toast.error("Failed to update snag");
     }
   };
@@ -394,7 +394,7 @@ const InspectionDetail = () => {
       toast.success(`Snag ${newStatus.toLowerCase()} successfully`);
       fetchSnags();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error updating snag status:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error updating snag status:", error);
       toast.error("Failed to update snag status");
     }
   };
@@ -413,7 +413,7 @@ const InspectionDetail = () => {
       toast.success("Snag deleted successfully");
       fetchSnags();
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting snag:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting snag:", error);
       toast.error("Failed to delete snag");
     }
   };
@@ -515,7 +515,7 @@ const InspectionDetail = () => {
           .eq('id', inspectionId);
 
         if (saveError) {
-          if (import.meta.env.DEV) console.error("Error auto-saving tenant image:", saveError);
+          if (process.env.NODE_ENV === 'development') console.error("Error auto-saving tenant image:", saveError);
           toast.warning("Image uploaded but auto-save failed. Please click Save to persist changes.");
         } else {
           // Update local inspection state to keep in sync
@@ -526,7 +526,7 @@ const InspectionDetail = () => {
         toast.success("Image uploaded successfully");
       }
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error uploading tenant image:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading tenant image:", error);
 
       // Check for JWT/authentication errors
       if (error?.message?.includes('JWT') ||
@@ -605,7 +605,7 @@ const InspectionDetail = () => {
           .eq('id', inspectionId);
 
         if (saveError) {
-          if (import.meta.env.DEV) console.error("Error auto-saving after image deletion:", saveError);
+          if (process.env.NODE_ENV === 'development') console.error("Error auto-saving after image deletion:", saveError);
           toast.warning("Image deleted but auto-save failed. Please click Save to persist changes.");
         } else {
           setInspection(prev => prev ? { ...prev, jsonData: jsonDataWithTenants } : null);
@@ -615,7 +615,7 @@ const InspectionDetail = () => {
         toast.success("Image deleted successfully");
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting tenant image:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting tenant image:", error);
       toast.error("Failed to delete image");
     }
   };
@@ -653,7 +653,7 @@ const InspectionDetail = () => {
       }
       toast.success(`${uploadedUrls.length} photo(s) uploaded`);
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error uploading snag photos:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading snag photos:", error);
 
       // Check for JWT/authentication errors
       if (error?.message?.includes('JWT') ||
@@ -700,12 +700,12 @@ const InspectionDetail = () => {
       // First verify the session is valid
       const { data: { session }, error: sessionError } = await supabase.auth.getSession();
       if (sessionError || !session) {
-        if (import.meta.env.DEV) console.error("[InspectionDetail] Session error:", sessionError, "| inspectionId:", inspectionId);
+        if (process.env.NODE_ENV === 'development') console.error("[InspectionDetail] Session error:", sessionError, "| inspectionId:", inspectionId);
         
         // Try to refresh the session before giving up
         const { data: refreshData, error: refreshError } = await supabase.auth.refreshSession();
         if (refreshError || !refreshData.session) {
-          if (import.meta.env.DEV) console.error("[InspectionDetail] Session refresh failed:", refreshError);
+          if (process.env.NODE_ENV === 'development') console.error("[InspectionDetail] Session refresh failed:", refreshError);
           
           // Try loading from cache as fallback
           const cached = await getCachedInspection();
@@ -746,7 +746,7 @@ const InspectionDetail = () => {
         .maybeSingle();
 
       if (inspError) {
-        if (import.meta.env.DEV) console.error("[InspectionDetail] Error fetching inspection:", inspError, "| Code:", inspError.code, "| Details:", inspError.details);
+        if (process.env.NODE_ENV === 'development') console.error("[InspectionDetail] Error fetching inspection:", inspError, "| Code:", inspError.code, "| Details:", inspError.details);
         
         // Retry on network or transient errors
         if (retryCount < maxRetries && (inspError.code === 'PGRST000' || inspError.message?.includes('network') || inspError.message?.includes('timeout'))) {
@@ -774,7 +774,7 @@ const InspectionDetail = () => {
       }
       
       if (!inspData) {
-        if (import.meta.env.DEV) console.error("[InspectionDetail] Inspection not found for ID:", inspectionId);
+        if (process.env.NODE_ENV === 'development') console.error("[InspectionDetail] Inspection not found for ID:", inspectionId);
         
         // Retry once in case of race condition
         if (retryCount < maxRetries) {
@@ -853,7 +853,7 @@ const InspectionDetail = () => {
               }
             }
           } catch (error) {
-            if (import.meta.env.DEV) console.error('Error generating signed URL for site image:', error);
+            if (process.env.NODE_ENV === 'development') console.error('Error generating signed URL for site image:', error);
           }
         }
 
@@ -998,7 +998,7 @@ const InspectionDetail = () => {
           // Always default to general tab for non-Site Drawing templates
           setActiveTab('general');
         } else {
-          if (import.meta.env.DEV) console.warn("No template or inspection data found");
+          if (process.env.NODE_ENV === 'development') console.warn("No template or inspection data found");
           setActiveTab('general');
         }
       }
@@ -1079,7 +1079,7 @@ const InspectionDetail = () => {
         setQrCodeUrl(canvas.toDataURL());
       }
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error fetching inspection data:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error fetching inspection data:", error);
       toast.error("Failed to load inspection data");
     } finally {
       setLoading(false);
@@ -1148,7 +1148,7 @@ const InspectionDetail = () => {
           .upload(fileName, file);
 
         if (error) {
-          if (import.meta.env.DEV) console.error('Upload error:', error);
+          if (process.env.NODE_ENV === 'development') console.error('Upload error:', error);
           throw error;
         }
 
@@ -1195,7 +1195,7 @@ const InspectionDetail = () => {
 
       toast.success(`${uploadedUrls.length} image(s) uploaded successfully`);
     } catch (error: any) {
-      if (import.meta.env.DEV) console.error("Error uploading images:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading images:", error);
 
       // Check for JWT/authentication errors
       if (error?.message?.includes('JWT') ||
@@ -1252,7 +1252,7 @@ const InspectionDetail = () => {
       // Use the existing upload logic
       await handleImageUpload(sectionKey, itemKey, dataTransfer.files);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error capturing image:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error capturing image:", error);
       toast.error("Failed to capture image");
       setUploadingImages(prev => {
         const newSet = new Set(prev);
@@ -1303,7 +1303,7 @@ const InspectionDetail = () => {
 
       await handleTenantImageUpload(tenantId, field, dataTransfer.files);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error capturing tenant image:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error capturing tenant image:", error);
       toast.error("Failed to capture image");
       setUploadingTenantImages(prev => {
         const newSet = new Set(prev);
@@ -1331,7 +1331,7 @@ const InspectionDetail = () => {
 
       await handleSnagPhotoUpload(dataTransfer.files);
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error capturing snag photos:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error capturing snag photos:", error);
       toast.error("Failed to capture photos");
       setUploadingSnagPhotos(false);
     }
@@ -1389,7 +1389,7 @@ const InspectionDetail = () => {
 
       toast.success("Image deleted successfully");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error deleting image:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error deleting image:", error);
       toast.error("Failed to delete image");
     }
   };
@@ -1424,7 +1424,7 @@ const InspectionDetail = () => {
 
       return result.updatedJsonData;
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error renaming images:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error renaming images:", error);
       toast.error("Failed to optimize image names");
       return inspection.jsonData;
     } finally {
@@ -1479,7 +1479,7 @@ const InspectionDetail = () => {
 
       toast.success("Inspection saved successfully");
     } catch (error) {
-      if (import.meta.env.DEV) console.error("Error saving inspection:", error);
+      if (process.env.NODE_ENV === 'development') console.error("Error saving inspection:", error);
       toast.error("Failed to save inspection");
     } finally {
       setSaving(false);

@@ -391,7 +391,7 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
   // Validate canvas elements before generating
   const canvasIssues = validateCanvasElements(docDefinition);
   if (canvasIssues.length > 0) {
-    if (import.meta.env.DEV) console.error('Canvas validation issues found:', canvasIssues);
+    if (process.env.NODE_ENV === 'development') console.error('Canvas validation issues found:', canvasIssues);
     throw new Error(`Invalid canvas elements: ${canvasIssues.join(', ')}`);
   }
   
@@ -445,7 +445,7 @@ export async function generatePdfBlob(docDefinition: TDocumentDefinitions): Prom
         throw new Error('Generated PDF is empty');
       }
     } catch (blobError) {
-      if (import.meta.env.DEV) console.error('getBlob failed:', blobError);
+      if (process.env.NODE_ENV === 'development') console.error('getBlob failed:', blobError);
       throw blobError;
     }
   }
@@ -515,7 +515,7 @@ export async function testPdfGeneration(): Promise<void> {
     
     alert('PDF downloaded successfully! Check your downloads folder.');
   } catch (error) {
-    if (import.meta.env.DEV) console.error('Test PDF generation failed:', error);
+    if (process.env.NODE_ENV === 'development') console.error('Test PDF generation failed:', error);
     alert('PDF generation failed: ' + (error instanceof Error ? error.message : String(error)));
   }
 }
