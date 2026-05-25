@@ -8,9 +8,28 @@ pnpm-debug.log*
 lerna-debug.log*
 
 node_modules
+node_modules 2/
 dist
 dist-ssr
-*.local
+
+# Next.js
+.next/
+out/
+next-env.d.ts
+
+# Environment / Security - added by audit
+.env
+.env.local
+.env.*.local
+
+# PWA generated files
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/worker-*.js
+public/worker-*.js.map
+public/swe-worker-*.js
 
 # Editor directories and files
 .vscode/*
@@ -22,3 +41,4 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+.vercel
