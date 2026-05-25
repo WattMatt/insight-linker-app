@@ -1,83 +1,28 @@
-import { useEffect, useState } from "react";
 import { Navigate, useSearchParams } from "@/lib/navigation";
-import { supabase } from "@/integrations/supabase/client";
 import { useUserRole } from "@/hooks/useUserRole";
-import { useQuery } from "@tanstack/react-query";
-import { Skeleton } from "./ui/skeleton";
-import { OnboardingWizard } from "@/components/OnboardingWizard";
+import { useAuthSession } from "@/components/auth/useAuthSession";
+import { useOnboardingStatus } from "@/components/auth/useOnboardingStatus";
+import { AuthLoading } from "@/components/auth/AuthLoading";
+import { OnboardingGate } from "@/components/auth/OnboardingGate";
 
 const ClientProtectedRoute = ({ children }: { children: React.ReactNode }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
-  const [onboardingDismissed, setOnboardingDismissed] = useState(false);
+  const { session, isLoading: sessionLoading } = useAuthSession();
+  const { data: userRole, isLoading: roleLoading } = useUserRole();
   const [searchParams] = useSearchParams();
   const previewClientId = searchParams.get("preview");
-  const { data: userRole, isLoading: roleLoading } = useUserRole();
+  const { data: onboardingStatus, refetch } = useOnboardingStatus(!!session);
 
-  const { data: onboardingStatus, refetch: refetchOnboarding } = useQuery({
-    queryKey: ["onboarding-status"],
-    queryFn: async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) return null;
-      const { data } = await supabase
-        .from("profiles")
-        .select("onboarding_completed")
-        .eq("id", user.id)
-        .single();
-      return data;
-    },
-    enabled: isAuthenticated === true,
-  });
-
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { session } } = await supabase.auth.getSession();
-      setIsAuthenticated(!!session);
-    };
-    checkAuth();
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      setIsAuthenticated(!!session);
-    });
-    return () => subscription.unsubscribe();
-  }, []);
-
-  if (isAuthenticated === null || roleLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="space-y-4 w-full max-w-md p-6">
-          <Skeleton className="h-12 w-full" />
-          <Skeleton className="h-64 w-full" />
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated) {
-    return <Navigate to="/auth/login" replace />;
-  }
-
-  if (userRole === "Admin" && previewClientId) {
-    return <>{children}</>;
-  }
-
-  if (userRole !== "Client") {
-    return <Navigate to="/dashboard" replace />;
-  }
-
-  const showOnboarding = onboardingStatus && !onboardingStatus.onboarding_completed && !onboardingDismissed;
+  if (sessionLoading || roleLoading) return <AuthLoading variant="skeleton" />;
+  if (!session) return <Navigate to="/auth/login" replace />;
+  // Admin preview path — render children without role match (so admins can
+  // visit a Client portal as another user).
+  if (userRole === "Admin" && previewClientId) return <>{children}</>;
+  if (userRole !== "Client") return <Navigate to="/dashboard" replace />;
 
   return (
-    <>
-      {showOnboarding && (
-        <OnboardingWizard
-          open={true}
-          onComplete={() => {
-            setOnboardingDismissed(true);
-            refetchOnboarding();
-          }}
-        />
-      )}
+    <OnboardingGate onboardingStatus={onboardingStatus} onComplete={() => refetch()}>
       {children}
-    </>
+    </OnboardingGate>
   );
 };
 
