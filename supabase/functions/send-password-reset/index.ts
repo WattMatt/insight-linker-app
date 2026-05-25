@@ -8,15 +8,46 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// In-memory per-IP rate limit (per Deno isolate). 5 reset requests per
+// minute is generous for legitimate users and tight enough to blunt naive
+// email-bombing. NOT shared across regions/cold-starts — defence-against-
+// naive-flooding only.
+const RL_WINDOW_MS = 60_000;
+const RL_MAX = 5;
+const rl = new Map<string, { count: number; resetAt: number }>();
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now();
+  const e = rl.get(ip);
+  if (!e || e.resetAt < now) {
+    rl.set(ip, { count: 1, resetAt: now + RL_WINDOW_MS });
+    return true;
+  }
+  if (e.count >= RL_MAX) return false;
+  e.count++;
+  return true;
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
 
+  const ipAddress =
+    req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
+  if (!checkRateLimit(ipAddress)) {
+    return new Response(JSON.stringify({ error: 'Too many requests' }), {
+      status: 429,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseServiceKey);
+    const supabase = createClient(supabaseUrl, supabaseServiceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
 
     const { email } = await req.json();
 

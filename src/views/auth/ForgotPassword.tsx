@@ -61,12 +61,23 @@ export default function ForgotPassword() {
     }
     const trimmed = emailInput.trim().toLowerCase();
 
+    // MED #7: flatten timing to defeat user-enumeration via response time.
+    // resetPasswordForEmail short-circuits faster when the user doesn't
+    // exist; pad to a minimum 1.0-1.3s so the two cases look the same.
+    const minDuration = 1000 + Math.random() * 300;
+    const started = Date.now();
+
     // Supabase email contains both the OTP and a clickable link as fallback.
     const redirectTo = `${window.location.origin}/auth`;
     const { error } = await supabase.auth.resetPasswordForEmail(trimmed, {
       redirectTo,
       ...(captchaToken ? { captchaToken } : {}),
     });
+
+    const elapsed = Date.now() - started;
+    if (elapsed < minDuration) {
+      await new Promise((r) => setTimeout(r, minDuration - elapsed));
+    }
 
     // Don't reveal whether the address exists. Always show the code step.
     recordAuthEvent("password_reset_requested", { method: "recovery" });

@@ -151,7 +151,34 @@ initial password.
 To re-enable self-signup: restore Signup.tsx to its prior contents (see
 commit 180822d) and restore the sign-up links in Login.tsx.
 
-## 5. Related artifacts
+## 5. Security-review pass (post-EC series)
+
+A focused security review surfaced 13 findings across the EC-0..EC-9 series.
+All CRITICAL/HIGH and most MEDIUM/LOW items have been addressed.
+
+| # | Severity | Status | Resolution |
+|---|---|---|---|
+| 1 | 🔴 CRITICAL | ✅ fixed | `send-password-reset` had a SECOND dead Lovable URL in the email body's `resetUrl` (commit 04d24ee only fixed `redirectTo`). Both now use `APP_URL` env. |
+| 2 | 🟠 HIGH | ✅ fixed | `log-auth-event` hardened: event-type allowlist split into ANON (pre-session, NULL user_id) vs AUTHED (JWT-required), metadata key allowlist, per-IP rate limit (20/min). |
+| 3 | 🟠 HIGH | ✅ fixed | 5 missing audit events wired: `logout` × 4 sign-out sites + `password_changed` from MyProfile self-service. |
+| 4 | 🟠 HIGH | ✅ fixed | `CaptchaTurnstile` now exposes `reset()` via `forwardRef`. Login + ForgotPassword call it on failed submit / Back. |
+| 5 | 🟠 HIGH | doc only | `CAPTCHA_ENABLED` (client-side gate) is defence-in-depth only — Supabase Auth project-level captcha enforcement MUST also be on (already noted in §3 deployment checklist). |
+| 6 | 🟡 MEDIUM | ✅ fixed | `/auth` dispatcher now scrubs token from `window.location` BEFORE calling `setSession`/`verifyOtp` — eliminates async window where 3rd-party scripts could capture it. |
+| 7 | 🟡 MEDIUM | ✅ fixed | Forgot-password + magic-link request handlers pad to 1.0–1.3s minimum, defeating user-enumeration via response timing. |
+| 8 | 🟡 MEDIUM | ✅ fixed | Per-IP rate limit on `log-auth-event` (20/min) and `send-password-reset` (5/min). In-memory per Deno isolate — adequate for naive flooding; for cross-region rate limit, move to a Postgres-backed counter later. |
+| 9 | 🟡 MEDIUM | ✅ fixed | `recordAuthEvent` now queues failed calls in `localStorage` (cap 50) and drains on next success / module load. Audit writes no longer silently disappear when Edge Functions are down. |
+| 10 | ⚪ LOW | ✅ fixed | MyProfile password rules synced with EC-2 (min 8 + zxcvbn score ≥ 2 + HIBP `pwnCount === 0`). Closed the back-door bypass. |
+| 11 | ⚪ LOW | ✅ fixed | Both Edge Functions' service-role clients now pass `{ auth: { persistSession: false, autoRefreshToken: false } }` for clarity in serverless Deno isolates. |
+| 12 | ⚪ LOW | doc only | AuthLayout's pre-auth `settings` read documented inline — only branding columns; the table's RLS must allow anon SELECT for those, and nothing sensitive should ever be added to this row. |
+| 13 | ⚪ LOW | ✅ fixed | Removed `bun.lockb` (drift signal — both bun + npm lockfiles existed; `vercel.json` specifies `npm install`). `package-lock.json` is now canonical. |
+
+**Remaining residual risks** (intentionally accepted; revisit later if scale or threat model warrants):
+
+- In-memory rate limits reset on Deno isolate cold starts and don't share across regions. A distributed limiter (Postgres-backed or Upstash Redis) would close this.
+- Account-enumeration via long-tail email-deliverability differences (Resend bounce behaviour) — out of scope for this pass.
+- `account_deleted` audit not wired into the `delete-user` Edge Function — that function should emit the event server-side on a successful delete, but `delete-user` is admin-only and exists outside this review's scope.
+
+## 6. Related artifacts
 
 - [AUDIT_BASELINE.md](./AUDIT_BASELINE.md) — codebase audit from earlier in the session
 - [PARITY_GAP_ANALYSIS.md](./PARITY_GAP_ANALYSIS.md) — iOS-parity gap analysis

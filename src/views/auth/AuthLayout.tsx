@@ -22,6 +22,11 @@ export function AuthLayout({ title, subtitle, children }: AuthLayoutProps) {
   const [settings, setSettings] = useState<AuthSettings | null>(null);
 
   useEffect(() => {
+    // NOTE: this query runs before the user has authenticated, so the
+    // `settings` row(s) read here must be RLS-readable by the anon role.
+    // Limit the SELECT to branding columns only — never add anything to
+    // this query that could leak business config / keys / internal flags.
+    // (Security-review LOW #12.)
     let cancelled = false;
     void supabase
       .from("settings")

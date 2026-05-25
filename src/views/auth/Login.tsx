@@ -114,6 +114,13 @@ export default function Login() {
       return;
     }
     const trimmed = email.trim().toLowerCase();
+
+    // MED #7: flatten timing to defeat user-enumeration via response time.
+    // signInWithOtp({shouldCreateUser:false}) short-circuits faster for
+    // unknown emails; pad to 1.0-1.3s so the two cases are indistinguishable.
+    const minDuration = 1000 + Math.random() * 300;
+    const started = Date.now();
+
     const { error } = await supabase.auth.signInWithOtp({
       email: trimmed,
       options: {
@@ -121,6 +128,11 @@ export default function Login() {
         ...(captchaToken ? { captchaToken } : {}),
       },
     });
+
+    const elapsed = Date.now() - started;
+    if (elapsed < minDuration) {
+      await new Promise((r) => setTimeout(r, minDuration - elapsed));
+    }
 
     recordAuthEvent("magic_link_requested", { method: "magic_link" });
 

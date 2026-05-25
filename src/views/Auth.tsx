@@ -77,6 +77,11 @@ const Auth = () => {
 
   async function handleInviteToken(accessToken: string) {
     setStatus("Verifying invite link...");
+    // MED #6: scrub the token from window.location BEFORE the async
+    // setSession runs. Any concurrent effect / analytics script / Sentry
+    // breadcrumb that captures `window.location` during the await window
+    // would otherwise see the token. Capture-then-clear-then-use.
+    window.history.replaceState({}, document.title, "/auth");
     const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
       refresh_token: accessToken,
@@ -86,17 +91,17 @@ const Auth = () => {
       toast.error("Invalid or expired invite link. Ask your admin for a new one.", {
         duration: 6000,
       });
-      window.history.replaceState({}, document.title, "/auth/login");
       navigate("/auth/login");
       return;
     }
 
-    window.history.replaceState({}, document.title, "/auth/set-password");
     navigate("/auth/set-password");
   }
 
   async function handleRecoveryToken(tokenHash: string) {
     setStatus("Verifying reset link...");
+    // MED #6: same scrub-first pattern as handleInviteToken.
+    window.history.replaceState({}, document.title, "/auth");
     const { data, error } = await supabase.auth.verifyOtp({
       token_hash: tokenHash,
       type: "recovery",
@@ -106,12 +111,10 @@ const Auth = () => {
       toast.error("Invalid or expired reset link. Request a new one below.", {
         duration: 8000,
       });
-      window.history.replaceState({}, document.title, "/auth/forgot-password");
       navigate("/auth/forgot-password");
       return;
     }
 
-    window.history.replaceState({}, document.title, "/auth/reset-password");
     navigate("/auth/reset-password");
   }
 
