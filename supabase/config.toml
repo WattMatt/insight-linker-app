@@ -78,3 +78,10 @@ verify_jwt = false
 
 [functions.generate-inspection-pdf]
 verify_jwt = false
+
+# log-auth-event is anon-callable so events like password_reset_requested,
+# magic_link_requested, and lockout — which happen before a session exists —
+# can still land in the auth_events audit trail. user_id is inferred from
+# the JWT when present and left NULL otherwise.
+[functions.log-auth-event]
+verify_jwt = false
