@@ -9,7 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { Plus, Trash2, ClipboardCheck, WifiOff } from "lucide-react";
+import { Plus, Trash2, ClipboardCheck, WifiOff, Link2Off } from "lucide-react";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { inspectionSchema } from "@/lib/validation-schemas";
@@ -61,6 +61,12 @@ const Inspections = () => {
     inspection_date: "",
     site_id: "",
   });
+
+  const [assignOpen, setAssignOpen] = useState(false);
+  const [assignTarget, setAssignTarget] = useState<Inspection | null>(null);
+  const [assignSubsections, setAssignSubsections] = useState<Array<{ id: string; name: string }>>([]);
+  const [assignSubsectionId, setAssignSubsectionId] = useState<string>("");
+  const [assignSaving, setAssignSaving] = useState(false);
 
   const { createInspection, deleteInspection, isOnline } = useOfflineInspections();
 
@@ -204,6 +210,46 @@ const Inspections = () => {
     } catch (error) {
       console.error("Error deleting inspection:", error);
       toast.error("Failed to delete inspection");
+    }
+  };
+
+  const openAssignDialog = async (inspection: Inspection) => {
+    setAssignTarget(inspection);
+    setAssignSubsectionId("");
+    setAssignSubsections([]);
+    setAssignOpen(true);
+    try {
+      const { data, error } = await supabase
+        .from("subsections")
+        .select("id, name")
+        .eq("site_id", inspection.site_id)
+        .order("name");
+      if (error) throw error;
+      setAssignSubsections(data || []);
+    } catch (err) {
+      console.error("Failed to load subsections for site", err);
+      toast.error("Could not load subsections for this site");
+    }
+  };
+
+  const submitAssign = async () => {
+    if (!assignTarget || !assignSubsectionId) return;
+    setAssignSaving(true);
+    try {
+      const { error } = await supabase
+        .from("inspections")
+        .update({ subsection_id: assignSubsectionId })
+        .eq("id", assignTarget.id);
+      if (error) throw error;
+      toast.success("Inspection linked to subsection");
+      setAssignOpen(false);
+      setAssignTarget(null);
+      fetchData();
+    } catch (err) {
+      console.error("Failed to assign subsection", err);
+      toast.error("Failed to link inspection");
+    } finally {
+      setAssignSaving(false);
     }
   };
 
@@ -384,7 +430,7 @@ const Inspections = () => {
               </TableHeader>
               <TableBody>
                 {inspections.map((inspection) => (
-                  <TableRow 
+                  <TableRow
                     key={inspection.id}
                     className="cursor-pointer hover:bg-muted/50"
                     onClick={() => {
@@ -393,18 +439,18 @@ const Inspections = () => {
                         toast.info("This inspection is saved offline. Sync when online to view details.");
                         return;
                       }
-                      
+
                       if (inspection.subsection_id && inspection.subsections) {
                         // Navigate through the proper hierarchy
                         const clientId = inspection.sites.client_id;
                         const siteId = inspection.site_id;
                         const subsectionId = inspection.subsection_id;
-                        const basePath = clientId 
-                          ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}` 
+                        const basePath = clientId
+                          ? `/clients/${clientId}/sites/${siteId}/subsections/${subsectionId}`
                           : `/sites/${siteId}/subsections/${subsectionId}`;
                         navigate(`${basePath}/inspections/${inspection.id}`);
                       } else {
-                        toast.info("This inspection is not linked to a subsection");
+                        openAssignDialog(inspection);
                       }
                     }}
                   >
@@ -414,6 +460,16 @@ const Inspections = () => {
                         {inspection.id.startsWith('offline_') && (
                           <Badge variant="outline" className="bg-blue-500/10 text-blue-500 border-blue-500/20 text-xs">
                             Offline
+                          </Badge>
+                        )}
+                        {!inspection.id.startsWith('offline_') && !inspection.subsection_id && (
+                          <Badge
+                            variant="outline"
+                            className="bg-amber-500/10 text-amber-600 border-amber-500/30 text-xs gap-1"
+                            title="Not linked to a subsection — click to assign"
+                          >
+                            <Link2Off className="h-3 w-3" />
+                            Unlinked
                           </Badge>
                         )}
                       </div>
@@ -449,6 +505,41 @@ const Inspections = () => {
           )}
         </CardContent>
       </Card>
+
+      <Dialog open={assignOpen} onOpenChange={(open) => { setAssignOpen(open); if (!open) setAssignTarget(null); }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Link inspection to a subsection</DialogTitle>
+            <DialogDescription>
+              {assignTarget
+                ? `"${assignTarget.title}" at ${assignTarget.sites?.name} isn't linked to a subsection yet. Pick one to assign it to.`
+                : null}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-2">
+            <Label>Subsection</Label>
+            <Select value={assignSubsectionId} onValueChange={setAssignSubsectionId}>
+              <SelectTrigger>
+                <SelectValue placeholder={assignSubsections.length ? "Select a subsection" : "Loading…"} />
+              </SelectTrigger>
+              <SelectContent>
+                {assignSubsections.map((s) => (
+                  <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {assignSubsections.length === 0 && (
+              <p className="text-xs text-muted-foreground">This site has no subsections yet — create one from the site page first.</p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setAssignOpen(false)} disabled={assignSaving}>Cancel</Button>
+            <Button onClick={submitAssign} disabled={!assignSubsectionId || assignSaving}>
+              {assignSaving ? "Linking…" : "Link"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

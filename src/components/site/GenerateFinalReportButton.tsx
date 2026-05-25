@@ -4,6 +4,8 @@ import { FileText, Loader2, Sparkles } from 'lucide-react';
 import { useServerPdfGeneration } from '@/hooks/useServerPdfGeneration';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { completeDownloadHandoff, createPendingDownloadHandoff } from '@/lib/downloadHandoff';
+import { downloadFile } from '@/lib/fileDownload';
 import { getCategoryAbbreviation } from '@/lib/subsectionCategories';
 import {
   Dialog,
@@ -415,6 +417,8 @@ export function GenerateFinalReportButton({
   };
 
   const handleGenerate = async () => {
+    const pendingDownload = createPendingDownloadHandoff();
+
     try {
       const data = await fetchComprehensiveData();
       
@@ -503,9 +507,20 @@ export function GenerateFinalReportButton({
         enabledSections,
         cocAnnexes: cocAnnexes.length > 0 ? cocAnnexes : undefined,
       });
-      
+
+      if (result) {
+        if (pendingDownload) {
+          await completeDownloadHandoff(pendingDownload, {
+            fileName: result.filename,
+            url: result.url,
+          });
+        } else {
+          await downloadFile(result.url, result.filename);
+        }
+      }
+
       setShowDialog(false);
-      
+
       // Trigger callback to refresh report list
       if (result && onReportSaved) {
         onReportSaved();

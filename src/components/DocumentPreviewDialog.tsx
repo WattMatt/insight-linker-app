@@ -20,7 +20,7 @@ import {
   Shield,
   FileText
 } from 'lucide-react';
-import { downloadFile } from '@/lib/fileDownload';
+import { downloadBlob, downloadFile } from '@/lib/fileDownload';
 import { Document, Page, pdfjs } from 'react-pdf';
 import { PDFComplianceCheck, getComplianceCheckLabel } from '@/lib/pdfEngine';
 import { renderAsync } from 'docx-preview';
@@ -36,6 +36,7 @@ interface DocumentPreviewDialogProps {
   onOpenChange: (open: boolean) => void;
   fileUrl: string;
   fileName: string;
+  downloadBlobData?: Blob;
   // New props for save functionality
   onSaveToDocuments?: () => Promise<void>;
   saveLocation?: 'site' | 'subsection';
@@ -50,6 +51,7 @@ export function DocumentPreviewDialog({
   onOpenChange,
   fileUrl,
   fileName,
+  downloadBlobData,
   onSaveToDocuments,
   saveLocation,
   contextName,
@@ -69,6 +71,7 @@ export function DocumentPreviewDialog({
   const [docxError, setDocxError] = useState<string | null>(null);
   const [docxReady, setDocxReady] = useState(false);
   const [pdfBlobUrl, setPdfBlobUrl] = useState<string | null>(null);
+  const [pdfBlobData, setPdfBlobData] = useState<Blob | null>(null);
   const [pdfLoading, setPdfLoading] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const docxContainerRef = useRef<HTMLDivElement>(null);
@@ -104,9 +107,11 @@ export function DocumentPreviewDialog({
         if (error || !data) {
           console.error('[DocPreview] SDK download failed:', error?.message);
           setPdfBlobUrl(null);
+          setPdfBlobData(null);
         } else {
           const url = URL.createObjectURL(data);
           setPdfBlobUrl(url);
+          setPdfBlobData(data);
           console.log(`[DocPreview] PDF blob created: ${(data.size / 1024).toFixed(1)}KB`);
         }
       })
@@ -117,6 +122,7 @@ export function DocumentPreviewDialog({
         if (prev) URL.revokeObjectURL(prev);
         return null;
       });
+      setPdfBlobData(null);
     };
   }, [open, isPdf, fileUrl]);
 
@@ -547,7 +553,20 @@ export function DocumentPreviewDialog({
                 {isFullscreen ? <Minimize2 className="h-4 w-4" /> : <Maximize2 className="h-4 w-4" />}
               </Button>
               <div className="w-px h-6 bg-border mx-1" />
-              <Button variant="ghost" size="icon" onClick={() => downloadFile(fileUrl, fileName)} title="Download">
+              <Button 
+                variant="ghost" 
+                size="icon" 
+                title="Download"
+                onClick={async () => {
+                  // Priority: 1) explicit downloadBlobData, 2) fetched pdfBlobData, 3) remote URL
+                  const blob = downloadBlobData || pdfBlobData;
+                  if (blob) {
+                    await downloadBlob(blob, fileName);
+                  } else {
+                    await downloadFile(fileUrl, fileName);
+                  }
+                }}
+              >
                 <Download className="h-4 w-4" />
               </Button>
               {onSaveToDocuments && (

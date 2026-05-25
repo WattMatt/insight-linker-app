@@ -373,14 +373,37 @@ export function useSubsectionDetail() {
         if (process.env.NODE_ENV === 'development') console.error("Error fetching inspections:", inspectionsError);
       }
 
+      // Fallback: also pull orphan inspections for the same site whose
+      // json_data shop number matches this subsection's name (handles records
+      // synced from the mobile app without a resolved subsection_id).
+      const normalize = (v?: string | null) =>
+        (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+      const normalizedSubName = normalize(fullSubsection.name);
+      let orphanInspections: any[] = [];
+      if (normalizedSubName) {
+        const { data: orphans } = await supabase
+          .from('inspections')
+          .select('*')
+          .eq('site_id', fullSubsection.site_id)
+          .is('subsection_id', null);
+        orphanInspections = (orphans || []).filter((insp: any) => {
+          const shop = insp?.json_data?.generalInfo?.shopNumber
+            || insp?.json_data?.generalInfo?.shopName
+            || insp?.shop_number
+            || insp?.shop_name;
+          return normalize(shop) === normalizedSubName;
+        });
+      }
+
       const inspectionsObj: Record<string, any> = {};
-      inspectionsData?.forEach(inspection => {
+      [...(inspectionsData || []), ...orphanInspections].forEach(inspection => {
         inspectionsObj[inspection.id] = {
           templateId: inspection.template_id,
           date: inspection.inspection_date,
           status: inspection.status,
           priority: inspection.priority,
           title: inspection.title,
+          needsRelink: inspection.subsection_id == null,
         };
       });
 
@@ -1364,13 +1387,12 @@ export function useSubsectionDetail() {
       const response = await fetch(url);
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = blobUrl;
-      link.download = fileName;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(blobUrl);
+
+      // Open in new tab — anchor download is blocked in iframe sandboxes
+      window.open(blobUrl, '_blank');
+
+      // Revoke after delay so the new tab can load
+      window.setTimeout(() => window.URL.revokeObjectURL(blobUrl), 60000);
       toast.success(`Downloading ${fileName}`);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error downloading document:", error);

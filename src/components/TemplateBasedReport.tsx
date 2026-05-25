@@ -69,6 +69,7 @@ export const TemplateBasedReport = ({
   const [previewOpen, setPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
+  const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
   const [saving, setSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
 
@@ -237,6 +238,8 @@ export const TemplateBasedReport = ({
       if (result.success && result.previewUrl) {
         setPreviewUrl(result.previewUrl);
         setPreviewFileName(`${subsectionName}_${selectedTemplate.name}_Report.pdf`);
+        // No blob available from this generator - DocumentPreviewDialog will fetch via SDK
+        setPreviewBlob(undefined);
         setPreviewOpen(true);
       } else {
         toast.error(result.error || "Failed to generate report");
@@ -468,10 +471,12 @@ export const TemplateBasedReport = ({
           setPreviewOpen(open);
           if (!open && previewUrl) {
             setPreviewUrl("");
+            setPreviewBlob(undefined);
           }
         }}
         fileUrl={previewUrl}
         fileName={previewFileName}
+        downloadBlobData={previewBlob}
         onSaveToDocuments={handleSaveToDocuments}
         saveLocation="subsection"
         contextName={subsectionName}

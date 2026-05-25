@@ -348,9 +348,9 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                                         </Button>
                                         <Button 
                                             size="sm" 
-                                            variant="ghost" 
-                                            onClick={() => downloadFile(report.file_url, report.file_name)}
+                                            variant="ghost"
                                             className="gap-1"
+                                            onClick={() => downloadFile(report.file_url, report.file_name)}
                                         >
                                             <Download className="h-4 w-4" />
                                             <span className="hidden sm:inline">Download</span>

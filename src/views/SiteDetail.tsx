@@ -577,8 +577,10 @@ const SiteDetail = () => {
     if (!newInspectionDate || !selectedTemplateId) return toast.error("Select template and date");
     try {
       const template = availableTemplates.find(t => t.id === selectedTemplateId);
+      const siteLevelName = `Site-wide: ${template?.name || 'Inspection'}`;
       const { data, error } = await supabase.from('inspections').insert({
         site_id: siteId, template_id: selectedTemplateId, title: template?.name || 'Inspection',
+        shop_name: siteLevelName,
         inspection_date: newInspectionDate, status: 'Pending'
       }).select().single();
       if (error) throw error;

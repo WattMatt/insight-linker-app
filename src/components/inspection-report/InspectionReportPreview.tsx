@@ -13,6 +13,7 @@ import { SignaturePage } from "./SignaturePage";
 import { generatePdfFromPages, waitForImages } from "@/lib/wysiwygPdfGenerator";
 import { Button } from "@/components/ui/button";
 import { Download, Loader2 } from "lucide-react";
+import { downloadBlob } from "@/lib/fileDownload";
 
 export interface InspectionSection {
   title: string;
@@ -69,7 +70,12 @@ export interface InspectionReportData {
 
 interface InspectionReportPreviewProps {
   data: InspectionReportData;
-  onPdfGenerated?: (result: { success: boolean; url?: string; blob?: Blob; error?: string }) => void;
+  onPdfGenerated?: (result: {
+    success: boolean;
+    url?: string;
+    blob?: Blob;
+    error?: string;
+  }) => void;
 }
 
 export function InspectionReportPreview({ data, onPdfGenerated }: InspectionReportPreviewProps) {
@@ -141,6 +147,12 @@ export function InspectionReportPreview({ data, onPdfGenerated }: InspectionRepo
           console.log(`[WYSIWYG Preview] Capturing page ${current}/${total}`);
         },
       });
+
+      if (result.success && result.blob) {
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const fileName = `Inspection_Report_${timestamp}.pdf`;
+        await downloadBlob(result.blob, fileName);
+      }
 
       onPdfGenerated?.(result);
     } catch (error) {
