@@ -119,11 +119,37 @@ Run these in sequence against the deployed URL.
 
 All EC-0 through EC-9 are either closed, committed, or explicitly deferred
 with rationale. The 7 commits ahead of `origin/main` from the earlier
-parity-pipeline work (audit, gap, plan, doc) are joined by 9 more from
-this series — **16 commits ahead of `origin/main`**, none pushed yet.
+parity-pipeline work (audit, gap, plan, doc) are joined by the auth-
+modernisation series from this session — currently **17 commits ahead of
+`origin/main`**, none pushed yet.
 
 `origin/main` push is a user decision (production deploys land off it via
 Vercel).
+
+### 4.1 Follow-up: self-signup locked (post-EC-9 decision)
+
+After the EC series landed, the open question of self-signup was answered:
+**lock it.** Compliance is a B2B product where every user maps to a paying
+customer or named contractor — there is no "let me try the product"
+persona that benefits from open signup, and a locked door is a clearer
+gate than an admin-approval queue that backs up.
+
+What changed:
+- `src/views/auth/Signup.tsx` rewritten as an invite-only notice. The
+  `/auth/signup` route still resolves (no 404 on old bookmarks) but
+  shows "contact your administrator" + a Back-to-Login button.
+- `src/views/auth/Login.tsx` — removed the "Don't have an account? Sign up"
+  link from both password and magic-link modes; replaced with a single-
+  line "No account? This system is invite-only — contact your administrator."
+- Signup Zod schema in `validation-schemas.ts` left in place (harmless if
+  unused; cheap to re-enable later if needed).
+
+All new accounts now go through the `invite-user` Edge Function (admin-
+triggered). Invited users land on `/auth/set-password` to set their
+initial password.
+
+To re-enable self-signup: restore Signup.tsx to its prior contents (see
+commit 180822d) and restore the sign-up links in Login.tsx.
 
 ## 5. Related artifacts
 

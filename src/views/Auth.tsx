@@ -15,7 +15,7 @@ import { LoadingState } from "@/components/LoadingState";
 // flows live at dedicated routes:
 //
 //   /auth/login              — sign-in form
-//   /auth/signup             — sign-up form
+//   /auth/signup             — invite-only notice (self-signup is locked)
 //   /auth/forgot-password    — request reset
 //   /auth/reset-password     — set new password (after recovery token verified)
 //   /auth/set-password       — set initial password (after invite accepted)
