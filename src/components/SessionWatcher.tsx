@@ -2,6 +2,7 @@ import { useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from '@/lib/navigation';
 import { supabase } from '@/integrations/supabase/client';
 import { clearAllCaches } from '@/lib/cacheUtils';
+import { recordAuthEvent } from '@/lib/auth-audit';
 import { toast } from 'sonner';
 
 const LAST_LOGOUT_KEY = 'wm_last_auto_logout_date';
@@ -51,12 +52,15 @@ export function SessionWatcher() {
     
     // Clear all caches first
     await clearAllCaches();
-    
+
+    // Audit the auto-logout BEFORE signOut invalidates the JWT.
+    recordAuthEvent("logout", { reason: "session_expired" });
+
     // Sign out from Supabase
     await supabase.auth.signOut();
-    
+
     // Navigate to auth page
-    navigate('/auth', { replace: true });
+    navigate('/auth/login', { replace: true });
     
     toast.info('Your session has expired. Please log in again.', {
       duration: 5000,

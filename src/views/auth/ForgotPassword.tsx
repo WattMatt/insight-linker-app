@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -10,7 +10,11 @@ import { toast } from "sonner";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
-import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
+import {
+  CaptchaTurnstile,
+  CAPTCHA_ENABLED,
+  type CaptchaTurnstileHandle,
+} from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
@@ -41,6 +45,7 @@ export default function ForgotPassword() {
   const [verifying, setVerifying] = useState(false);
   const [serverError, setServerError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaTurnstileHandle>(null);
 
   const {
     register,
@@ -150,6 +155,9 @@ export default function ForgotPassword() {
               setStep("email");
               setCode("");
               setServerError(null);
+              // Discard the prior captcha — it was consumed by the send-code
+              // step. The widget will re-render and issue a fresh one.
+              setCaptchaToken(null);
             }}
           >
             Back
@@ -184,7 +192,7 @@ export default function ForgotPassword() {
           </p>
         )}
 
-        <CaptchaTurnstile onTokenChange={setCaptchaToken} />
+        <CaptchaTurnstile ref={captchaRef} onTokenChange={setCaptchaToken} />
 
         <Button type="submit" className="w-full" size="lg" disabled={isSubmitting}>
           {isSubmitting ? "Sending..." : "Send Code"}

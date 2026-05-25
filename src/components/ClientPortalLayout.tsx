@@ -1,6 +1,7 @@
 import { Building2, Calendar, Home, LogOut, User } from "lucide-react";
 import { NavLink, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { recordAuthEvent } from "@/lib/auth-audit";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -77,12 +78,13 @@ function ClientSidebar() {
       return;
     }
     
+    recordAuthEvent("logout");
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast.error("Error signing out");
     } else {
       toast.success("Signed out successfully");
-      navigate("/auth");
+      navigate("/auth/login");
     }
   };
 

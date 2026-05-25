@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { NavLink, useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { recordAuthEvent } from "@/lib/auth-audit";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -109,12 +110,15 @@ export function AppSidebar() {
   };
 
   const handleLogout = async () => {
+    // Log BEFORE signOut — after signOut the JWT is invalidated and
+    // log-auth-event can't infer user_id from the Authorization header.
+    recordAuthEvent("logout");
     const { error } = await supabase.auth.signOut();
     if (error) {
       toast.error("Error signing out");
     } else {
       toast.success("Signed out successfully");
-      navigate("/auth");
+      navigate("/auth/login");
     }
   };
 

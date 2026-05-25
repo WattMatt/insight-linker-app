@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -11,7 +11,11 @@ import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { AuthLayout } from "@/views/auth/AuthLayout";
 import { useRoleRedirect } from "@/views/auth/useRoleRedirect";
-import { CaptchaTurnstile, CAPTCHA_ENABLED } from "@/components/CaptchaTurnstile";
+import {
+  CaptchaTurnstile,
+  CAPTCHA_ENABLED,
+  type CaptchaTurnstileHandle,
+} from "@/components/CaptchaTurnstile";
 import { recordAuthEvent } from "@/lib/auth-audit";
 import { signInSchema, forgotPasswordSchema, type SignInInput, type ForgotPasswordInput } from "@/lib/validation-schemas";
 import { Button } from "@/components/ui/button";
@@ -39,10 +43,18 @@ export default function Login() {
   const [mode, setMode] = useState<Mode>("password");
   const [serverError, setServerError] = useState<string | null>(null);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaTurnstileHandle>(null);
   const [mlStep, setMlStep] = useState<MagicLinkStep>("email");
   const [mlEmail, setMlEmail] = useState("");
   const [mlCode, setMlCode] = useState("");
   const [mlVerifying, setMlVerifying] = useState(false);
+
+  // Reset captcha after any failed attempt — Turnstile tokens are single-use
+  // server-side; carrying a stale token over to the retry will fail silently.
+  function resetCaptcha() {
+    setCaptchaToken(null);
+    captchaRef.current?.reset();
+  }
 
   // Already-signed-in redirect
   useEffect(() => {
@@ -79,6 +91,7 @@ export default function Login() {
         : error.message;
       setServerError(msg);
       toast.error(msg);
+      resetCaptcha();
       return;
     }
 
@@ -139,6 +152,8 @@ export default function Login() {
       setServerError(msg);
       toast.error(msg);
       setMlVerifying(false);
+      // verifyOtp doesn't consume the captcha (the request-code step did)
+      // — nothing to reset here.
       return;
     }
 
@@ -272,7 +287,7 @@ export default function Login() {
             </p>
           )}
 
-          <CaptchaTurnstile onTokenChange={setCaptchaToken} />
+          <CaptchaTurnstile ref={captchaRef} onTokenChange={setCaptchaToken} />
 
           <Button type="submit" className="w-full" size="lg" disabled={pw.formState.isSubmitting}>
             {pw.formState.isSubmitting ? "Signing in..." : "Sign in"}
@@ -311,7 +326,7 @@ export default function Login() {
             </p>
           )}
 
-          <CaptchaTurnstile onTokenChange={setCaptchaToken} />
+          <CaptchaTurnstile ref={captchaRef} onTokenChange={setCaptchaToken} />
 
           <Button type="submit" className="w-full" size="lg" disabled={ml.formState.isSubmitting}>
             {ml.formState.isSubmitting ? "Sending..." : "Send Code"}

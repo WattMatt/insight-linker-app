@@ -62,10 +62,13 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Build a direct link to the app with the OTP token — bypasses Supabase Site URL redirect
+    // Build a direct link to the app with the OTP token — bypasses Supabase Site URL redirect.
+    // Uses the same env-driven APP_URL as redirectTo above — security-review caught that
+    // the earlier EC-0 fix only updated redirectTo and missed this resetUrl. Both must
+    // point at the live host or the email button + plaintext link land on a dead domain.
     const hashedToken = linkData?.properties?.hashed_token;
-    const resetUrl = hashedToken 
-      ? `https://wm-compliance.lovable.app/auth?type=recovery&token=${hashedToken}`
+    const resetUrl = hashedToken
+      ? `${appUrl}/auth?type=recovery&token=${hashedToken}`
       : redirectTo;
 
     // Fetch company branding

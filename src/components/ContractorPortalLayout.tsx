@@ -1,6 +1,7 @@
 import { Home, MapPin, LogOut, User, Briefcase } from "lucide-react";
 import { NavLink, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { recordAuthEvent } from "@/lib/auth-audit";
 import { toast } from "sonner";
 import { useQuery } from "@tanstack/react-query";
 import { useUserRole } from "@/hooks/useUserRole";
@@ -72,9 +73,10 @@ const ContractorSidebar = () => {
       return;
     }
     
+    recordAuthEvent("logout");
     await supabase.auth.signOut();
     toast.success("Logged out successfully");
-    navigate("/auth");
+    navigate("/auth/login");
   };
 
   const getInitials = (name: string) => {

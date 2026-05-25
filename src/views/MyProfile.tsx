@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { recordAuthEvent } from "@/lib/auth-audit";
+import { evaluatePassword } from "@/lib/password-strength";
 import { toast } from "sonner";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -145,8 +147,10 @@ const MyProfile = () => {
 
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (newPassword.length < 6) {
-      toast.error("New password must be at least 6 characters");
+    // Sync with the auth-flow rules (was min 6 — now matches EC-2: 8 chars
+    // minimum + zxcvbn score >= 2 + not in HIBP breach corpus).
+    if (newPassword.length < 8) {
+      toast.error("New password must be at least 8 characters");
       return;
     }
     if (newPassword !== confirmPassword) {
@@ -164,6 +168,19 @@ const MyProfile = () => {
         toast.error("Current password is incorrect");
         return;
       }
+      // Strength + breach gate (best-effort; matches Set/ResetPassword).
+      const evalRes = await evaluatePassword(newPassword);
+      if (evalRes.score < 2) {
+        toast.error("Password is too weak. Mix words, length, and symbols.", { duration: 6000 });
+        return;
+      }
+      if (evalRes.pwned) {
+        toast.error(
+          `Found in ${evalRes.pwnCount?.toLocaleString() ?? "known"} data breaches. Choose a unique password.`,
+          { duration: 6000 },
+        );
+        return;
+      }
       // Update password
       const { error } = await supabase.auth.updateUser({ password: newPassword });
       if (error) {
@@ -174,6 +191,7 @@ const MyProfile = () => {
         }
         return;
       }
+      recordAuthEvent("password_changed", { method: "self" });
       toast.success("Password changed successfully!");
       setCurrentPassword("");
       setNewPassword("");
