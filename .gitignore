@@ -43,3 +43,7 @@ public/swe-worker-*.js
 *.sln
 *.sw?
 .vercel
+
+# Supabase CLI local state
+supabase/.temp/
+supabase/.branches/
