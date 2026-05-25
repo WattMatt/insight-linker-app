@@ -34,7 +34,7 @@ const AuthOnlyRoute = ({ children }: AuthOnlyRouteProps) => {
   }
 
   if (!session) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth/login" replace />;
   }
 
   return <>{children}</>;

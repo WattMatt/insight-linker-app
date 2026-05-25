@@ -53,7 +53,7 @@ const ContractorProtectedRoute = ({ children }: { children: React.ReactNode }) =
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth/login" replace />;
   }
 
   if (userRole === "Admin" && previewSiteId) {

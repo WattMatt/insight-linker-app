@@ -85,3 +85,38 @@ export const subsectionSchema = z.object({
   meter_serial_number: z.string().max(100).optional(),
   ct_ratio: z.string().max(100).optional(),
 });
+
+// =============================================================================
+// Auth schemas (used by /auth/login, /signup, /forgot-password, /reset-password,
+// /set-password). Min length 8 enforced here; entropy + breach check (EC-2)
+// happens in src/lib/password-strength.ts at form submit time.
+// =============================================================================
+
+export const signInSchema = z.object({
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(1, "Password is required"),
+});
+export type SignInInput = z.infer<typeof signInSchema>;
+
+export const signUpSchema = z.object({
+  fullName: z.string().trim().min(1, "Full name is required").max(255),
+  email: z.string().email("Invalid email address"),
+  password: z.string().min(8, "Password must be at least 8 characters").max(72),
+});
+export type SignUpInput = z.infer<typeof signUpSchema>;
+
+export const forgotPasswordSchema = z.object({
+  email: z.string().email("Invalid email address"),
+});
+export type ForgotPasswordInput = z.infer<typeof forgotPasswordSchema>;
+
+export const setPasswordSchema = z
+  .object({
+    password: z.string().min(8, "Password must be at least 8 characters").max(72),
+    confirmPassword: z.string(),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: "Passwords do not match",
+    path: ["confirmPassword"],
+  });
+export type SetPasswordInput = z.infer<typeof setPasswordSchema>;
