@@ -32,8 +32,11 @@ Deno.serve(async (req) => {
       throw new Error('Invalid email format');
     }
 
-    // Use production URL for redirect
-    const redirectTo = 'https://wm-compliance.lovable.app/auth';
+    // Redirect target for the recovery link. Env-driven so domain swaps
+    // (custom domain cutover, preview branches) don't require a code change.
+    // Falls back to the live Vercel URL — never the dead Lovable subdomain.
+    const appUrl = Deno.env.get('APP_URL') ?? 'https://insight-linker-app.vercel.app';
+    const redirectTo = `${appUrl}/auth`;
 
     // Generate password recovery link via admin API
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
