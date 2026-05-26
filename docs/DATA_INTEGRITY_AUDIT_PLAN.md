@@ -1,8 +1,9 @@
 # Data Integrity Audit & Foolproof Layer — Plan
 
-> **Status:** Plan only — not yet executed. Briefed 2026-05-25 at the end of a long
-> session. Next Claude session should pick this up cold using this document
-> as the source of truth.
+> **Status:** Stage 1 executed 2026-05-26 — see
+> [integrity-audit/2026-05-26-scorecard.md](integrity-audit/2026-05-26-scorecard.md).
+> Material gaps: 233 orphan inspections, 103 missing photo objects; everything else
+> referentially clean. Next stage = root-cause in iOS (needs external SSD mounted).
 >
 > **Goal:** Make it impossible for inspections, images, and documents to silently
 > drift out of the navigation hierarchy users see in the app. End the "I navigate
@@ -72,10 +73,12 @@ WHERE i.site_id <> s.site_id;
 SELECT * FROM public.orphan_photo_refs LIMIT 100;
 
 -- Q5: COC validations whose subsection_document is gone
-SELECT cv.id, cv.subsection_document_id, cv.created_at
+-- NOTE (2026-05-26): the actual FK column is `document_id`, not
+-- `subsection_document_id`. FK to subsection_documents already enforced.
+SELECT cv.id, cv.document_id, cv.created_at
 FROM public.coc_validations cv
-LEFT JOIN public.subsection_documents sd ON sd.id = cv.subsection_document_id
-WHERE sd.id IS NULL;
+LEFT JOIN public.subsection_documents sd ON sd.id = cv.document_id
+WHERE cv.document_id IS NOT NULL AND sd.id IS NULL;
 
 -- Q6: floor_plan_pins whose subsection or floor_plan parent is gone
 SELECT fpp.id, fpp.floor_plan_id, fpp.created_at
@@ -266,24 +269,23 @@ post-deploy.
   contractors for their own data? (Default: admin-only.)
 - **Promoting `subsection_id` to NOT NULL**: depends on whether Stage 3 confirms
   iOS can always populate it. Decide after Stage 3.
-- **iOS app source location**: confirm the path
-  `/Users/arnomattheus/Documents/DEVELOPER/ECompliance/ECompliance/` is current
-  (the working dir for this Claude session is
-  `/Users/arnomattheus/Documents/DEVELOPER/ECompliance 2` which is a docs/scratch
-  copy per [[wm-compliance-supabase]]).
+- **iOS app source location**: confirmed at
+  `/Users/arnomattheus/Documents/DEVELOPER/ECompliance` — symlink to
+  `/Volumes/Extreme SSD/DEVELOPER/ECompliance`. The external SSD must be mounted
+  before Stage 3 work can begin.
 
 ## 4. Execution sequence
 
 Recommended order per session:
 
-| Session | Stage | Output |
-|---|---|---|
-| Next | Stage 1 | Scorecard markdown with counts + top offenders |
-| +1 | Stage 2 | Regenerable inventory script + initial DATA_INVENTORY.md |
-| +2 | Stage 3 | Root-cause document; one diagnosis per gap class |
-| +3 | Stage 4a (DB invariants) | SQL migration + apply via SQL Editor |
-| +4 | Stage 4b (verification layer) | View + admin UI + cron |
-| +5 | Stage 4c (iOS sync fixes) | Swift changes + release |
+| Session | Stage | Output | Status |
+|---|---|---|---|
+| 2026-05-26 | Stage 1 | [Scorecard](integrity-audit/2026-05-26-scorecard.md) | ✅ Done |
+| Next | Stage 2 | Regenerable inventory script + initial DATA_INVENTORY.md | |
+| +1 | Stage 3 | Root-cause document; one diagnosis per gap class | Needs SSD mounted |
+| +2 | Stage 4a (DB invariants) | SQL migration + apply via SQL Editor | |
+| +3 | Stage 4b (verification layer) | View + admin UI + cron | |
+| +4 | Stage 4c (iOS sync fixes) | Swift changes + release | |
 
 Each session is ~1-2 hours of focused work. Total: a week of evenings.
 
