@@ -1,66 +1,27 @@
 /**
- * Test 5/5 of the Web ARCHITECTURE_AUDIT.md Strategy 1 baseline.
+ * Tests for the orphan-name fallback helper used by `useSubsectionDetail`.
  *
- * SHADOW TEST for the orphan-name fallback in useSubsectionDetail.ts
- * at lines 376-396. The fallback walks every inspection at the same
- * site whose `subsection_id IS NULL` and pulls in the ones whose
- * shop-number/name normalises to this subsection's name. This is the
- * exact code Stage 1 audit's Q9 referenced (`useSubsectionDetail.ts:366-399`).
+ * Originally Web ARCHITECTURE_AUDIT.md Strategy 1 deliverable #5 —
+ * the rule was shadowed here as a pure spec because the hook was a
+ * 1,751-line god-hook. Strategy 6 has now extracted the rule into
+ * `./orphanFallback.ts`, so this test imports + exercises the real
+ * helper directly. Any drift between the production rule and the test
+ * is now impossible — they share code.
  *
- * Why a shadow test, not a hook test? The hook is 1,751 lines of god-hook
- * with chained supabase calls and React state. Mocking the full surface
- * is more cost than value. Instead we replicate the normalize+match
- * predicate here as a pure spec. When Web ARCHITECTURE_AUDIT Strategy 6
- * extracts this logic into a helper (`matchOrphanByShopName`), this
- * test should be rewired to import + call that helper directly.
- *
- * Until that refactor, this file is the canonical reference for the rule.
- * Any change to the rule in the hook MUST update this test to match,
- * or the rule is silently drifting.
- *
- * Source rule (useSubsectionDetail.ts:379-395):
- *
- *   const normalize = (v?: string | null) =>
- *     (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
- *   const normalizedSubName = normalize(fullSubsection.name);
- *   // For each orphan inspection at the same site:
- *   const shop = insp?.json_data?.generalInfo?.shopNumber
- *             || insp?.json_data?.generalInfo?.shopName
- *             || insp?.shop_number
- *             || insp?.shop_name;
- *   return normalize(shop) === normalizedSubName;
+ * The fixtures still mirror Stage 1 Q9: of 233 historical orphans,
+ * only 3 attached via the strict rule (see
+ * `docs/integrity-audit/root-causes.md`).
  */
 
-// Replicated rule — keep byte-identical to the hook.
-function normalize(v?: string | null): string {
-  return (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '')
-}
+import {
+  normalize,
+  inspectionShopFingerprint,
+  matchesSubsection,
+  selectOrphansForSubsection,
+  type InspectionLike,
+} from './orphanFallback'
 
-interface InspectionLike {
-  shop_name?: string | null
-  shop_number?: string | null
-  json_data?: {
-    generalInfo?: {
-      shopName?: string | null
-      shopNumber?: string | null
-    } | null
-  } | null
-}
-
-function inspectionShopFingerprint(insp: InspectionLike): string {
-  const shop =
-    insp?.json_data?.generalInfo?.shopNumber ||
-    insp?.json_data?.generalInfo?.shopName ||
-    insp?.shop_number ||
-    insp?.shop_name
-  return normalize(shop)
-}
-
-function matchesSubsection(insp: InspectionLike, subsectionName: string): boolean {
-  return inspectionShopFingerprint(insp) === normalize(subsectionName)
-}
-
-describe('useSubsectionDetail orphan-name fallback (shadow spec)', () => {
+describe('orphanFallback helper', () => {
   describe('normalize()', () => {
     it('uppercases and strips non-alphanumerics', () => {
       expect(normalize('Shop 31/32')).toBe('SHOP3132')
@@ -81,7 +42,55 @@ describe('useSubsectionDetail orphan-name fallback (shadow spec)', () => {
     })
   })
 
-  describe('matchesSubsection() — fingerprint precedence', () => {
+  describe('inspectionShopFingerprint() — precedence', () => {
+    it('prefers json_data.generalInfo.shopNumber over every other field', () => {
+      expect(
+        inspectionShopFingerprint({
+          json_data: { generalInfo: { shopNumber: 'SHOP A', shopName: 'B' } },
+          shop_number: 'C',
+          shop_name: 'D',
+        }),
+      ).toBe('SHOPA')
+    })
+
+    it('falls through to json_data.generalInfo.shopName next', () => {
+      expect(
+        inspectionShopFingerprint({
+          json_data: { generalInfo: { shopNumber: null, shopName: 'B' } },
+          shop_number: 'C',
+          shop_name: 'D',
+        }),
+      ).toBe('B')
+    })
+
+    it('falls through to columnar shop_number when json_data is empty', () => {
+      expect(
+        inspectionShopFingerprint({
+          json_data: { generalInfo: { shopNumber: null, shopName: null } },
+          shop_number: 'C',
+          shop_name: 'D',
+        }),
+      ).toBe('C')
+    })
+
+    it('falls through to columnar shop_name as last resort', () => {
+      expect(
+        inspectionShopFingerprint({ shop_number: null, shop_name: 'D' }),
+      ).toBe('D')
+    })
+
+    it('returns empty string when all four sources are null/empty', () => {
+      expect(
+        inspectionShopFingerprint({
+          json_data: { generalInfo: { shopNumber: null, shopName: null } },
+          shop_number: null,
+          shop_name: null,
+        }),
+      ).toBe('')
+    })
+  })
+
+  describe('matchesSubsection()', () => {
     const subName = 'Shop 7'
 
     it('matches when json_data.generalInfo.shopNumber matches', () => {
@@ -135,42 +144,56 @@ describe('useSubsectionDetail orphan-name fallback (shadow spec)', () => {
       }
       expect(matchesSubsection(insp, subName)).toBe(false)
     })
+
+    it('returns no match for an empty/null subsection name', () => {
+      // Guards against accidentally pulling every dark orphan when a
+      // subsection has an unset name.
+      const fingerprinted: InspectionLike = { shop_name: 'something' }
+      expect(matchesSubsection(fingerprinted, '')).toBe(false)
+      expect(matchesSubsection(fingerprinted, null)).toBe(false)
+      expect(matchesSubsection(fingerprinted, undefined)).toBe(false)
+    })
   })
 
-  describe('integration: filter a batch of inspections', () => {
+  describe('selectOrphansForSubsection()', () => {
     // Mirrors Stage 1 Q9: of 233 orphans, only 3 attached via the
-    // strict rule. The same set is reproduced here as test fixtures.
+    // strict rule. The same set is reproduced here as fixtures.
     const subsectionName = 'SHOP SH G07'
     const orphans: InspectionLike[] = [
       {
-        // Direct match on shop_number column
+        // Direct match on shop_number column.
         shop_number: 'SHOP SH G07',
         shop_name: 'Le Kremeary',
       },
       {
-        // Match via json_data.generalInfo.shopNumber
+        // Match via json_data.generalInfo.shopNumber.
         json_data: { generalInfo: { shopNumber: 'shop sh g07' } },
       },
       {
-        // Different shop entirely
+        // Different shop entirely.
         shop_number: 'SHOP 99',
         shop_name: 'Pep Cell',
       },
       {
-        // Dark orphan — no fingerprint
+        // Dark orphan — no fingerprint.
         shop_name: null,
         shop_number: null,
       },
     ]
 
     it('attaches exactly the matching orphans', () => {
-      const matched = orphans.filter((o) => matchesSubsection(o, subsectionName))
+      const matched = selectOrphansForSubsection(orphans, subsectionName)
       expect(matched).toHaveLength(2)
     })
 
     it('ignores dark orphans (no fingerprint = no match)', () => {
-      const dark = orphans[3]
-      expect(matchesSubsection(dark, subsectionName)).toBe(false)
+      const matched = selectOrphansForSubsection(orphans, subsectionName)
+      expect(matched.find(m => m.shop_name === null && m.shop_number === null)).toBeUndefined()
+    })
+
+    it('returns an empty list when the subsection name is empty', () => {
+      expect(selectOrphansForSubsection(orphans, '')).toEqual([])
+      expect(selectOrphansForSubsection(orphans, null)).toEqual([])
     })
   })
 })

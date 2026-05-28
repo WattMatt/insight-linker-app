@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
+import { selectOrphansForSubsection } from "./orphanFallback";
 import type {
   SubsectionData,
   SiteData,
@@ -374,25 +375,22 @@ export function useSubsectionDetail() {
       }
 
       // Fallback: also pull orphan inspections for the same site whose
-      // json_data shop number matches this subsection's name (handles records
+      // shop fingerprint matches this subsection's name (handles records
       // synced from the mobile app without a resolved subsection_id).
-      const normalize = (v?: string | null) =>
-        (v || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
-      const normalizedSubName = normalize(fullSubsection.name);
+      //
+      // AUDIT: see insight-linker-app/docs/integrity-audit/root-causes.md Q9.
+      // Rule + tests live in ./orphanFallback.ts — single source of truth.
       let orphanInspections: any[] = [];
-      if (normalizedSubName) {
+      if (fullSubsection.name) {
         const { data: orphans } = await supabase
           .from('inspections')
           .select('*')
           .eq('site_id', fullSubsection.site_id)
           .is('subsection_id', null);
-        orphanInspections = (orphans || []).filter((insp: any) => {
-          const shop = insp?.json_data?.generalInfo?.shopNumber
-            || insp?.json_data?.generalInfo?.shopName
-            || insp?.shop_number
-            || insp?.shop_name;
-          return normalize(shop) === normalizedSubName;
-        });
+        orphanInspections = selectOrphansForSubsection(
+          (orphans || []) as any[],
+          fullSubsection.name,
+        );
       }
 
       const inspectionsObj: Record<string, any> = {};
