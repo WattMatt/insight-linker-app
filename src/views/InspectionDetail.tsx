@@ -31,6 +31,13 @@ import {
 import { InspectionSignatures } from "@/components/InspectionSignatures";
 import { InspectionOfflineBanner } from "@/components/InspectionOfflineBanner";
 import { useOfflineInspectionDetail } from "@/hooks/useOfflineInspectionDetail";
+import {
+  fetchSnagsForSubsection as fetchSnagsForSubsection_,
+  createSnag,
+  updateSnag,
+  toggleSnagStatus,
+  deleteSnag,
+} from "@/views/inspection-detail/snagsApi";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
 
 
@@ -275,17 +282,16 @@ const InspectionDetail = () => {
     await fetchSnagsForSubsection(subsectionId);
   };
 
+  // Snag CRUD lives in `@/views/inspection-detail/snagsApi` — Web
+  // ARCHITECTURE_AUDIT.md Strategy 5 (first carve from this 2,834-line
+  // mega-view). The view component still owns the dialog + form state;
+  // every supabase call has been lifted into the testable helper module.
+
   const fetchSnagsForSubsection = async (subId: string) => {
     try {
       setLoadingSnags(true);
-      const { data, error } = await supabase
-        .from('snags')
-        .select('*')
-        .eq('subsection_id', subId)
-        .order('created_at', { ascending: false });
-
-      if (error) throw error;
-      setSnags(data || []);
+      const rows = await fetchSnagsForSubsection_(supabase, subId);
+      setSnags(rows as any[]);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching snags:", error);
       toast.error("Failed to load snags");
@@ -301,27 +307,18 @@ const InspectionDetail = () => {
       toast.error("Snag title is required");
       return;
     }
+    if (!subsectionId) {
+      toast.error("Cannot create snag — subsection unknown");
+      return;
+    }
 
     try {
       const { data: { user } } = await supabase.auth.getUser();
-
-      const snagData: any = {
-        subsection_id: subsectionId,
-        title: newSnag.title,
-        description: newSnag.description,
-        notes: newSnag.notes,
-        photos: newSnag.photos,
-        risk_level: newSnag.risk_level || null,
-        estimated_cost: newSnag.estimated_cost ? parseFloat(newSnag.estimated_cost) : null,
-        status: 'Open',
-        created_by: user?.id
-      };
-
-      const { error } = await supabase
-        .from('snags')
-        .insert(snagData);
-
-      if (error) throw error;
+      await createSnag(supabase, {
+        subsectionId,
+        input: newSnag,
+        createdBy: user?.id,
+      });
 
       toast.success("Snag created successfully");
       setSnagDialogOpen(false);
@@ -350,19 +347,15 @@ const InspectionDetail = () => {
     }
 
     try {
-      const { error } = await supabase
-        .from('snags')
-        .update({
-          title: editingSnag.title,
-          description: editingSnag.description || null,
-          notes: editingSnag.notes || null,
-          photos: editingSnag.photos.length > 0 ? editingSnag.photos : null,
-          risk_level: editingSnag.risk_level || null,
-          estimated_cost: editingSnag.estimated_cost ? parseFloat(editingSnag.estimated_cost) : null
-        })
-        .eq('id', editingSnag.id);
-
-      if (error) throw error;
+      await updateSnag(supabase, {
+        id: editingSnag.id,
+        title: editingSnag.title,
+        description: editingSnag.description,
+        notes: editingSnag.notes,
+        photos: editingSnag.photos,
+        risk_level: editingSnag.risk_level,
+        estimated_cost: editingSnag.estimated_cost,
+      });
 
       toast.success("Snag updated successfully");
       setSnagDialogOpen(false);
@@ -381,16 +374,8 @@ const InspectionDetail = () => {
   };
 
   const handleToggleSnagStatus = async (snagId: string, currentStatus: string) => {
-    const newStatus = currentStatus === 'Open' ? 'Closed' : 'Open';
-
     try {
-      const { error } = await supabase
-        .from('snags')
-        .update({ status: newStatus })
-        .eq('id', snagId);
-
-      if (error) throw error;
-
+      const newStatus = await toggleSnagStatus(supabase, snagId, currentStatus);
       toast.success(`Snag ${newStatus.toLowerCase()} successfully`);
       fetchSnags();
     } catch (error) {
@@ -403,13 +388,7 @@ const InspectionDetail = () => {
     if (!confirm("Are you sure you want to delete this snag?")) return;
 
     try {
-      const { error } = await supabase
-        .from('snags')
-        .delete()
-        .eq('id', snagId);
-
-      if (error) throw error;
-
+      await deleteSnag(supabase, snagId);
       toast.success("Snag deleted successfully");
       fetchSnags();
     } catch (error) {
