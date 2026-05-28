@@ -1,3 +1,5 @@
+"use client";
+
 import { useEffect, useState } from "react";
 import { useParams } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -5,185 +7,97 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { 
+import {
   FAILED_VALIDATION_STATUSES,
-  hasValidCocStatus 
+  hasValidCocStatus,
 } from "@/lib/complianceCalculations";
+import {
+  fetchPublicSubsectionData,
+  type PublicSubsectionBundle,
+  type PublicSubsectionData as SubsectionData,
+  type PublicSiteData as SiteData,
+  type PublicClientData as ClientData,
+  type PublicDocumentCategory as DocumentCategory,
+  type PublicSnagData as SnagData,
+  type PublicCompanySettings,
+} from "./PublicSubsection.data";
 
-interface SubsectionData {
-  id: string;
-  name: string;
-  tenant_name?: string;
-  description?: string;
-  category?: string;
-  coc_number?: string;
-  coc_type?: string;
-  coc_issue_date?: string;
-  is_coc_required: boolean;
-  coc_status?: string;
-  metering_status?: string;
-  meter_serial_number?: string;
+interface PublicSubsectionProps {
+  /**
+   * Optional pre-fetched data — supplied by the RSC page wrapper
+   * (`src/app/public/subsections/[subsectionId]/page.tsx`). When
+   * present, the component skips its in-effect re-fetch and renders
+   * immediately with full HTML on first paint.
+   *
+   * Web ARCHITECTURE_AUDIT.md Strategy 2.
+   */
+  initial?: PublicSubsectionBundle | null;
 }
 
-interface SiteData {
-  id: string;
-  name: string;
-  address?: string;
-  client_logo_url?: string;
-}
-
-interface ClientData {
-  id: string;
-  name: string;
-  company_name?: string;
-  logo_url?: string;
-}
-
-interface DocumentCategory {
-  name: string;
-  files: DocumentFile[];
-}
-
-interface DocumentFile {
-  name: string;
-  url: string;
-  uploadedAt?: string;
-}
-
-interface SnagData {
-  id: string;
-  title: string;
-  description?: string;
-  status: string;
-  risk_level?: string;
-  created_at: string;
-}
-
-
-const PublicSubsection = () => {
+const PublicSubsection = ({ initial }: PublicSubsectionProps = {}) => {
   const { subsectionId } = useParams();
-  const [subsection, setSubsection] = useState<SubsectionData | null>(null);
-  const [siteData, setSiteData] = useState<SiteData | null>(null);
-  const [clientData, setClientData] = useState<ClientData | null>(null);
-  const [documents, setDocuments] = useState<DocumentCategory[]>([]);
-  const [snags, setSnags] = useState<SnagData[]>([]);
-  const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
-  const [loading, setLoading] = useState(true);
-  const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
+  // Seed from RSC when provided. Empty/null when this component is
+  // mounted via the legacy client-only path (kept as a fallback during
+  // the migration).
+  const [subsection, setSubsection] = useState<SubsectionData | null>(
+    initial?.subsection ?? null,
+  );
+  const [siteData, setSiteData] = useState<SiteData | null>(
+    initial?.site ?? null,
+  );
+  const [clientData, setClientData] = useState<ClientData | null>(
+    initial?.client ?? null,
+  );
+  const [documents, setDocuments] = useState<DocumentCategory[]>(
+    initial?.documents ?? [],
+  );
+  const [snags, setSnags] = useState<SnagData[]>(initial?.snags ?? []);
+  const [cocValidations, setCocValidations] = useState<Record<string, any>>(
+    (initial?.cocValidations as Record<string, any>) ?? {},
+  );
+  // If the RSC seeded us, we're not in a loading state — render now.
+  const [loading, setLoading] = useState(initial == null);
+  const [companySettings, setCompanySettings] =
+    useState<PublicCompanySettings | null>(initial?.companySettings ?? null);
 
   useEffect(() => {
+    // Skip the client-side fetch when the RSC already supplied data.
+    if (initial) {
+      return;
+    }
     if (subsectionId) {
       fetchPublicData();
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [subsectionId]);
 
   const fetchPublicData = async () => {
+    if (!subsectionId) return;
     try {
       setLoading(true);
 
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('company_name, company_logo_url')
-        .maybeSingle();
-      
-      if (settings) {
-        setCompanySettings(settings);
-      }
+      // Single source of truth — `fetchPublicSubsectionData` runs the
+      // same queries as the RSC path. Web ARCHITECTURE_AUDIT.md
+      // Strategy 2.
+      const bundle = await fetchPublicSubsectionData(
+        // The browser client implements the same query DSL as the
+        // server one. Cast keeps the public-facing types clean.
+        supabase as unknown as Parameters<typeof fetchPublicSubsectionData>[0],
+        subsectionId,
+      );
 
-      const { data: subsectionData, error: subsectionError } = await supabase
-        .from('subsections')
-        .select(`
-          *,
-          sites!inner (
-            id,
-            name,
-            address,
-            client_logo_url,
-            clients!inner (
-              id,
-              name,
-              company_name,
-              logo_url
-            )
-          )
-        `)
-        .eq('id', subsectionId)
-        .maybeSingle();
-
-      if (subsectionError) {
-        console.error("Error fetching subsection:", subsectionError);
-        return;
-      }
-
-      if (!subsectionData) {
+      if (!bundle) {
         console.error("Subsection not found");
         return;
       }
 
-      setSubsection(subsectionData);
-      setSiteData(subsectionData.sites);
-      setClientData(subsectionData.sites.clients);
-
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('document_categories')
-        .select(`
-          id,
-          name,
-          order_index,
-          subsection_documents (
-            id,
-            file_name,
-            file_url,
-            uploaded_at
-          )
-        `)
-        .eq('subsection_id', subsectionId)
-        .order('order_index');
-
-      if (categoriesError) {
-        console.error("Error fetching categories:", categoriesError);
-      }
-
-      const transformedDocs: DocumentCategory[] = (categoriesData || [])
-        .filter((cat: any) => cat.subsection_documents && cat.subsection_documents.length > 0)
-        .map((cat: any) => ({
-          name: cat.name,
-          files: cat.subsection_documents.map((doc: any) => ({
-            name: doc.file_name,
-            url: doc.file_url,
-            uploadedAt: doc.uploaded_at
-          }))
-        }));
-
-      setDocuments(transformedDocs);
-
-      const { data: snagsData, error: snagsError } = await supabase
-        .from('snags')
-        .select('id, title, description, status, risk_level, created_at')
-        .eq('subsection_id', subsectionId)
-        .order('created_at', { ascending: false });
-
-      if (snagsError) {
-        console.error("Error fetching snags:", snagsError);
-      } else {
-        setSnags(snagsData || []);
-      }
-
-      // Fetch COC validations to check for any failed validations
-      const { data: validationsData, error: validationsError } = await supabase
-        .from('coc_validations')
-        .select('*')
-        .eq('subsection_id', subsectionId);
-
-      if (validationsError) {
-        console.error("Error fetching COC validations:", validationsError);
-      } else {
-        const validationsMap: Record<string, any> = {};
-        validationsData?.forEach(validation => {
-          validationsMap[validation.document_id] = validation;
-        });
-        setCocValidations(validationsMap);
-      }
+      setSubsection(bundle.subsection);
+      setSiteData(bundle.site);
+      setClientData(bundle.client);
+      setDocuments(bundle.documents);
+      setSnags(bundle.snags);
+      setCocValidations(bundle.cocValidations as Record<string, any>);
+      setCompanySettings(bundle.companySettings);
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
