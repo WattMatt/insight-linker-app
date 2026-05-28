@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { createSiteInspection } from "@/app/actions/inspections";
 
 import { FileText, QrCode, Layers, MapPin, Building, FileBarChart, LayoutGrid, ClipboardCheck, Shield, Plus, ShieldCheck, Workflow } from "lucide-react";
 import { toast } from "sonner";
@@ -575,15 +576,23 @@ const SiteDetail = () => {
 
   const handleCreateInspection = async () => {
     if (!newInspectionDate || !selectedTemplateId) return toast.error("Select template and date");
+    if (!siteId) return toast.error("Site missing");
     try {
       const template = availableTemplates.find(t => t.id === selectedTemplateId);
-      const siteLevelName = `Site-wide: ${template?.name || 'Inspection'}`;
-      const { data, error } = await supabase.from('inspections').insert({
-        site_id: siteId, template_id: selectedTemplateId, title: template?.name || 'Inspection',
-        shop_name: siteLevelName,
-        inspection_date: newInspectionDate, status: 'Pending'
-      }).select().single();
-      if (error) throw error;
+      // Web ARCHITECTURE_AUDIT.md Strategy 3 — route through the
+      // Server Action so inspector_id is set from the auth session
+      // (closes finding (f) on the web side) and Zod validation +
+      // template/site existence checks run server-side.
+      const result = await createSiteInspection({
+        siteId,
+        templateId: selectedTemplateId,
+        title: template?.name || 'Inspection',
+        inspectionDate: newInspectionDate,
+      });
+      if (!result.ok) {
+        toast.error(result.error || "Failed to create inspection");
+        return;
+      }
       toast.success("Inspection created");
       setIsCreateInspectionOpen(false);
       // Site-level inspections: stay on site page with inspections tab
