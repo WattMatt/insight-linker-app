@@ -11,9 +11,6 @@ import {
   Building2,
   MapPin,
   Search,
-  Shield,
-  CheckCircle2,
-  Clock,
   AlertTriangle,
   FileText,
   ChevronRight,
@@ -29,8 +26,6 @@ interface SiteWithStats {
   site_type?: string;
   site_image_url?: string;
   totalSubsections: number;
-  compliantCount: number;
-  pendingCount: number;
   failedCount: number;
   openSnags: number;
 }
@@ -186,16 +181,6 @@ const PublicClientPortfolio = () => {
       // Calculate stats per site
       const enriched: SiteWithStats[] = sitesWithSignedUrls.map((site) => {
         const siteSubs = (subsections || []).filter((s) => s.site_id === site.id);
-        const compliantCount = siteSubs.filter(
-          (s) =>
-            s.is_coc_required &&
-            ["approved", "valid", "pass"].includes((s.coc_status || "").toLowerCase())
-        ).length;
-        const pendingCount = siteSubs.filter(
-          (s) =>
-            s.is_coc_required &&
-            ["pending", "review"].includes((s.coc_status || "").toLowerCase())
-        ).length;
         const failedCount = siteSubs.filter(
           (s) =>
             s.is_coc_required &&
@@ -211,8 +196,6 @@ const PublicClientPortfolio = () => {
         return {
           ...site,
           totalSubsections: siteSubs.length,
-          compliantCount,
-          pendingCount,
           failedCount,
           openSnags,
         };
@@ -266,9 +249,7 @@ const PublicClientPortfolio = () => {
 
   // Portfolio-wide stats
   const totalSubs = sites.reduce((a, s) => a + s.totalSubsections, 0);
-  const totalCompliant = sites.reduce((a, s) => a + s.compliantCount, 0);
   const totalSnags = sites.reduce((a, s) => a + s.openSnags, 0);
-  const overallRate = totalSubs > 0 ? Math.round((totalCompliant / totalSubs) * 100) : 0;
 
   const filteredSites = sites.filter((site) => {
     const q = searchQuery.toLowerCase();
@@ -316,7 +297,7 @@ const PublicClientPortfolio = () => {
 
       <div className="max-w-6xl mx-auto px-4 py-6 space-y-6">
         {/* KPI Cards */}
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
           <Card>
             <CardContent className="pt-5 pb-4 text-center">
               <Building2 className="h-6 w-6 mx-auto text-primary mb-1" />
@@ -329,13 +310,6 @@ const PublicClientPortfolio = () => {
               <FileText className="h-6 w-6 mx-auto text-muted-foreground mb-1" />
               <p className="text-2xl font-bold">{totalSubs}</p>
               <p className="text-xs text-muted-foreground">Subsections</p>
-            </CardContent>
-          </Card>
-          <Card>
-            <CardContent className="pt-5 pb-4 text-center">
-              <Shield className="h-6 w-6 mx-auto text-green-600 mb-1" />
-              <p className="text-2xl font-bold text-green-600">{overallRate}%</p>
-              <p className="text-xs text-muted-foreground">Compliance</p>
             </CardContent>
           </Card>
           <Card>
@@ -371,23 +345,6 @@ const PublicClientPortfolio = () => {
         ) : (
           <div className="grid gap-6 md:grid-cols-2">
             {filteredSites.map((site) => {
-              const complianceRate =
-                site.totalSubsections > 0
-                  ? Math.round((site.compliantCount / site.totalSubsections) * 100)
-                  : 0;
-
-              const getHealthColor = () => {
-                if (complianceRate >= 80) return "text-green-600";
-                if (complianceRate >= 50) return "text-yellow-600";
-                return "text-red-600";
-              };
-
-              const getProgressColor = () => {
-                if (complianceRate >= 80) return "bg-green-500";
-                if (complianceRate >= 50) return "bg-yellow-500";
-                return "bg-red-500";
-              };
-
               return (
                 <Link key={site.id} to={`/portfolio/${token}/site/${site.id}`}>
                   <Card className="h-full hover:shadow-lg transition-all duration-200 hover:border-primary/50 cursor-pointer group">
@@ -430,22 +387,6 @@ const PublicClientPortfolio = () => {
                       </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {/* Compliance Progress */}
-                      <div>
-                        <div className="flex items-center justify-between text-sm mb-2">
-                          <span className="text-muted-foreground">Compliance</span>
-                          <span className={`font-semibold ${getHealthColor()}`}>
-                            {complianceRate}%
-                          </span>
-                        </div>
-                        <div className="h-2 bg-muted rounded-full overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-500 ${getProgressColor()}`}
-                            style={{ width: `${complianceRate}%` }}
-                          />
-                        </div>
-                      </div>
-
                       {/* Stats Grid */}
                       <div className="grid grid-cols-2 gap-3">
                         <div className="flex items-center gap-2 text-sm">
@@ -455,24 +396,6 @@ const PublicClientPortfolio = () => {
                           <div>
                             <p className="font-medium">{site.totalSubsections}</p>
                             <p className="text-xs text-muted-foreground">Subsections</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <div className="p-1.5 rounded bg-green-100">
-                            <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-green-600">{site.compliantCount}</p>
-                            <p className="text-xs text-muted-foreground">Compliant</p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2 text-sm">
-                          <div className="p-1.5 rounded bg-yellow-100">
-                            <Clock className="h-3.5 w-3.5 text-yellow-600" />
-                          </div>
-                          <div>
-                            <p className="font-medium text-yellow-600">{site.pendingCount}</p>
-                            <p className="text-xs text-muted-foreground">Pending</p>
                           </div>
                         </div>
                         <div className="flex items-center gap-2 text-sm">

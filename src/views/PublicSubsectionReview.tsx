@@ -26,17 +26,12 @@ import {
   Calendar,
   Hash,
   MapPin,
-  FileCheck,
   Info
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
-import { 
-  FAILED_VALIDATION_STATUSES,
-  hasValidCocStatus 
-} from "@/lib/complianceCalculations";
 import { RobustImage } from "@/components/RobustImage";
 
 interface SubsectionData {
@@ -100,13 +95,6 @@ interface InspectionData {
   quality_rating?: number;
 }
 
-interface ValidationData {
-  id: string;
-  status: string;
-  validated_at: string;
-  violations?: any[];
-}
-
 interface FloorPlanData {
   id: string;
   file_name: string;
@@ -122,7 +110,6 @@ const PublicSubsectionReview = () => {
   const [documents, setDocuments] = useState<DocumentFile[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
   const [inspections, setInspections] = useState<InspectionData[]>([]);
-  const [latestValidation, setLatestValidation] = useState<ValidationData | null>(null);
   const [floorPlans, setFloorPlans] = useState<FloorPlanData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -280,24 +267,6 @@ const PublicSubsectionReview = () => {
         })));
       }
 
-      // Fetch latest COC validation for this subsection
-      const { data: validationData } = await supabase
-        .from('coc_validations')
-        .select('id, status, validated_at, violations')
-        .eq('subsection_id', subsectionId)
-        .order('validated_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (validationData) {
-        setLatestValidation({
-          id: validationData.id,
-          status: validationData.status,
-          validated_at: validationData.validated_at,
-          violations: validationData.violations as any[] || []
-        });
-      }
-
       // Fetch floor plans with pin count
       const { data: floorPlanData } = await supabase
         .from('subsection_floor_plans')
@@ -384,35 +353,6 @@ const PublicSubsectionReview = () => {
   }).length;
   const completedInspections = inspections.filter(i => i.status?.toLowerCase() === 'completed').length;
   const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
-  
-  // Determine effective compliance status using shared logic from complianceCalculations.ts
-  // A subsection is compliant if:
-  // 1. COC is not required, OR
-  // 2. COC is required AND has a valid status AND no failed validations
-  const getEffectiveComplianceStatus = (): string => {
-    // If COC is not required, it's compliant by default
-    if (!subsection?.is_coc_required) return 'Compliant';
-    
-    // Check latest validation first (most authoritative)
-    if (latestValidation) {
-      const validationStatus = latestValidation.status;
-      if (FAILED_VALIDATION_STATUSES.includes(validationStatus as any)) {
-        return 'Non-Compliant';
-      }
-      if (validationStatus === 'Pass' || validationStatus === 'Passed') {
-        return 'Compliant';
-      }
-    }
-    
-    // Fallback to COC status field using shared utility
-    if (hasValidCocStatus(subsection?.coc_status)) {
-      return 'Compliant';
-    }
-    
-    return 'Pending Review';
-  };
-  
-  const effectiveComplianceStatus = getEffectiveComplianceStatus();
 
   // Fetch full inspection details when an inspection is selected
   const fetchInspectionDetails = async (inspectionId: string) => {
@@ -649,24 +589,7 @@ const PublicSubsectionReview = () => {
 
       {/* KPI Stats */}
       <section className="container mx-auto px-4 py-6">
-        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          <Card className={`bg-gradient-to-br ${
-            effectiveComplianceStatus === 'Compliant' 
-              ? 'from-green-50 to-white border-green-200' 
-              : effectiveComplianceStatus === 'Non-Compliant'
-              ? 'from-red-50 to-white border-red-200'
-              : 'from-amber-50 to-white border-amber-200'
-          }`}>
-            <CardContent className="p-4 text-center">
-              <div className={`text-lg font-bold mb-1 ${
-                effectiveComplianceStatus === 'Compliant' ? 'text-green-600' : 
-                effectiveComplianceStatus === 'Non-Compliant' ? 'text-red-600' : 'text-amber-600'
-              }`}>
-                {effectiveComplianceStatus}
-              </div>
-              <div className="text-sm text-muted-foreground">Status</div>
-            </CardContent>
-          </Card>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <Card className="bg-gradient-to-br from-blue-50 to-white border-blue-200">
             <CardContent className="p-4 text-center">
               <div className="text-3xl font-bold text-blue-600 mb-1">{documents.length}</div>
@@ -722,85 +645,7 @@ const PublicSubsectionReview = () => {
 
           {/* Overview Tab */}
           <TabsContent value="overview" className="space-y-6">
-            <div className="grid md:grid-cols-2 gap-6">
-              {/* COC Details */}
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center gap-2">
-                    <FileCheck className="h-5 w-5 text-primary" />
-                    Certificate of Compliance
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                      <span className="text-sm text-muted-foreground">COC Status</span>
-                      <Badge className={`${getCocStatusColor(subsection.coc_status)} text-white`}>
-                        {subsection.coc_status || 'Not Available'}
-                      </Badge>
-                    </div>
-                    {latestValidation && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <span className="text-sm text-muted-foreground">Validation Result</span>
-                        <div className="flex items-center gap-2">
-                          <Badge className={`${
-                            latestValidation.status === 'Pass' ? 'bg-green-500' : 
-                            latestValidation.status === 'Fail' ? 'bg-destructive' : 
-                            'bg-amber-500'
-                          } text-white`}>
-                            {latestValidation.status}
-                          </Badge>
-                          <span className="text-xs text-muted-foreground">
-                            {new Date(latestValidation.validated_at).toLocaleDateString()}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                    {subsection.coc_number && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <span className="text-sm text-muted-foreground">Certificate Number</span>
-                        <span className="font-mono font-medium">{subsection.coc_number}</span>
-                      </div>
-                    )}
-                    {subsection.coc_type && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <span className="text-sm text-muted-foreground">Type</span>
-                        <span className="font-medium">{subsection.coc_type}</span>
-                      </div>
-                    )}
-                    {subsection.coc_issue_date && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/50">
-                        <span className="text-sm text-muted-foreground">Issue Date</span>
-                        <span className="font-medium flex items-center gap-2">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(subsection.coc_issue_date).toLocaleDateString()}
-                        </span>
-                      </div>
-                    )}
-                    {latestValidation?.violations && latestValidation.violations.length > 0 && (
-                      <div className="mt-4 pt-4 border-t">
-                        <p className="text-sm font-medium text-destructive mb-2">
-                          {latestValidation.violations.length} Validation Issue{latestValidation.violations.length !== 1 ? 's' : ''}
-                        </p>
-                        <div className="space-y-2 max-h-40 overflow-y-auto">
-                          {latestValidation.violations.slice(0, 5).map((v: any, i: number) => (
-                            <div key={i} className="text-xs p-2 rounded bg-destructive/10 text-destructive">
-                              {v.message || v.description || JSON.stringify(v)}
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-                    {!subsection.coc_number && !subsection.coc_type && !latestValidation && (
-                      <div className="text-center py-6 text-muted-foreground">
-                        <Shield className="h-10 w-10 mx-auto mb-2 opacity-30" />
-                        <p>No COC details available</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
+            <div>
               {/* Recent Activity */}
               <Card>
                 <CardHeader>
@@ -1172,33 +1017,12 @@ const PublicSubsectionReview = () => {
                                 <div className="divide-y">
                                   {section.items?.map((templateItem: any, iIdx: number) => {
                                     const itemData = sectionData[templateItem.id] || {};
-                                    const statusVal = (itemData.status || itemData.value || '').toLowerCase();
-                                    const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
-                                    const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
-                                    const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
                                     const photos: string[] = itemData.photos || [];
 
                                     return (
                                       <div key={iIdx} className="p-3">
-                                        <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
                                           <span className="text-sm font-medium">{templateItem.name}</span>
-                                          {statusVal ? (
-                                            <Badge 
-                                              variant="outline"
-                                              className={
-                                                isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                isFail ? 'bg-red-50 text-red-700 border-red-200' :
-                                                isNA ? 'bg-muted text-muted-foreground' :
-                                                'bg-blue-50 text-blue-700 border-blue-200'
-                                              }
-                                            >
-                                              {(itemData.status || itemData.value || 'N/A').toUpperCase()}
-                                            </Badge>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-muted text-muted-foreground">
-                                              NOT RECORDED
-                                            </Badge>
-                                          )}
                                         </div>
                                         {itemData.notes && (
                                           <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-100">
@@ -1280,9 +1104,8 @@ const PublicSubsectionReview = () => {
                                   const photos: string[] = itemVal?.photos || [];
                                   return (
                                     <div key={itemKey} className="p-3">
-                                      <div className="flex items-center justify-between gap-2">
+                                      <div className="flex items-center gap-2">
                                         <span className="text-sm font-medium">{itemLabel}</span>
-                                        {itemVal?.status && <Badge variant="outline">{itemVal.status}</Badge>}
                                       </div>
                                       {itemVal?.notes && <p className="text-xs text-muted-foreground mt-1">Notes: {itemVal.notes}</p>}
                                       {photos.length > 0 && (

@@ -3,20 +3,15 @@ import { useParams, Link, useNavigate } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { 
-  Building2, 
-  FileText, 
-  CheckCircle2, 
-  XCircle, 
-  AlertTriangle, 
-  Clock,
+import {
+  Building2,
+  FileText,
+  XCircle,
+  AlertTriangle,
   MapPin,
   Zap,
-  Shield,
-  BarChart3,
   Eye,
   Loader2,
   LayoutGrid,
@@ -31,21 +26,11 @@ import { supabase } from "@/integrations/supabase/client";
 import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { downloadFile } from "@/lib/fileDownload";
 import { Site, Subsection } from "@/types/site";
-
-interface LocalComplianceStats {
-  approved: number;
-  pending: number;
-  failed: number;
-  missing: number;
-  notRequired: number;
-  total: number;
-}
 
 interface SiteData {
   id: string;
@@ -85,12 +70,6 @@ interface SnagData {
   title: string;
   status: string;
   risk_level?: string;
-}
-
-interface ValidationData {
-  id: string;
-  subsection_id: string;
-  status: string;
 }
 
 interface DocumentData {
@@ -141,7 +120,6 @@ const PublicSiteReview = () => {
   const [client, setClient] = useState<ClientData | null>(null);
   const [subsections, setSubsections] = useState<SubsectionData[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
-  const [validations, setValidations] = useState<ValidationData[]>([]);
   const [siteDocuments, setSiteDocuments] = useState<DocumentData[]>([]);
   const [siteDocCategories, setSiteDocCategories] = useState<SiteDocCategoryData[]>([]);
   const [subsectionDocuments, setSubsectionDocuments] = useState<SubsectionDocumentData[]>([]);
@@ -271,7 +249,7 @@ const PublicSiteReview = () => {
 
         setInspections(inspectionsData || []);
 
-        // Fetch snags and validations
+        // Fetch snags
         const subsectionIds = (subsectionsData || []).map(s => s.id);
         if (subsectionIds.length > 0) {
           const { data: snagsData } = await supabase
@@ -280,13 +258,6 @@ const PublicSiteReview = () => {
             .in('subsection_id', subsectionIds);
 
           setSnags(snagsData || []);
-
-          const { data: validationsData } = await supabase
-            .from('coc_validations')
-            .select('id, subsection_id, status')
-            .in('subsection_id', subsectionIds);
-
-          setValidations(validationsData || []);
 
           // Fetch subsection documents
           const { data: subDocsData } = await supabase
@@ -311,76 +282,7 @@ const PublicSiteReview = () => {
     }
   };
 
-  // Calculate stats locally
-  const calculateLocalStats = (): LocalComplianceStats => {
-    let approved = 0;
-    let pending = 0;
-    let failed = 0;
-    let missing = 0;
-    let notRequired = 0;
-    
-    subsections.forEach(s => {
-      if (!s.is_coc_required) {
-        notRequired++;
-      } else {
-        const status = s.coc_status?.toLowerCase();
-        if (status === 'approved' || status === 'valid' || status === 'pass') {
-          approved++;
-        } else if (status === 'pending' || status === 'review') {
-          pending++;
-        } else if (status === 'fail' || status === 'failed' || status === 'expired') {
-          failed++;
-        } else {
-          missing++;
-        }
-      }
-    });
-    
-    return { approved, pending, failed, missing, notRequired, total: subsections.length };
-  };
-  
-  const stats = calculateLocalStats();
   const openSnags = snags.filter(s => !['Rectified', 'Closed', 'rectified'].includes(s.status));
-  const failedValidations = validations.filter(v => ['Fail', 'Failed'].includes(v.status));
-
-  const getOverallHealthScore = () => {
-    if (subsections.length === 0) return 0;
-    let score = 0;
-    const total = subsections.length;
-    
-    subsections.forEach(s => {
-      if (!s.is_coc_required) {
-        score += 1;
-      } else if (['Approved', 'Valid', 'Pass', 'approved', 'valid', 'pass'].includes(s.coc_status || '')) {
-        score += 1;
-      }
-    });
-    
-    return Math.round((score / total) * 100);
-  };
-
-  const healthScore = getOverallHealthScore();
-
-  const getCategoryBreakdown = () => {
-    const categories: Record<string, { total: number; compliant: number }> = {};
-    
-    subsections.forEach(s => {
-      const cat = s.category || 'Uncategorized';
-      if (!categories[cat]) {
-        categories[cat] = { total: 0, compliant: 0 };
-      }
-      categories[cat].total++;
-      if (!s.is_coc_required || ['Approved', 'Valid', 'Pass', 'approved', 'valid', 'pass'].includes(s.coc_status || '')) {
-        categories[cat].compliant++;
-      }
-    });
-    
-    return Object.entries(categories).map(([name, data]) => ({
-      name,
-      ...data,
-      percentage: Math.round((data.compliant / data.total) * 100)
-    }));
-  };
 
   const getStatusColor = (status?: string) => {
     switch (status?.toLowerCase()) {
@@ -439,24 +341,6 @@ const PublicSiteReview = () => {
   });
 
   const totalDocs = siteDocuments.length + subsectionDocuments.length;
-
-  // Format data for ComplianceDashboard
-  const formattedSubsections = subsections.map(s => ({
-    id: s.id,
-    name: s.name,
-    category: s.category || null,
-    coc_status: s.coc_status || '',
-    metering_status: s.metering_status || '',
-    is_compliant: s.is_compliant || false,
-    is_coc_required: s.is_coc_required || false,
-  }));
-
-  const formattedInspections = inspections.map(i => ({
-    id: i.id,
-    subsection_id: i.subsection_id,
-    inspection_date: i.inspection_date,
-    json_data: i.json_data,
-  }));
 
   if (loading) {
     return (
@@ -547,115 +431,41 @@ const PublicSiteReview = () => {
       <section className="relative overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-r from-primary/5 via-transparent to-primary/5" />
         <div className="container mx-auto px-4 py-12">
-          <div className="grid lg:grid-cols-2 gap-8 items-center">
-            <div>
-              <Badge variant="outline" className="mb-4">
-                <Building2 className="h-3 w-3 mr-1" />
-                {site.site_type || 'Commercial'}
-              </Badge>
-              <h1 className="text-4xl font-bold mb-2">{site.name}</h1>
-              {site.address && (
-                <p className="text-lg text-muted-foreground flex items-center gap-2 mb-6">
-                  <MapPin className="h-4 w-4" />
-                  {site.address}
-                </p>
-              )}
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <span>Prepared for</span>
-                <Badge variant="secondary">{client.company_name || client.name}</Badge>
-              </div>
+          <div>
+            <Badge variant="outline" className="mb-4">
+              <Building2 className="h-3 w-3 mr-1" />
+              {site.site_type || 'Commercial'}
+            </Badge>
+            <h1 className="text-4xl font-bold mb-2">{site.name}</h1>
+            {site.address && (
+              <p className="text-lg text-muted-foreground flex items-center gap-2 mb-6">
+                <MapPin className="h-4 w-4" />
+                {site.address}
+              </p>
+            )}
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span>Prepared for</span>
+              <Badge variant="secondary">{client.company_name || client.name}</Badge>
             </div>
-
-            {/* Health Score Card */}
-            <Card className="bg-white/80 backdrop-blur border-2 shadow-xl">
-              <CardHeader className="pb-2">
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-primary" />
-                  Overall Site Health
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="flex items-center gap-6">
-                  <div className="relative w-32 h-32">
-                    <svg className="w-full h-full -rotate-90">
-                      <circle
-                        cx="64"
-                        cy="64"
-                        r="56"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="12"
-                        className="text-muted/20"
-                      />
-                      <circle
-                        cx="64"
-                        cy="64"
-                        r="56"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="12"
-                        strokeDasharray={`${(healthScore / 100) * 352} 352`}
-                        strokeLinecap="round"
-                        className={healthScore >= 80 ? 'text-emerald-500' : healthScore >= 50 ? 'text-amber-500' : 'text-destructive'}
-                      />
-                    </svg>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <span className="text-3xl font-bold">{healthScore}%</span>
-                    </div>
-                  </div>
-                  <div className="flex-1 space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <CheckCircle2 className="h-4 w-4 text-emerald-500" />
-                        Compliant
-                      </span>
-                      <span className="font-medium">{stats.approved}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <Clock className="h-4 w-4 text-amber-500" />
-                        Pending
-                      </span>
-                      <span className="font-medium">{stats.pending}</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="flex items-center gap-2">
-                        <XCircle className="h-4 w-4 text-destructive" />
-                        Non-Compliant
-                      </span>
-                      <span className="font-medium">{stats.failed}</span>
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </div>
       </section>
 
       {/* Stats Summary */}
       <section className="container mx-auto px-4 py-8">
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Card className="text-center p-6">
             <div className="text-3xl font-bold text-primary mb-1">{subsections.length}</div>
             <p className="text-sm text-muted-foreground">Total Subsections</p>
           </Card>
           <Card className="text-center p-6">
-            <div className="text-3xl font-bold text-emerald-600 mb-1">{stats.approved}</div>
-            <p className="text-sm text-muted-foreground">COC Approved</p>
-          </Card>
-          <Card className="text-center p-6">
             <div className="text-3xl font-bold text-destructive mb-1">{openSnags.length}</div>
             <p className="text-sm text-muted-foreground">Open Snags</p>
-          </Card>
-          <Card className="text-center p-6">
-            <div className="text-3xl font-bold text-amber-600 mb-1">{failedValidations.length}</div>
-            <p className="text-sm text-muted-foreground">Failed Validations</p>
           </Card>
         </div>
       </section>
 
-      {/* Tabbed Content - 7 Tabs */}
+      {/* Tabbed Content - 6 Tabs */}
       <section className="container mx-auto px-4 pb-12">
         <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-6">
           <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1 overflow-visible">
@@ -670,10 +480,6 @@ const PublicSiteReview = () => {
             <TabsTrigger value="assets" className="gap-2 shrink-0">
               <ShieldCheck className="h-4 w-4 shrink-0" />
               <span className="hidden md:inline">Assets</span>
-            </TabsTrigger>
-            <TabsTrigger value="compliance" className="gap-2 shrink-0">
-              <Shield className="h-4 w-4 shrink-0" />
-              <span className="hidden md:inline">Compliance</span>
             </TabsTrigger>
             <TabsTrigger value="documents" className="gap-2 shrink-0">
               <FileText className="h-4 w-4 shrink-0" />
@@ -691,95 +497,38 @@ const PublicSiteReview = () => {
 
           {/* Dashboard Tab */}
           <TabsContent value="dashboard" className="space-y-6">
-            {/* Category Breakdown */}
+            {/* Snag Summary */}
             <Card>
               <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <BarChart3 className="h-5 w-5" />
-                  Compliance by Category
-                </CardTitle>
+                <CardTitle>Snag Summary</CardTitle>
               </CardHeader>
-              <CardContent className="space-y-4">
-                {getCategoryBreakdown().map((cat) => (
-                  <div key={cat.name} className="space-y-2">
-                    <div className="flex items-center justify-between text-sm">
-                      <span className="font-medium">{cat.name}</span>
-                      <span className="text-muted-foreground">
-                        {cat.compliant} / {cat.total} ({cat.percentage}%)
+              <CardContent className="space-y-2">
+                {['Critical', 'High', 'Medium', 'Low'].map(priority => {
+                  const count = openSnags.filter(s => s.risk_level?.toLowerCase() === priority.toLowerCase()).length;
+                  const colorMap: Record<string, string> = {
+                    critical: 'bg-red-50 border-red-200 text-red-700',
+                    high: 'bg-orange-50 border-orange-200 text-orange-700',
+                    medium: 'bg-amber-50 border-amber-200 text-amber-700',
+                    low: 'bg-blue-50 border-blue-200 text-blue-700',
+                  };
+                  const badgeMap: Record<string, string> = {
+                    critical: 'bg-destructive',
+                    high: 'bg-orange-500',
+                    medium: 'bg-amber-500',
+                    low: 'bg-blue-500',
+                  };
+                  return (
+                    <div key={priority} className={`flex items-center justify-between p-3 rounded-lg border ${colorMap[priority.toLowerCase()]}`}>
+                      <span className="flex items-center gap-2">
+                        <AlertTriangle className="h-4 w-4" />
+                        {priority}
                       </span>
+                      <Badge className={badgeMap[priority.toLowerCase()]}>{count}</Badge>
                     </div>
-                    <Progress value={cat.percentage} className="h-2" />
-                  </div>
-                ))}
-                {getCategoryBreakdown().length === 0 && (
-                  <p className="text-center text-muted-foreground py-4">No categories found</p>
-                )}
+                  );
+                })}
               </CardContent>
             </Card>
-
-            {/* COC Status Summary & Snag Summary */}
-            <div className="grid md:grid-cols-2 gap-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle>COC Status Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-emerald-50 border border-emerald-200">
-                    <span className="flex items-center gap-2 text-emerald-700">
-                      <CheckCircle2 className="h-4 w-4" />
-                      Approved / Valid
-                    </span>
-                    <Badge className="bg-emerald-500">{stats.approved}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-amber-50 border border-amber-200">
-                    <span className="flex items-center gap-2 text-amber-700">
-                      <Clock className="h-4 w-4" />
-                      Pending Review
-                    </span>
-                    <Badge className="bg-amber-500">{stats.pending}</Badge>
-                  </div>
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-red-50 border border-red-200">
-                    <span className="flex items-center gap-2 text-red-700">
-                      <XCircle className="h-4 w-4" />
-                      Failed / Missing
-                    </span>
-                    <Badge className="bg-destructive">{stats.failed + stats.missing}</Badge>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card>
-                <CardHeader>
-                  <CardTitle>Snag Summary</CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-2">
-                  {['Critical', 'High', 'Medium', 'Low'].map(priority => {
-                    const count = openSnags.filter(s => s.risk_level?.toLowerCase() === priority.toLowerCase()).length;
-                    const colorMap: Record<string, string> = {
-                      critical: 'bg-red-50 border-red-200 text-red-700',
-                      high: 'bg-orange-50 border-orange-200 text-orange-700',
-                      medium: 'bg-amber-50 border-amber-200 text-amber-700',
-                      low: 'bg-blue-50 border-blue-200 text-blue-700',
-                    };
-                    const badgeMap: Record<string, string> = {
-                      critical: 'bg-destructive',
-                      high: 'bg-orange-500',
-                      medium: 'bg-amber-500',
-                      low: 'bg-blue-500',
-                    };
-                    return (
-                      <div key={priority} className={`flex items-center justify-between p-3 rounded-lg border ${colorMap[priority.toLowerCase()]}`}>
-                        <span className="flex items-center gap-2">
-                          <AlertTriangle className="h-4 w-4" />
-                          {priority}
-                        </span>
-                        <Badge className={badgeMap[priority.toLowerCase()]}>{count}</Badge>
-                      </div>
-                    );
-                  })}
-                </CardContent>
-              </Card>
-            </div>
 
             {/* Site Information */}
             {(site.supply_authority || site.nominated_max_demand) && (
@@ -815,15 +564,6 @@ const PublicSiteReview = () => {
           {/* Asset Verification Tab */}
           <TabsContent value="assets" className="space-y-6">
             <AssetVerification siteId={site.id} siteName={site.name} readOnly />
-          </TabsContent>
-
-          {/* Compliance Tab */}
-          <TabsContent value="compliance" className="space-y-6">
-            <ComplianceDashboard 
-              siteId={site.id} 
-              subsections={formattedSubsections} 
-              inspections={formattedInspections} 
-            />
           </TabsContent>
 
           {/* Documents Tab */}
