@@ -32,8 +32,21 @@ Deno.serve(async (req) => {
       throw new Error('Invalid email format');
     }
 
-    // Use production URL for redirect
-    const redirectTo = 'https://wm-compliance.lovable.app/auth';
+    // Fetch branding + the configured app base URL up front.
+    const { data: settings } = await supabase
+      .from('settings')
+      .select('company_name, company_logo_url, qr_base_url')
+      .single();
+
+    // Derive the app base URL dynamically so reset links point at wherever the
+    // app is actually served (custom domains included) — never a hardcoded host.
+    const originHeader = req.headers.get('origin') || '';
+    const baseUrl = (
+      originHeader.startsWith('http')
+        ? originHeader
+        : (settings?.qr_base_url || 'https://wm-compliance.lovable.app')
+    ).replace(/\/$/, '');
+    const redirectTo = `${baseUrl}/auth`;
 
     // Generate password recovery link via admin API
     const { data: linkData, error: linkError } = await supabase.auth.admin.generateLink({
@@ -61,15 +74,9 @@ Deno.serve(async (req) => {
 
     // Build a direct link to the app with the OTP token — bypasses Supabase Site URL redirect
     const hashedToken = linkData?.properties?.hashed_token;
-    const resetUrl = hashedToken 
-      ? `https://wm-compliance.lovable.app/auth?type=recovery&token=${hashedToken}`
+    const resetUrl = hashedToken
+      ? `${baseUrl}/auth?type=recovery&token=${hashedToken}`
       : redirectTo;
-
-    // Fetch company branding
-    const { data: settings } = await supabase
-      .from('settings')
-      .select('company_name, company_logo_url')
-      .single();
 
     const companyName = settings?.company_name || 'WM Compliance';
     const logoUrl = settings?.company_logo_url;

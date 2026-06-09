@@ -3,11 +3,11 @@ import { useParams, Link, useSearchParams, useNavigate } from "react-router-dom"
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  FileText, Download, Info, Eye, ArrowLeft, 
-  CheckCircle2, AlertCircle, Calendar, Hash, User, Zap,
+import {
+  FileText, Download, Info, Eye, ArrowLeft,
+  CheckCircle2, AlertCircle, Calendar, User,
   Building2, MapPin, ChevronRight, Layers, FileBarChart,
-  ShieldCheck, Clock, Loader2, ClipboardList
+  ShieldCheck, Loader2, ClipboardList
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -183,26 +183,6 @@ const ClientPortalSubsectionDetail = () => {
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "compliant": case "valid": case "approved": case "pass": return "bg-emerald-500";
-      case "missing": return "bg-destructive";
-      case "expired": return "bg-amber-500";
-      default: return "bg-muted-foreground";
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "compliant": case "valid": case "approved": case "pass": 
-        return <CheckCircle2 className="h-4 w-4" />;
-      case "missing": case "expired": 
-        return <AlertCircle className="h-4 w-4" />;
-      default: 
-        return <Clock className="h-4 w-4" />;
-    }
-  };
-
   // Group documents by category
   const groupedDocuments = documents.reduce((acc, doc) => {
     const categoryName = (doc.document_categories as any)?.name || "Uncategorized";
@@ -284,12 +264,6 @@ const ClientPortalSubsectionDetail = () => {
                 </div>
               </div>
             </div>
-            {subsection.coc_status && (
-              <Badge className={`${getStatusColor(subsection.coc_status)} text-white gap-1.5`}>
-                {getStatusIcon(subsection.coc_status)}
-                COC: {subsection.coc_status}
-              </Badge>
-            )}
           </div>
         </div>
 
@@ -341,96 +315,28 @@ const ClientPortalSubsectionDetail = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* COC Details Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                  Certificate of Compliance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {subsection.coc_status ? (
-                  <>
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                      <span className="text-sm text-muted-foreground">Status</span>
-                      <Badge className={`${getStatusColor(subsection.coc_status)} text-white`}>
-                        {subsection.coc_status}
-                      </Badge>
-                    </div>
-                    {subsection.coc_number && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Hash className="h-4 w-4" /> COC Number
-                        </span>
-                        <span className="font-medium">{subsection.coc_number}</span>
-                      </div>
-                    )}
-                    {subsection.coc_issue_date && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Calendar className="h-4 w-4" /> Issue Date
-                        </span>
-                        <span className="font-medium">
-                          {format(new Date(subsection.coc_issue_date), "dd MMM yyyy")}
-                        </span>
-                      </div>
-                    )}
-                    {subsection.coc_type && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Zap className="h-4 w-4" /> Type
-                        </span>
-                        <span className="font-medium">{subsection.coc_type}</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No COC information available</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tenant & Meter Details Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5 text-primary" />
-                  Tenant & Metering
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {subsection.tenant_name && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">Tenant Name</span>
-                    <span className="font-medium">{subsection.tenant_name}</span>
-                  </div>
-                )}
-                {subsection.meter_serial_number && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">Meter Serial</span>
-                    <span className="font-mono font-medium">{subsection.meter_serial_number}</span>
-                  </div>
-                )}
-                {subsection.ct_ratio && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">CT Ratio</span>
-                    <span className="font-medium">{subsection.ct_ratio}</span>
-                  </div>
-                )}
-                {!subsection.tenant_name && !subsection.meter_serial_number && !subsection.ct_ratio && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No tenant or metering information</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          {/* Tenant Details Card */}
+          <Card>
+            <CardHeader>
+              <CardTitle className="text-lg flex items-center gap-2">
+                <User className="h-5 w-5 text-primary" />
+                Tenant
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {subsection.tenant_name ? (
+                <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
+                  <span className="text-sm text-muted-foreground">Tenant Name</span>
+                  <span className="font-medium">{subsection.tenant_name}</span>
+                </div>
+              ) : (
+                <div className="text-center py-6 text-muted-foreground">
+                  <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                  <p>No tenant information</p>
+                </div>
+              )}
+            </CardContent>
+          </Card>
 
           {/* Recent Activity Summary */}
           <Card>
@@ -729,34 +635,12 @@ const ClientPortalSubsectionDetail = () => {
                                 <div className="divide-y">
                                   {section.items?.map((templateItem: any, iIdx: number) => {
                                     const itemData = sectionData[templateItem.id] || {};
-                                    const statusVal = (itemData.status || itemData.value || '').toLowerCase();
-                                    const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
-                                    const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
-                                    const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
                                     const photos: string[] = itemData.photos || [];
-                                    const hasData = statusVal || itemData.notes || photos.length > 0;
 
                                     return (
                                       <div key={iIdx} className="p-3">
-                                        <div className="flex items-center justify-between gap-2">
+                                        <div className="flex items-center gap-2">
                                           <span className="text-sm font-medium">{templateItem.name}</span>
-                                          {statusVal ? (
-                                            <Badge 
-                                              variant="outline"
-                                              className={
-                                                isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                isFail ? 'bg-red-50 text-red-700 border-red-200' :
-                                                isNA ? 'bg-muted text-muted-foreground' :
-                                                'bg-blue-50 text-blue-700 border-blue-200'
-                                              }
-                                            >
-                                              {(itemData.status || itemData.value || 'N/A').toUpperCase()}
-                                            </Badge>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-muted text-muted-foreground">
-                                              NOT RECORDED
-                                            </Badge>
-                                          )}
                                         </div>
 
                                         {itemData.notes && (
@@ -930,14 +814,8 @@ const ClientPortalSubsectionDetail = () => {
                               {(tenant.shopNumber || tenant.shop_number) && (
                                 <div><span className="text-muted-foreground">Shop #:</span> {tenant.shopNumber || tenant.shop_number}</div>
                               )}
-                              {(tenant.meterSerialNumber || tenant.meter_serial_number) && (
-                                <div><span className="text-muted-foreground">Meter S/N:</span> {tenant.meterSerialNumber || tenant.meter_serial_number}</div>
-                              )}
                               {(tenant.breakerSize || tenant.breaker_size) && (
                                 <div><span className="text-muted-foreground">Breaker:</span> {tenant.breakerSize || tenant.breaker_size}</div>
-                              )}
-                              {(tenant.ctSizeAndRatio || tenant.ct_ratio) && (
-                                <div><span className="text-muted-foreground">CT Ratio:</span> {tenant.ctSizeAndRatio || tenant.ct_ratio}</div>
                               )}
                             </div>
                             {/* Tenant verification photos */}

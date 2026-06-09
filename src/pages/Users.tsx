@@ -242,9 +242,13 @@ const Users = () => {
   const sendInviteMutation = useMutation({
     mutationFn: async (invite: PendingInvite) => {
       const { data, error } = await supabase.functions.invoke('invite-user', {
-        body: { email: invite.email, fullName: invite.full_name || '' }
+        body: {
+          email: invite.email,
+          fullName: invite.full_name || '',
+          isResend: !!invite.invited_at,
+        },
       });
-      
+
       if (error) throw error;
       if (!data.success) {
         throw new Error(data.error || 'Failed to send invite');
@@ -457,11 +461,23 @@ const Users = () => {
   // Update user status mutation
   const updateStatusMutation = useMutation({
     mutationFn: async ({ userId, newStatus }: { userId: string; newStatus: string }) => {
+      // Enforce a REAL access change: ban/unban the auth user so "Inactive"
+      // actually blocks sign-in and token refresh — not just a status badge.
+      const active = newStatus === "Active";
+      const { data: fnData, error: fnError } = await supabase.functions.invoke(
+        "set-user-active",
+        { body: { userId, active } }
+      );
+      if (fnError) throw fnError;
+      if (fnData && fnData.success === false) {
+        throw new Error(fnData.error || "Failed to update user access");
+      }
+
       const { error } = await supabase
         .from("profiles")
         .update({ status: newStatus })
         .eq("id", userId);
-      
+
       if (error) throw error;
     },
     onSuccess: () => {
@@ -856,7 +872,7 @@ const Users = () => {
                           <Button
                             size="sm"
                             onClick={() => sendInviteMutation.mutate(invite)}
-                            disabled={!!invite.invited_at || sendInviteMutation.isPending}
+                            disabled={sendInviteMutation.isPending}
                           >
                             <Send className="mr-2 h-3 w-3" />
                             {invite.invited_at ? 'Resend' : 'Send Invite'}

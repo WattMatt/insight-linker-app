@@ -3,14 +3,13 @@ import { useParams, Link, useSearchParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  Building2, FileText, MapPin, Eye, Info, Search, 
-  BarChart3, CheckCircle2, AlertCircle, LayoutGrid,
-  Shield, Workflow, ShieldCheck, FileBarChart, Layers, ChevronRight
+import {
+  Building2, FileText, MapPin, Info, Search,
+  BarChart3, LayoutGrid,
+  Workflow, ShieldCheck, FileBarChart, Layers, ChevronRight
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -19,7 +18,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { ComplianceDashboard } from "@/components/ComplianceDashboard";
 import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
@@ -182,54 +180,19 @@ const ClientPortalSiteDetail = () => {
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "compliant": case "valid": case "approved": case "pass": return "bg-emerald-500";
-      case "missing": return "bg-destructive";
-      case "expired": return "bg-amber-500";
-      default: return "bg-muted-foreground";
-    }
-  };
-
   const filteredSubsections = subsections.filter(subsection => {
     const searchLower = subsectionSearch.toLowerCase();
     return (
       subsection.name.toLowerCase().includes(searchLower) ||
-      subsection.description?.toLowerCase().includes(searchLower) ||
-      subsection.coc_status?.toLowerCase().includes(searchLower)
+      subsection.description?.toLowerCase().includes(searchLower)
     );
   });
 
   // Calculate KPIs
   const totalSubsections = subsections.length;
-  const compliantSubsections = subsections.filter(s => {
-    const status = s.coc_status?.toLowerCase();
-    return status === "compliant" || status === "valid" || status === "approved" || status === "pass";
-  }).length;
-  const missingCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "missing").length;
-  const expiredCOCs = subsections.filter(s => s.coc_status?.toLowerCase() === "expired").length;
   const totalDocuments = siteDocuments.length + subsectionDocuments.length;
   const totalInspections = inspections.length;
   const completedInspections = inspections.filter(i => i.status?.toLowerCase() === "completed").length;
-
-  // Format subsections for ComplianceDashboard
-  const formattedSubsections = subsections.map(s => ({
-    id: s.id,
-    name: s.name,
-    category: s.category || null,
-    coc_status: s.coc_status || '',
-    metering_status: s.metering_status || '',
-    is_compliant: s.is_compliant || false,
-    is_coc_required: s.is_coc_required || false,
-  }));
-
-  // Format inspections for ComplianceDashboard
-  const formattedInspections = inspections.map(i => ({
-    id: i.id,
-    subsection_id: i.subsection_id,
-    inspection_date: i.inspection_date || i.created_at,
-    json_data: i.json_data,
-  }));
 
   const sitesUrl = `/client-portal/sites${previewClientId ? `?preview=${previewClientId}` : ''}`;
 
@@ -309,10 +272,6 @@ const ClientPortalSiteDetail = () => {
             <ShieldCheck className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Assets</span>
           </TabsTrigger>
-          <TabsTrigger value="compliance" className="gap-2 shrink-0">
-            <Shield className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Compliance</span>
-          </TabsTrigger>
           <TabsTrigger value="documents" className="gap-2 shrink-0">
             <FileText className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Documents</span>
@@ -329,7 +288,7 @@ const ClientPortalSiteDetail = () => {
 
         {/* Dashboard Tab */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Subsections</CardTitle>
@@ -337,32 +296,6 @@ const ClientPortalSiteDetail = () => {
               </CardHeader>
               <CardContent>
                 <div className="text-2xl font-bold">{totalSubsections}</div>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Compliant COCs</CardTitle>
-                <CheckCircle2 className="h-4 w-4 text-green-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-green-600">{compliantSubsections}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {totalSubsections > 0 ? Math.round((compliantSubsections / totalSubsections) * 100) : 0}% compliant
-                </p>
-              </CardContent>
-            </Card>
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Missing/Expired COCs</CardTitle>
-                <AlertCircle className="h-4 w-4 text-red-500" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold text-red-600">{missingCOCs + expiredCOCs}</div>
-                <p className="text-xs text-muted-foreground mt-1">
-                  {missingCOCs} missing, {expiredCOCs} expired
-                </p>
               </CardContent>
             </Card>
 
@@ -425,15 +358,6 @@ const ClientPortalSiteDetail = () => {
           <AssetVerification siteId={siteId!} siteName={site.name} readOnly />
         </TabsContent>
 
-        {/* Compliance Tab */}
-        <TabsContent value="compliance" className="space-y-6">
-          <ComplianceDashboard 
-            siteId={siteId!} 
-            subsections={formattedSubsections} 
-            inspections={formattedInspections} 
-          />
-        </TabsContent>
-
         {/* Documents Tab */}
         <TabsContent value="documents" className="space-y-4">
           {docsLoading ? (
@@ -459,7 +383,7 @@ const ClientPortalSiteDetail = () => {
           <div className="relative">
             <Search className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search subsections by name, description, or status..."
+              placeholder="Search subsections by name or description..."
               value={subsectionSearch}
               onChange={(e) => setSubsectionSearch(e.target.value)}
               className="pl-9"
@@ -492,14 +416,6 @@ const ClientPortalSiteDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        {subsection.coc_status && (
-                          <Badge 
-                            variant="secondary"
-                            className={`${getStatusColor(subsection.coc_status)} text-white`}
-                          >
-                            COC: {subsection.coc_status}
-                          </Badge>
-                        )}
                         <ChevronRight className="h-4 w-4 text-muted-foreground" />
                       </div>
                     </Link>
