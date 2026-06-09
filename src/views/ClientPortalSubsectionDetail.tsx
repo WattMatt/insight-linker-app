@@ -3,11 +3,11 @@ import { useParams, Link, useSearchParams, useNavigate } from "@/lib/navigation"
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { 
-  FileText, Download, Info, Eye, ArrowLeft, 
-  CheckCircle2, AlertCircle, Calendar, Hash, User, Zap,
+import {
+  FileText, Download, Info, Eye, ArrowLeft,
+  CheckCircle2, AlertCircle, Calendar, User,
   Building2, MapPin, ChevronRight, Layers, FileBarChart,
-  ShieldCheck, Clock, Loader2, ClipboardList
+  ShieldCheck, Loader2, ClipboardList
 } from "lucide-react";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Button } from "@/components/ui/button";
@@ -21,7 +21,6 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { downloadFile } from "@/lib/fileDownload";
 import { format } from "date-fns";
-import { RobustImage } from "@/components/RobustImage";
 
 const ClientPortalSubsectionDetail = () => {
   const { subsectionId } = useParams();
@@ -202,26 +201,6 @@ const ClientPortalSubsectionDetail = () => {
     );
   }
 
-  const getStatusColor = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "compliant": case "valid": case "approved": case "pass": return "bg-emerald-500";
-      case "missing": return "bg-destructive";
-      case "expired": return "bg-amber-500";
-      default: return "bg-muted-foreground";
-    }
-  };
-
-  const getStatusIcon = (status: string) => {
-    switch (status?.toLowerCase()) {
-      case "compliant": case "valid": case "approved": case "pass": 
-        return <CheckCircle2 className="h-4 w-4" />;
-      case "missing": case "expired": 
-        return <AlertCircle className="h-4 w-4" />;
-      default: 
-        return <Clock className="h-4 w-4" />;
-    }
-  };
-
   // Group documents by category
   const groupedDocuments = documents.reduce((acc, doc) => {
     const categoryName = (doc.document_categories as any)?.name || "Uncategorized";
@@ -303,12 +282,6 @@ const ClientPortalSubsectionDetail = () => {
                 </div>
               </div>
             </div>
-            {subsection.coc_status && (
-              <Badge className={`${getStatusColor(subsection.coc_status)} text-white gap-1.5`}>
-                {getStatusIcon(subsection.coc_status)}
-                COC: {subsection.coc_status}
-              </Badge>
-            )}
           </div>
         </div>
 
@@ -360,97 +333,6 @@ const ClientPortalSubsectionDetail = () => {
 
         {/* Overview Tab */}
         <TabsContent value="overview" className="space-y-6">
-          <div className="grid gap-6 md:grid-cols-2">
-            {/* COC Details Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <ShieldCheck className="h-5 w-5 text-primary" />
-                  Certificate of Compliance
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {subsection.coc_status ? (
-                  <>
-                    <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                      <span className="text-sm text-muted-foreground">Status</span>
-                      <Badge className={`${getStatusColor(subsection.coc_status)} text-white`}>
-                        {subsection.coc_status}
-                      </Badge>
-                    </div>
-                    {subsection.coc_number && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Hash className="h-4 w-4" /> COC Number
-                        </span>
-                        <span className="font-medium">{subsection.coc_number}</span>
-                      </div>
-                    )}
-                    {subsection.coc_issue_date && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Calendar className="h-4 w-4" /> Issue Date
-                        </span>
-                        <span className="font-medium">
-                          {format(new Date(subsection.coc_issue_date), "dd MMM yyyy")}
-                        </span>
-                      </div>
-                    )}
-                    {subsection.coc_type && (
-                      <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                        <span className="text-sm text-muted-foreground flex items-center gap-2">
-                          <Zap className="h-4 w-4" /> Type
-                        </span>
-                        <span className="font-medium">{subsection.coc_type}</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <AlertCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No COC information available</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-
-            {/* Tenant & Meter Details Card */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="text-lg flex items-center gap-2">
-                  <User className="h-5 w-5 text-primary" />
-                  Tenant & Metering
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {subsection.tenant_name && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">Tenant Name</span>
-                    <span className="font-medium">{subsection.tenant_name}</span>
-                  </div>
-                )}
-                {subsection.meter_serial_number && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">Meter Serial</span>
-                    <span className="font-mono font-medium">{subsection.meter_serial_number}</span>
-                  </div>
-                )}
-                {subsection.ct_ratio && (
-                  <div className="flex items-center justify-between p-3 rounded-lg bg-muted/30">
-                    <span className="text-sm text-muted-foreground">CT Ratio</span>
-                    <span className="font-medium">{subsection.ct_ratio}</span>
-                  </div>
-                )}
-                {!subsection.tenant_name && !subsection.meter_serial_number && !subsection.ct_ratio && (
-                  <div className="text-center py-6 text-muted-foreground">
-                    <User className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                    <p>No tenant or metering information</p>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-
           {/* Recent Activity Summary */}
           <Card>
             <CardHeader>
@@ -707,284 +589,6 @@ const ClientPortalSubsectionDetail = () => {
                   <div className="p-4 rounded-lg border bg-muted/20">
                     <h4 className="text-sm font-semibold mb-1">Description</h4>
                     <p className="text-sm text-muted-foreground">{inspectionDetails.description}</p>
-                  </div>
-                )}
-
-                {/* Full Sections with Items, Notes & Photos */}
-                {inspectionDetails.json_data && typeof inspectionDetails.json_data === 'object' && (() => {
-                  const jsonData = inspectionDetails.json_data;
-                  // Use template sections as schema if available
-                  const templateSections = inspectionDetails.inspection_templates?.sections;
-                  const parsedSections: any[] = typeof templateSections === 'string' 
-                    ? JSON.parse(templateSections) 
-                    : (Array.isArray(templateSections) ? templateSections : []);
-                  
-                  // If we have template sections, cross-reference with json_data
-                  if (parsedSections.length > 0) {
-                    return (
-                      <div className="space-y-4">
-                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                          <ShieldCheck className="h-5 w-5 text-primary" />
-                          Inspection Results
-                        </h3>
-                        {parsedSections
-                          .filter((s: any) => s.id !== 'observations')
-                          .sort((a: any, b: any) => (a.order_index || 0) - (b.order_index || 0))
-                          .map((section: any, sIdx: number) => {
-                            const sectionData = jsonData[section.id] || {};
-                            return (
-                              <div key={sIdx} className="border rounded-lg overflow-hidden">
-                                <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
-                                  <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                                    {sIdx + 1}
-                                  </div>
-                                  <h4 className="font-semibold">{section.name}</h4>
-                                  {section.items && (
-                                    <Badge variant="secondary" className="ml-auto text-xs">
-                                      {section.items.length} items
-                                    </Badge>
-                                  )}
-                                </div>
-                                <div className="divide-y">
-                                  {section.items?.map((templateItem: any, iIdx: number) => {
-                                    const itemData = sectionData[templateItem.id] || {};
-                                    const statusVal = (itemData.status || itemData.value || '').toLowerCase();
-                                    const isPass = ['pass', 'passed', 'compliant', 'yes'].includes(statusVal);
-                                    const isFail = ['fail', 'failed', 'non-compliant', 'no'].includes(statusVal);
-                                    const isNA = ['n/a', 'na', 'not applicable'].includes(statusVal);
-                                    const photos: string[] = itemData.photos || [];
-                                    const hasData = statusVal || itemData.notes || photos.length > 0;
-
-                                    return (
-                                      <div key={iIdx} className="p-3">
-                                        <div className="flex items-center justify-between gap-2">
-                                          <span className="text-sm font-medium">{templateItem.name}</span>
-                                          {statusVal ? (
-                                            <Badge 
-                                              variant="outline"
-                                              className={
-                                                isPass ? 'bg-emerald-50 text-emerald-700 border-emerald-200' :
-                                                isFail ? 'bg-red-50 text-red-700 border-red-200' :
-                                                isNA ? 'bg-muted text-muted-foreground' :
-                                                'bg-blue-50 text-blue-700 border-blue-200'
-                                              }
-                                            >
-                                              {(itemData.status || itemData.value || 'N/A').toUpperCase()}
-                                            </Badge>
-                                          ) : (
-                                            <Badge variant="outline" className="bg-muted text-muted-foreground">
-                                              NOT RECORDED
-                                            </Badge>
-                                          )}
-                                        </div>
-
-                                        {itemData.notes && (
-                                          <div className="mt-2 p-2 rounded bg-amber-50 border border-amber-100">
-                                            <p className="text-xs text-muted-foreground">
-                                              <span className="font-semibold">Notes:</span> {itemData.notes}
-                                            </p>
-                                          </div>
-                                        )}
-
-                                        {photos.length > 0 && (
-                                          <div className="mt-3 grid grid-cols-2 gap-2">
-                                            {photos.map((photo: string, pIdx: number) => (
-                                              <div key={pIdx} className="rounded-lg overflow-hidden border">
-                                                <RobustImage 
-                                                  src={photo} 
-                                                  alt={`${templateItem.name} - Photo ${pIdx + 1}`}
-                                                  className="w-full h-40 object-cover rounded border"
-                                                />
-                                              </div>
-                                            ))}
-                                          </div>
-                                        )}
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
-                            );
-                          })}
-
-                        {/* Observations section if present */}
-                        {jsonData.observations && (
-                          <div className="border rounded-lg overflow-hidden">
-                            <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
-                              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                                ✎
-                              </div>
-                              <h4 className="font-semibold">Observations & Quality</h4>
-                            </div>
-                            <div className="p-4 space-y-3">
-                              {jsonData.observations.comments?.value && (
-                                <div>
-                                  <span className="text-sm font-medium">Comments</span>
-                                  <p className="text-sm text-muted-foreground mt-1">{jsonData.observations.comments.value}</p>
-                                </div>
-                              )}
-                              {jsonData.observations.qualityRating?.value && (
-                                <div>
-                                  <span className="text-sm font-medium">Quality Rating</span>
-                                  <p className="text-sm font-bold mt-1">{jsonData.observations.qualityRating.value}/5</p>
-                                </div>
-                              )}
-                              {jsonData.observations.comments?.notes && (
-                                <div className="p-2 rounded bg-amber-50 border border-amber-100">
-                                  <p className="text-xs text-muted-foreground">
-                                    <span className="font-semibold">Notes:</span> {jsonData.observations.comments.notes}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    );
-                  }
-                  
-                  // Fallback: if json_data has a 'sections' array (alternative format)
-                  if (jsonData.sections?.length > 0) {
-                    return (
-                      <div className="space-y-4">
-                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                          <ShieldCheck className="h-5 w-5 text-primary" />
-                          Inspection Results
-                        </h3>
-                        {jsonData.sections.map((section: any, sIdx: number) => (
-                          <div key={sIdx} className="border rounded-lg overflow-hidden">
-                            <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
-                              <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                                {sIdx + 1}
-                              </div>
-                              <h4 className="font-semibold">{section.name || `Section ${sIdx + 1}`}</h4>
-                            </div>
-                            <div className="divide-y">
-                              {section.items?.map((item: any, iIdx: number) => (
-                                <div key={iIdx} className="p-3 flex items-center justify-between">
-                                  <span className="text-sm">{item.name || item.label}</span>
-                                  <Badge variant="outline">{item.status || item.value || 'Pending'}</Badge>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    );
-                  }
-                  
-                  // Last fallback: render raw json_data keys as sections
-                  const skipKeys = ['tenants', 'generalInfo', 'subsectionId'];
-                  const dataKeys = Object.keys(jsonData).filter(k => !skipKeys.includes(k) && typeof jsonData[k] === 'object' && jsonData[k] !== null);
-                  if (dataKeys.length > 0) {
-                    return (
-                      <div className="space-y-4">
-                        <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                          <ShieldCheck className="h-5 w-5 text-primary" />
-                          Inspection Results
-                        </h3>
-                        {dataKeys.map((key, sIdx) => {
-                          const sectionData = jsonData[key];
-                          const label = key.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-                          const subItems = Object.entries(sectionData).filter(([, v]) => typeof v === 'object' && v !== null);
-                          return (
-                            <div key={sIdx} className="border rounded-lg overflow-hidden">
-                              <div className="flex items-center gap-3 px-4 py-3 bg-primary/5 border-b">
-                                <div className="w-8 h-8 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">
-                                  {sIdx + 1}
-                                </div>
-                                <h4 className="font-semibold">{label}</h4>
-                              </div>
-                              <div className="divide-y">
-                                {subItems.map(([itemKey, itemVal]: [string, any]) => {
-                                  const itemLabel = itemKey.replace(/([A-Z])/g, ' $1').replace(/^./, s => s.toUpperCase());
-                                  const photos: string[] = itemVal?.photos || [];
-                                  return (
-                                    <div key={itemKey} className="p-3">
-                                      <div className="flex items-center justify-between gap-2">
-                                        <span className="text-sm font-medium">{itemLabel}</span>
-                                        {itemVal?.status && (
-                                          <Badge variant="outline">{itemVal.status}</Badge>
-                                        )}
-                                      </div>
-                                      {itemVal?.notes && (
-                                        <p className="text-xs text-muted-foreground mt-1">Notes: {itemVal.notes}</p>
-                                      )}
-                                      {photos.length > 0 && (
-                                        <div className="mt-2 grid grid-cols-2 gap-2">
-                                          {photos.map((photo: string, pIdx: number) => (
-                                            <div key={pIdx} className="rounded-lg overflow-hidden border">
-                                              <RobustImage src={photo} alt={`${itemLabel} photo`} className="w-full h-40 object-cover rounded border" />
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    );
-                  }
-                  
-                  return null;
-                })()}
-
-                {/* Tenant Information */}
-                {inspectionDetails.json_data?.tenants?.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                      <User className="h-5 w-5 text-primary" />
-                      Tenant Information
-                    </h3>
-                    <div className="grid gap-3">
-                      {inspectionDetails.json_data.tenants.map((tenant: any, tIdx: number) => (
-                        <Card key={tIdx}>
-                          <CardContent className="p-4">
-                            <h5 className="font-semibold mb-2">{tenant.shopName || tenant.shop_name || `Tenant ${tIdx + 1}`}</h5>
-                            <div className="grid grid-cols-2 gap-2 text-sm mb-3">
-                              {(tenant.shopNumber || tenant.shop_number) && (
-                                <div><span className="text-muted-foreground">Shop #:</span> {tenant.shopNumber || tenant.shop_number}</div>
-                              )}
-                              {(tenant.meterSerialNumber || tenant.meter_serial_number) && (
-                                <div><span className="text-muted-foreground">Meter S/N:</span> {tenant.meterSerialNumber || tenant.meter_serial_number}</div>
-                              )}
-                              {(tenant.breakerSize || tenant.breaker_size) && (
-                                <div><span className="text-muted-foreground">Breaker:</span> {tenant.breakerSize || tenant.breaker_size}</div>
-                              )}
-                              {(tenant.ctSizeAndRatio || tenant.ct_ratio) && (
-                                <div><span className="text-muted-foreground">CT Ratio:</span> {tenant.ctSizeAndRatio || tenant.ct_ratio}</div>
-                              )}
-                            </div>
-                            {/* Tenant verification photos */}
-                            {(() => {
-                              const tenantPhotos = [
-                                tenant.meterImage || tenant.meter_image,
-                                tenant.breakerImage || tenant.breaker_image,
-                                tenant.ctRatioImage || tenant.ct_ratio_image,
-                              ].filter(Boolean);
-                              if (tenantPhotos.length === 0) return null;
-                              return (
-                                <div className="grid grid-cols-3 gap-2">
-                                  {tenantPhotos.map((photo: string, pIdx: number) => (
-                                    <div key={pIdx} className="rounded-lg overflow-hidden border">
-                                      <RobustImage 
-                                        src={photo} 
-                                        alt={`Tenant verification ${pIdx + 1}`}
-                                        className="w-full h-32 object-cover rounded border"
-                                      />
-                                    </div>
-                                  ))}
-                                </div>
-                              );
-                            })()}
-                          </CardContent>
-                        </Card>
-                      ))}
-                    </div>
                   </div>
                 )}
 

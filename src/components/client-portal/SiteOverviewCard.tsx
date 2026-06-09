@@ -1,14 +1,9 @@
 import { Link } from "@/lib/navigation";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
-import { Button } from "@/components/ui/button";
-import { 
-  Building2, 
-  MapPin, 
-  CheckCircle2, 
-  XCircle, 
-  Clock, 
+import {
+  Building2,
+  MapPin,
   AlertTriangle,
   ChevronRight,
   FileText
@@ -16,9 +11,6 @@ import {
 
 interface SiteStats {
   totalSubsections: number;
-  compliantCount: number;
-  pendingCount: number;
-  failedCount: number;
   openSnags: number;
 }
 
@@ -35,22 +27,6 @@ interface SiteOverviewCardProps {
 }
 
 export function SiteOverviewCard({ site, stats, linkPrefix = "/client-portal/sites" }: SiteOverviewCardProps) {
-  const complianceRate = stats.totalSubsections > 0 
-    ? Math.round((stats.compliantCount / stats.totalSubsections) * 100) 
-    : 0;
-
-  const getHealthColor = () => {
-    if (complianceRate >= 80) return "text-green-600";
-    if (complianceRate >= 50) return "text-yellow-600";
-    return "text-red-600";
-  };
-
-  const getProgressColor = () => {
-    if (complianceRate >= 80) return "bg-green-500";
-    if (complianceRate >= 50) return "bg-yellow-500";
-    return "bg-red-500";
-  };
-
   return (
     <Link to={`${linkPrefix}/${site.id}`}>
       <Card className="h-full hover:shadow-lg transition-all duration-200 hover:border-primary/50 cursor-pointer group">
@@ -97,22 +73,6 @@ export function SiteOverviewCard({ site, stats, linkPrefix = "/client-portal/sit
         </CardHeader>
 
         <CardContent className="space-y-4">
-          {/* Compliance Progress */}
-          <div>
-            <div className="flex items-center justify-between text-sm mb-2">
-              <span className="text-muted-foreground">Compliance</span>
-              <span className={`font-semibold ${getHealthColor()}`}>
-                {complianceRate}%
-              </span>
-            </div>
-            <div className="h-2 bg-muted rounded-full overflow-hidden">
-              <div 
-                className={`h-full transition-all duration-500 ${getProgressColor()}`}
-                style={{ width: `${complianceRate}%` }}
-              />
-            </div>
-          </div>
-
           {/* Status Grid */}
           <div className="grid grid-cols-2 gap-3">
             <div className="flex items-center gap-2 text-sm">
@@ -122,26 +82,6 @@ export function SiteOverviewCard({ site, stats, linkPrefix = "/client-portal/sit
               <div>
                 <p className="font-medium">{stats.totalSubsections}</p>
                 <p className="text-xs text-muted-foreground">Subsections</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <div className="p-1.5 rounded bg-green-100">
-                <CheckCircle2 className="h-3.5 w-3.5 text-green-600" />
-              </div>
-              <div>
-                <p className="font-medium text-green-600">{stats.compliantCount}</p>
-                <p className="text-xs text-muted-foreground">Compliant</p>
-              </div>
-            </div>
-
-            <div className="flex items-center gap-2 text-sm">
-              <div className="p-1.5 rounded bg-yellow-100">
-                <Clock className="h-3.5 w-3.5 text-yellow-600" />
-              </div>
-              <div>
-                <p className="font-medium text-yellow-600">{stats.pendingCount}</p>
-                <p className="text-xs text-muted-foreground">Pending</p>
               </div>
             </div>
 

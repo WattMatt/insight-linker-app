@@ -1,16 +1,13 @@
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
-import { Building2, FileText, Calendar, CheckCircle, AlertTriangle, TrendingUp, ArrowRight } from "lucide-react";
+import { Building2, FileText, Calendar, AlertTriangle, ArrowRight } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useSearchParams, Link } from "@/lib/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Progress } from "@/components/ui/progress";
 import { Info } from "lucide-react";
-import { ComplianceHealthWidget } from "@/components/client-portal/ComplianceHealthWidget";
 import { SiteOverviewCard } from "@/components/client-portal/SiteOverviewCard";
 
 const ClientPortalDashboard = () => {
@@ -43,40 +40,20 @@ const ClientPortalDashboard = () => {
           subsections: 0,
           inspections: 0,
           upcoming: 0,
-          complianceStats: { approved: 0, pending: 0, failed: 0, missing: 0, notRequired: 0, total: 0 },
           openSnags: 0,
         };
       }
-      
+
       const { count: subsectionsCount } = await supabase
         .from("subsections")
         .select("*", { count: "exact", head: true })
         .in("site_id", siteIds);
 
-      // Get subsections for compliance calculation
+      // Get subsection IDs for snags lookup
       const { data: subsectionsData } = await supabase
         .from("subsections")
-        .select("id, is_coc_required, coc_status")
+        .select("id")
         .in("site_id", siteIds);
-
-      // Calculate compliance stats
-      let approved = 0, pending = 0, failed = 0, missing = 0, notRequired = 0;
-      (subsectionsData || []).forEach(s => {
-        if (!s.is_coc_required) {
-          notRequired++;
-        } else {
-          const status = s.coc_status?.toLowerCase();
-          if (status === 'approved' || status === 'valid' || status === 'pass') {
-            approved++;
-          } else if (status === 'pending' || status === 'review') {
-            pending++;
-          } else if (status === 'fail' || status === 'failed' || status === 'expired') {
-            failed++;
-          } else {
-            missing++;
-          }
-        }
-      });
 
       const { count: inspectionsCount } = await supabase
         .from("inspections")
@@ -105,14 +82,6 @@ const ClientPortalDashboard = () => {
         subsections: subsectionsCount || 0,
         inspections: inspectionsCount || 0,
         upcoming: upcomingCount || 0,
-        complianceStats: { 
-          approved, 
-          pending, 
-          failed, 
-          missing, 
-          notRequired, 
-          total: subsectionsData?.length || 0 
-        },
         openSnags,
       };
     },
@@ -130,7 +99,7 @@ const ClientPortalDashboard = () => {
         .select(`
           id, name, address, site_type, site_image_url,
           subsections (
-            id, is_coc_required, coc_status
+            id
           )
         `)
         .eq("client_id", clientId)
@@ -179,23 +148,10 @@ const ClientPortalDashboard = () => {
 
           // Calculate stats for each site
           const subs = site.subsections || [];
-          let compliantCount = 0, pendingCount = 0, failedCount = 0;
           let totalSnags = 0;
-          
+
           subs.forEach(s => {
             totalSnags += snagsMap[s.id] || 0;
-            if (!s.is_coc_required) {
-              compliantCount++;
-            } else {
-              const status = s.coc_status?.toLowerCase();
-              if (status === 'approved' || status === 'valid' || status === 'pass') {
-                compliantCount++;
-              } else if (status === 'pending' || status === 'review') {
-                pendingCount++;
-              } else {
-                failedCount++;
-              }
-            }
           });
 
           return {
@@ -203,9 +159,6 @@ const ClientPortalDashboard = () => {
             site_image_url: imageUrl,
             stats: {
               totalSubsections: subs.length,
-              compliantCount,
-              pendingCount,
-              failedCount,
               openSnags: totalSnags,
             }
           };
@@ -230,10 +183,6 @@ const ClientPortalDashboard = () => {
       </div>
     );
   }
-
-  const complianceScore = stats?.complianceStats.total 
-    ? Math.round(((stats.complianceStats.approved + stats.complianceStats.notRequired) / stats.complianceStats.total) * 100)
-    : 0;
 
   return (
     <div className="space-y-8">
@@ -262,7 +211,7 @@ const ClientPortalDashboard = () => {
               Welcome back
             </h1>
             <p className="text-muted-foreground">
-              {client?.company_name || client?.name} • Compliance Overview
+              {client?.company_name || client?.name} • Portfolio Overview
             </p>
           </div>
         </div>
@@ -283,63 +232,7 @@ const ClientPortalDashboard = () => {
       </div>
 
       {/* Main Stats Row */}
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-        {/* Compliance Score - Large */}
-        <Card className="md:col-span-2 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-6">
-              <div className="relative w-24 h-24">
-                <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    className="text-primary/20"
-                  />
-                  <circle
-                    cx="50"
-                    cy="50"
-                    r="42"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="8"
-                    strokeDasharray={`${(complianceScore / 100) * 264} 264`}
-                    strokeLinecap="round"
-                    className="text-primary"
-                  />
-                </svg>
-                <div className="absolute inset-0 flex items-center justify-center">
-                  <span className="text-2xl font-bold">{complianceScore}%</span>
-                </div>
-              </div>
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold mb-1">Compliance Score</h3>
-                <p className="text-sm text-muted-foreground mb-3">
-                  Based on {stats?.complianceStats.total || 0} subsections across {stats?.sites || 0} sites
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <Badge variant="outline" className="bg-green-50 text-green-700 border-green-200">
-                    <CheckCircle className="h-3 w-3 mr-1" />
-                    {stats?.complianceStats.approved || 0} Approved
-                  </Badge>
-                  <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">
-                    {stats?.complianceStats.pending || 0} Pending
-                  </Badge>
-                  {(stats?.complianceStats.failed || 0) + (stats?.complianceStats.missing || 0) > 0 && (
-                    <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">
-                      <AlertTriangle className="h-3 w-3 mr-1" />
-                      {(stats?.complianceStats.failed || 0) + (stats?.complianceStats.missing || 0)} Issues
-                    </Badge>
-                  )}
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
+      <div className="grid gap-6 md:grid-cols-2">
         {/* Sites Count */}
         <Card>
           <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -436,7 +329,7 @@ const ClientPortalDashboard = () => {
             </div>
             <div>
               <p className="font-medium">View Documents</p>
-              <p className="text-sm text-muted-foreground">Access compliance docs</p>
+              <p className="text-sm text-muted-foreground">Access your documents</p>
             </div>
           </Link>
         </CardContent>
