@@ -81,33 +81,70 @@ const PublicSubsection = () => {
     try {
       setLoading(true);
 
-      // Public QR data now comes from a SECURITY DEFINER RPC that returns ONLY
-      // the public-safe payload for this one subsection (see migration
-      // 20260609092000_get_public_subsection_rpc.sql) — no anonymous table reads.
-      const { data: payload, error: rpcError } = await (supabase.rpc as any)(
-        'get_public_subsection',
-        { p_subsection_id: subsectionId }
-      );
+      const { data: settings } = await supabase
+        .from('settings')
+        .select('company_name, company_logo_url')
+        .maybeSingle();
+      
+      if (settings) {
+        setCompanySettings(settings);
+      }
 
-      if (rpcError) {
-        console.error("Error fetching public subsection:", rpcError);
+      const { data: subsectionData, error: subsectionError } = await supabase
+        .from('subsections')
+        .select(`
+          *,
+          sites!inner (
+            id,
+            name,
+            address,
+            client_logo_url,
+            clients!inner (
+              id,
+              name,
+              company_name,
+              logo_url
+            )
+          )
+        `)
+        .eq('id', subsectionId)
+        .maybeSingle();
+
+      if (subsectionError) {
+        console.error("Error fetching subsection:", subsectionError);
         return;
       }
 
-      if (!payload || !payload.subsection) {
+      if (!subsectionData) {
         console.error("Subsection not found");
         return;
       }
 
-      if (payload.settings) {
-        setCompanySettings(payload.settings);
+      setSubsection(subsectionData);
+      setSiteData(subsectionData.sites);
+      setClientData(subsectionData.sites.clients);
+
+      const { data: categoriesData, error: categoriesError } = await supabase
+        .from('document_categories')
+        .select(`
+          id,
+          name,
+          order_index,
+          subsection_documents (
+            id,
+            file_name,
+            file_url,
+            uploaded_at
+          )
+        `)
+        .eq('subsection_id', subsectionId)
+        .order('order_index');
+
+      if (categoriesError) {
+        console.error("Error fetching categories:", categoriesError);
       }
 
-      setSubsection(payload.subsection);
-      setSiteData(payload.site);
-      setClientData(payload.client);
-
-      const transformedDocs: DocumentCategory[] = (payload.categories || [])
+      const transformedDocs: DocumentCategory[] = (categoriesData || [])
         .filter((cat: any) => cat.subsection_documents && cat.subsection_documents.length > 0)
         .map((cat: any) => ({
           name: cat.name,
@@ -120,13 +157,33 @@ const PublicSubsection = () => {
 
       setDocuments(transformedDocs);
 
-      setSnags(payload.snags || []);
+      const { data: snagsData, error: snagsError } = await supabase
+        .from('snags')
+        .select('id, title, description, status, risk_level, created_at')
+        .eq('subsection_id', subsectionId)
+        .order('created_at', { ascending: false });
 
-      const validationsMap: Record<string, any> = {};
-      (payload.coc_validations || []).forEach((validation: any) => {
-        validationsMap[validation.document_id] = validation;
-      });
-      setCocValidations(validationsMap);
+      if (snagsError) {
+        console.error("Error fetching snags:", snagsError);
+      } else {
+        setSnags(snagsData || []);
+      }
+
+      // Fetch COC validations to check for any failed validations
+      const { data: validationsData, error: validationsError } = await supabase
+        .from('coc_validations')
+        .select('*')
+        .eq('subsection_id', subsectionId);
+
+      if (validationsError) {
+        console.error("Error fetching COC validations:", validationsError);
+      } else {
+        const validationsMap: Record<string, any> = {};
+        validationsData?.forEach(validation => {
+          validationsMap[validation.document_id] = validation;
+        });
+        setCocValidations(validationsMap);
+      }
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
