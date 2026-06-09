@@ -576,12 +576,6 @@ const ClientPortalSubsectionDetail = () => {
                       <span className="font-semibold text-sm">{inspectionDetails.inspector_name}</span>
                     </div>
                   )}
-                  {inspectionDetails.quality_rating && (
-                    <div className="p-3 rounded-lg bg-muted/50">
-                      <span className="text-xs text-muted-foreground block mb-1">Quality</span>
-                      <span className="font-semibold text-sm">{inspectionDetails.quality_rating}/5</span>
-                    </div>
-                  )}
                 </div>
 
                 {/* Description */}
