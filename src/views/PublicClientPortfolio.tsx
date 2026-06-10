@@ -103,58 +103,24 @@ const PublicClientPortfolio = () => {
         return;
       }
 
-      // Fetch company settings
-      const { data: settings } = await supabase
-        .from("settings")
-        .select("company_name, company_logo_url")
-        .maybeSingle();
-      if (settings) setCompanySettings(settings);
+      // Fetch the scoped portfolio payload (settings + client + sites with stats)
+      const { data: portfolio, error: portfolioError } = await supabase
+        .rpc("get_public_portfolio", { p_token: token });
 
-      // Fetch client info
-      const { data: clientData, error: clientError } = await supabase
-        .from("clients")
-        .select("id, name, company_name, logo_url")
-        .eq("id", link.client_id)
-        .single();
-
-      if (clientError) {
+      if (portfolioError || !portfolio) {
         setError("Unable to load client data");
         return;
       }
-      setClient(clientData);
 
-      // Fetch all sites for this client
-      const { data: sitesData } = await supabase
-        .from("sites")
-        .select("id, name, address, site_type, site_image_url")
-        .eq("client_id", link.client_id)
-        .order("name");
+      const payload = portfolio as any;
 
-      if (!sitesData || sitesData.length === 0) {
+      if (payload.settings) setCompanySettings(payload.settings);
+      setClient(payload.client);
+
+      const sitesData: any[] = payload.sites || [];
+      if (sitesData.length === 0) {
         setSites([]);
         return;
-      }
-
-      // Fetch subsections for all sites
-      const siteIds = sitesData.map((s) => s.id);
-      const { data: subsections } = await supabase
-        .from("subsections")
-        .select("id, site_id, coc_status, is_coc_required, is_compliant")
-        .in("site_id", siteIds);
-
-      // Fetch snags for all subsections (batch to avoid URL length limits)
-      const subIds = (subsections || []).map((s) => s.id);
-      let snags: { subsection_id: string; status: string }[] = [];
-      if (subIds.length > 0) {
-        const BATCH_SIZE = 50;
-        for (let i = 0; i < subIds.length; i += BATCH_SIZE) {
-          const batch = subIds.slice(i, i + BATCH_SIZE);
-          const { data: snagsData } = await supabase
-            .from("snags")
-            .select("subsection_id, status")
-            .in("subsection_id", batch);
-          if (snagsData) snags = snags.concat(snagsData);
-        }
       }
 
       // Generate signed URLs for site images
@@ -178,28 +144,17 @@ const PublicClientPortfolio = () => {
         })
       );
 
-      // Calculate stats per site
-      const enriched: SiteWithStats[] = sitesWithSignedUrls.map((site) => {
-        const siteSubs = (subsections || []).filter((s) => s.site_id === site.id);
-        const failedCount = siteSubs.filter(
-          (s) =>
-            s.is_coc_required &&
-            ["fail", "failed", "expired"].includes((s.coc_status || "").toLowerCase())
-        ).length;
-        const siteSubIds = siteSubs.map((s) => s.id);
-        const openSnags = snags.filter(
-          (sn) =>
-            siteSubIds.includes(sn.subsection_id) &&
-            !["Rectified", "Closed", "rectified"].includes(sn.status)
-        ).length;
-
-        return {
-          ...site,
-          totalSubsections: siteSubs.length,
-          failedCount,
-          openSnags,
-        };
-      });
+      // Map the RPC stats into the view's state shape
+      const enriched: SiteWithStats[] = sitesWithSignedUrls.map((site) => ({
+        id: site.id,
+        name: site.name,
+        address: site.address,
+        site_type: site.site_type,
+        site_image_url: site.site_image_url,
+        totalSubsections: site.total_subsections ?? 0,
+        failedCount: 0,
+        openSnags: site.open_snags ?? 0,
+      }));
 
       setSites(enriched);
     } catch (err) {

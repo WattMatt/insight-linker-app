@@ -64,10 +64,8 @@ const PublicSubsection = () => {
   const { subsectionId } = useParams();
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
-  const [clientData, setClientData] = useState<ClientData | null>(null);
   const [documents, setDocuments] = useState<DocumentCategory[]>([]);
   const [snags, setSnags] = useState<SnagData[]>([]);
-  const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
   const [loading, setLoading] = useState(true);
   const [companySettings, setCompanySettings] = useState<{company_name: string; company_logo_url?: string} | null>(null);
 
@@ -81,70 +79,29 @@ const PublicSubsection = () => {
     try {
       setLoading(true);
 
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('company_name, company_logo_url')
-        .maybeSingle();
-      
-      if (settings) {
-        setCompanySettings(settings);
-      }
+      const { data, error } = await supabase
+        .rpc('get_public_subsection', { p_subsection_id: subsectionId });
 
-      const { data: subsectionData, error: subsectionError } = await supabase
-        .from('subsections')
-        .select(`
-          *,
-          sites!inner (
-            id,
-            name,
-            address,
-            client_logo_url,
-            clients!inner (
-              id,
-              name,
-              company_name,
-              logo_url
-            )
-          )
-        `)
-        .eq('id', subsectionId)
-        .maybeSingle();
-
-      if (subsectionError) {
-        console.error("Error fetching subsection:", subsectionError);
+      if (error) {
+        console.error("Error fetching public data:", error);
         return;
       }
 
-      if (!subsectionData) {
+      if (!data) {
         console.error("Subsection not found");
         return;
       }
 
-      setSubsection(subsectionData);
-      setSiteData(subsectionData.sites);
-      setClientData(subsectionData.sites.clients);
+      const payload = data as any;
 
-      const { data: categoriesData, error: categoriesError } = await supabase
-        .from('document_categories')
-        .select(`
-          id,
-          name,
-          order_index,
-          subsection_documents (
-            id,
-            file_name,
-            file_url,
-            uploaded_at
-          )
-        `)
-        .eq('subsection_id', subsectionId)
-        .order('order_index');
-
-      if (categoriesError) {
-        console.error("Error fetching categories:", categoriesError);
+      if (payload.settings) {
+        setCompanySettings(payload.settings);
       }
 
-      const transformedDocs: DocumentCategory[] = (categoriesData || [])
+      setSubsection(payload.subsection);
+      setSiteData(payload.site);
+
+      const transformedDocs: DocumentCategory[] = (payload.categories || [])
         .filter((cat: any) => cat.subsection_documents && cat.subsection_documents.length > 0)
         .map((cat: any) => ({
           name: cat.name,
@@ -156,34 +113,7 @@ const PublicSubsection = () => {
         }));
 
       setDocuments(transformedDocs);
-
-      const { data: snagsData, error: snagsError } = await supabase
-        .from('snags')
-        .select('id, title, description, status, risk_level, created_at')
-        .eq('subsection_id', subsectionId)
-        .order('created_at', { ascending: false });
-
-      if (snagsError) {
-        console.error("Error fetching snags:", snagsError);
-      } else {
-        setSnags(snagsData || []);
-      }
-
-      // Fetch COC validations to check for any failed validations
-      const { data: validationsData, error: validationsError } = await supabase
-        .from('coc_validations')
-        .select('*')
-        .eq('subsection_id', subsectionId);
-
-      if (validationsError) {
-        console.error("Error fetching COC validations:", validationsError);
-      } else {
-        const validationsMap: Record<string, any> = {};
-        validationsData?.forEach(validation => {
-          validationsMap[validation.document_id] = validation;
-        });
-        setCocValidations(validationsMap);
-      }
+      setSnags(payload.snags || []);
     } catch (error) {
       console.error("Error fetching public data:", error);
     } finally {
@@ -224,7 +154,7 @@ const PublicSubsection = () => {
     );
   }
 
-  if (!subsection || !siteData || !clientData) {
+  if (!subsection || !siteData) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100">
         <Card className="max-w-md">

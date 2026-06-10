@@ -93,6 +93,11 @@ interface InspectionData {
   template_name?: string;
   inspector_name?: string;
   quality_rating?: number;
+  // Carried from the scoped RPC so the report dialog renders without a second read
+  description?: string;
+  json_data?: any;
+  template_sections?: any;
+  signatures?: any[];
 }
 
 interface FloorPlanData {
@@ -134,7 +139,7 @@ const PublicSubsectionReview = () => {
       setLoading(true);
       setError(null);
 
-      // Validate the access token
+      // Validate the access token (used for the registration gate + redirect logic)
       const { data: linkResult, error: linkError } = await supabase
         .rpc('validate_access_link', { token });
 
@@ -157,135 +162,66 @@ const PublicSubsectionReview = () => {
         setVisitorRegistered(true);
       }
 
-      // Fetch company settings
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('company_name, company_logo_url')
-        .maybeSingle();
+      // Fetch the scoped subsection payload. Scope enforcement (does this subsection
+      // belong to the token's client/site/subsection) now happens in the DB; a null
+      // return means invalid token, missing subsection, or out-of-scope access.
+      const { data, error: reviewError } = await supabase
+        .rpc('get_public_subsection_review', { p_token: token, p_subsection_id: subsectionId });
 
-      if (settings) {
-        setCompanySettings(settings);
+      if (reviewError) {
+        console.error("Error fetching subsection:", reviewError);
+        setError("Unable to load subsection data");
+        return;
       }
 
-      // Fetch subsection data with site and client
-      const { data: subsectionData, error: subsectionError } = await supabase
-        .from('subsections')
-        .select(`
-          *,
-          sites!inner (
-            id,
-            name,
-            address,
-            client_logo_url,
-            clients!inner (
-              id,
-              name,
-              company_name,
-              logo_url
-            )
-          )
-        `)
-        .eq('id', subsectionId)
-        .single();
-
-      if (subsectionError || !subsectionData) {
+      if (!data) {
         setError("Subsection not found");
         return;
       }
 
-      // Verify the subsection belongs to the site from the access link
-      const linkData = linkResult[0];
-      if (linkData.site_id && subsectionData.sites.id !== linkData.site_id) {
-        setError("You don't have access to this subsection");
-        return;
+      const payload = data as any;
+
+      if (payload.settings) {
+        setCompanySettings(payload.settings);
       }
 
-      setSubsection(subsectionData);
-      setSiteData(subsectionData.sites);
-      setClientData(subsectionData.sites.clients);
+      setSubsection(payload.subsection);
+      setSiteData(payload.site);
+      setClientData(payload.client);
 
-      // Fetch documents with file size
-      const { data: docsData } = await supabase
-        .from('subsection_documents')
-        .select(`
-          id,
-          file_name,
-          file_url,
-          uploaded_at,
-          file_size,
-          document_categories (name)
-        `)
-        .eq('subsection_id', subsectionId)
-        .order('uploaded_at', { ascending: false });
+      setDocuments((payload.documents || []).map((doc: any) => ({
+        id: doc.id,
+        file_name: doc.file_name,
+        file_url: doc.file_url,
+        category_name: doc.category_name || undefined,
+        uploaded_at: doc.uploaded_at,
+        file_size: doc.file_size || undefined
+      })));
 
-      if (docsData) {
-        setDocuments(docsData.map(doc => ({
-          id: doc.id,
-          file_name: doc.file_name,
-          file_url: doc.file_url,
-          category_name: doc.document_categories?.name,
-          uploaded_at: doc.uploaded_at,
-          file_size: doc.file_size || undefined
-        })));
-      }
+      setSnags(payload.snags || []);
 
-      // Fetch snags with rectification data
-      const { data: snagsData } = await supabase
-        .from('snags')
-        .select('id, title, description, status, risk_level, created_at, rectified_at, rectification_notes')
-        .eq('subsection_id', subsectionId)
-        .order('created_at', { ascending: false });
+      setInspections((payload.inspections || []).map((insp: any) => ({
+        id: insp.id,
+        title: insp.title,
+        status: insp.status,
+        inspection_date: insp.inspection_date,
+        template_name: insp.template_name || undefined,
+        inspector_name: insp.inspector_name || undefined,
+        quality_rating: insp.quality_rating || undefined,
+        // Carry the full detail fields so the report dialog renders without a
+        // second (now blocked) direct table read.
+        description: insp.description,
+        json_data: insp.json_data,
+        template_sections: insp.template_sections,
+        signatures: insp.signatures
+      })));
 
-      if (snagsData) {
-        setSnags(snagsData);
-      }
-
-      // Fetch inspections with inspector info
-      const { data: inspectionsData } = await supabase
-        .from('inspections')
-        .select(`
-          id,
-          title,
-          status,
-          inspection_date,
-          inspector_name,
-          quality_rating,
-          inspection_templates (name)
-        `)
-        .eq('subsection_id', subsectionId)
-        .order('inspection_date', { ascending: false });
-
-      if (inspectionsData) {
-        setInspections(inspectionsData.map(insp => ({
-          id: insp.id,
-          title: insp.title,
-          status: insp.status,
-          inspection_date: insp.inspection_date,
-          template_name: insp.inspection_templates?.name,
-          inspector_name: insp.inspector_name || undefined,
-          quality_rating: insp.quality_rating || undefined
-        })));
-      }
-
-      // Fetch floor plans with pin count
-      const { data: floorPlanData } = await supabase
-        .from('subsection_floor_plans')
-        .select(`
-          id,
-          file_name,
-          file_url,
-          floor_plan_pins (id)
-        `)
-        .eq('subsection_id', subsectionId);
-
-      if (floorPlanData) {
-        setFloorPlans(floorPlanData.map(fp => ({
-          id: fp.id,
-          file_name: fp.file_name,
-          file_url: fp.file_url,
-          pins_count: fp.floor_plan_pins?.length || 0
-        })));
-      }
+      setFloorPlans((payload.floor_plans || []).map((fp: any) => ({
+        id: fp.id,
+        file_name: fp.file_name,
+        file_url: fp.file_url,
+        pins_count: fp.pins_count || 0
+      })));
 
     } catch (err) {
       console.error("Error fetching data:", err);
@@ -336,37 +272,29 @@ const PublicSubsectionReview = () => {
   const completedInspections = inspections.filter(i => i.status?.toLowerCase() === 'completed').length;
   const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
 
-  // Fetch full inspection details when an inspection is selected
-  const fetchInspectionDetails = async (inspectionId: string) => {
-    setLoadingInspection(true);
-    try {
-      const { data, error } = await supabase
-        .from('inspections')
-        .select(`
-          *,
-          inspection_templates (name, sections),
-          inspection_signatures (signer_name, signer_type, signed_at)
-        `)
-        .eq('id', inspectionId)
-        .single();
-      
-      if (error) {
-        console.error('Error fetching inspection:', error);
-        return;
-      }
-      
-      setInspectionDetails(data);
-    } catch (err) {
-      console.error('Error fetching inspection details:', err);
-    } finally {
-      setLoadingInspection(false);
-    }
+  // Build full inspection details from the already-loaded payload (no extra
+  // table read — the scoped RPC carries json_data, template + signatures).
+  const buildInspectionDetails = (insp: any) => {
+    return {
+      id: insp.id,
+      title: insp.title,
+      status: insp.status,
+      inspection_date: insp.inspection_date,
+      inspector_name: insp.inspector_name,
+      quality_rating: insp.quality_rating,
+      description: insp.description,
+      json_data: insp.json_data,
+      inspection_templates: insp.template_name || insp.template_sections
+        ? { name: insp.template_name, sections: insp.template_sections }
+        : null,
+      inspection_signatures: insp.signatures || []
+    };
   };
 
-  // Trigger fetch when inspection is selected
+  // Reshape the selected inspection when it changes
   useEffect(() => {
     if (selectedInspection) {
-      fetchInspectionDetails(selectedInspection.id);
+      setInspectionDetails(buildInspectionDetails(selectedInspection));
     } else {
       setInspectionDetails(null);
     }
