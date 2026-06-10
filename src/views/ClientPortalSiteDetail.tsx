@@ -18,7 +18,6 @@ import { useIsMobile } from "@/hooks/use-mobile";
 import { Breadcrumbs } from "@/components/Breadcrumb";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { downloadFile } from "@/lib/fileDownload";
@@ -280,10 +279,6 @@ const ClientPortalSiteDetail = () => {
             <Layers className="h-4 w-4 shrink-0" />
             <span className="hidden lg:inline">Subsections</span>
           </TabsTrigger>
-          <TabsTrigger value="reports" className="gap-2 shrink-0">
-            <FileBarChart className="h-4 w-4 shrink-0" />
-            <span className="hidden lg:inline">Reports</span>
-          </TabsTrigger>
         </TabsList>
 
         {/* Dashboard Tab */}
@@ -432,10 +427,6 @@ const ClientPortalSiteDetail = () => {
           </Card>
         </TabsContent>
 
-        {/* Reports Tab */}
-        <TabsContent value="reports" className="space-y-6">
-          <SiteReports site={site} readOnly />
-        </TabsContent>
       </Tabs>
 
       {/* Document Preview Dialog */}

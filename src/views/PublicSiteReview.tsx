@@ -26,7 +26,6 @@ import { supabase } from "@/integrations/supabase/client";
 import { VisitorRegistrationGate, getVisitorSession } from "@/components/VisitorRegistrationGate";
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { AssetVerification } from "@/components/site/AssetVerification";
-import { SiteReports } from "@/components/site/SiteReports";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { ClientPortalDocuments } from "@/components/client-portal/ClientPortalDocuments";
 import { downloadFile } from "@/lib/fileDownload";
@@ -489,10 +488,6 @@ const PublicSiteReview = () => {
               <Layers className="h-4 w-4 shrink-0" />
               <span className="hidden md:inline">Subsections</span>
             </TabsTrigger>
-            <TabsTrigger value="reports" className="gap-2 shrink-0">
-              <FileBarChart className="h-4 w-4 shrink-0" />
-              <span className="hidden md:inline">Reports</span>
-            </TabsTrigger>
           </TabsList>
 
           {/* Dashboard Tab */}
@@ -643,10 +638,6 @@ const PublicSiteReview = () => {
             </Card>
           </TabsContent>
 
-          {/* Reports Tab */}
-          <TabsContent value="reports" className="space-y-6">
-            <SiteReports site={site as Site} readOnly />
-          </TabsContent>
         </Tabs>
       </section>
 
