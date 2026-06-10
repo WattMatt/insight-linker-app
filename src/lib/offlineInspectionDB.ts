@@ -1,6 +1,9 @@
 // Extended IndexedDB storage for offline inspection functionality
 const DB_NAME = 'wm_compliance_offline';
-const DB_VERSION = 2; // Increment version for new stores
+// v4: must match offlineDB.ts DB_VERSION. Both modules share this db name and
+// now create the SAME complete store set, so neither clobbers the other's schema
+// and there is no version skew (which previously threw VersionError).
+const DB_VERSION = 4;
 
 export interface CachedInspection {
   id: string;
@@ -68,6 +71,11 @@ class OfflineInspectionDatabase {
 
       request.onsuccess = () => {
         this.db = request.result;
+        // Close on a version change triggered elsewhere so we don't block it.
+        this.db.onversionchange = () => {
+          this.db?.close();
+          this.db = null;
+        };
         resolve();
       };
 
@@ -77,9 +85,10 @@ class OfflineInspectionDatabase {
 
         console.log(`Upgrading IndexedDB from version ${oldVersion} to ${DB_VERSION}`);
 
-        // Preserve existing stores from version 1
-        if (oldVersion < 1) {
-          // These are created in the main offlineDB.ts - skip if exists
+        // v4: create the full store set idempotently on every upgrade so the
+        // schema is complete regardless of the db's prior version or which module
+        // opened it first. (Shared with offlineDB.ts — keep the two in sync.)
+        {
           if (!db.objectStoreNames.contains('inspections')) {
             const inspectionStore = db.createObjectStore('inspections', { keyPath: 'id' });
             inspectionStore.createIndex('synced', 'synced', { unique: false });
@@ -126,8 +135,7 @@ class OfflineInspectionDatabase {
           }
         }
 
-        // New stores for version 2
-        if (oldVersion < 2) {
+        {
           // Inspection cache - full inspection data for offline access
           if (!db.objectStoreNames.contains('inspection_cache')) {
             const cacheStore = db.createObjectStore('inspection_cache', { keyPath: 'id' });
@@ -150,6 +158,23 @@ class OfflineInspectionDatabase {
             const templateStore = db.createObjectStore('template_cache', { keyPath: 'id' });
             templateStore.createIndex('cached_at', 'cached_at', { unique: false });
           }
+        }
+
+        // v4: stores owned by offlineDB.ts — created here too so the complete
+        // schema exists regardless of which module opens the db first.
+        if (!db.objectStoreNames.contains('coc_compliance_photos')) {
+          const cocPhotosStore = db.createObjectStore('coc_compliance_photos', { keyPath: 'id' });
+          cocPhotosStore.createIndex('subsection_id', 'subsection_id', { unique: false });
+          cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
+          cocPhotosStore.createIndex('synced', 'synced', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('offline_photos')) {
+          const photosStore = db.createObjectStore('offline_photos', { keyPath: 'id' });
+          photosStore.createIndex('context_type', 'context_type', { unique: false });
+          photosStore.createIndex('context_id', 'context_id', { unique: false });
+          photosStore.createIndex('secondary_context_id', 'secondary_context_id', { unique: false });
+          photosStore.createIndex('synced', 'synced', { unique: false });
+          photosStore.createIndex('photo_type', 'photo_type', { unique: false });
         }
       };
     });
