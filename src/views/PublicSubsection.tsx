@@ -252,30 +252,6 @@ const PublicSubsection = () => {
     low: openSnags.filter(s => s.risk_level?.toLowerCase() === 'low').length,
   };
   
-  // Use shared compliance logic from complianceCalculations.ts
-  const getOverallStatus = () => {
-    // Check if any COC validation has failed using shared constants
-    const hasFailedValidation = Object.values(cocValidations).some(
-      (v: any) => FAILED_VALIDATION_STATUSES.includes(v?.status as any)
-    );
-    
-    // If COC is required but has failed validation
-    if (subsection.is_coc_required && hasFailedValidation) return "Fail";
-    
-    // If COC is required but status is not valid (using shared utility)
-    if (subsection.is_coc_required && !hasValidCocStatus(subsection.coc_status)) return "Fail";
-    
-    // If COC is required but metering is missing
-    if (subsection.is_coc_required && subsection.metering_status === 'Missing' && !subsection.meter_serial_number) return "Fail";
-    
-    // If there are open snags
-    if (openSnagsCount > 0) return "Fail";
-    
-    return "Pass";
-  };
-
-  const overallStatus = getOverallStatus();
-
   const getRiskLevelColor = (level?: string) => {
     switch (level?.toLowerCase()) {
       case 'critical': return 'bg-red-500/20 text-red-600 border-red-300';
@@ -324,56 +300,6 @@ const PublicSubsection = () => {
             <div>
               <p className="text-sm text-muted-foreground mb-1">Tenant Name</p>
               <p className="font-medium">{subsection.tenant_name || siteData.name}</p>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">COC Required</p>
-              <Badge variant={subsection.is_coc_required ? "default" : "secondary"}>
-                {subsection.is_coc_required ? "Yes" : "No"}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Overall Status</p>
-              <Badge 
-                variant="outline"
-                className={overallStatus === "Pass" 
-                  ? "bg-green-500/10 text-green-500" 
-                  : "bg-red-500/10 text-red-500"
-                }
-              >
-                {overallStatus}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
-              <Badge
-                variant="outline"
-                className={
-                  subsection.coc_status === "Approved" || subsection.coc_status === "Valid" || subsection.coc_status === "Pass"
-                    ? "bg-green-500/10 text-green-500"
-                    : subsection.is_coc_required
-                    ? "bg-red-500/10 text-red-500"
-                    : "bg-gray-500/10 text-gray-500"
-                }
-              >
-                {subsection.is_coc_required ? (subsection.coc_status || "Missing") : "N/A"}
-              </Badge>
-            </div>
-            <div>
-              <p className="text-sm text-muted-foreground mb-1">Metering Status</p>
-              <Badge
-                variant="outline"
-                className={
-                  subsection.metering_status === "Installed" || subsection.meter_serial_number
-                    ? "bg-green-500/10 text-green-500"
-                    : subsection.is_coc_required
-                    ? "bg-red-500/10 text-red-500"
-                    : "bg-gray-500/10 text-gray-500"
-                }
-              >
-                {subsection.is_coc_required 
-                  ? (subsection.metering_status === "Installed" || subsection.meter_serial_number ? "Installed" : subsection.metering_status || "Missing")
-                  : "N/A"}
-              </Badge>
             </div>
             <div className="md:col-span-2">
               <p className="text-sm text-muted-foreground mb-1">Open Snags</p>
