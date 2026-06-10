@@ -33,6 +33,7 @@ const QRCodes = () => {
   const [loading, setLoading] = useState(true);
   const [selectedQR, setSelectedQR] = useState<QRCodeEntry | null>(null);
   const [companyLogo, setCompanyLogo] = useState<string>("");
+  const [qrBaseUrl, setQrBaseUrl] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -45,12 +46,15 @@ const QRCodes = () => {
     try {
       const { data } = await supabase
         .from('settings')
-        .select('company_logo_url')
+        .select('company_logo_url, qr_base_url')
         .limit(1)
         .maybeSingle();
-      
+
       if (data?.company_logo_url) {
         setCompanyLogo(data.company_logo_url);
+      }
+      if (data?.qr_base_url) {
+        setQrBaseUrl(data.qr_base_url);
       }
     } catch (error) {
       console.error('Error fetching company logo:', error);
@@ -268,7 +272,7 @@ const QRCodes = () => {
           {selectedQR && selectedQR.sites && (
             <div className="py-4">
               <LabeledQRCode
-                url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${selectedQR.id}`}
+                url={`${(qrBaseUrl || window.location.origin).replace(/\/$/, '')}/public/subsections/${selectedQR.id}`}
                 siteName={selectedQR.sites.name}
                 subsectionName={selectedQR.name}
                 logoUrl={companyLogo || undefined}

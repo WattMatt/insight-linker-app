@@ -118,11 +118,14 @@ const Clients = () => {
       const { data: { user } } = await supabase.auth.getUser();
 
       let logo_url = null;
+      let folderTs: number | null = null;
+      let fileExt: string | undefined;
 
       // Upload logo if provided
       if (logoFile) {
-        const fileExt = logoFile.name.split('.').pop();
-        const fileName = `new-client-${Date.now()}/logo.${fileExt}`;
+        fileExt = logoFile.name.split('.').pop();
+        folderTs = Date.now();
+        const fileName = `new-client-${folderTs}/logo.${fileExt}`;
 
         const { error: uploadError } = await supabase.storage
           .from('client-logos')
@@ -139,54 +142,49 @@ const Clients = () => {
         logo_url = publicUrl;
       }
 
-      const { error } = await supabase.from("clients").insert([
-        {
-          ...validated,
-          logo_url: logo_url ? `${logo_url}?t=${Date.now()}` : null,
-          created_by: user?.id,
-        } as any,  // Type assertion needed due to zod inference
-      ]);
+      const { data: insertedClient, error } = await supabase
+        .from("clients")
+        .insert([
+          {
+            ...validated,
+            logo_url: logo_url ? `${logo_url}?t=${Date.now()}` : null,
+            created_by: user?.id,
+          } as any,  // Type assertion needed due to zod inference
+        ])
+        .select("id")
+        .single();
 
       if (error) throw error;
 
       // If logo was uploaded, rename the folder to use the actual client ID
-      if (logo_url) {
-        const insertedClient = await supabase
-          .from("clients")
-          .select("id")
-          .eq("logo_url", logo_url)
-          .single();
+      if (logo_url && insertedClient && folderTs !== null) {
+        const oldPath = `new-client-${folderTs}/logo.${fileExt}`;
+        const newPath = `${insertedClient.id}/logo.${fileExt}`;
 
-        if (insertedClient.data) {
-          const fileExt = logoFile!.name.split('.').pop();
-          const oldPath = `new-client-${Date.now()}/logo.${fileExt}`;
-          const newPath = `${insertedClient.data.id}/logo.${fileExt}`;
+        // Copy to new location
+        const { data: fileData } = await supabase.storage
+          .from('client-logos')
+          .download(oldPath);
 
-          // Copy to new location
-          const { data: fileData } = await supabase.storage
+        if (fileData) {
+          await supabase.storage
             .from('client-logos')
-            .download(oldPath);
+            .upload(newPath, fileData, { upsert: true });
 
-          if (fileData) {
-            await supabase.storage
-              .from('client-logos')
-              .upload(newPath, fileData, { upsert: true });
+          // Delete old file
+          await supabase.storage
+            .from('client-logos')
+            .remove([oldPath]);
 
-            // Delete old file
-            await supabase.storage
-              .from('client-logos')
-              .remove([oldPath]);
+          // Update URL with cache-busting
+          const { data: { publicUrl: newPublicUrl } } = supabase.storage
+            .from('client-logos')
+            .getPublicUrl(newPath);
 
-            // Update URL with cache-busting
-            const { data: { publicUrl: newPublicUrl } } = supabase.storage
-              .from('client-logos')
-              .getPublicUrl(newPath);
-
-            await supabase
-              .from("clients")
-              .update({ logo_url: `${newPublicUrl}?t=${Date.now()}` })
-              .eq("id", insertedClient.data.id);
-          }
+          await supabase
+            .from("clients")
+            .update({ logo_url: `${newPublicUrl}?t=${Date.now()}` })
+            .eq("id", insertedClient.id);
         }
       }
 

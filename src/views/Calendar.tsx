@@ -261,7 +261,7 @@ const Calendar = () => {
   const exportToPDF = async () => {
     const totalEvents = events?.length || 0;
     const completedCount = events?.filter(e => e.status.toLowerCase() === 'completed').length || 0;
-    const upcomingCount = events?.filter(e => new Date(e.start_date) > new Date()).length || 0;
+    const upcomingCount = events?.filter(e => parseISO(e.start_date) > new Date()).length || 0;
     const pendingCount = totalEvents - completedCount - upcomingCount;
 
     const reportData: CalendarReportData = {

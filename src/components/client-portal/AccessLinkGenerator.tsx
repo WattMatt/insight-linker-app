@@ -147,10 +147,23 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
     enabled: !clientId && !siteId,
   });
 
+  const resolvedSiteId = siteId || formData.selectedSiteId || null;
+  const resolvedClientId = clientId || formData.selectedClientId || null;
+  const targetMissing =
+    formData.linkType === "site" ? !resolvedSiteId : !resolvedClientId;
+
   // Create access link mutation
   const createLinkMutation = useMutation({
     mutationFn: async () => {
-      const expiresAt = formData.expiresIn === "never" 
+      // Validate the target before creating a link to avoid dead/mis-scoped links
+      if (formData.linkType === "site" && !resolvedSiteId) {
+        throw new Error("Please select a site for this review link");
+      }
+      if (formData.linkType === "client" && !resolvedClientId) {
+        throw new Error("Please select a client for this portfolio link");
+      }
+
+      const expiresAt = formData.expiresIn === "never"
         ? null 
         : new Date(Date.now() + {
             "7d": 7 * 24 * 60 * 60 * 1000,
@@ -165,8 +178,8 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
         .insert({
           label: formData.label || null,
           link_type: formData.linkType,
-          site_id: siteId || formData.selectedSiteId || null,
-          client_id: clientId || formData.selectedClientId || null,
+          site_id: resolvedSiteId,
+          client_id: resolvedClientId,
           expires_at: expiresAt,
           created_by: user.user?.id,
         })
@@ -193,9 +206,9 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
       navigator.clipboard.writeText(link);
       toast.success("Access link created and copied to clipboard!");
     },
-    onError: (error) => {
+    onError: (error: any) => {
       console.error("Error creating access link:", error);
-      toast.error("Failed to create access link");
+      toast.error(error?.message || "Failed to create access link");
     },
   });
 
@@ -380,9 +393,9 @@ export function AccessLinkGenerator({ siteId, clientId }: AccessLinkGeneratorPro
                 <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
                   Cancel
                 </Button>
-                <Button 
+                <Button
                   onClick={() => createLinkMutation.mutate()}
-                  disabled={createLinkMutation.isPending}
+                  disabled={createLinkMutation.isPending || targetMissing}
                 >
                   {createLinkMutation.isPending ? "Creating..." : "Create & Copy Link"}
                 </Button>

@@ -12,6 +12,11 @@ import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { supabase } from "@/integrations/supabase/client";
 
+// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
+const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
+const isSnagOpen = (status: string | null | undefined): boolean =>
+    !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+
 interface Snag {
     id: string;
     subsection_id: string;
@@ -77,7 +82,7 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
     const snagCountBySubsection = useMemo(() => {
         const counts: Record<string, number> = {};
         snags.forEach(snag => {
-            if (snag.status !== 'rectified' && snag.status !== 'Rectified') {
+            if (isSnagOpen(snag.status)) {
                 counts[snag.subsection_id] = (counts[snag.subsection_id] || 0) + 1;
             }
         });

@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { RefreshCw, Download, QrCode } from "lucide-react";
@@ -31,6 +31,21 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
     setDownloadingAll,
     fetchSiteData
 }) => {
+    // Configured QR base URL (same source as handleDownloadAll / qrCodeGenerator)
+    const [qrBaseUrl, setQrBaseUrl] = useState<string>("");
+
+    useEffect(() => {
+        (async () => {
+            const { data: qrSettings } = await supabase
+                .from('settings')
+                .select('qr_base_url')
+                .single();
+            if (qrSettings?.qr_base_url) {
+                setQrBaseUrl(qrSettings.qr_base_url);
+            }
+        })();
+    }, []);
+
     const handleGenerateAll = async () => {
         setGeneratingAll(true);
         toast.info("Regenerating QR codes for all subsections...");
@@ -283,7 +298,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                                 <CardContent className="p-4">
                                     <div className="bg-muted rounded-lg mb-3 flex items-center justify-center relative">
                                         <LabeledQRCode
-                                            url={`${window.location.origin.replace(/\/$/, '')}/public/subsections/${subsection.id}`}
+                                            url={`${(qrBaseUrl || window.location.origin).replace(/\/$/, '')}/public/subsections/${subsection.id}`}
                                             siteName={site.name}
                                             subsectionName={subsection.name}
                                             logoUrl={companyLogo || undefined}

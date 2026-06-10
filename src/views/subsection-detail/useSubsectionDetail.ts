@@ -849,12 +849,15 @@ export function useSubsectionDetail() {
         await supabase.from('subsection_documents').update(docUpdateData).eq('id', docId);
       }
 
+      // Preserve any prior local COC state so we can roll back if validate-coc fails.
+      const priorCocData = cocDataByDocument[docId];
       setCocDataByDocument(prev => ({
         ...prev,
         [docId]: {
-          cocNumber: approvedData.cocNumber || '',
-          cocType: normalizedCocType || '',
-          cocIssueDate: approvedData.cocIssueDate || '',
+          ...prev[docId],
+          cocNumber: approvedData.cocNumber || prev[docId]?.cocNumber || '',
+          cocType: normalizedCocType || prev[docId]?.cocType || '',
+          cocIssueDate: approvedData.cocIssueDate || prev[docId]?.cocIssueDate || '',
           cocStatus: prev[docId]?.cocStatus || ''
         }
       }));
@@ -869,6 +872,16 @@ export function useSubsectionDetail() {
       });
 
       if (validationError || validationData?.error) {
+        // Roll back the optimistic write so a failed validation leaves local state intact.
+        setCocDataByDocument(prev => {
+          const next = { ...prev };
+          if (priorCocData) {
+            next[docId] = priorCocData;
+          } else {
+            delete next[docId];
+          }
+          return next;
+        });
         toast.error(`Verification failed: ${validationError?.message || validationData?.error || 'Unknown error'}`);
         return;
       }
@@ -1121,38 +1134,43 @@ export function useSubsectionDetail() {
 
     try {
       setSaving(true);
-      const updateData: any = {
-        coc_type: docData.cocType,
-        coc_status: docData.cocStatus,
-        coc_number: docData.cocNumber || null,
-        coc_issue_date: docData.cocIssueDate || null
-      };
+      // Only overwrite a coc field when a non-empty value is provided; never
+      // clobber an existing value (incl. an Approved status) with an empty one.
+      const updateData: Record<string, string> = {};
+      if (docData.cocType) updateData.coc_type = docData.cocType;
+      if (docData.cocStatus) updateData.coc_status = docData.cocStatus;
+      if (docData.cocNumber) updateData.coc_number = docData.cocNumber;
+      if (docData.cocIssueDate) updateData.coc_issue_date = docData.cocIssueDate;
 
-      const { error: updateError } = await supabase
-        .from('subsection_documents')
-        .update(updateData)
-        .eq('id', documentId);
+      if (Object.keys(updateData).length > 0) {
+        const { error: updateError } = await supabase
+          .from('subsection_documents')
+          .update(updateData)
+          .eq('id', documentId);
 
-      if (updateError) {
-        if (process.env.NODE_ENV === 'development') console.error("Error updating document COC details:", updateError);
-        throw updateError;
+        if (updateError) {
+          if (process.env.NODE_ENV === 'development') console.error("Error updating document COC details:", updateError);
+          throw updateError;
+        }
       }
 
       setSubsection({
         ...subsection,
-        cocType: docData.cocType,
-        cocStatus: docData.cocStatus,
+        cocType: docData.cocType || subsection.cocType,
+        cocStatus: docData.cocStatus || subsection.cocStatus,
         cocNumber: docData.cocNumber || subsection.cocNumber,
         cocIssueDate: docData.cocIssueDate || subsection.cocIssueDate
       });
 
-      const { error: subsectionError } = await supabase
-        .from('subsections')
-        .update(updateData)
-        .eq('id', subsectionId);
+      if (Object.keys(updateData).length > 0) {
+        const { error: subsectionError } = await supabase
+          .from('subsections')
+          .update(updateData)
+          .eq('id', subsectionId);
 
-      if (subsectionError) {
-        if (process.env.NODE_ENV === 'development') console.error("Error updating subsection COC details:", subsectionError);
+        if (subsectionError) {
+          if (process.env.NODE_ENV === 'development') console.error("Error updating subsection COC details:", subsectionError);
+        }
       }
 
       toast.success("COC details saved successfully");
