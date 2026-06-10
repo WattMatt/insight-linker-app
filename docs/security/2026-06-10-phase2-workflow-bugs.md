@@ -10,6 +10,8 @@ Recommended fix order at the bottom.
 
 Most of these stem from the **legacy localStorage-backed queue** (`src/hooks/useOfflineSync.ts`). The newer IndexedDB pattern in `src/hooks/useOfflinePhotos.ts` is correct and is the migration target.
 
+**Status (2026-06-10):** A1 (`ebdb497`), A6 (`7def899`), A10 (`64ab0bf`) FIXED on `fixes/phase2-workflow` — the contained, statically-verifiable wins. A2/A7/A8 (queue engine: binaries-in-IndexedDB, snapshot-safe flush, idempotent handlers), A9 (concurrency merge), A3/A4/A5 (wire the never-uploaded paths), and A11 (object-URL leak) remain — these change the live sync engine and must be exercised on a device/running app before shipping, so they're bundled into the staging/device verification pass rather than committed blind.
+
 ### A1 — Two IndexedDB classes open the same DB with conflicting versions — **High**
 `src/lib/offlineDB.ts:2-3` (`wm_compliance_offline` v3) vs `src/lib/offlineInspectionDB.ts:2-3` (same name, v2). IndexedDB allows one version per DB name; whichever opens second throws `VersionError`, and `init()` has no catch → every cached-inspection/image read or write rejects. No `onblocked`/`onversionchange` handlers either. **Fix:** consolidate to one DB module + version + `onupgradeneeded`; add blocked/versionchange handlers.
 
