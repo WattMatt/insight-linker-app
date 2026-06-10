@@ -41,10 +41,11 @@ const Auth = () => {
     const token = urlParams.get("token");
     const hashParams = new URLSearchParams(window.location.hash.slice(1));
     const accessToken = hashParams.get("access_token");
+    const refreshToken = hashParams.get("refresh_token");
 
-    // 1. Invite link: /auth?type=invite + #access_token=...
-    if (type === "invite" && accessToken) {
-      void handleInviteToken(accessToken);
+    // 1. Invite link: /auth?type=invite + #access_token=...&refresh_token=...
+    if (type === "invite" && accessToken && refreshToken) {
+      void handleInviteToken(accessToken, refreshToken);
       return;
     }
 
@@ -75,7 +76,7 @@ const Auth = () => {
     return () => subscription.unsubscribe();
   }, [navigate]);
 
-  async function handleInviteToken(accessToken: string) {
+  async function handleInviteToken(accessToken: string, refreshToken: string) {
     setStatus("Verifying invite link...");
     // MED #6: scrub the token from window.location BEFORE the async
     // setSession runs. Any concurrent effect / analytics script / Sentry
@@ -84,7 +85,7 @@ const Auth = () => {
     window.history.replaceState({}, document.title, "/auth");
     const { data, error } = await supabase.auth.setSession({
       access_token: accessToken,
-      refresh_token: accessToken,
+      refresh_token: refreshToken,
     });
 
     if (error || !data.session) {

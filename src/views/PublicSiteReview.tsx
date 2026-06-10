@@ -302,26 +302,6 @@ const PublicSiteReview = () => {
     }
   };
 
-  const getStatusBadgeColor = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case 'approved':
-      case 'valid':
-      case 'pass':
-      case 'compliant':
-        return 'bg-emerald-500';
-      case 'pending':
-      case 'review':
-        return 'bg-amber-500';
-      case 'fail':
-      case 'failed':
-      case 'expired':
-      case 'missing':
-        return 'bg-destructive';
-      default:
-        return 'bg-muted-foreground';
-    }
-  };
-
   const handleDownload = async (url: string, fileName: string) => {
     try {
       await downloadFile(url, fileName);
@@ -616,11 +596,6 @@ const PublicSiteReview = () => {
                         <div className="flex items-center gap-2">
                           {subsection.category && (
                             <Badge variant="outline">{subsection.category}</Badge>
-                          )}
-                          {subsection.coc_status && (
-                            <Badge className={`${getStatusBadgeColor(subsection.coc_status)} text-white`}>
-                              COC: {subsection.coc_status}
-                            </Badge>
                           )}
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>

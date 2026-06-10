@@ -13,7 +13,7 @@ verify_jwt = false
 verify_jwt = true
 
 [functions.extract-coc]
-verify_jwt = false
+verify_jwt = true
 
 [functions.validation-chat]
 verify_jwt = true

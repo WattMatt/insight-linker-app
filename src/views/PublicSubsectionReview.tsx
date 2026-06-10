@@ -295,24 +295,6 @@ const PublicSubsectionReview = () => {
     }
   };
 
-  const getCocStatusColor = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case 'approved': return 'bg-green-500';
-      case 'failed': return 'bg-destructive';
-      case 'pending': return 'bg-amber-500';
-      default: return 'bg-muted';
-    }
-  };
-
-  const getCocStatusIcon = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case 'approved': return <CheckCircle2 className="h-4 w-4" />;
-      case 'failed': return <XCircle className="h-4 w-4" />;
-      case 'pending': return <Clock className="h-4 w-4" />;
-      default: return <Info className="h-4 w-4" />;
-    }
-  };
-
   const getSnagRiskColor = (risk?: string) => {
     switch (risk?.toLowerCase()) {
       case 'critical': return 'bg-red-100 border-red-300 text-red-800';
@@ -500,10 +482,6 @@ const PublicSubsectionReview = () => {
                     </p>
                   )}
                 </div>
-                <Badge className={`${getCocStatusColor(subsection.coc_status)} text-white px-3 py-1.5 text-sm`}>
-                  {getCocStatusIcon(subsection.coc_status)}
-                  <span className="ml-1.5">{subsection.coc_status || 'Unknown'}</span>
-                </Badge>
               </div>
 
               {subsection.description && (
@@ -516,24 +494,6 @@ const PublicSubsectionReview = () => {
                   <div className="bg-white/80 backdrop-blur rounded-lg border p-3">
                     <p className="text-xs text-muted-foreground mb-1">Category</p>
                     <p className="font-medium text-sm">{subsection.category}</p>
-                  </div>
-                )}
-                {subsection.coc_number && (
-                  <div className="bg-white/80 backdrop-blur rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground mb-1">COC Number</p>
-                    <p className="font-medium text-sm">{subsection.coc_number}</p>
-                  </div>
-                )}
-                {subsection.coc_issue_date && (
-                  <div className="bg-white/80 backdrop-blur rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground mb-1">Issue Date</p>
-                    <p className="font-medium text-sm">{new Date(subsection.coc_issue_date).toLocaleDateString()}</p>
-                  </div>
-                )}
-                {subsection.coc_type && (
-                  <div className="bg-white/80 backdrop-blur rounded-lg border p-3">
-                    <p className="text-xs text-muted-foreground mb-1">COC Type</p>
-                    <p className="font-medium text-sm">{subsection.coc_type}</p>
                   </div>
                 )}
               </div>
