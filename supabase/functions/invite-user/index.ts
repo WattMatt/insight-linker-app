@@ -72,8 +72,10 @@ Deno.serve(async (req) => {
       throw new Error('Temporary password must be at least 6 characters');
     }
 
-    // Get the origin from the request to use as redirect URL
-    const origin = req.headers.get('origin') || req.headers.get('referer')?.split('/').slice(0, 3).join('/');
+    // Redirect base from env, NOT the request origin — a preview deployment or a
+    // spoofed Origin/Referer header must never end up in invite links. Mirrors
+    // send-password-reset (APP_URL). Feeds both redirectTo and recoveryRedirect below.
+    const origin = Deno.env.get('APP_URL') ?? 'https://insight-linker-app.vercel.app';
     const redirectTo = `${origin}/auth?type=invite`;
 
     console.log('Redirect URL:', redirectTo);
@@ -449,7 +451,7 @@ Deno.serve(async (req) => {
     `;
 
     const { error: emailError } = await resend.emails.send({
-      from: `${companyName} <onboarding@resend.dev>`,
+      from: `${companyName} <noreply@watsonmattheus.com>`,
       to: [email],
       subject: `You're invited to join ${companyName}`,
       html: emailHtml,
