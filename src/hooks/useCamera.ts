@@ -220,7 +220,9 @@ export const useCamera = () => {
       const fileName = `photo_${Date.now()}.${image.format || 'jpg'}`;
       const file = new File([blob], fileName, { type: `image/${image.format || 'jpeg'}` });
 
-      return file;
+      // iOS (esp. gallery picks via Prompt) can return HEIC; convert to JPEG so the
+      // photo is viewable everywhere and not mislabeled as jpeg downstream.
+      return await convertHeicToJpeg(file);
     } catch (error: any) {
       console.error('Error taking picture:', error);
       if (error.message?.includes('User cancelled') || error.message?.includes('cancelled')) {
@@ -268,7 +270,8 @@ export const useCamera = () => {
           const blob = await response.blob();
           const fileName = `photo_${Date.now()}_${files.length}.${photo.format || 'jpg'}`;
           const file = new File([blob], fileName, { type: `image/${photo.format || 'jpeg'}` });
-          files.push(file);
+          // HEIC from the photo library -> JPEG so it renders in all browsers.
+          files.push(await convertHeicToJpeg(file));
         }
       }
 

@@ -100,11 +100,14 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
 
   // State for generated QR codes
   const [qrCodeCache, setQrCodeCache] = React.useState<Record<string, string>>({});
+  // Ref mirror of the cache so the callback identity stays stable (read-only access)
+  const qrCodeCacheRef = React.useRef<Record<string, string>>({});
+  qrCodeCacheRef.current = qrCodeCache;
 
   // Generate QR code data URL for a subsection
   const generateQRCodeDataUrl = React.useCallback(async (subsectionId: string, logoUrl?: string | null): Promise<string> => {
     const cacheKey = `${subsectionId}-${logoUrl || 'no-logo'}`;
-    if (qrCodeCache[cacheKey]) return qrCodeCache[cacheKey];
+    if (qrCodeCacheRef.current[cacheKey]) return qrCodeCacheRef.current[cacheKey];
 
     try {
       const qrTargetUrl = `https://example.com/public/subsections/${subsectionId}`;
@@ -151,7 +154,7 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
     } catch {
       return '';
     }
-  }, [qrCodeCache]);
+  }, []);
 
   // Generate QR codes for all subsections on mount
   React.useEffect(() => {

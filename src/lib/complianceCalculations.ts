@@ -51,9 +51,10 @@ export async function fetchFailedValidationsBySubsection(
 
   const { data, error } = await supabase
     .from('coc_validations')
-    .select('subsection_id, status, validated_at')
+    .select('subsection_id, status, validated_at, created_at')
     .in('subsection_id', subsectionIds)
-    .order('validated_at', { ascending: false });
+    .order('validated_at', { ascending: false, nullsFirst: false })
+    .order('created_at', { ascending: false, nullsFirst: false });
 
   if (error) {
     console.error("Error fetching COC validations:", error);

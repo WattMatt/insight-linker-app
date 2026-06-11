@@ -45,6 +45,11 @@ import {
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
 import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
 
+// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
+const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
+const isSnagOpen = (status: string | null | undefined): boolean =>
+  !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+
 interface SiteSummaryReportProps {
   siteId: string;
   siteName: string;
@@ -119,8 +124,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     }
     const subsectionSnags = snags.filter(snag =>
       snag.subsection_id === subsection.id &&
-      snag.status !== 'rectified' &&
-      snag.status !== 'Rectified'
+      isSnagOpen(snag.status)
     );
     if (subsectionSnags.length > 0) {
       return false;
@@ -173,9 +177,9 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
   // Transform DB subsection to SubsectionCardData (extended for cards)
   const transformToSubsectionCardData = (sub: any, allSnags: any[], qrBaseUrl: string, assets: any[]): SubsectionCardData => {
-    const subSnags = allSnags.filter(s => 
-      s.subsection_id === sub.id && 
-      !['rectified', 'Rectified'].includes(s.status || '')
+    const subSnags = allSnags.filter(s =>
+      s.subsection_id === sub.id &&
+      isSnagOpen(s.status)
     );
     
     // Generate QR URL if not stored - use public subsection URL
@@ -295,7 +299,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
     // Calculate metrics using spec function
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
-    const openSnags = allSnags.filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length;
+    const openSnags = allSnags.filter(snag => isSnagOpen(snag.status)).length;
     const metrics = calculateMetrics(subsectionData, cocRequired, openSnags);
 
     // Calculate asset verification metrics using inspection json_data

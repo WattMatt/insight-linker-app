@@ -45,6 +45,35 @@ import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { COCValidationLogCard, type ValidationRecord as ImportedValidationRecord } from "@/components/compliance/COCValidationLogCard";
 import { toast } from "sonner";
 
+// Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
+// (written by InspectionDetail.handleItemChange, read by ComprehensiveInspectionReport).
+// This iterates that map, skipping non-section/non-item keys, and returns whether any item is open.
+const hasOpenInspectionItems = (jsonData: any): boolean => {
+  if (!jsonData || typeof jsonData !== 'object') return false;
+  for (const [sectionKey, sectionValue] of Object.entries(jsonData)) {
+    // Skip non-section keys: tenants, *customFields/*_customFields, siteDrawing*
+    if (
+      sectionKey === 'tenants' ||
+      sectionKey.endsWith('customFields') ||
+      sectionKey.endsWith('_customFields') ||
+      sectionKey.startsWith('siteDrawing')
+    ) {
+      continue;
+    }
+    if (!sectionValue || typeof sectionValue !== 'object' || Array.isArray(sectionValue)) continue;
+    for (const itemValue of Object.values(sectionValue as Record<string, any>)) {
+      // A child is an item iff it is a non-null object with a string status
+      if (itemValue && typeof itemValue === 'object' && typeof (itemValue as any).status === 'string') {
+        const status = (itemValue as any).status;
+        if (status !== 'Pass' && status !== 'N/A') {
+          return true;
+        }
+      }
+    }
+  }
+  return false;
+};
+
 interface ComplianceDashboardProps {
   siteId: string;
   subsections: Array<{
@@ -444,18 +473,9 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       const latestInspection = inspections.find(i => i.subsection_id === sub.id);
       if (latestInspection?.json_data) {
         const jsonData = latestInspection.json_data;
-        if (jsonData.sections && Array.isArray(jsonData.sections)) {
-          for (const section of jsonData.sections) {
-            if (section.items && Array.isArray(section.items)) {
-              const openItems = section.items.filter((item: any) => 
-                item.status !== 'Pass' && item.status !== 'N/A'
-              );
-              if (openItems.length > 0) return;
-            }
-          }
-        }
+        if (hasOpenInspectionItems(jsonData)) return;
       }
-      
+
       compliantCount++;
     });
     
@@ -496,22 +516,8 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
       if (latestInspection?.json_data) {
         totalInspected++;
         const jsonData = latestInspection.json_data;
-        let hasOpenSnags = false;
-        
-        if (jsonData.sections && Array.isArray(jsonData.sections)) {
-          for (const section of jsonData.sections) {
-            if (section.items && Array.isArray(section.items)) {
-              const openItems = section.items.filter((item: any) => 
-                item.status !== 'Pass' && item.status !== 'N/A'
-              );
-              if (openItems.length > 0) {
-                hasOpenSnags = true;
-                break;
-              }
-            }
-          }
-        }
-        
+        const hasOpenSnags = hasOpenInspectionItems(jsonData);
+
         if (!hasOpenSnags) allPassed++;
       }
     });

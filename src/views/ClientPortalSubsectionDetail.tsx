@@ -210,7 +210,7 @@ const ClientPortalSubsectionDetail = () => {
   }, {} as Record<string, typeof documents>);
 
   const totalPins = floorPlans.reduce((sum, fp) => sum + (fp.floor_plan_pins?.length || 0), 0);
-  const completedInspections = inspections.filter(i => i.status === "completed").length;
+  const completedInspections = inspections.filter(i => (i.status || '').toLowerCase() === "completed").length;
 
   return (
     <div className="space-y-6">
@@ -465,10 +465,10 @@ const ClientPortalSubsectionDetail = () => {
                     <div className="flex items-start justify-between">
                       <div className="flex items-center gap-3">
                         <div className={`h-10 w-10 rounded-lg flex items-center justify-center ${
-                          inspection.status === "completed" ? "bg-emerald-500/10" : "bg-amber-500/10"
+                          (inspection.status || '').toLowerCase() === "completed" ? "bg-emerald-500/10" : "bg-amber-500/10"
                         }`}>
                           <ShieldCheck className={`h-5 w-5 ${
-                            inspection.status === "completed" ? "text-emerald-600" : "text-amber-600"
+                            (inspection.status || '').toLowerCase() === "completed" ? "text-emerald-600" : "text-amber-600"
                           }`} />
                         </div>
                         <div>
@@ -493,9 +493,9 @@ const ClientPortalSubsectionDetail = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge 
-                          variant={inspection.status === "completed" ? "default" : "secondary"}
-                          className={inspection.status === "completed" ? "bg-emerald-500" : ""}
+                        <Badge
+                          variant={(inspection.status || '').toLowerCase() === "completed" ? "default" : "secondary"}
+                          className={(inspection.status || '').toLowerCase() === "completed" ? "bg-emerald-500" : ""}
                         >
                           {inspection.status}
                         </Badge>

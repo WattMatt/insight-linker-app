@@ -149,7 +149,7 @@ const SiteAssignments = () => {
 
   // Fetch all assignments
   const { data: assignments, isLoading: loadingAssignments } = useQuery({
-    queryKey: ["site-assignments"],
+    queryKey: ["site-assignments-flat"],
     queryFn: async () => {
       const { data: userSites, error } = await supabase
         .from("user_sites")
@@ -308,7 +308,9 @@ const SiteAssignments = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["site-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignments-flat"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-site-assignments"] });
       toast.success("Contractor assigned to site successfully");
       setSelectedContractor("");
       setSelectedSite("");
@@ -329,7 +331,9 @@ const SiteAssignments = () => {
       if (error) throw error;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["site-assignments"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignments-flat"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-site-assignments"] });
       toast.success("Contractor access removed successfully");
     },
     onError: (error: any) => {

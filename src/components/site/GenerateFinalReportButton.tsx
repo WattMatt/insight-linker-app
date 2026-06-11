@@ -18,6 +18,11 @@ import {
 import { Progress } from '@/components/ui/progress';
 import { ReportSection } from './ReportSettingsDialog';
 
+// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
+const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
+const isSnagOpen = (status: string | null | undefined): boolean =>
+  !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+
 interface SiteData {
   id: string;
   name: string;
@@ -67,8 +72,7 @@ export function GenerateFinalReportButton({
     }
     const subsectionSnags = snags.filter(snag =>
       snag.subsection_id === subsection.id &&
-      snag.status !== 'rectified' &&
-      snag.status !== 'Rectified'
+      isSnagOpen(snag.status)
     );
     if (subsectionSnags.length > 0) {
       return false;
@@ -147,7 +151,7 @@ export function GenerateFinalReportButton({
       // Transform subsections with full data
       const transformedSubsections = subs.map(sub => {
         const subSnags = allSnags.filter(s => s.subsection_id === sub.id);
-        const openSnags = subSnags.filter(s => !['rectified', 'Rectified'].includes(s.status || ''));
+        const openSnags = subSnags.filter(s => isSnagOpen(s.status));
         
         // Find matching asset for breaker size
         const subNameNorm = sub.name?.toLowerCase().trim() || '';
@@ -203,7 +207,7 @@ export function GenerateFinalReportButton({
       }).length;
       
       const meteringInstalled = subs.filter(s => s.meter_serial_number).length;
-      const openSnagsTotal = allSnags.filter(s => !['rectified', 'Rectified'].includes(s.status || '')).length;
+      const openSnagsTotal = allSnags.filter(s => isSnagOpen(s.status)).length;
       const compliantCount = transformedSubsections.filter(s => s.isCompliant === true).length;
 
       const summaryStats = {
@@ -217,7 +221,7 @@ export function GenerateFinalReportButton({
         cocRequired,
         meteringInstalled,
         openSnagsCount: openSnagsTotal,
-        resolvedSnagsCount: allSnags.filter(s => ['rectified', 'Rectified'].includes(s.status || '')).length,
+        resolvedSnagsCount: allSnags.filter(s => !isSnagOpen(s.status)).length,
       };
 
       // Calculate category health

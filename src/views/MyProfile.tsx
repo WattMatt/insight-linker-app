@@ -161,7 +161,7 @@ const MyProfile = () => {
     try {
       // Verify current password
       const { error: signInError } = await supabase.auth.signInWithPassword({
-        email: profile?.email || "",
+        email: profile?.auth_email || profile?.email || "",
         password: currentPassword,
       });
       if (signInError) {

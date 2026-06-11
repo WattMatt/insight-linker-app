@@ -464,6 +464,50 @@ const InspectionDetail = () => {
     toast.success("Tenant deleted successfully");
   };
 
+  // Dialog-scoped capture: upload the file but store the URL on the newTenant
+  // draft only. The image is persisted to the tenants list + DB on dialog Save
+  // (handleSaveTenant), and discarded on Cancel — so a not-yet-saved tenant
+  // doesn't orphan the upload by writing against an id absent from `tenants`.
+  const handleTenantDraftImageUpload = async (field: 'breakerImage' | 'ctRatioImage' | 'meterImage', files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    const uploadKey = `${newTenant.id}-${field}`;
+    setUploadingTenantImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      const file = files[0];
+      const fileExt = file.name.split('.').pop();
+
+      const filePath = generateTenantImagePath({
+        clientName: siteData?.clientName || 'unknown-client',
+        siteName: siteData?.siteName || 'unknown-site',
+        subsectionName: subsectionData?.name || 'unknown-subsection',
+        inspectionId: inspectionId!,
+        tenantId: newTenant.id,
+        field,
+        fileExtension: fileExt || 'jpg'
+      });
+
+      const result = await uploadImage(file, 'inspection-photos', filePath);
+
+      if (!result) {
+        throw new Error('Failed to upload image');
+      }
+
+      setNewTenant(prev => ({ ...prev, [field]: result.url }));
+      toast.success("Image captured. Save the tenant to keep it.");
+    } catch (error: any) {
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading tenant image:", error);
+      toast.error("Failed to upload image: " + (error?.message || "Unknown error"));
+    } finally {
+      setUploadingTenantImages(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(uploadKey);
+        return newSet;
+      });
+    }
+  };
+
   const handleTenantImageUpload = async (tenantId: string, field: 'breakerImage' | 'ctRatioImage' | 'meterImage', files: FileList | null) => {
     if (!files || files.length === 0) return;
 
@@ -1519,7 +1563,10 @@ const InspectionDetail = () => {
             <Label>Inspection Date</Label>
             <Input
               type="date"
-              value={inspection?.date ? format(new Date(inspection.date), 'yyyy-MM-dd') : ''}
+              value={(() => {
+                const d = inspection?.date ? new Date(inspection.date) : null;
+                return d && !isNaN(d.getTime()) ? format(d, 'yyyy-MM-dd') : '';
+              })()}
               onChange={(e) => handleFieldChange('date', e.target.value)}
             />
           </div>
@@ -1917,7 +1964,10 @@ const InspectionDetail = () => {
           </h1>
           <p className="text-muted-foreground mt-1 text-sm sm:text-base truncate">
             {inspection?.projectName || siteData?.siteName} • {subsectionData?.name}
-            {inspection?.date && ` • ${format(new Date(inspection.date), 'MMM dd, yyyy')}`}
+            {(() => {
+              const d = inspection?.date ? new Date(inspection.date) : null;
+              return d && !isNaN(d.getTime()) ? ` • ${format(d, 'MMM dd, yyyy')}` : '';
+            })()}
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
@@ -2602,7 +2652,7 @@ const InspectionDetail = () => {
                 capture="environment"
                 className="hidden"
                 id="meter-image-upload"
-                onChange={(e) => handleTenantImageUpload(newTenant.id, 'meterImage' as any, e.target.files)}
+                onChange={(e) => handleTenantDraftImageUpload('meterImage', e.target.files)}
               />
               <Button
                 type="button"

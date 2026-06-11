@@ -1,7 +1,8 @@
 import { useCallback } from 'react';
 import { useOfflineSync } from './useOfflineSync';
 import { 
-  saveOfflinePin, 
+  saveOfflinePin,
+  getOfflinePin,
   getFloorPlanPins,
   deleteOfflinePin,
   saveMarkup,
@@ -136,13 +137,12 @@ export function useOfflineFloorPlanAnnotations() {
     }
 
     // Offline mode - save to IndexedDB
-    const existingPin = await getFloorPlanPins(pinId);
-    if (existingPin.length === 0) {
+    const pin = await getOfflinePin(pinId);
+    if (!pin) {
       toast.error('Pin not available offline');
       return;
     }
 
-    const pin = existingPin[0];
     const updatedPin: OfflineFloorPlanPin = {
       ...pin,
       ...updates,

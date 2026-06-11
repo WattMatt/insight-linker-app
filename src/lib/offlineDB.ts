@@ -1,6 +1,10 @@
 // IndexedDB wrapper for offline inspection storage
 const DB_NAME = 'wm_compliance_offline';
-const DB_VERSION = 3;
+// v4: unified with offlineInspectionDB so both modules open the SAME db name at
+// the SAME version with the SAME complete store set (see onupgradeneeded). Before
+// this, offlineDB(v3) and offlineInspectionDB(v2) fought over one db name with
+// divergent schemas, causing VersionError / missing object stores.
+const DB_VERSION = 4;
 
 export interface OfflineInspection {
   id: string;
@@ -167,6 +171,12 @@ class OfflineDatabase {
       request.onerror = () => reject(request.error);
       request.onsuccess = () => {
         this.db = request.result;
+        // If another tab/module triggers a version upgrade, close this handle so
+        // we don't block it (and force a re-open on next use).
+        this.db.onversionchange = () => {
+          this.db?.close();
+          this.db = null;
+        };
         resolve();
       };
 
@@ -251,6 +261,26 @@ class OfflineDatabase {
           photosStore.createIndex('secondary_context_id', 'secondary_context_id', { unique: false });
           photosStore.createIndex('synced', 'synced', { unique: false });
           photosStore.createIndex('photo_type', 'photo_type', { unique: false });
+        }
+
+        // v4: stores owned by offlineInspectionDB — created here too so the
+        // complete schema exists regardless of which module opens the db first.
+        if (!db.objectStoreNames.contains('inspection_cache')) {
+          const cacheStore = db.createObjectStore('inspection_cache', { keyPath: 'id' });
+          cacheStore.createIndex('synced', 'synced', { unique: false });
+          cacheStore.createIndex('site_id', 'site_id', { unique: false });
+          cacheStore.createIndex('cached_at', 'cached_at', { unique: false });
+          cacheStore.createIndex('pending_changes', 'pending_changes', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('inspection_images')) {
+          const imagesStore = db.createObjectStore('inspection_images', { keyPath: 'id' });
+          imagesStore.createIndex('inspection_id', 'inspection_id', { unique: false });
+          imagesStore.createIndex('section_key', 'section_key', { unique: false });
+          imagesStore.createIndex('synced', 'synced', { unique: false });
+        }
+        if (!db.objectStoreNames.contains('template_cache')) {
+          const templateStore = db.createObjectStore('template_cache', { keyPath: 'id' });
+          templateStore.createIndex('cached_at', 'cached_at', { unique: false });
         }
       };
     });

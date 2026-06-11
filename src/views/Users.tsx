@@ -154,7 +154,7 @@ const Users = () => {
 
   // Fetch all site assignments grouped by site
   const { data: siteAssignments, isLoading: assignmentsLoading } = useQuery({
-    queryKey: ["site-assignments"],
+    queryKey: ["site-assignments-grouped"],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("user_sites")
@@ -445,6 +445,7 @@ const Users = () => {
     onSuccess: () => {
       toast.success("Site assignments updated successfully");
       queryClient.invalidateQueries({ queryKey: ["users"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignments-grouped"] });
       setEditSitesOpen(false);
       setEditSitesUser(null);
       setEditUserSiteIds([]);
@@ -571,7 +572,8 @@ const Users = () => {
     if (!selectedUser) return;
 
     try {
-      let avatarUrl = editFormData.full_name ? selectedUser.avatar_url : null;
+      // Preserve the existing avatar unless the admin explicitly changes it.
+      let avatarUrl = selectedUser.avatar_url;
 
       // Upload avatar if a new file is selected
       if (avatarFile) {
@@ -595,8 +597,10 @@ const Users = () => {
           .getPublicUrl(fileName);
 
         avatarUrl = publicUrl;
-      } else if (!avatarPreview && selectedUser.avatar_url) {
-        // Remove avatar if preview is cleared
+      } else if (selectedUser.avatar_url && !avatarPreview) {
+        // Explicit remove: a stored avatar existed and the admin cleared the
+        // preview via the Remove button (preview is seeded with the stored URL
+        // on open, so an empty preview here is a deliberate removal).
         const oldPath = selectedUser.avatar_url.split("/").slice(-2).join("/");
         await supabase.storage.from("profile-images").remove([oldPath]);
         avatarUrl = null;

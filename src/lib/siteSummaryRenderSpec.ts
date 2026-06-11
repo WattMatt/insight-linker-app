@@ -513,7 +513,8 @@ export function calculateMetrics(
   cocRequiredCount?: number,
   openSnagCount?: number
 ): SiteSummaryMetrics {
-  const subsectionCount = Math.max(subsections.length, 1);
+  const subsectionCount = subsections.length;
+  const safeDenominator = Math.max(subsections.length, 1);
   const cocRequired = cocRequiredCount ?? subsections.filter(s => s.cocStatus !== null).length;
   const cocCompliant = subsections.filter(s => 
     ['Approved', 'Valid', 'Pass'].includes(s.cocStatus || '')
@@ -524,10 +525,10 @@ export function calculateMetrics(
   const openSnags = openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
   const compliantCount = subsections.filter(s => s.isCompliant).length;
   
-  const overallHealth = Math.round((compliantCount / subsectionCount) * 100);
+  const overallHealth = Math.round((compliantCount / safeDenominator) * 100);
   const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
-  const meteringData = Math.round((meteringInstalled / subsectionCount) * 100);
-  const snagFree = 100 - Math.round((openSnags / subsectionCount) * 100);
+  const meteringData = Math.round((meteringInstalled / safeDenominator) * 100);
+  const snagFree = 100 - Math.round((openSnags / safeDenominator) * 100);
   
   return {
     subsectionCount,
