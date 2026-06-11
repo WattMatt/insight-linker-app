@@ -42,12 +42,16 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Resolve:** Read actual expiry from dashboard; align copy or delete with the function.
 - **Owner:** folds into G-SEC-03.
 
-### G-SEC-06 · Invites sent from `onboarding@resend.dev` 🟠 Med-High — FIXED in branch, awaiting deploy
+### G-SEC-06 · Invites sent from `onboarding@resend.dev` 🟢 CLOSED 2026-06-11 (deployed)
+- **Closure:** invite-user deployed v297 (2026-06-11 09:19) with sender `noreply@watsonmattheus.com`. To fully verify delivery, send a real invite to an external address (Owner: Arno). Auth gate re-verified post-deploy (no-auth → 401, anon → handler-reject).
+- *(original below)*
 - **Gap:** `invite-user` sent from Resend's sandbox sender (was `index.ts:452`) vs `noreply@watsonmattheus.com` for password reset. **Resend sandbox senders only deliver to the account owner's own address** — external invites were likely silently failing.
 - **Fix (branch `fix/sec-gaps-invite-user`):** sender → `noreply@watsonmattheus.com`, matching send-password-reset:190.
 - **To close:** deploy invite-user, send a test invite to an external address, confirm delivery. **Owner:** Claude (deploy on Arno's OK) · Arno confirms receipt.
 
-### G-SEC-07 · Invite `redirectTo` derived from request origin header 🟠 Medium — FIXED in branch, awaiting deploy
+### G-SEC-07 · Invite `redirectTo` derived from request origin header 🟢 CLOSED 2026-06-11 (deployed)
+- **Closure:** invite-user deployed v297; redirect base now from `APP_URL` env. Fixes both invite + recovery redirects.
+- *(original below)*
 - **Gap:** `invite-user` built the invite link from `origin`/`referer` (was `index.ts:76-77`, also feeding `recoveryRedirect` at :200) instead of an env var — invites from a preview/spoofed host would point invitees there.
 - **Fix (branch `fix/sec-gaps-invite-user`):** `origin` now sourced from `Deno.env.get('APP_URL')` with the prod fallback, mirroring send-password-reset:69. One change fixes both the invite and recovery redirects.
 - **To close:** deploy invite-user. **Owner:** Claude (deploy on Arno's OK).

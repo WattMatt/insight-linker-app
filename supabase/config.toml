@@ -43,9 +43,6 @@ verify_jwt = false
 verify_jwt = false
 
 
-[functions.abacus-code-review]
-verify_jwt = true
-
 [functions.generate-pdf]
 verify_jwt = false
 
