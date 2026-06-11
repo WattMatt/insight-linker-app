@@ -1,5 +1,5 @@
 -- ============================================================================
--- PENDING — DO NOT APPLY YET.  Tier 2: close anonymous full-dataset READ.
+-- APPLIED to production 2026-06-11 (SQL editor). Kept for the record. Tier 2: close anonymous full-dataset READ.
 -- ============================================================================
 -- This is intentionally OUTSIDE supabase/migrations/ so it is NOT auto-applied.
 --
@@ -26,12 +26,12 @@ BEGIN
       AND tablename NOT IN ('settings')
   LOOP
     FOR p IN
-      SELECT polname FROM pg_policies
+      SELECT policyname FROM pg_policies
       WHERE schemaname='public' AND tablename=t.tablename AND cmd='SELECT' AND qual='true'
         AND (roles='{public}' OR 'anon'=ANY(roles))
     LOOP
-      EXECUTE format('DROP POLICY %I ON public.%I', p.polname, t.tablename);
-      RAISE NOTICE 'Removed anon SELECT policy "%" on %', p.polname, t.tablename;
+      EXECUTE format('DROP POLICY %I ON public.%I', p.policyname, t.tablename);
+      RAISE NOTICE 'Removed anon SELECT policy "%" on %', p.policyname, t.tablename;
     END LOOP;
     EXECUTE format('DROP POLICY IF EXISTS %I ON public.%I', 'auth_read_'||t.tablename, t.tablename);
     EXECUTE format('CREATE POLICY %I ON public.%I FOR SELECT TO authenticated USING (true)',
@@ -41,6 +41,6 @@ END $$;
 COMMIT;
 
 -- POST-APPLY VERIFICATION (expect ZERO rows):
---   SELECT tablename, polname FROM pg_policies
+--   SELECT tablename, policyname FROM pg_policies
 --   WHERE schemaname='public' AND cmd='SELECT' AND qual='true'
 --     AND (roles='{public}' OR 'anon'=ANY(roles)) AND tablename <> 'settings';
