@@ -52,19 +52,23 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Fix (branch `fix/sec-gaps-invite-user`):** `origin` now sourced from `Deno.env.get('APP_URL')` with the prod fallback, mirroring send-password-reset:69. One change fixes both the invite and recovery redirects.
 - **To close:** deploy invite-user. **Owner:** Claude (deploy on Arno's OK).
 
-### G-SEC-09 · `create-user-admin` — UNAUTHENTICATED account creation 🔴🔴 CRITICAL — live in prod
+### G-SEC-09 · `create-user-admin` — UNAUTHENTICATED account creation 🟢 CLOSED 2026-06-11 (deleted from prod)
+- **Closure evidence:** `supabase functions delete create-user-admin --project-ref oltzgidkjxwsukvkomof` → "Deleted Function". No longer in `functions list`. Re-probe `POST .../create-user-admin` → HTTP 404 `NOT_FOUND`. Source preserved at `docs/system-reference/_work/unversioned-prod-functions/create-user-admin.PULLED-FROM-PROD.ts`.
+- *(Original finding, for the record:)*
 - **Gap:** Edge function `create-user-admin` (deployed v2 since 2026-02-12, **source NOT in repo**) uses the **service-role key** and calls `auth.admin.createUser({ email, password, email_confirm: true })` from the raw request body with **NO authentication check of any kind** — no `Authorization` verification, no admin-role gate (contrast `invite-user/index.ts:32-54`).
 - **Evidence (2026-06-11):** source pulled via `supabase functions download` to `/tmp/fnreview/.../create-user-admin/index.ts` (lines 13-24 = no guard). Live probe: `POST .../functions/v1/create-user-admin` with **no Authorization header**, body `{}` → HTTP 400 `"Cannot create a user without either an email or phone"` — i.e. the request reached the handler unauthenticated (`verify_jwt` is OFF; even if ON, the public anon key satisfies it). No user was created (empty body). 0 repo callers.
 - **Impact:** anyone on the internet can create a fully email-confirmed account with a chosen password — bypasses the invite-only model and email confirmation entirely; yields a working login. Compounds with G-SEC-01.
 - **Resolve:** **DELETE from prod immediately** — it has no callers and no repo source. `supabase functions delete create-user-admin --project-ref oltzgidkjxwsukvkomof`. Source is backed up at `/tmp/fnreview` if ever needed. (If a real use surfaces later, re-implement WITH an admin-role guard + `verify_jwt`.)
 - **Owner:** Arno approves deletion (destructive, prod) · Claude executes the one command on OK. **Blocking — recommend before any other gap work.**
 
-### G-SEC-08 · 7 prod edge functions have no source in the repo 🔴 High
+### G-SEC-08 · 7 prod edge functions had no source in the repo 🟢 CLOSED 2026-06-11 (all 7 deleted)
+- **Closure evidence:** all 7 reviewed, sources preserved at `docs/system-reference/_work/unversioned-prod-functions/*.PULLED-FROM-PROD.ts`, then deleted from prod (`supabase functions delete`). Verified: none appear in `functions list`; every endpoint returns HTTP 404 on probe. create-user-admin → G-SEC-09 (CRITICAL, was the headline). Others were unauthenticated service-role endpoints / finished one-off migrations with 0 repo callers: bulk-validate-coc (RLS-bypass COC read), abacus-code-review (denial-of-wallet on paid Abacus key + third-party egress), migrate-storage/images (unauth bucket upload), migrate-firebase-data, audit-orphan-photos (read-only). All confirmed superseded or obsolete.
+- *(Original finding, for the record:)*
 - **Gap:** `supabase functions list` shows 7 ACTIVE functions absent from `supabase/functions/`: `create-user-admin` (→ G-SEC-09), `abacus-code-review`, `bulk-validate-coc`, `audit-orphan-photos`, `migrate-storage`, `migrate-images`, `migrate-firebase-data`. All have **0 repo references**. Unreviewable prod attack surface; the June security review (26 repo functions) never covered them.
 - **Notables:** `abacus-code-review` (third-party? may exfiltrate code — review its source + egress); the three `migrate-*` are likely one-off data migrations safe to remove; `bulk-validate-coc`/`audit-orphan-photos` need an auth-model review like the repo functions got.
 - **Resolve:** Download each (`supabase functions download <slug>`), review auth model + side effects, then per function: delete if obsolete, or commit to repo + pin `verify_jwt` if kept. Probe each unauthenticated (folds into G-TEST-03).
 - **Owner:** Claude (download + review + recommendation) · Arno (delete/keep decisions).
-- **Status:** create-user-admin reviewed (→ G-SEC-09 CRITICAL); other 6 pending review.
+- **Status:** create-user-admin reviewed → G-SEC-09 → **deleted/closed**. Other 6 pending review: abacus-code-review, bulk-validate-coc, audit-orphan-photos, migrate-storage, migrate-images, migrate-firebase-data.
 
 ## TEST — verification infrastructure (assessed 2026-06-11; repo has ZERO automated tests, no CI, tsc/eslint gates disabled)
 
