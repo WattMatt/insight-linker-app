@@ -126,13 +126,13 @@ interface InspectionTenantMatch {
 // Minimum container height; actual height adapts to PDF
 const MIN_CONTAINER_HEIGHT = 400;
 
-// Size presets
+// Size presets (percentage of the page, matching the % render layer)
 const SIZE_PRESETS = {
-  small: { width: 80, height: 50, label: "Small", description: "80 × 50 px" },
-  medium: { width: 150, height: 100, label: "Medium", description: "150 × 100 px" },
-  large: { width: 220, height: 140, label: "Large", description: "220 × 140 px" },
-  wide: { width: 200, height: 80, label: "Wide", description: "200 × 80 px" },
-  tall: { width: 100, height: 150, label: "Tall", description: "100 × 150 px" },
+  small: { width: 4, height: 3, label: "Small", description: "4 × 3 %" },
+  medium: { width: 8, height: 6, label: "Medium", description: "8 × 6 %" },
+  large: { width: 12, height: 9, label: "Large", description: "12 × 9 %" },
+  wide: { width: 16, height: 6, label: "Wide", description: "16 × 6 %" },
+  tall: { width: 6, height: 12, label: "Tall", description: "6 × 12 %" },
   custom: { width: 0, height: 0, label: "Custom", description: "Set your own" },
 };
 
@@ -200,7 +200,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Block size configuration dialog
   const [sizeDialogOpen, setSizeDialogOpen] = useState(false);
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
-  const [customSize, setCustomSize] = useState({ width: 150, height: 100 });
+  const [customSize, setCustomSize] = useState({ width: 8, height: 6 });
 
   // Measure container width on mount and resize
   useEffect(() => {
@@ -590,7 +590,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         newY = originalBlock.y + dyPercent;
       }
 
-      setBlocks(blocks.map(b => 
+      // Clamp position to page bounds (mirror handleSchematicClick)
+      newX = Math.max(0, Math.min(100 - newWidth, newX));
+      newY = Math.max(0, Math.min(100 - newHeight, newY));
+
+      setBlocks(blocks.map(b =>
         b.id === resizing.blockId
           ? { ...b, width: newWidth, height: newHeight, x_position: newX, y_position: newY }
           : b
@@ -605,16 +609,20 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       
       // Find snap points (now using percentages)
       const { snappedX, snappedY, snapX, snapY } = findSnapPoints(
-        dragging.blockId, 
-        rawX, 
-        rawY, 
-        block.width, 
+        dragging.blockId,
+        rawX,
+        rawY,
+        block.width,
         block.height
       );
 
-      setBlocks(blocks.map(b => 
-        b.id === dragging.blockId 
-          ? { ...b, x_position: snappedX, y_position: snappedY }
+      // Clamp position to page bounds (mirror handleSchematicClick)
+      const clampedX = Math.max(0, Math.min(100 - block.width, snappedX));
+      const clampedY = Math.max(0, Math.min(100 - block.height, snappedY));
+
+      setBlocks(blocks.map(b =>
+        b.id === dragging.blockId
+          ? { ...b, x_position: clampedX, y_position: clampedY }
           : b
       ));
       setSnapLines({ x: snapX, y: snapY });
@@ -2047,30 +2055,30 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               </div>
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-1">
-                  <Label htmlFor="custom_width" className="text-xs text-muted-foreground">Width (px)</Label>
+                  <Label htmlFor="custom_width" className="text-xs text-muted-foreground">Width (%)</Label>
                   <Input
                     id="custom_width"
                     type="number"
-                    min={40}
-                    max={500}
+                    min={2}
+                    max={40}
                     value={customSize.width}
                     onChange={(e) => {
                       setSelectedSizePreset("custom");
-                      setCustomSize({ ...customSize, width: Math.max(40, Math.min(500, Number(e.target.value))) });
+                      setCustomSize({ ...customSize, width: Math.max(2, Math.min(40, Number(e.target.value))) });
                     }}
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor="custom_height" className="text-xs text-muted-foreground">Height (px)</Label>
+                  <Label htmlFor="custom_height" className="text-xs text-muted-foreground">Height (%)</Label>
                   <Input
                     id="custom_height"
                     type="number"
-                    min={30}
-                    max={500}
+                    min={2}
+                    max={40}
                     value={customSize.height}
                     onChange={(e) => {
                       setSelectedSizePreset("custom");
-                      setCustomSize({ ...customSize, height: Math.max(30, Math.min(500, Number(e.target.value))) });
+                      setCustomSize({ ...customSize, height: Math.max(2, Math.min(40, Number(e.target.value))) });
                     }}
                   />
                 </div>

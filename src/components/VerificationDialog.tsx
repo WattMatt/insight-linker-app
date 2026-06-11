@@ -111,7 +111,8 @@ export function VerificationDialog({ verification, open, onClose, onVerified }: 
           verified_by: user.id,
           rejection_reason: rejectionReason,
           rejection_screenshot_url: screenshotUrl,
-          status: 'in_progress', // Move back to in_progress
+          // issue_reports uses hyphenated status vocabulary; leave suggestions as-is
+          status: verification.type === 'issue' ? 'in-progress' : 'in_progress', // Move back to in-progress
           needs_user_verification: false
         })
         .eq('id', verification.id);

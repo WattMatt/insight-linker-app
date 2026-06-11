@@ -309,6 +309,8 @@ const SiteAssignments = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-assignments-flat"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-site-assignments"] });
       toast.success("Contractor assigned to site successfully");
       setSelectedContractor("");
       setSelectedSite("");
@@ -330,6 +332,8 @@ const SiteAssignments = () => {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["site-assignments-flat"] });
+      queryClient.invalidateQueries({ queryKey: ["site-assignment-history"] });
+      queryClient.invalidateQueries({ queryKey: ["recent-site-assignments"] });
       toast.success("Contractor access removed successfully");
     },
     onError: (error: any) => {

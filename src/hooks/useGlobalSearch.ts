@@ -29,6 +29,19 @@ export interface SearchFilters {
   dateTo?: Date;
 }
 
+/**
+ * Sanitize a user query before interpolating it into PostgREST `.or(...)`/`.ilike(...)`
+ * filter strings.
+ * - Removes the `.or` delimiter `,` and the grouping chars `(`/`)` which would
+ *   produce malformed filters (PostgREST 400 -> silent empty results).
+ * - Backslash-escapes the LIKE wildcards `%` and `_` so they match literally.
+ */
+const sanitizeSearchQuery = (raw: string): string =>
+  raw
+    .replace(/[,()]/g, " ")
+    .replace(/[%_]/g, (ch) => `\\${ch}`)
+    .trim();
+
 export const useGlobalSearch = (
   searchQuery: string,
   filters: SearchFilters = {}
@@ -41,7 +54,7 @@ export const useGlobalSearch = (
       }
 
       const results: SearchResult[] = [];
-      const query = searchQuery.toLowerCase();
+      const query = sanitizeSearchQuery(searchQuery.toLowerCase());
 
       // Search Clients
       let clientQuery = supabase

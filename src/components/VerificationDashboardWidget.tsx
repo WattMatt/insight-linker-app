@@ -35,12 +35,14 @@ export function VerificationDashboardWidget() {
           .from('issue_reports')
           .select('id, description, verification_status, verified_at, rejection_reason, user_name')
           .in('verification_status', ['verified', 'rejected'])
+          .not('verified_at', 'is', null)
           .order('verified_at', { ascending: false })
           .limit(3),
         supabase
           .from('suggestions')
           .select('id, title, verification_status, verified_at, rejection_reason, user_name')
           .in('verification_status', ['verified', 'rejected'])
+          .not('verified_at', 'is', null)
           .order('verified_at', { ascending: false })
           .limit(3)
       ]);

@@ -259,9 +259,11 @@ const Calendar = () => {
   const { generatePdf, isGenerating: isExporting } = useUnifiedPdfGeneration();
 
   const exportToPDF = async () => {
+    const now = new Date();
     const totalEvents = events?.length || 0;
     const completedCount = events?.filter(e => e.status.toLowerCase() === 'completed').length || 0;
-    const upcomingCount = events?.filter(e => parseISO(e.start_date) > new Date()).length || 0;
+    // Disjoint buckets: upcoming excludes completed events so they aren't double-counted.
+    const upcomingCount = events?.filter(e => e.status.toLowerCase() !== 'completed' && parseISO(e.start_date) > now).length || 0;
     const pendingCount = totalEvents - completedCount - upcomingCount;
 
     const reportData: CalendarReportData = {

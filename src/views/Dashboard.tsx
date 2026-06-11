@@ -217,6 +217,19 @@ const Dashboard = () => {
     ? Math.round((stats.closedSnags / stats.totalSnags) * 100)
     : 100;
 
+  // Pass rate over the DECIDED set (passed + failed) so unbucketed/pending
+  // validations don't dilute the percentage.
+  const decidedValidations = stats.passedValidations + stats.failedValidations;
+  const validationPassRate = decidedValidations > 0
+    ? Math.round((stats.passedValidations / decidedValidations) * 100)
+    : 0;
+
+  // Statuses that fall outside passed/failed/pending so the stacked bar sums to 100%.
+  const otherValidations = Math.max(
+    0,
+    stats.totalCocValidations - stats.passedValidations - stats.failedValidations - stats.pendingValidations
+  );
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-full">
@@ -419,19 +432,33 @@ const Dashboard = () => {
               <div className="flex justify-between items-center mb-2">
                 <span className="text-sm font-medium">Validation Pass Rate</span>
                 <span className="text-sm font-bold text-green-600 dark:text-green-400">
-                  {Math.round((stats.passedValidations / stats.totalCocValidations) * 100)}%
+                  {validationPassRate}%
                 </span>
               </div>
               <div className="relative h-3 bg-muted rounded-full overflow-hidden">
-                <div 
+                <div
                   className="absolute left-0 top-0 h-full bg-green-500 transition-all"
                   style={{ width: `${(stats.passedValidations / stats.totalCocValidations) * 100}%` }}
                 />
-                <div 
+                <div
                   className="absolute top-0 h-full bg-red-500 transition-all"
-                  style={{ 
+                  style={{
                     left: `${(stats.passedValidations / stats.totalCocValidations) * 100}%`,
-                    width: `${(stats.failedValidations / stats.totalCocValidations) * 100}%` 
+                    width: `${(stats.failedValidations / stats.totalCocValidations) * 100}%`
+                  }}
+                />
+                <div
+                  className="absolute top-0 h-full bg-yellow-500 transition-all"
+                  style={{
+                    left: `${((stats.passedValidations + stats.failedValidations) / stats.totalCocValidations) * 100}%`,
+                    width: `${(stats.pendingValidations / stats.totalCocValidations) * 100}%`
+                  }}
+                />
+                <div
+                  className="absolute top-0 h-full bg-muted-foreground/30 transition-all"
+                  style={{
+                    left: `${((stats.passedValidations + stats.failedValidations + stats.pendingValidations) / stats.totalCocValidations) * 100}%`,
+                    width: `${(otherValidations / stats.totalCocValidations) * 100}%`
                   }}
                 />
               </div>
@@ -448,6 +475,12 @@ const Dashboard = () => {
                   <span className="w-2 h-2 rounded-full bg-yellow-500"></span>
                   Pending ({stats.pendingValidations})
                 </span>
+                {otherValidations > 0 && (
+                  <span className="flex items-center gap-1">
+                    <span className="w-2 h-2 rounded-full bg-muted-foreground/30"></span>
+                    Other ({otherValidations})
+                  </span>
+                )}
               </div>
             </div>
           )}

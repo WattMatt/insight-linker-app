@@ -580,7 +580,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
 
   // Subsections Table Page
   const renderSubsectionsPage = () => {
-    const section = sections.find(s => s.id === 'subsections' || s.type === 'table');
+    const section = sections.find(s => s.id === 'subsection-details');
     const columns = section?.columns || [
       { id: 'name', label: 'Shop Name', field: 'name', visible: true },
       { id: 'tenant', label: 'Tenant', field: 'tenantName', visible: true },
@@ -599,7 +599,7 @@ export const PDFWYSIWYGEditor: React.FC<PDFWYSIWYGEditorProps> = ({
             />
           </h2>
           <button
-            onClick={() => setAddColumnDialog({ open: true, sectionId: section?.id || 'subsections' })}
+            onClick={() => setAddColumnDialog({ open: true, sectionId: section?.id || 'subsection-details' })}
             className="text-gray-400 hover:text-gray-600"
             style={{ padding: 4 * zoom }}
           >
