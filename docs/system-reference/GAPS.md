@@ -11,6 +11,16 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 
 ---
 
+## ✅ PROD SECURITY ACTIONS APPLIED 2026-06-11 (via Supabase Management API / PAT)
+
+- 🟢 **G-SEC-01 CLOSED** — `disable_signup: true` set on prod (verified). The critical self-register→all-tenant-data vector is shut.
+- 🟢 **G-SEC-11 CLOSED** — `REVOKE ALL FROM anon` on `contractor_coc_uploads` + `inspection_relink_audit`; verified anon read+write → 401.
+- 🟢 **G-SEC-14 (anon write) CLOSED** — dropped the blanket "Anyone can upload/update/delete to all storage" policies → authenticated-only. (Follow-up: make `documents` bucket private + signed-URL per Arno's decision.)
+- 🟢 **G-SEC-13 / G-SEC-20 admin-config APPLIED** — `settings`/`inspection_templates`/`validation_feedback` writes now staff-gated (`NOT Contractor AND NOT Client`); no `{public}` write policies remain. Reads unchanged.
+- 🟢 **snag lifecycle APPLIED** — `snags.status` CHECK widened to `('Open','Rectified','Closed')` (all 121 rows were 'Open', no backfill needed).
+- 🟢 **G-SEC-02 answered** — captcha is OFF (hcaptcha configured, not enabled). Low priority now signup is closed.
+- 🟢 **G-SEC-03 answered** — NO Send-Email auth hook is configured, so `send-password-reset` is a true orphan → safe to delete (not load-bearing).
+
 ## SEC — security & configuration (from Phase 1, auth-flows)
 
 ### G-SEC-01 · Open signup → auto-`User` role → all-tenant data 🔴🔴 CRITICAL (escalated 2026-06-11) — #1 dashboard action
