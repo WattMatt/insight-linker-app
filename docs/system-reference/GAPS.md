@@ -32,6 +32,7 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Resolve — DASHBOARD CHECK FIRST (Owner Arno):** Supabase → Authentication → Hooks → "Send Email". Is it set to `send-password-reset`?
   - **If YES:** it's load-bearing — keep. Then harden: confirm it validates the GoTrue hook signature/secret (else it's still a callable open email sender). Claude reviews the hook-signature handling.
   - **If NO:** confirmed orphan — safe to delete (source is in repo at `supabase/functions/send-password-reset/`; preserve + `supabase functions delete`).
+- **Gate probe (2026-06-11):** no-auth `POST` reaches the handler (400 "Email is required") → `verify_jwt` is OFF, directly callable unauthenticated. So **either branch needs action**: if not the hook → delete; if it IS the hook → it isn't validating the hook signature, so it's still an open email-sender (anyone can trigger a branded reset email to any address, only 5/min/IP in-isolate) → harden with signature validation. The dashboard check only decides delete-vs-harden.
 - **Owner:** Arno (one dashboard check) → Claude executes the resulting action.
 
 ### G-SEC-04 · invite/delete-user wrote no audit rows 🟢 CLOSED 2026-06-11 (deployed) — residual noted
