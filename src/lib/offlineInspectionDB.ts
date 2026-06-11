@@ -3,7 +3,10 @@ const DB_NAME = 'wm_compliance_offline';
 // v4: must match offlineDB.ts DB_VERSION. Both modules share this db name and
 // now create the SAME complete store set, so neither clobbers the other's schema
 // and there is no version skew (which previously threw VersionError).
-const DB_VERSION = 4;
+// v5: added the `queue_blobs` store (mirrors offlineDB.ts) so the localStorage
+// mutation queue keeps binaries in IndexedDB. Both files MUST stay at the same
+// version with the SAME union of stores — keep the two onupgradeneeded blocks identical.
+const DB_VERSION = 5;
 
 export interface CachedInspection {
   id: string;
@@ -175,6 +178,13 @@ class OfflineInspectionDatabase {
           photosStore.createIndex('secondary_context_id', 'secondary_context_id', { unique: false });
           photosStore.createIndex('synced', 'synced', { unique: false });
           photosStore.createIndex('photo_type', 'photo_type', { unique: false });
+        }
+
+        // v5: queue_blobs — binary payloads for the localStorage mutation queue.
+        // Created here too so the complete schema exists regardless of which module
+        // opens the db first. (Shared with offlineDB.ts — keep the two in sync.)
+        if (!db.objectStoreNames.contains('queue_blobs')) {
+          db.createObjectStore('queue_blobs', { keyPath: 'id' });
         }
       };
     });

@@ -151,7 +151,9 @@ export function useOfflineFloorPlanAnnotations() {
     };
 
     await saveOfflinePin(updatedPin);
-    queueMutation('UPDATE_FLOOR_PLAN_PIN', { pinId, updates, photo });
+    // Pass photoFileName separately: the File is externalized to queue_blobs as a bare
+    // Blob (loses .name), so the flush handler builds the storage path from this instead.
+    queueMutation('UPDATE_FLOOR_PLAN_PIN', { pinId, updates, photo, photoFileName: photo?.name });
     toast.success('Pin updated offline. Will sync when online.');
   }, [isOnline, queueMutation]);
 

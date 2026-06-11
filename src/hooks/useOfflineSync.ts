@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -10,16 +10,101 @@ interface QueuedMutation {
   data: any;
   timestamp: number;
   retries: number;
+  // A8: set once retries hit MAX_RETRIES so we stop looping and surface the failure.
+  sync_error?: string | null;
 }
 
 const QUEUE_KEY = 'offline_mutation_queue';
 const MAX_RETRIES = 3;
+
+// A2: keys on a mutation's `data` object whose values are Blob/File and therefore
+// must be moved into IndexedDB (queue_blobs) rather than JSON.stringify-ed into {}.
+// At enqueue we replace `<key>` with `<key>_blob_id` (a queue_blobs id). At flush we
+// re-read the blob by that id, and delete it after a successful upload.
+const BLOB_FIELDS = ['file', 'blob', 'photo'] as const;
+
+// A2: walk a mutation payload, persist any top-level or pin.photo_blob binaries to
+// queue_blobs, and replace them with `<key>_blob_id` references. Returns a shallow
+// clone that is safe to JSON.stringify (no Blob/File survives). Synchronous-free of
+// surprises: callers await this before pushing to the queue.
+async function externalizeBlobs(data: any): Promise<any> {
+  if (!data || typeof data !== 'object') return data;
+  const out: any = { ...data };
+
+  // Top-level binary fields (UPLOAD_IMAGE.file, UPLOAD_DOCUMENT.file,
+  // UPLOAD_FLOOR_PLAN.file, UPLOAD_INSPECTION_IMAGE.blob, UPDATE_FLOOR_PLAN_PIN.photo).
+  for (const key of BLOB_FIELDS) {
+    if (out[key] instanceof Blob) {
+      out[`${key}_blob_id`] = await offlineDB.putQueueBlob(out[key]);
+      delete out[key];
+    }
+  }
+
+  // ADD_FLOOR_PLAN_PIN carries the binary nested at data.pin.photo_blob.
+  if (out.pin && typeof out.pin === 'object' && out.pin.photo_blob instanceof Blob) {
+    const pin = { ...out.pin };
+    pin.photo_blob_id = await offlineDB.putQueueBlob(pin.photo_blob);
+    delete pin.photo_blob;
+    out.pin = pin;
+  }
+
+  // BATCH_UPLOAD_INSPECTION_IMAGES carries an array of { blob, ... } entries.
+  if (Array.isArray(out.images)) {
+    out.images = await Promise.all(out.images.map(async (img: any) => {
+      if (img && img.blob instanceof Blob) {
+        const clone = { ...img };
+        clone.blob_id = await offlineDB.putQueueBlob(img.blob);
+        delete clone.blob;
+        return clone;
+      }
+      return img;
+    }));
+  }
+
+  return out;
+}
+
+// A8: derive a STABLE, deterministic UUID from an arbitrary offline id (e.g.
+// "offline_doc_173..._0.5"). Server PK columns are uuid-typed, so we cannot insert
+// the raw offline id. Hashing it into a fixed uuid means every retry of the same
+// queued mutation targets the SAME row, so an upsert is idempotent (no duplicates).
+// Uses SHA-256 → first 16 bytes → RFC-4122 v5-shaped uuid (deterministic, not random).
+async function deterministicUuid(seed: string): Promise<string> {
+  const bytes = new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(seed)));
+  const b = bytes.slice(0, 16);
+  b[6] = (b[6] & 0x0f) | 0x50; // version 5
+  b[8] = (b[8] & 0x3f) | 0x80; // RFC-4122 variant
+  const hex = Array.from(b, (x) => x.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// A2: collect every queue_blobs id referenced by a mutation so we can delete them
+// all once the mutation has been fully processed (success) or permanently dropped.
+function collectBlobIds(data: any): string[] {
+  if (!data || typeof data !== 'object') return [];
+  const ids: string[] = [];
+  for (const key of BLOB_FIELDS) {
+    if (typeof data[`${key}_blob_id`] === 'string') ids.push(data[`${key}_blob_id`]);
+  }
+  if (data.pin && typeof data.pin.photo_blob_id === 'string') ids.push(data.pin.photo_blob_id);
+  if (Array.isArray(data.images)) {
+    for (const img of data.images) {
+      if (img && typeof img.blob_id === 'string') ids.push(img.blob_id);
+    }
+  }
+  return ids;
+}
 
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [queueSize, setQueueSize] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const queryClient = useQueryClient();
+  // A7: ref-based concurrency guard (mirrors useOfflinePhotos.syncingRef). Unlike the
+  // old `isSyncing` React state, a ref is read synchronously and is not captured stale
+  // by the processQueue closure, so overlapping triggers (online event + effect +
+  // manual button) cannot double-flush the same queue.
+  const syncingRef = useRef(false);
 
   // Load queue from localStorage
   const getQueue = useCallback((): QueuedMutation[] => {
@@ -37,15 +122,19 @@ export function useOfflineSync() {
     setQueueSize(queue.length);
   }, []);
 
-  // Add mutation to queue
-  const queueMutation = useCallback((type: string, data: any) => {
+  // Add mutation to queue. A2: binaries are externalized to queue_blobs first so the
+  // localStorage entry only ever holds blob ids — never the bytes (which JSON.stringify
+  // would silently turn into {}, destroying the image).
+  const queueMutation = useCallback(async (type: string, data: any) => {
+    const safeData = await externalizeBlobs(data);
     const queue = getQueue();
     const mutation: QueuedMutation = {
-      id: `${Date.now()}_${Math.random()}`,
+      id: crypto.randomUUID(),
       type,
-      data,
+      data: safeData,
       timestamp: Date.now(),
       retries: 0,
+      sync_error: null,
     };
     queue.push(mutation);
     saveQueue(queue);
@@ -89,12 +178,16 @@ export function useOfflineSync() {
       }
 
       case 'UPLOAD_IMAGE': {
-        const { bucket, path, file, inspectionId } = mutation.data;
+        // A2: file lives in queue_blobs; re-read it by id at flush time.
+        const { bucket, path, file_blob_id, inspectionId } = mutation.data;
+        const file = file_blob_id ? await offlineDB.getQueueBlob(file_blob_id) : null;
+        if (!file) throw new Error('UPLOAD_IMAGE: missing blob in queue_blobs');
+        // A8: upsert so a retry after a partial failure overwrites rather than 409s.
         const { error } = await supabase.storage
           .from(bucket)
-          .upload(path, file);
+          .upload(path, file, { upsert: true });
         if (error) throw error;
-        
+
         // Mark as synced in IndexedDB
         if (inspectionId) {
           const images = await offlineDB.getUnsyncedImages();
@@ -121,12 +214,16 @@ export function useOfflineSync() {
       }
 
       case 'UPLOAD_DOCUMENT': {
-        const { documentId, subsectionId, categoryId, file, filePath } = mutation.data;
-        
-        // Upload to storage
+        // A2: file re-read from queue_blobs. A8: deterministic row id + upserts so a
+        // retry (after a partial storage/DB failure) targets the same path and row.
+        const { documentId, subsectionId, categoryId, file_blob_id, filePath, fileName, fileSize } = mutation.data;
+        const file = file_blob_id ? await offlineDB.getQueueBlob(file_blob_id) : null;
+        if (!file) throw new Error('UPLOAD_DOCUMENT: missing blob in queue_blobs');
+
+        // Upload to storage (upsert so a retry overwrites the same object).
         const { error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(filePath, file);
+          .upload(filePath, file, { upsert: true });
         if (uploadError) throw uploadError;
 
         // Get public URL
@@ -134,15 +231,17 @@ export function useOfflineSync() {
           .from('documents')
           .getPublicUrl(filePath);
 
-        // Insert into database
+        // A8: deterministic uuid from the offline documentId → idempotent row write.
+        const rowId = await deterministicUuid(documentId);
         const { error: dbError } = await supabase
           .from('subsection_documents')
-          .insert({
+          .upsert({
+            id: rowId,
             subsection_id: subsectionId,
             category_id: categoryId,
-            file_name: file.name,
+            file_name: fileName,
             file_url: publicUrl,
-            file_size: file.size,
+            file_size: fileSize,
           });
         if (dbError) throw dbError;
 
@@ -153,12 +252,15 @@ export function useOfflineSync() {
       }
 
       case 'UPLOAD_FLOOR_PLAN': {
-        const { floorPlanId, subsectionId, file, filePath } = mutation.data;
-        
-        // Upload to storage
+        // A2: file re-read from queue_blobs. A8: deterministic row id + upserts.
+        const { floorPlanId, subsectionId, file_blob_id, filePath, fileName } = mutation.data;
+        const file = file_blob_id ? await offlineDB.getQueueBlob(file_blob_id) : null;
+        if (!file) throw new Error('UPLOAD_FLOOR_PLAN: missing blob in queue_blobs');
+
+        // Upload to storage (upsert so a retry overwrites the same object).
         const { error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(filePath, file);
+          .upload(filePath, file, { upsert: true });
         if (uploadError) throw uploadError;
 
         // Get public URL
@@ -166,12 +268,14 @@ export function useOfflineSync() {
           .from('documents')
           .getPublicUrl(filePath);
 
-        // Insert into database
+        // A8: deterministic uuid from the offline floorPlanId → idempotent row write.
+        const rowId = await deterministicUuid(floorPlanId);
         const { error: dbError } = await supabase
           .from('subsection_floor_plans')
-          .insert({
+          .upsert({
+            id: rowId,
             subsection_id: subsectionId,
-            file_name: file.name,
+            file_name: fileName,
             file_url: publicUrl,
           });
         if (dbError) throw dbError;
@@ -185,24 +289,34 @@ export function useOfflineSync() {
       case 'ADD_FLOOR_PLAN_PIN': {
         const { pin } = mutation.data;
         const { markPinSynced } = await import('@/lib/offlineFloorPlanDB');
-        
-        // Upload photo if exists
+
+        // A2: photo (if any) re-read from queue_blobs. A8: deterministic storage path
+        // (keyed by the offline pin id, no Date.now()) + upsert so a retry overwrites
+        // the same object instead of leaving an orphaned duplicate upload behind.
         let photoUrl = pin.photo_url;
-        if (pin.photo_blob) {
-          const fileName = `floor-plan-pins/${pin.floor_plan_id}/${Date.now()}_photo.jpg`;
-          await supabase.storage
-            .from('inspection-photos')
-            .upload(fileName, pin.photo_blob);
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('inspection-photos')
-            .getPublicUrl(fileName);
-          photoUrl = publicUrl;
+        if (pin.photo_blob_id) {
+          const photoBlob = await offlineDB.getQueueBlob(pin.photo_blob_id);
+          if (photoBlob) {
+            const fileName = `floor-plan-pins/${pin.floor_plan_id}/${pin.id}_photo.jpg`;
+            const { error: upErr } = await supabase.storage
+              .from('inspection-photos')
+              .upload(fileName, photoBlob, { upsert: true });
+            if (upErr) throw upErr;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('inspection-photos')
+              .getPublicUrl(fileName);
+            photoUrl = publicUrl;
+          }
         }
-        
-        await supabase
+
+        // A8: deterministic uuid from the offline pin id → upsert is idempotent,
+        // so a retry after a partial failure does not create a duplicate pin row.
+        const rowId = await deterministicUuid(pin.id);
+        const { error: dbError } = await supabase
           .from('floor_plan_pins')
-          .insert({
+          .upsert({
+            id: rowId,
             floor_plan_id: pin.floor_plan_id,
             pin_number: pin.pin_number,
             x_position: pin.x_position,
@@ -220,36 +334,45 @@ export function useOfflineSync() {
             photo_url: photoUrl,
             created_by: pin.created_by,
           });
-        
+        if (dbError) throw dbError;
+
         await markPinSynced(pin.id);
         break;
       }
 
       case 'UPDATE_FLOOR_PLAN_PIN': {
-        const { pinId, updates, photo } = mutation.data;
+        // A2: photo re-read from queue_blobs. A8: deterministic storage path (keyed by
+        // pinId, no Date.now()) + upsert so a retry overwrites the same object. The row
+        // write is an .update() on an existing uuid pinId — already idempotent.
+        const { pinId, updates, photoFileName, photo_blob_id } = mutation.data;
         const { markPinSynced } = await import('@/lib/offlineFloorPlanDB');
-        
+
         let photoUrl = updates.photo_url;
-        if (photo) {
-          const fileName = `floor-plan-pins/${pinId}/${Date.now()}_${photo.name}`;
-          await supabase.storage
-            .from('inspection-photos')
-            .upload(fileName, photo);
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('inspection-photos')
-            .getPublicUrl(fileName);
-          photoUrl = publicUrl;
+        if (photo_blob_id) {
+          const photoBlob = await offlineDB.getQueueBlob(photo_blob_id);
+          if (photoBlob) {
+            const fileName = `floor-plan-pins/${pinId}/${photoFileName || 'photo.jpg'}`;
+            const { error: upErr } = await supabase.storage
+              .from('inspection-photos')
+              .upload(fileName, photoBlob, { upsert: true });
+            if (upErr) throw upErr;
+
+            const { data: { publicUrl } } = supabase.storage
+              .from('inspection-photos')
+              .getPublicUrl(fileName);
+            photoUrl = publicUrl;
+          }
         }
-        
-        await supabase
+
+        const { error: dbError } = await supabase
           .from('floor_plan_pins')
           .update({
             ...updates,
             photo_url: photoUrl,
           })
           .eq('id', pinId);
-        
+        if (dbError) throw dbError;
+
         await markPinSynced(pinId);
         break;
       }
@@ -294,7 +417,48 @@ export function useOfflineSync() {
       // ============ Inspection Offline Mutations ============
 
       case 'SAVE_INSPECTION_JSON': {
-        const { inspectionId, jsonData } = mutation.data;
+        // A9: stop blind last-write-wins. Before overwriting the whole server
+        // json_data, read the server row's updated_at and compare it to the moment the
+        // offline edit was captured (editedAt). If the server is NEWER, someone changed
+        // the inspection after we went offline — overwriting would clobber their work.
+        // We skip the write, flag a conflict for manual review, and warn. This is
+        // deliberately CONSERVATIVE: no deep merge (the json shape is item-keyed and
+        // merging risks silent corruption — that needs a product decision).
+        const { inspectionId, jsonData, editedAt } = mutation.data;
+        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
+
+        // Resolve the baseline timestamp the offline edit was made against.
+        // Prefer editedAt threaded from the producer; otherwise fall back to the
+        // locally cached inspection's last_modified.
+        // LIMITATION: if neither is available we proceed with the overwrite (legacy
+        // behaviour) rather than block a legitimate save — documented for device review.
+        let baseline = editedAt as string | undefined;
+        if (!baseline) {
+          const cached = await offlineInspectionDB.getCachedInspection(inspectionId);
+          baseline = cached?.last_modified;
+        }
+
+        const { data: serverRow, error: readErr } = await supabase
+          .from('inspections')
+          .select('updated_at')
+          .eq('id', inspectionId)
+          .single();
+        if (readErr) throw readErr;
+
+        if (baseline && serverRow?.updated_at &&
+            new Date(serverRow.updated_at).getTime() > new Date(baseline).getTime()) {
+          // Conflict: server changed after this offline edit. Do NOT overwrite.
+          console.warn(
+            `[OfflineSync] SAVE_INSPECTION_JSON conflict for ${inspectionId}: ` +
+            `server updated_at (${serverRow.updated_at}) is newer than offline edit ` +
+            `baseline (${baseline}). Skipping overwrite — manual review required.`
+          );
+          mutation.sync_error = 'conflict: server newer than offline edit';
+          // Throwing routes this into the retry/flag path; once retries are exhausted
+          // it is dropped (logged) instead of looping or silently clobbering.
+          throw new Error('SAVE_INSPECTION_JSON conflict: server is newer than offline edit');
+        }
+
         const { error } = await supabase
           .from('inspections')
           .update({
@@ -305,45 +469,36 @@ export function useOfflineSync() {
         if (error) throw error;
 
         // Mark as synced in IndexedDB
-        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
         await offlineInspectionDB.markInspectionSynced(inspectionId);
         break;
       }
 
       case 'UPLOAD_INSPECTION_IMAGE': {
-        const { imageId, inspectionId, sectionKey, itemKey, blob, fileName } = mutation.data;
+        // A2: blob re-read from queue_blobs (was destroyed by JSON.stringify before).
+        const { imageId, inspectionId, sectionKey, itemKey, blob_id, fileName } = mutation.data;
+        const blob = blob_id ? await offlineDB.getQueueBlob(blob_id) : null;
+        if (!blob) throw new Error('UPLOAD_INSPECTION_IMAGE: missing blob in queue_blobs');
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
-        const { generateInspectionImagePath, sanitizeForFileName } = await import('@/lib/imageNaming');
 
         // Get cached inspection for context (client/site/subsection names)
         const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
-        
-        // Generate descriptive file path using the naming utility
+
+        // A8: DETERMINISTIC storage path keyed by the stable offline imageId (NOT
+        // Date.now()). generateInspectionImagePath() stamps Date.now() into the file
+        // name, so a retry would land at a NEW path and produce a NEW public URL —
+        // defeating the de-dupe below and re-uploading the same photo. Anchoring the
+        // file name to imageId makes the path (and therefore the URL) stable across
+        // retries, so upsert + includes() de-dupe are genuinely idempotent.
         const fileExtension = fileName.split('.').pop() || 'jpg';
-        let filePath: string;
-        
-        if (cachedInspection?.site_data) {
-          // Use descriptive naming with client/site/subsection context
-          filePath = generateInspectionImagePath({
-            clientName: cachedInspection.site_data.clientName,
-            siteName: cachedInspection.site_data.siteName,
-            subsectionName: cachedInspection.subsection_data?.name,
-            inspectionId,
-            sectionKey,
-            itemKey: itemKey || 'general',
-            fileExtension
-          });
-        } else {
-          // Fallback to simple path if no context available
-          filePath = `${inspectionId}/${sectionKey}/${itemKey || 'general'}/${Date.now()}.${fileExtension}`;
-        }
+        const filePath = `${inspectionId}/${sectionKey}/${itemKey || 'general'}/${imageId}.${fileExtension}`;
 
         console.log('[OfflineSync] Uploading image with path:', filePath);
 
-        // Upload to storage
+        // A8: upsert so a retry (after a partial failure) overwrites the same object
+        // and yields the same deterministic public URL — no orphaned duplicate upload.
         const { error: uploadError } = await supabase.storage
           .from('inspection-photos')
-          .upload(filePath, blob);
+          .upload(filePath, blob, { upsert: true });
         if (uploadError) throw uploadError;
 
         // Get public URL
@@ -351,7 +506,9 @@ export function useOfflineSync() {
           .from('inspection-photos')
           .getPublicUrl(filePath);
 
-        // Update the inspection's json_data with the new image URL
+        // Update the inspection's json_data with the new image URL.
+        // A8: de-dupe — only push the URL if it is not already present, so a retry
+        // (filePath is deterministic, so publicUrl is stable) doesn't append twice.
         if (cachedInspection) {
           const updatedJsonData = { ...cachedInspection.json_data };
           if (!updatedJsonData[sectionKey]) {
@@ -364,16 +521,19 @@ export function useOfflineSync() {
           if (!updatedJsonData[sectionKey][targetKey].photos) {
             updatedJsonData[sectionKey][targetKey].photos = [];
           }
-          updatedJsonData[sectionKey][targetKey].photos.push(publicUrl);
+          const photos: string[] = updatedJsonData[sectionKey][targetKey].photos;
+          if (!photos.includes(publicUrl)) {
+            photos.push(publicUrl);
 
-          // Update inspection in Supabase
-          await supabase
-            .from('inspections')
-            .update({
-              json_data: updatedJsonData,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', inspectionId);
+            // Update inspection in Supabase (only when we actually added a URL).
+            await supabase
+              .from('inspections')
+              .update({
+                json_data: updatedJsonData,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', inspectionId);
+          }
         }
 
         // Mark image as synced
@@ -385,35 +545,25 @@ export function useOfflineSync() {
       case 'BATCH_UPLOAD_INSPECTION_IMAGES': {
         const { inspectionId, images } = mutation.data;
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
-        const { generateInspectionImagePath } = await import('@/lib/imageNaming');
-        
-        // Get cached inspection for naming context
-        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
 
         for (let index = 0; index < images.length; index++) {
           const image = images[index];
-          const fileExtension = image.fileName.split('.').pop() || 'jpg';
-          
-          let filePath: string;
-          if (cachedInspection?.site_data) {
-            filePath = generateInspectionImagePath({
-              clientName: cachedInspection.site_data.clientName,
-              siteName: cachedInspection.site_data.siteName,
-              subsectionName: cachedInspection.subsection_data?.name,
-              inspectionId,
-              sectionKey: image.sectionKey,
-              itemKey: image.itemKey || 'general',
-              index,
-              fileExtension
-            });
-          } else {
-            filePath = `${inspectionId}/${image.sectionKey}/${image.itemKey || 'general'}/${Date.now()}_${index}.${fileExtension}`;
+          // A2: each image's blob re-read from queue_blobs by its blob_id.
+          const blob = image.blob_id ? await offlineDB.getQueueBlob(image.blob_id) : null;
+          if (!blob) {
+            console.warn('[OfflineSync] BATCH image missing blob in queue_blobs, skipping:', image.id);
+            continue;
           }
-          
+          const fileExtension = image.fileName.split('.').pop() || 'jpg';
+
+          // A8: DETERMINISTIC path keyed by the stable image.id (NOT Date.now()/index),
+          // so a retry overwrites the same object via upsert instead of duplicating it.
+          const filePath = `${inspectionId}/${image.sectionKey}/${image.itemKey || 'general'}/${image.id}.${fileExtension}`;
+
           const { error: uploadError } = await supabase.storage
             .from('inspection-photos')
-            .upload(filePath, image.blob);
-          
+            .upload(filePath, blob, { upsert: true });
+
           if (!uploadError) {
             const { data: { publicUrl } } = supabase.storage
               .from('inspection-photos')
@@ -430,42 +580,98 @@ export function useOfflineSync() {
     }
   };
 
-  // Process queue when online
+  // Process queue when online.
+  //
+  // A7 — snapshot-safe, read-modify-write keyed by id:
+  //   The OLD code read getQueue() once, then at the end did saveQueue(failedMutations),
+  //   which OVERWROTE the whole queue — silently destroying any mutation enqueued while
+  //   the flush was running. We now snapshot the queue for processing, but at the end we
+  //   RE-READ the current queue and only mutate the entries we processed (remove the
+  //   succeeded/dropped ids, bump retries on retryable failures), preserving everything
+  //   else — including items enqueued mid-flush.
+  //
+  // Concurrency is guarded by syncingRef (a ref, read synchronously) instead of the
+  // isSyncing React state, so two near-simultaneous triggers can't both pass the guard.
   const processQueue = useCallback(async () => {
-    if (!isOnline || isSyncing) return;
-
-    const queue = getQueue();
-    if (queue.length === 0) return;
-
+    if (syncingRef.current || !navigator.onLine) return;
+    syncingRef.current = true;
     setIsSyncing(true);
-    const failedMutations: QueuedMutation[] = [];
 
-    for (const mutation of queue) {
-      try {
-        await executeMutation(mutation);
-        console.log('Successfully synced mutation:', mutation.type);
-      } catch (error) {
-        console.error('Failed to process mutation:', error);
-        
-        if (mutation.retries < MAX_RETRIES) {
-          failedMutations.push({
-            ...mutation,
-            retries: mutation.retries + 1,
-          });
-        } else {
-          toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+    try {
+      const snapshot = getQueue();
+      if (snapshot.length === 0) return;
+
+      // ids of mutations to REMOVE from the queue afterwards (succeeded OR permanently
+      // dropped after MAX_RETRIES). Map of id -> {retries, sync_error} for retryable
+      // failures so we update them in place without clobbering newer fields.
+      const removeIds = new Set<string>();
+      const retryUpdates = new Map<string, { retries: number; sync_error: string }>();
+      const blobIdsToDelete: string[] = [];
+      let successCount = 0;
+
+      for (const mutation of snapshot) {
+        // Break the loop if we drop offline mid-flush (mirrors useOfflinePhotos).
+        if (!navigator.onLine) break;
+
+        try {
+          await executeMutation(mutation);
+          console.log('Successfully synced mutation:', mutation.type);
+          removeIds.add(mutation.id);
+          blobIdsToDelete.push(...collectBlobIds(mutation.data));
+          successCount++;
+        } catch (error) {
+          const message = error instanceof Error ? error.message : 'Unknown error';
+          console.error('Failed to process mutation:', mutation.type, error);
+
+          if (mutation.retries + 1 < MAX_RETRIES) {
+            // Still retryable: bump the counter + persist the error, leave it queued.
+            retryUpdates.set(mutation.id, { retries: mutation.retries + 1, sync_error: message });
+          } else {
+            // A8: cap reached — STOP retrying. Drop it (so it can't loop forever) but log
+            // exactly what was dropped, and clean up its orphaned blobs. The mutation's
+            // sync_error is already surfaced; nothing is silently lost without a trace.
+            console.error(
+              `[OfflineSync] DROPPING ${mutation.type} (id=${mutation.id}) after ${MAX_RETRIES} attempts. ` +
+              `Last error: ${message}. Payload:`, mutation.data
+            );
+            toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+            removeIds.add(mutation.id);
+            blobIdsToDelete.push(...collectBlobIds(mutation.data));
+          }
         }
       }
-    }
 
-    saveQueue(failedMutations);
-    setIsSyncing(false);
+      // A7: read-modify-write. Re-read the CURRENT queue (it may have grown mid-flush),
+      // then rebuild it preserving untouched + newly-enqueued items.
+      const current = getQueue();
+      const next = current
+        .filter((m) => !removeIds.has(m.id))
+        .map((m) => {
+          const upd = retryUpdates.get(m.id);
+          return upd ? { ...m, retries: upd.retries, sync_error: upd.sync_error } : m;
+        });
+      saveQueue(next);
 
-    if (failedMutations.length === 0 && queue.length > 0) {
-      toast.success(`Synced ${queue.length} offline action${queue.length > 1 ? 's' : ''}`);
-      queryClient.invalidateQueries();
+      // Clean up queue_blobs for everything we removed (success or permanent drop).
+      for (const blobId of blobIdsToDelete) {
+        try {
+          await offlineDB.deleteQueueBlob(blobId);
+        } catch (e) {
+          console.warn('[OfflineSync] Failed to delete queue blob', blobId, e);
+        }
+      }
+
+      if (successCount > 0) {
+        toast.success(`Synced ${successCount} offline action${successCount > 1 ? 's' : ''}`);
+        queryClient.invalidateQueries();
+      }
+    } catch (error) {
+      console.error('[OfflineSync] processQueue error:', error);
+    } finally {
+      setIsSyncing(false);
+      syncingRef.current = false;
     }
-  }, [isOnline, isSyncing, getQueue, saveQueue, queryClient]);
+  }, [getQueue, saveQueue, queryClient]);
 
   // Monitor online/offline status
   useEffect(() => {

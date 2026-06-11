@@ -276,8 +276,10 @@ export default function OfflineSyncTest() {
     addLog(`Found ${unsyncedImages.length} unsynced images`);
 
     for (const image of unsyncedImages) {
-      // Queue the upload mutation
-      queueMutation('UPLOAD_INSPECTION_IMAGE', {
+      // Queue the upload mutation. await: queueMutation is now async (it externalizes
+      // the blob to queue_blobs before writing the queue entry), and we processQueue()
+      // right after — so we must let the enqueue finish first.
+      await queueMutation('UPLOAD_INSPECTION_IMAGE', {
         imageId: image.id,
         inspectionId: image.inspection_id,
         sectionKey: image.section_key,
@@ -293,9 +295,13 @@ export default function OfflineSyncTest() {
     addLog(`Found ${unsyncedInspections.length} inspections with pending changes`);
 
     for (const inspection of unsyncedInspections) {
-      queueMutation('SAVE_INSPECTION_JSON', {
+      await queueMutation('SAVE_INSPECTION_JSON', {
         inspectionId: inspection.id,
-        jsonData: inspection.json_data
+        jsonData: inspection.json_data,
+        // A9: thread the moment this offline edit was made so the flush can detect a
+        // concurrent server change (server updated_at newer than this) and skip the
+        // blind overwrite instead of clobbering someone else's work.
+        editedAt: inspection.last_modified,
       });
       addLog(`Queued inspection data: ${inspection.title}`);
     }

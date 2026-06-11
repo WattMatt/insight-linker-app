@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { 
@@ -25,6 +25,13 @@ export function useOfflineInspectionDetail({
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
+  // A11: cache of object URLs keyed by image id. getSectionImages() used to mint a
+  // fresh URL.createObjectURL per image on EVERY call and never revoke it — a steady
+  // memory leak. We now reuse a cached URL per image id (stable across re-renders) and
+  // revoke them all on unmount. Stored in a ref so it survives re-renders without
+  // re-triggering effects.
+  const objectUrlCacheRef = useRef<Map<string, string>>(new Map());
+
   // Monitor online/offline status
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -36,6 +43,18 @@ export function useOfflineInspectionDetail({
     return () => {
       window.removeEventListener('online', handleOnline);
       window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
+
+  // A11: revoke every cached object URL when the hook unmounts so the blob memory is
+  // released. (Empty deps: the ref instance is stable; we only clean up on unmount.)
+  useEffect(() => {
+    const cache = objectUrlCacheRef.current;
+    return () => {
+      for (const url of cache.values()) {
+        URL.revokeObjectURL(url);
+      }
+      cache.clear();
     };
   }, []);
 
@@ -233,13 +252,22 @@ export function useOfflineInspectionDetail({
       });
     }
 
-    // Get offline images
+    // Get offline images. A11: reuse a cached object URL per image id instead of
+    // minting (and leaking) a fresh one on every call. URLs are revoked on unmount.
     const offlineImgs = await offlineInspectionDB.getInspectionImages(inspectionId, sectionKey);
-    const offlineImageData = offlineImgs.map(img => ({
-      id: img.id,
-      blobUrl: URL.createObjectURL(img.blob),
-      synced: img.synced
-    }));
+    const cache = objectUrlCacheRef.current;
+    const offlineImageData = offlineImgs.map(img => {
+      let blobUrl = cache.get(img.id);
+      if (!blobUrl) {
+        blobUrl = URL.createObjectURL(img.blob);
+        cache.set(img.id, blobUrl);
+      }
+      return {
+        id: img.id,
+        blobUrl,
+        synced: img.synced
+      };
+    });
 
     return { onlineImages, offlineImages: offlineImageData };
   }, [inspectionId, getCachedInspection]);
