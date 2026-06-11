@@ -1,0 +1,914 @@
+[
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "constraint",
+    "object_name": "floor_plan_pins_status_check",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP CONSTRAINT IF EXISTS floor_plan_pins_status_check (replaced in the same ALTER TABLE statement)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "constraint",
+    "object_name": "floor_plan_pins_status_check",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD CONSTRAINT floor_plan_pins_status_check CHECK (status IN ('open', 'in_progress', 'finished', 'closed', 'resolved')). Expands allowed status values beyond the prior 'open'/'resolved'."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "package",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS package TEXT; nullable, no default, no references."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "stakeholders",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS stakeholders TEXT; nullable, no default, no references."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "detailed_description",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS detailed_description TEXT; nullable, no default, no references."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "edit_history",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS edit_history JSONB DEFAULT '[]'::jsonb; nullable."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "last_modified_by",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS last_modified_by UUID REFERENCES auth.users(id); nullable, no default."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "column",
+    "object_name": "last_modified_at",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS last_modified_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(); nullable."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "table",
+    "object_name": "floor_plan_pin_comments",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS floor_plan_pin_comments: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); pin_id UUID NOT NULL REFERENCES floor_plan_pins(id) ON DELETE CASCADE; user_id UUID REFERENCES auth.users(id) (nullable); user_name TEXT (nullable); comment TEXT NOT NULL; created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() (nullable); updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW() (nullable)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "rls",
+    "object_name": "floor_plan_pin_comments",
+    "table": "floor_plan_pin_comments",
+    "action": "enable",
+    "detail": "ALTER TABLE floor_plan_pin_comments ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view comments",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public). USING (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create comments",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "FOR INSERT, no role clause (applies to public). WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own comments",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "FOR UPDATE, no role clause (applies to public). USING (auth.uid() = user_id). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their own comments",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "FOR DELETE, no role clause (applies to public). USING (auth.uid() = user_id)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "index",
+    "object_name": "idx_floor_plan_pin_comments_pin_id",
+    "table": "floor_plan_pin_comments",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_floor_plan_pin_comments_pin_id ON floor_plan_pin_comments(pin_id)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "function",
+    "object_name": "track_floor_plan_pin_changes",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION track_floor_plan_pin_changes() RETURNS TRIGGER, LANGUAGE plpgsql, no SECURITY DEFINER (default SECURITY INVOKER), no search_path set in this version. Behavior: appends to NEW.edit_history a jsonb object with 'timestamp' NOW(), 'user_id' NEW.last_modified_by, and a 'changes' object containing from/to pairs for status, priority, and assigned_contractor when OLD value IS DISTINCT FROM NEW value (NULL otherwise); sets NEW.last_modified_at = NOW(); returns NEW. Touches only the floor_plan_pins row being updated."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "trigger",
+    "object_name": "floor_plan_pin_changes_trigger",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS floor_plan_pin_changes_trigger ON floor_plan_pins (precedes recreate in same migration)."
+  },
+  {
+    "migration": "20251120102352_9e71ab8f-203e-4876-9207-b010022c3232.sql",
+    "object_type": "trigger",
+    "object_name": "floor_plan_pin_changes_trigger",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "CREATE TRIGGER floor_plan_pin_changes_trigger BEFORE UPDATE ON floor_plan_pins FOR EACH ROW EXECUTE FUNCTION track_floor_plan_pin_changes()."
+  },
+  {
+    "migration": "20251120102409_a7bc6b71-ab85-43e9-aa98-adf6c1024c49.sql",
+    "object_type": "function",
+    "object_name": "track_floor_plan_pin_changes",
+    "table": "floor_plan_pins",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION track_floor_plan_pin_changes() RETURNS TRIGGER, LANGUAGE plpgsql, now SECURITY DEFINER, SET search_path = public. Body identical to the version in 20251120102352 (edit_history append + last_modified_at = NOW()). Sole purpose of this migration: fix the linter security warning by adding SECURITY DEFINER and pinned search_path."
+  },
+  {
+    "migration": "20251120103640_b5942e14-2aea-455c-918f-9ce42b257ead.sql",
+    "object_type": "table",
+    "object_name": "floor_plan_pins",
+    "table": "floor_plan_pins",
+    "action": "alter",
+    "detail": "ALTER TABLE floor_plan_pins REPLICA IDENTITY FULL — enables full-row data in realtime change events. A comment in the file claims the table is automatically added to the supabase_realtime publication by Supabase; no ALTER PUBLICATION statement is present in this migration (⚠️ UNVERIFIED that publication membership actually happened)."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "function",
+    "object_name": "contractor_has_site_access",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.contractor_has_site_access(_user_id uuid, _site_id uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public. Body: SELECT EXISTS (SELECT 1 FROM public.user_sites WHERE user_id = _user_id AND site_id = _site_id). Reads user_sites only. Note: defined as a helper but not referenced by any policy created in this migration (policies inline the user_sites subquery instead)."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on sites."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR ALL, no role clause (applies to public). USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND client_id = get_user_client_id())."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view assigned sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on subsections."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view subsections for their sites",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND site_id IN (SELECT id FROM sites WHERE client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view subsections for assigned sites",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on inspections."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view inspections for their sites",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND site_id IN (SELECT id FROM sites WHERE client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspections for assigned sites",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to site_documents",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on site_documents."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all site documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view site documents for their sites",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND site_id IN (SELECT id FROM sites WHERE client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view site documents for assigned sites",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to floor_plan_pins",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on floor_plan_pins."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all floor plan pins",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view floor plan pins for their sites",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND floor_plan_id IN (SELECT fp.id FROM subsection_floor_plans fp JOIN subsections s ON s.id = fp.subsection_id JOIN sites st ON st.id = s.site_id WHERE st.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view floor plan pins for assigned sites",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND floor_plan_id IN (SELECT fp.id FROM subsection_floor_plans fp JOIN subsections s ON s.id = fp.subsection_id WHERE s.site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid())))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to subsection_floor_plans",
+    "table": "subsection_floor_plans",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on subsection_floor_plans."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all subsection floor plans",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view subsection floor plans for their sites",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s JOIN sites st ON st.id = s.site_id WHERE st.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view subsection floor plans for assigned sites",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s WHERE s.site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid())))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to document_categories",
+    "table": "document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on document_categories."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view document categories for their sites",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s JOIN sites st ON st.id = s.site_id WHERE st.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view document categories for assigned sites",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s WHERE s.site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid())))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on snags."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all snags",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view snags for their sites",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s JOIN sites st ON st.id = s.site_id WHERE st.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view snags for assigned sites",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s WHERE s.site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid())))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspection_items",
+    "table": "inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS — removes the blanket full-access policy on inspection_items."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all inspection items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120110544_4e89ad10-205d-44f0-9308-05167a2a3326.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspection items for assigned sites",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT isub.id FROM inspection_subsections isub JOIN inspections i ON i.id = isub.inspection_id WHERE i.site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))). Note: no Client SELECT policy was created for inspection_items in this migration, unlike the other eight tables."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role)). Emergency fix restoring access for the 'User' app_role after the 20251120110544 lockdown; file header notes an INSERT in a prior attempt failed and is omitted here."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all site documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all floor plan pins",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all subsection floor plans",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all snags",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20251120111033_1e66f4c9-8418-4d98-9333-8331b5c0aa7a.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all inspection items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (has_role(auth.uid(), 'User'::app_role)) WITH CHECK (has_role(auth.uid(), 'User'::app_role))."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_description",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_description text; nullable, no default. COMMENT: 'Description of the fix applied by admin'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_test_result",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_test_result jsonb; nullable, no default. COMMENT: 'JSON result from AI verification of the fix'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_test_run_at",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_test_run_at timestamp with time zone; nullable, no default. COMMENT: 'When the fix verification test was run'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_confidence_score",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_confidence_score integer; nullable, no default. COMMENT: 'AI confidence score 0-100 for the fix'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_description",
+    "table": "suggestions",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_description text; nullable, no default. COMMENT: 'Description of the implementation by admin'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_test_result",
+    "table": "suggestions",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_test_result jsonb; nullable, no default. COMMENT: 'JSON result from AI verification of the implementation'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_test_run_at",
+    "table": "suggestions",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_test_run_at timestamp with time zone; nullable, no default. COMMENT: 'When the implementation verification test was run'."
+  },
+  {
+    "migration": "20260107120703_5e5ed71f-854c-4fc9-b271-870c47e8e026.sql",
+    "object_type": "column",
+    "object_name": "fix_confidence_score",
+    "table": "suggestions",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS fix_confidence_score integer; nullable, no default. COMMENT: 'AI confidence score 0-100 for the implementation'."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "table",
+    "object_name": "inspection_signatures",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "CREATE TABLE public.inspection_signatures: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE; signer_type TEXT NOT NULL CHECK (signer_type IN ('inspector', 'contractor', 'client', 'witness')); signer_name TEXT NOT NULL; signer_email TEXT (nullable); signature_data TEXT NOT NULL (base64 signature image per inline comment); signature_url TEXT (nullable, storage URL after upload); signed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); ip_address TEXT (nullable); created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); table-level UNIQUE(inspection_id, signer_type)."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "rls",
+    "object_name": "inspection_signatures",
+    "table": "inspection_signatures",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspection_signatures ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "policy",
+    "object_name": "Users can view signatures for inspections they have access to",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (EXISTS (SELECT 1 FROM inspections i JOIN sites s ON i.site_id = s.id WHERE i.id = inspection_signatures.inspection_id)). The expression contains no direct auth.uid() check; access gating relies on the RLS of inspections/sites applying inside the subquery for the querying user (⚠️ UNVERIFIED that this transitive gating was the intent)."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create signatures",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "FOR INSERT, no role clause. WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own signatures",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "FOR UPDATE, no role clause. USING (auth.uid() IS NOT NULL). Despite the name, the expression permits ANY authenticated user to update ANY signature row — there is no ownership column comparison."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "policy",
+    "object_name": "Admins can delete signatures",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "FOR DELETE, no role clause. USING (EXISTS (SELECT 1 FROM user_roles WHERE user_id = auth.uid() AND role = 'Admin')). Queries user_roles directly rather than via has_role()."
+  },
+  {
+    "migration": "20260108042823_c7515df1-fcdf-4adc-ae75-55420c305177.sql",
+    "object_type": "index",
+    "object_name": "idx_inspection_signatures_inspection_id",
+    "table": "inspection_signatures",
+    "action": "create",
+    "detail": "CREATE INDEX idx_inspection_signatures_inspection_id ON public.inspection_signatures(inspection_id)."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectification_photo_url",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectification_photo_url TEXT; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectification_notes",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectification_notes TEXT; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectified_at",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectified_at TIMESTAMP WITH TIME ZONE; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectified_by",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectified_by TEXT; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectification_photos",
+    "table": "snags",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectification_photos JSONB DEFAULT '[]'::jsonb; nullable. (Note: snags uses a JSONB array of photos where floor_plan_pins got a single rectification_photo_url TEXT.)"
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectification_notes",
+    "table": "snags",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectification_notes TEXT; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectified_at",
+    "table": "snags",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectified_at TIMESTAMP WITH TIME ZONE; nullable, no default."
+  },
+  {
+    "migration": "20260108043155_ce46260e-e4f6-49dc-ac7f-b2fea35fcf99.sql",
+    "object_type": "column",
+    "object_name": "rectified_by",
+    "table": "snags",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS rectified_by TEXT; nullable, no default."
+  },
+  {
+    "migration": "20260108071956_61a3cdd4-0e0d-414e-a0aa-db2c0a258935.sql",
+    "object_type": "policy",
+    "object_name": "Public can view subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). Added for the QR code public landing page — grants unauthenticated read of ALL subsections."
+  },
+  {
+    "migration": "20260108071956_61a3cdd4-0e0d-414e-a0aa-db2c0a258935.sql",
+    "object_type": "policy",
+    "object_name": "Public can view sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). Grants unauthenticated read of ALL sites (needed for subsection context on the QR landing page)."
+  },
+  {
+    "migration": "20260108071956_61a3cdd4-0e0d-414e-a0aa-db2c0a258935.sql",
+    "object_type": "policy",
+    "object_name": "Public can view clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). Grants unauthenticated read of ALL clients (needed for site/subsection context)."
+  },
+  {
+    "migration": "20260108071956_61a3cdd4-0e0d-414e-a0aa-db2c0a258935.sql",
+    "object_type": "policy",
+    "object_name": "Public can view document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). Grants unauthenticated read of ALL document categories (for public document listing)."
+  },
+  {
+    "migration": "20260108071956_61a3cdd4-0e0d-414e-a0aa-db2c0a258935.sql",
+    "object_type": "policy",
+    "object_name": "Public can view site documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). Grants unauthenticated read of ALL site_documents rows (for public document download)."
+  },
+  {
+    "migration": "20260108121126_8c54625a-9d18-45ef-8ba5-5358ba8bce5b.sql",
+    "object_type": "data",
+    "object_name": "inspections.json_data cleanup (path {1,3,photos})",
+    "table": "inspections",
+    "action": "update",
+    "detail": "UPDATE inspections SET json_data = jsonb_set(json_data, '{1,3,photos}', '[]'::jsonb), updated_at = NOW() WHERE id = 'd4b630cf-f484-4d42-b346-d891c9c85f39'. One-row data fix: empties the photos array at json_data section index 1, item index 3 to remove broken photo URLs from that inspection."
+  },
+  {
+    "migration": "20260108121329_2579467d-a0d9-4adf-bbe5-19e8f770c887.sql",
+    "object_type": "data",
+    "object_name": "inspections.json_data cleanup (path {0,2,photos})",
+    "table": "inspections",
+    "action": "update",
+    "detail": "UPDATE inspections SET json_data = jsonb_set(json_data, '{0,2,photos}', '[]'::jsonb), updated_at = NOW() WHERE id = 'd4b630cf-f484-4d42-b346-d891c9c85f39'. Follow-up one-row data fix on the same inspection: empties the photos array for 'Ventilation & Cooling Systems' (section 0, item 2) to remove broken photo URLs."
+  },
+  {
+    "migration": "20260109084016_d57b7c31-aec3-441a-8832-76fcda58be64.sql",
+    "object_type": "policy",
+    "object_name": "Public can view snags via subsection ID",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause (applies to public, including anon). USING (true). File comment states this is intentional for the QR code public access feature; despite the name, the expression grants unauthenticated read of ALL snags, not just those for a known subsection ID."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "enum",
+    "object_name": "asset_category",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE TYPE asset_category AS ENUM ('electrical_meter', 'water_meter', 'equipment', 'other'). (File comment calls it 'asset_types enum' but the actual type name is asset_category.)"
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "table",
+    "object_name": "site_assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE TABLE public.site_assets: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; site_id UUID NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; premises_id TEXT NOT NULL; trade_as TEXT (nullable); asset_category asset_category NOT NULL DEFAULT 'other'; meter_serial_number TEXT; comments TEXT; meter_type TEXT (inline comment: Direct (D) / Current Transformer (CT), 1PH DIRECT, 3PH DIRECT); ct_ratio TEXT; breaker_size TEXT; reading_at_commissioning TEXT; old_meter_serial_number TEXT; last_meter_read_old TEXT; tag TEXT; mbus_gateway_index TEXT; created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); created_by UUID REFERENCES auth.users(id) (nullable); import_batch_id UUID (nullable, tracks bulk imports). All unlabeled columns nullable with no default."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "rls",
+    "object_name": "site_assets",
+    "table": "site_assets",
+    "action": "enable",
+    "detail": "ALTER TABLE public.site_assets ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (public.has_role(auth.uid(), 'Admin')) WITH CHECK (public.has_role(auth.uid(), 'Admin')). Note: role literal is untyped 'Admin' (no ::app_role cast)."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "policy",
+    "object_name": "Users can view assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (public.has_role(auth.uid(), 'User') OR public.has_role(auth.uid(), 'Moderator'))."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view assets for assigned sites",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (public.has_role(auth.uid(), 'Contractor') AND EXISTS (SELECT 1 FROM public.user_sites WHERE user_sites.user_id = auth.uid() AND user_sites.site_id = site_assets.site_id))."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view assets for their sites",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (public.has_role(auth.uid(), 'Client') AND EXISTS (SELECT 1 FROM public.sites s JOIN public.user_clients uc ON uc.client_id = s.client_id WHERE s.id = site_assets.site_id AND uc.user_id = auth.uid())). Uses user_clients mapping rather than get_user_client_id()."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "trigger",
+    "object_name": "update_site_assets_updated_at",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_site_assets_updated_at BEFORE UPDATE ON public.site_assets FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "index",
+    "object_name": "idx_site_assets_site_id",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE INDEX idx_site_assets_site_id ON public.site_assets(site_id)."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "index",
+    "object_name": "idx_site_assets_category",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE INDEX idx_site_assets_category ON public.site_assets(asset_category)."
+  },
+  {
+    "migration": "20260109105319_51c4643e-1fc9-42d3-b4cc-8dad8d520921.sql",
+    "object_type": "index",
+    "object_name": "idx_site_assets_premises_id",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE INDEX idx_site_assets_premises_id ON public.site_assets(premises_id)."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "table",
+    "object_name": "pdf_report_templates",
+    "table": "pdf_report_templates",
+    "action": "create",
+    "detail": "CREATE TABLE public.pdf_report_templates: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; name TEXT NOT NULL; report_type TEXT NOT NULL (inline comment enumerates 'site_summary', 'inspection', 'floor_plan', 'asset_verification', 'compliance' — no CHECK constraint enforces this); description TEXT (nullable); is_default BOOLEAN DEFAULT false (nullable); customization JSONB NOT NULL DEFAULT '{}'::jsonb; sections JSONB NOT NULL DEFAULT '[]'::jsonb; created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); created_by UUID REFERENCES auth.users(id) (nullable)."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "rls",
+    "object_name": "pdf_report_templates",
+    "table": "pdf_report_templates",
+    "action": "enable",
+    "detail": "ALTER TABLE public.pdf_report_templates ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage PDF templates",
+    "table": "pdf_report_templates",
+    "action": "create",
+    "detail": "FOR ALL, no role clause. USING (public.has_role(auth.uid(), 'Admin')). No WITH CHECK clause (Postgres applies the USING expression to new rows for FOR ALL policies without WITH CHECK)."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view PDF templates",
+    "table": "pdf_report_templates",
+    "action": "create",
+    "detail": "FOR SELECT, no role clause. USING (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "trigger",
+    "object_name": "update_pdf_report_templates_updated_at",
+    "table": "pdf_report_templates",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_pdf_report_templates_updated_at BEFORE UPDATE ON public.pdf_report_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "index",
+    "object_name": "idx_pdf_templates_default_per_type",
+    "table": "pdf_report_templates",
+    "action": "create",
+    "detail": "CREATE UNIQUE INDEX idx_pdf_templates_default_per_type ON public.pdf_report_templates (report_type) WHERE is_default = true — partial unique index enforcing at most one default template per report_type."
+  },
+  {
+    "migration": "20260110132516_9c4acf95-e674-4d32-a18d-668b0add0770.sql",
+    "object_type": "data",
+    "object_name": "pdf_report_templates default rows",
+    "table": "pdf_report_templates",
+    "action": "insert",
+    "detail": "INSERT of 5 seed rows, all with is_default = true, one per report_type: 'Default Site Summary' (site_summary, accentColor blue, sections: site-info, subsections, compliance KPI, documents, inspections), 'Default Inspection Report' (inspection, accentColor green, TOC enabled, sections: inspection-details, findings, photos, signatures), 'Default Floor Plan Report' (floor_plan, accentColor orange, sections: floor-plan-image [editable false], pins-summary KPI, pins-table), 'Default Asset Verification Report' (asset_verification, accentColor purple, sections: asset-summary KPI, electrical-meters, water-meters, equipment), 'Default Compliance Report' (compliance, accentColor blue, TOC enabled, sections: compliance-summary KPI, coc-status, expiring-cocs, non-compliant). Each row carries full customization JSONB (coverTitle, coverSubtitle, includeDate true, includeReference true, executiveSummary '', customNotes '', includePageNumbers true, includeWatermark false, watermarkText 'DRAFT') and sections JSONB with id/title/type/enabled/order/editable per section."
+  }
+]

@@ -1,0 +1,282 @@
+[
+  {
+    "migration": "20260123052554_ac3f12e7-5888-4960-bf58-c83716abe25c.sql",
+    "object_type": "policy",
+    "object_name": "Allow tracking updates via token",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE POLICY \"Allow tracking updates via token\" ON public.client_access_links FOR UPDATE USING (true) WITH CHECK (true); no TO clause (applies to all roles / public). Rationale in comments: allow validate_access_link (SECURITY DEFINER) to update tracking fields last_accessed_at and access_count when token matches. Extremely permissive (any role may UPDATE any row); explicitly reverted in the very next migration 20260123052614."
+  },
+  {
+    "migration": "20260123052614_a764fe2c-37bc-4a80-b19b-6860d8086690.sql",
+    "object_type": "policy",
+    "object_name": "Allow tracking updates via token",
+    "table": "client_access_links",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Allow tracking updates via token\" ON public.client_access_links; — removes the overly permissive UPDATE policy created in the immediately preceding migration 20260123052554."
+  },
+  {
+    "migration": "20260123052614_a764fe2c-37bc-4a80-b19b-6860d8086690.sql",
+    "object_type": "policy",
+    "object_name": "Public can select access_links for validation",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE POLICY \"Public can select access_links for validation\" ON public.client_access_links FOR SELECT USING (true); no TO clause (applies to all roles including anon). Lets anyone read every row of client_access_links so the validate_access_link RPC can find the token."
+  },
+  {
+    "migration": "20260123052614_a764fe2c-37bc-4a80-b19b-6860d8086690.sql",
+    "object_type": "function",
+    "object_name": "validate_access_link",
+    "table": "client_access_links",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.validate_access_link(token TEXT) RETURNS TABLE(link_id UUID, link_type TEXT, client_id UUID, site_id UUID, subsection_id UUID, is_valid BOOLEAN) LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public'. Behavior: calls PERFORM set_config('role', 'postgres', true) to attempt an RLS bypass, then UPDATE public.client_access_links SET last_accessed_at = now(), access_count = access_count + 1 WHERE access_token = token AND is_active = true AND (expires_at IS NULL OR expires_at > now()); then PERFORM set_config('role', 'anon', true) to reset, then RETURN QUERY selecting id, link_type, client_id, site_id, subsection_id and is_valid = (is_active AND (expires_at IS NULL OR expires_at > now())) from client_access_links WHERE access_token = token LIMIT 1. NOTE: the set_config role switch to 'postgres' is not permitted for non-superusers; this version is replaced in the very next migration 20260123052657 which removes the role switching."
+  },
+  {
+    "migration": "20260123052657_71a9512e-785c-4b85-bb99-36699b88907d.sql",
+    "object_type": "function",
+    "object_name": "validate_access_link",
+    "table": "client_access_links",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.validate_access_link(token TEXT) RETURNS TABLE(link_id UUID, link_type TEXT, client_id UUID, site_id UUID, subsection_id UUID, is_valid BOOLEAN) LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public'. Removes the disallowed set_config role-switching from the previous version. Behavior: SELECT id, link_type, client_id, site_id, subsection_id, access_token, is_active, expires_at INTO a record from public.client_access_links WHERE access_token = token LIMIT 1; if the record exists AND is_active = true AND (expires_at IS NULL OR expires_at > now()) then UPDATE public.client_access_links SET last_accessed_at = now(), access_count = access_count + 1 WHERE id = record.id (works because SECURITY DEFINER runs as owner who bypasses RLS); if the record exists, RETURN QUERY with is_valid = (is_active AND (expires_at IS NULL OR expires_at > now())), otherwise return empty."
+  },
+  {
+    "migration": "20260123052657_71a9512e-785c-4b85-bb99-36699b88907d.sql",
+    "object_type": "grant",
+    "object_name": "EXECUTE ON validate_access_link(TEXT) TO anon",
+    "table": null,
+    "action": "create",
+    "detail": "GRANT EXECUTE ON FUNCTION public.validate_access_link(TEXT) TO anon;"
+  },
+  {
+    "migration": "20260123052657_71a9512e-785c-4b85-bb99-36699b88907d.sql",
+    "object_type": "grant",
+    "object_name": "EXECUTE ON validate_access_link(TEXT) TO authenticated",
+    "table": null,
+    "action": "create",
+    "detail": "GRANT EXECUTE ON FUNCTION public.validate_access_link(TEXT) TO authenticated;"
+  },
+  {
+    "migration": "20260130084823_e2a3c7ab-238a-4ebf-be44-b4f129217d9b.sql",
+    "object_type": "data",
+    "object_name": "subsections coc_status/is_compliant correction",
+    "table": "subsections",
+    "action": "update",
+    "detail": "Data-consistency backfill fixing a prior status-priority bug: UPDATE subsections SET coc_status = 'Failed', is_compliant = false, updated_at = NOW() for all subsections whose coc_status = 'Approved' but whose most recent row in coc_validations (max validated_at per subsection_id) has status IN ('Fail', 'Failed', 'Incomplete'). Matters: subsections displayed as Approved/compliant despite a failing latest COC validation are flipped to Failed/non-compliant."
+  },
+  {
+    "migration": "20260201150950_afa72d38-c1ae-4c85-8035-d0d82fe2c724.sql",
+    "object_type": "data",
+    "object_name": "subsections is_compliant fix (5 Yarona subsections)",
+    "table": "subsections",
+    "action": "update",
+    "detail": "UPDATE subsections SET is_compliant = false, updated_at = now() WHERE id IN ('9b4f3ac9-2b95-4ab7-8e2c-b6b4ce5bd1b2' /* LV ROOM */, '9e31a990-273f-4564-8650-927935b9bacb' /* GENERATOR */, '46dfaeea-6e37-4781-9ed8-91761f38b43e' /* CENTRE MANAGEMENT */, '01b5bf41-7a9f-495e-be4b-aee8c548de96' /* SHOPRITE */, 'e6b5ba63-9a68-40da-9dc8-ccec9e5f79fd' /* SHOPRITE LIQUOR */). Five hardcoded Yarona-site subsection UUIDs that had Missing COC while requiring COC but incorrectly showed is_compliant=true."
+  },
+  {
+    "migration": "20260201150950_afa72d38-c1ae-4c85-8035-d0d82fe2c724.sql",
+    "object_type": "data",
+    "object_name": "subsections is_compliant fix (DAY TO DAY)",
+    "table": "subsections",
+    "action": "update",
+    "detail": "UPDATE subsections SET is_compliant = true, updated_at = now() WHERE id = 'fb6eb96d-9f70-4e7d-984c-a52b0ddd6518' — hardcoded UUID for the DAY TO DAY subsection, which has a Pass validation with all checks passed but was incorrectly marked non-compliant."
+  },
+  {
+    "migration": "20260201150950_afa72d38-c1ae-4c85-8035-d0d82fe2c724.sql",
+    "object_type": "data",
+    "object_name": "subsections global Missing-COC compliance fix",
+    "table": "subsections",
+    "action": "update",
+    "detail": "Global backfill: UPDATE subsections SET is_compliant = false, updated_at = now() WHERE coc_status = 'Missing' AND is_coc_required = true AND is_compliant = true — flips every subsection anywhere that requires a COC, has none, yet was flagged compliant."
+  },
+  {
+    "migration": "20260201151127_01cd682f-c771-455b-9df6-dd86d54b1af4.sql",
+    "object_type": "function",
+    "object_name": "sync_coc_compliance_status",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.sync_coc_compliance_status() RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public'. Trigger function for subsections. Behavior (only runs on INSERT, or on UPDATE when OLD.coc_status IS DISTINCT FROM NEW.coc_status OR OLD.is_coc_required IS DISTINCT FROM NEW.is_coc_required): (1) if NOT COALESCE(NEW.is_coc_required, false) then NEW.is_compliant := true; (2) else if the latest coc_validations row for NEW.id (max validated_at) has status IN ('Fail','Failed','Incomplete') then NEW.is_compliant := false; (3) else if NEW.coc_status IN ('Approved','Valid','Pass') then NEW.is_compliant := true; (4) otherwise (Missing, Failed, Pending, etc.) NEW.is_compliant := false. Reads coc_validations. Also COMMENT ON FUNCTION documenting this logic."
+  },
+  {
+    "migration": "20260201151127_01cd682f-c771-455b-9df6-dd86d54b1af4.sql",
+    "object_type": "trigger",
+    "object_name": "trg_sync_coc_compliance",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS trg_sync_coc_compliance ON public.subsections; — defensive drop before (re)creation in the same migration."
+  },
+  {
+    "migration": "20260201151127_01cd682f-c771-455b-9df6-dd86d54b1af4.sql",
+    "object_type": "trigger",
+    "object_name": "trg_sync_coc_compliance",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE TRIGGER trg_sync_coc_compliance BEFORE INSERT OR UPDATE OF coc_status, is_coc_required ON public.subsections FOR EACH ROW EXECUTE FUNCTION public.sync_coc_compliance_status(); — keeps is_compliant automatically in sync with coc_status / is_coc_required changes."
+  },
+  {
+    "migration": "20260206105621_98283aeb-a916-4255-912c-ca7e946e34c0.sql",
+    "object_type": "column",
+    "object_name": "auto_logout_enabled",
+    "table": "settings",
+    "action": "create",
+    "detail": "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS auto_logout_enabled boolean DEFAULT false; nullable (no NOT NULL), default false."
+  },
+  {
+    "migration": "20260206105621_98283aeb-a916-4255-912c-ca7e946e34c0.sql",
+    "object_type": "column",
+    "object_name": "auto_logout_time",
+    "table": "settings",
+    "action": "create",
+    "detail": "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS auto_logout_time time DEFAULT '02:00:00'; nullable (no NOT NULL), default 02:00:00."
+  },
+  {
+    "migration": "20260212144831_85c05452-caf9-430b-b7cf-57affed32a53.sql",
+    "object_type": "extension",
+    "object_name": "pgcrypto",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE EXTENSION IF NOT EXISTS pgcrypto SCHEMA extensions; — needed for crypt()/gen_salt() used by the one-off password reset below. (object_type 'extension' is outside the prescribed enum; no closer category exists.)"
+  },
+  {
+    "migration": "20260212144831_85c05452-caf9-430b-b7cf-57affed32a53.sql",
+    "object_type": "function",
+    "object_name": "temp_reset_password",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.temp_reset_password() RETURNS void LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public', 'extensions'. Behavior: looks up auth.users.id WHERE email = 'marries.liesie@gmail.com' (RAISE EXCEPTION 'User not found' if absent), then UPDATE auth.users SET encrypted_password = extensions.crypt('Marries@001', extensions.gen_salt('bf')) WHERE id = target_user_id. Touches auth.users directly. SECURITY NOTE: the plaintext password 'Marries@001' is committed in the migration file."
+  },
+  {
+    "migration": "20260212144831_85c05452-caf9-430b-b7cf-57affed32a53.sql",
+    "object_type": "data",
+    "object_name": "one-off password reset for marries.liesie@gmail.com",
+    "table": "auth.users",
+    "action": "update",
+    "detail": "SELECT public.temp_reset_password(); — executes the function, rewriting auth.users.encrypted_password for the user with email marries.liesie@gmail.com to bcrypt('Marries@001'). One-time operational data mutation embedded in a migration."
+  },
+  {
+    "migration": "20260212144831_85c05452-caf9-430b-b7cf-57affed32a53.sql",
+    "object_type": "function",
+    "object_name": "temp_reset_password",
+    "table": null,
+    "action": "drop",
+    "detail": "DROP FUNCTION public.temp_reset_password(); — the temporary function is removed immediately after being invoked, in the same migration."
+  },
+  {
+    "migration": "20260214023114_a056bc18-90e7-4e5b-9b06-b7b6443a3ce7.sql",
+    "object_type": "column",
+    "object_name": "onboarding_completed",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS onboarding_completed boolean DEFAULT false; nullable (no NOT NULL), default false."
+  },
+  {
+    "migration": "20260214023114_a056bc18-90e7-4e5b-9b06-b7b6443a3ce7.sql",
+    "object_type": "function",
+    "object_name": "handle_new_user",
+    "table": "profiles",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public'. Behavior: INSERT INTO public.profiles (id, email, full_name) VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', '')); then INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, CASE WHEN (SELECT COUNT(*) FROM auth.users) = 1 THEN 'Admin'::app_role ELSE 'User'::app_role END); RETURN NEW. Change vs previous version (per migration comment): new signups now get the 'User' role by default instead of 'Admin'; only the very first auth.users row gets 'Admin'. Touches profiles, user_roles, auth.users (count)."
+  },
+  {
+    "migration": "20260214023532_c185ee4b-5e08-474c-b743-f138fea45cb3.sql",
+    "object_type": "data",
+    "object_name": "profiles onboarding_completed backfill",
+    "table": "profiles",
+    "action": "update",
+    "detail": "UPDATE public.profiles SET onboarding_completed = true WHERE onboarding_completed = false OR onboarding_completed IS NULL; — marks every existing user as having completed onboarding so they are not blocked by the new onboarding gate introduced with the onboarding_completed column."
+  },
+  {
+    "migration": "20260216054714_fd97a029-74c6-40db-8d62-a78858ea0f2f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE POLICY \"Authenticated users can insert assets\" ON public.site_assets FOR INSERT TO authenticated WITH CHECK (true);"
+  },
+  {
+    "migration": "20260216054714_fd97a029-74c6-40db-8d62-a78858ea0f2f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE POLICY \"Authenticated users can update assets\" ON public.site_assets FOR UPDATE TO authenticated USING (true) WITH CHECK (true);"
+  },
+  {
+    "migration": "20260216054714_fd97a029-74c6-40db-8d62-a78858ea0f2f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE POLICY \"Authenticated users can delete assets\" ON public.site_assets FOR DELETE TO authenticated USING (true);"
+  },
+  {
+    "migration": "20260216054714_fd97a029-74c6-40db-8d62-a78858ea0f2f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE POLICY \"Authenticated users can view assets\" ON public.site_assets FOR SELECT TO authenticated USING (true);"
+  },
+  {
+    "migration": "20260217075058_c326adca-137f-404f-8bdb-00d321ce1fc0.sql",
+    "object_type": "data",
+    "object_name": "settings qr_base_url repoint",
+    "table": "settings",
+    "action": "update",
+    "detail": "UPDATE settings SET qr_base_url = 'https://wm-compliance.lovable.app' WHERE qr_base_url = 'https://watsonmattheus.com' OR qr_base_url IS NULL; — repoints the QR-code base URL from the old watsonmattheus.com domain (or unset) to the wm-compliance.lovable.app deployment; affects where generated QR codes resolve."
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "table",
+    "object_name": "access_link_visitors",
+    "table": "access_link_visitors",
+    "action": "create",
+    "detail": "CREATE TABLE public.access_link_visitors: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; access_link_id UUID NULL REFERENCES public.client_access_links(id) ON DELETE CASCADE; first_name TEXT NOT NULL; last_name TEXT NOT NULL; email TEXT NOT NULL; phone TEXT NOT NULL; role TEXT NOT NULL; accessed_at TIMESTAMPTZ NOT NULL DEFAULT now(); ip_address TEXT NULL; user_agent TEXT NULL. Stores visitor details and logs each access of a client access link."
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "rls",
+    "object_name": "access_link_visitors RLS",
+    "table": "access_link_visitors",
+    "action": "enable",
+    "detail": "ALTER TABLE public.access_link_visitors ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can register as visitor",
+    "table": "access_link_visitors",
+    "action": "create",
+    "detail": "CREATE POLICY \"Anyone can register as visitor\" ON public.access_link_visitors FOR INSERT WITH CHECK (true); no TO clause (applies to all roles including anon) — allows anonymous inserts from public pages."
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view visitors",
+    "table": "access_link_visitors",
+    "action": "create",
+    "detail": "CREATE POLICY \"Admins can view visitors\" ON public.access_link_visitors FOR SELECT USING (public.has_role(auth.uid(), 'Admin')); no TO clause (applies to all roles, gated by has_role)."
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "index",
+    "object_name": "idx_access_link_visitors_link_id",
+    "table": "access_link_visitors",
+    "action": "create",
+    "detail": "CREATE INDEX idx_access_link_visitors_link_id ON public.access_link_visitors(access_link_id);"
+  },
+  {
+    "migration": "20260217082506_a2247d71-37f4-49d4-bb28-fbb9724692fd.sql",
+    "object_type": "index",
+    "object_name": "idx_access_link_visitors_email",
+    "table": "access_link_visitors",
+    "action": "create",
+    "detail": "CREATE INDEX idx_access_link_visitors_email ON public.access_link_visitors(email);"
+  },
+  {
+    "migration": "20260217085025_6cdfaefc-6542-454a-b068-c3bc37e1ede1.sql",
+    "object_type": "policy",
+    "object_name": "Public can view site assets",
+    "table": "site_assets",
+    "action": "create",
+    "detail": "CREATE POLICY \"Public can view site assets\" ON public.site_assets FOR SELECT TO anon USING (true); — opens all site_assets rows to anonymous reads for public review portals; migration comment asserts safety because site_assets contains only electrical meter metadata, no PII."
+  }
+]

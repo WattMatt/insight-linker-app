@@ -1,0 +1,674 @@
+[
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "table",
+    "object_name": "api_clients",
+    "table": "api_clients",
+    "action": "create",
+    "detail": "CREATE TABLE public.api_clients: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); name TEXT NOT NULL; client_id TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(16), 'hex'); client_secret TEXT NOT NULL DEFAULT encode(gen_random_bytes(32), 'hex'); redirect_uris TEXT[] DEFAULT '{}'; scopes TEXT[] DEFAULT ARRAY['reports:read']; is_active BOOLEAN DEFAULT true; created_by UUID REFERENCES auth.users(id); created_at TIMESTAMPTZ DEFAULT now(); updated_at TIMESTAMPTZ DEFAULT now(). Table for OAuth API clients (external applications)."
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "table",
+    "object_name": "api_access_tokens",
+    "table": "api_access_tokens",
+    "action": "create",
+    "detail": "CREATE TABLE public.api_access_tokens: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); client_id UUID NOT NULL REFERENCES public.api_clients(id) ON DELETE CASCADE; access_token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'); refresh_token TEXT UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'); scopes TEXT[] DEFAULT ARRAY['reports:read']; expires_at TIMESTAMPTZ NOT NULL DEFAULT (now() + interval '1 hour'); refresh_expires_at TIMESTAMPTZ DEFAULT (now() + interval '30 days'); created_at TIMESTAMPTZ DEFAULT now(); last_used_at TIMESTAMPTZ (nullable). Table for OAuth access tokens."
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "table",
+    "object_name": "api_request_logs",
+    "table": "api_request_logs",
+    "action": "create",
+    "detail": "CREATE TABLE public.api_request_logs: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); client_id UUID REFERENCES public.api_clients(id) ON DELETE SET NULL (nullable); endpoint TEXT NOT NULL; method TEXT NOT NULL; status_code INTEGER (nullable); request_params JSONB (nullable); ip_address TEXT (nullable); user_agent TEXT (nullable); created_at TIMESTAMPTZ DEFAULT now(). API request audit trail table."
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "rls",
+    "object_name": "api_clients RLS",
+    "table": "api_clients",
+    "action": "enable",
+    "detail": "ALTER TABLE public.api_clients ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "rls",
+    "object_name": "api_access_tokens RLS",
+    "table": "api_access_tokens",
+    "action": "enable",
+    "detail": "ALTER TABLE public.api_access_tokens ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "rls",
+    "object_name": "api_request_logs RLS",
+    "table": "api_request_logs",
+    "action": "enable",
+    "detail": "ALTER TABLE public.api_request_logs ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage API clients",
+    "table": "api_clients",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING (public.has_role(auth.uid(), 'Admin')) WITH CHECK (public.has_role(auth.uid(), 'Admin'))"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "policy",
+    "object_name": "Service role manages tokens",
+    "table": "api_access_tokens",
+    "action": "create",
+    "detail": "FOR ALL TO service_role. USING (true) WITH CHECK (true)"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view API logs",
+    "table": "api_request_logs",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (public.has_role(auth.uid(), 'Admin'))"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "policy",
+    "object_name": "Service role manages logs",
+    "table": "api_request_logs",
+    "action": "create",
+    "detail": "FOR ALL TO service_role. USING (true) WITH CHECK (true)"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "function",
+    "object_name": "validate_api_token",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.validate_api_token(token TEXT) RETURNS TABLE(client_id UUID, scopes TEXT[], is_valid BOOLEAN) LANGUAGE plpgsql SECURITY DEFINER SET search_path = public. Behavior: SELECTs t.client_id, t.scopes, and (t.expires_at > now() AND c.is_active) AS is_valid from public.api_access_tokens t JOIN public.api_clients c ON c.id = t.client_id WHERE t.access_token = token LIMIT 1; then UPDATEs public.api_access_tokens SET last_used_at = now() WHERE access_token = token. Tables touched: api_access_tokens (read+write), api_clients (read)."
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "index",
+    "object_name": "idx_api_access_tokens_token",
+    "table": "api_access_tokens",
+    "action": "create",
+    "detail": "CREATE INDEX idx_api_access_tokens_token ON public.api_access_tokens(access_token);"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "index",
+    "object_name": "idx_api_access_tokens_expires",
+    "table": "api_access_tokens",
+    "action": "create",
+    "detail": "CREATE INDEX idx_api_access_tokens_expires ON public.api_access_tokens(expires_at);"
+  },
+  {
+    "migration": "20260110172925_a9616e50-9aa9-4128-8fa1-4e8852cde733.sql",
+    "object_type": "index",
+    "object_name": "idx_api_clients_client_id",
+    "table": "api_clients",
+    "action": "create",
+    "detail": "CREATE INDEX idx_api_clients_client_id ON public.api_clients(client_id);"
+  },
+  {
+    "migration": "20260112114907_df79a7e4-f9b1-4de4-a1f9-0ef5bbdb3db0.sql",
+    "object_type": "data",
+    "object_name": "subsection_documents COC backfill",
+    "table": "subsection_documents",
+    "action": "update",
+    "detail": "Backfills subsection_documents COC columns from existing coc_validations rows (joined via cv.document_id = sd.id, only where cv.report_data->>'cocNumber' IS NOT NULL): coc_number = cv.report_data->>'cocNumber'; coc_issue_date = (cv.report_data->>'cocIssueDate')::date; coc_type = 'supplementary' when LOWER(cv.report_data->>'cocType') ILIKE '%supplementary%' else 'initial'; coc_status = 'approved' when cv.status = 'Pass', 'rejected' when cv.status = 'Fail', else 'pending'. Matters because it populates denormalized COC metadata on documents using values conforming to the then-current CHECK constraints."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "table",
+    "object_name": "coc_extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "CREATE TABLE public.coc_extractions: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; document_id UUID NOT NULL REFERENCES public.subsection_documents(id) ON DELETE CASCADE; subsection_id UUID NOT NULL REFERENCES public.subsections(id) ON DELETE CASCADE; extracted_data JSONB NOT NULL DEFAULT '{}'::jsonb; confidence TEXT CHECK (confidence IN ('high', 'medium', 'low')) (nullable); extraction_method TEXT DEFAULT 'gemini-full'; extraction_notes TEXT (nullable); extracted_at TIMESTAMPTZ NOT NULL DEFAULT now(); extracted_by UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_at TIMESTAMPTZ NOT NULL DEFAULT now(). Stores COC extraction results."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "index",
+    "object_name": "coc_extractions_document_id_unique",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "CREATE UNIQUE INDEX coc_extractions_document_id_unique ON public.coc_extractions(document_id); enforces one extraction per document."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "rls",
+    "object_name": "coc_extractions RLS",
+    "table": "coc_extractions",
+    "action": "enable",
+    "detail": "ALTER TABLE public.coc_extractions ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own organization extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause; applies to all roles). USING (true). Despite the name, this is a public/unrestricted SELECT policy."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause). WITH CHECK (auth.uid() IS NOT NULL). Dropped in the next migration 20260113062636."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO clause). USING (auth.uid() IS NOT NULL). Dropped in the next migration 20260113062636."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR DELETE (no TO clause). USING (auth.uid() IS NOT NULL). Dropped in the next migration 20260113062636."
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "index",
+    "object_name": "coc_extractions_subsection_id_idx",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "CREATE INDEX coc_extractions_subsection_id_idx ON public.coc_extractions(subsection_id);"
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "index",
+    "object_name": "coc_extractions_extracted_at_idx",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "CREATE INDEX coc_extractions_extracted_at_idx ON public.coc_extractions(extracted_at DESC);"
+  },
+  {
+    "migration": "20260113062616_960f2100-566c-454c-9738-b22646ec4836.sql",
+    "object_type": "trigger",
+    "object_name": "update_coc_extractions_updated_at",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_coc_extractions_updated_at BEFORE UPDATE ON public.coc_extractions FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();"
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create extractions",
+    "table": "coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can create extractions\" ON public.coc_extractions;"
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update extractions",
+    "table": "coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update extractions\" ON public.coc_extractions;"
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete extractions",
+    "table": "coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete extractions\" ON public.coc_extractions;"
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Users can create their own extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause). WITH CHECK (auth.uid() = extracted_by OR extracted_by IS NULL)"
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Users can update extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO clause). USING (EXISTS (SELECT 1 FROM public.subsection_documents sd JOIN public.subsections s ON sd.subsection_id = s.id JOIN public.sites st ON s.site_id = st.id WHERE sd.id = coc_extractions.document_id)). Note: the EXISTS only verifies the document/subsection/site chain exists; it does not actually restrict by user or organization."
+  },
+  {
+    "migration": "20260113062636_77327e63-3e41-4a7f-a70f-87a2706690ab.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete extractions",
+    "table": "coc_extractions",
+    "action": "create",
+    "detail": "FOR DELETE (no TO clause). USING (EXISTS (SELECT 1 FROM public.subsection_documents sd JOIN public.subsections s ON sd.subsection_id = s.id JOIN public.sites st ON s.site_id = st.id WHERE sd.id = coc_extractions.document_id)). Same caveat as the UPDATE policy: no per-user restriction in the expression."
+  },
+  {
+    "migration": "20260113123609_5d0752d4-c95d-4b30-b716-95177dc4bdd4.sql",
+    "object_type": "data",
+    "object_name": "subsections is_compliant fix (failed validations)",
+    "table": "subsections",
+    "action": "update",
+    "detail": "UPDATE subsections SET is_compliant = false WHERE id IN (SELECT DISTINCT s.id FROM subsections s JOIN coc_validations v ON v.subsection_id = s.id WHERE v.report_data->>'overallStatus' IN ('Fail','Failed','Invalid','FAIL') OR v.report_data->'hierarchyValidation'->>'hierarchyStatus' LIKE '%Invalid%' OR (v.report_data->'criticalFailures' IS NOT NULL AND jsonb_array_length(v.report_data->'criticalFailures') > 0)). Corrects subsections wrongly marked compliant despite failed validations."
+  },
+  {
+    "migration": "20260113123609_5d0752d4-c95d-4b30-b716-95177dc4bdd4.sql",
+    "object_type": "data",
+    "object_name": "subsections is_compliant fix (failed coc_status)",
+    "table": "subsections",
+    "action": "update",
+    "detail": "UPDATE subsections SET is_compliant = false WHERE coc_status IN ('Failed','rejected','Rejected','failed','invalid','Invalid') AND (is_compliant = true OR is_compliant IS NULL). Ensures subsections with failed/rejected coc_status are marked non-compliant."
+  },
+  {
+    "migration": "20260114082530_362f8fa2-77e6-44f2-9f74-fb117a357932.sql",
+    "object_type": "constraint",
+    "object_name": "subsection_documents_coc_type_check",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "ALTER TABLE subsection_documents DROP CONSTRAINT IF EXISTS subsection_documents_coc_type_check; (old constraint rejected valid COC type values, causing COC type to be reset)"
+  },
+  {
+    "migration": "20260114082530_362f8fa2-77e6-44f2-9f74-fb117a357932.sql",
+    "object_type": "constraint",
+    "object_name": "subsection_documents_coc_status_check",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "ALTER TABLE subsection_documents DROP CONSTRAINT IF EXISTS subsection_documents_coc_status_check;"
+  },
+  {
+    "migration": "20260114082530_362f8fa2-77e6-44f2-9f74-fb117a357932.sql",
+    "object_type": "constraint",
+    "object_name": "subsection_documents_coc_type_check",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "ALTER TABLE subsection_documents ADD CONSTRAINT subsection_documents_coc_type_check CHECK (coc_type IS NULL OR coc_type = ANY (ARRAY['Initial', 'Supplementary', 'Temporary', 'Not Marked', 'initial', 'supplementary', 'temporary', 'not marked'])); allows both capitalized and lowercase variants for compatibility."
+  },
+  {
+    "migration": "20260114082530_362f8fa2-77e6-44f2-9f74-fb117a357932.sql",
+    "object_type": "constraint",
+    "object_name": "subsection_documents_coc_status_check",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "ALTER TABLE subsection_documents ADD CONSTRAINT subsection_documents_coc_status_check CHECK (coc_status IS NULL OR coc_status = ANY (ARRAY['pending', 'approved', 'rejected', 'Approved', 'Failed', 'Pending', 'Rejected']));"
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "table",
+    "object_name": "coc_validation_settings",
+    "table": "coc_validation_settings",
+    "action": "create",
+    "detail": "CREATE TABLE public.coc_validation_settings: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; earth_continuity_max_ohms NUMERIC NOT NULL DEFAULT 5.0; insulation_resistance_min_mohms NUMERIC NOT NULL DEFAULT 0.25; rcd_trip_1x_max_ms INTEGER NOT NULL DEFAULT 300; rcd_trip_5x_max_ms INTEGER NOT NULL DEFAULT 150; rcd_trip_max_ms INTEGER NOT NULL DEFAULT 40; coc_expiry_domestic_years INTEGER NOT NULL DEFAULT 5; coc_expiry_commercial_years INTEGER NOT NULL DEFAULT 2; ai_confidence_threshold_percent INTEGER NOT NULL DEFAULT 30; hierarchy_check_enabled BOOLEAN NOT NULL DEFAULT true; earth_continuity_check_enabled BOOLEAN NOT NULL DEFAULT true; insulation_resistance_check_enabled BOOLEAN NOT NULL DEFAULT true; protective_conductor_check_enabled BOOLEAN NOT NULL DEFAULT true; certificate_date_validation_enabled BOOLEAN NOT NULL DEFAULT true; rcd_function_check_enabled BOOLEAN NOT NULL DEFAULT true; signature_check_enabled BOOLEAN NOT NULL DEFAULT true; auto_fail_missing_initial_ref BOOLEAN NOT NULL DEFAULT true; auto_fail_invalid_certificate BOOLEAN NOT NULL DEFAULT true; auto_fail_future_dated BOOLEAN NOT NULL DEFAULT true; auto_fail_earth_resistance_threshold BOOLEAN NOT NULL DEFAULT true; auto_fail_missing_signature BOOLEAN NOT NULL DEFAULT true; mandatory_failures_for_fail INTEGER NOT NULL DEFAULT 2; safety_critical_failures_for_fail INTEGER NOT NULL DEFAULT 1; ai_model TEXT NOT NULL DEFAULT 'google/gemini-3-pro-preview'; ai_temperature NUMERIC NOT NULL DEFAULT 0.1; created_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_by UUID REFERENCES auth.users(id) (nullable). Stores COC validation configuration (thresholds, rule toggles, pass/fail determination, AI model settings)."
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "rls",
+    "object_name": "coc_validation_settings RLS",
+    "table": "coc_validation_settings",
+    "action": "enable",
+    "detail": "ALTER TABLE public.coc_validation_settings ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage COC validation settings",
+    "table": "coc_validation_settings",
+    "action": "create",
+    "detail": "FOR ALL (no TO clause). USING (public.has_role(auth.uid(), 'Admin')) WITH CHECK (public.has_role(auth.uid(), 'Admin'))"
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can read COC validation settings",
+    "table": "coc_validation_settings",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "trigger",
+    "object_name": "update_coc_validation_settings_updated_at",
+    "table": "coc_validation_settings",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_coc_validation_settings_updated_at BEFORE UPDATE ON public.coc_validation_settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();"
+  },
+  {
+    "migration": "20260116052034_3ec8c385-2428-402e-9763-a9871451eb55.sql",
+    "object_type": "data",
+    "object_name": "coc_validation_settings default row",
+    "table": "coc_validation_settings",
+    "action": "insert",
+    "detail": "INSERT INTO public.coc_validation_settings (id) VALUES (gen_random_uuid()); seeds a single settings row with all column defaults so the app has a configuration record to read/update."
+  },
+  {
+    "migration": "20260119123152_ec4cb176-c376-4617-9b79-9e3b465a89ff.sql",
+    "object_type": "data",
+    "object_name": "pdf_report_templates asset-verification section",
+    "table": "pdf_report_templates",
+    "action": "update",
+    "detail": "UPDATE pdf_report_templates SET sections = sections || '[{\"id\": \"asset-verification\", \"title\": \"Asset Verification Summary\", \"type\": \"kpi\", \"enabled\": true, \"editable\": true, \"order\": 7}]'::jsonb WHERE report_type = 'site_summary' AND no existing element with id 'asset-verification'. Appends the asset-verification KPI section to existing site_summary report templates (idempotent)."
+  },
+  {
+    "migration": "20260120073408_51e2e561-5e4c-4f1b-8d1d-90d987a494c7.sql",
+    "object_type": "data",
+    "object_name": "pdf_report_templates fortress-checklist section",
+    "table": "pdf_report_templates",
+    "action": "update",
+    "detail": "UPDATE pdf_report_templates SET sections = sections || '[{\"id\": \"fortress-checklist\", \"title\": \"Fortress Compliance Checklist\", \"type\": \"table\", \"enabled\": true, \"editable\": true, \"order\": 8}]'::jsonb WHERE report_type = 'site_summary' AND no existing element with id 'fortress-checklist'. Appends the fortress-checklist table section to existing site_summary templates (idempotent)."
+  },
+  {
+    "migration": "20260120073408_51e2e561-5e4c-4f1b-8d1d-90d987a494c7.sql",
+    "object_type": "data",
+    "object_name": "pdf_report_templates documents-summary section",
+    "table": "pdf_report_templates",
+    "action": "update",
+    "detail": "UPDATE pdf_report_templates SET sections = sections || '[{\"id\": \"documents-summary\", \"title\": \"Documents Summary\", \"type\": \"table\", \"enabled\": true, \"editable\": true, \"order\": 1}]'::jsonb WHERE report_type = 'site_summary' AND no existing element with id 'documents-summary'. Appends the documents-summary table section (order 1, after health-metrics per the comment) to existing site_summary templates (idempotent)."
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "table",
+    "object_name": "site_schematics",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "CREATE TABLE public.site_schematics: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; site_id UUID NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; file_name TEXT NOT NULL; file_url TEXT NOT NULL; uploaded_by UUID (nullable, no FK); created_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_at TIMESTAMPTZ NOT NULL DEFAULT now(); UNIQUE(site_id) (one schematic per site). Stores site schematic diagrams."
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "table",
+    "object_name": "schematic_blocks",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "CREATE TABLE public.schematic_blocks: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; schematic_id UUID NOT NULL REFERENCES public.site_schematics(id) ON DELETE CASCADE; subsection_id UUID REFERENCES public.subsections(id) ON DELETE SET NULL (nullable); block_identifier TEXT NOT NULL (e.g. 'DB-001'); block_name TEXT (nullable, e.g. 'SHOPRITE'); x_position NUMERIC NOT NULL; y_position NUMERIC NOT NULL; width NUMERIC DEFAULT 120; height NUMERIC DEFAULT 80; is_auto_matched BOOLEAN DEFAULT false; created_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_at TIMESTAMPTZ NOT NULL DEFAULT now(). Stores block-to-subsection mappings on schematics."
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "rls",
+    "object_name": "site_schematics RLS",
+    "table": "site_schematics",
+    "action": "enable",
+    "detail": "ALTER TABLE public.site_schematics ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "rls",
+    "object_name": "schematic_blocks RLS",
+    "table": "schematic_blocks",
+    "action": "enable",
+    "detail": "ALTER TABLE public.schematic_blocks ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can view site schematics",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (true). Public read."
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert site schematics",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause). WITH CHECK (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update site schematics",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO clause). USING (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete site schematics",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "FOR DELETE (no TO clause). USING (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can view schematic blocks",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (true). Public read."
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert schematic blocks",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause). WITH CHECK (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update schematic blocks",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO clause). USING (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete schematic blocks",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "FOR DELETE (no TO clause). USING (auth.uid() IS NOT NULL)"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "index",
+    "object_name": "idx_site_schematics_site_id",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "CREATE INDEX idx_site_schematics_site_id ON public.site_schematics(site_id);"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "index",
+    "object_name": "idx_schematic_blocks_schematic_id",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "CREATE INDEX idx_schematic_blocks_schematic_id ON public.schematic_blocks(schematic_id);"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "index",
+    "object_name": "idx_schematic_blocks_subsection_id",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "CREATE INDEX idx_schematic_blocks_subsection_id ON public.schematic_blocks(subsection_id);"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "trigger",
+    "object_name": "update_site_schematics_updated_at",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_site_schematics_updated_at BEFORE UPDATE ON public.site_schematics FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();"
+  },
+  {
+    "migration": "20260120132425_dd27775f-2702-483d-846e-ba743b2d95f6.sql",
+    "object_type": "trigger",
+    "object_name": "update_schematic_blocks_updated_at",
+    "table": "schematic_blocks",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_schematic_blocks_updated_at BEFORE UPDATE ON public.schematic_blocks FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column();"
+  },
+  {
+    "migration": "20260121080355_91217713-58ee-40f1-a28d-4b1b52c293ab.sql",
+    "object_type": "column",
+    "object_name": "detected_regions",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS detected_regions JSONB DEFAULT '[]'::jsonb (nullable). COMMENT: 'AI-detected rectangular regions with coordinates [{x, y, width, height, label?}]'."
+  },
+  {
+    "migration": "20260121080355_91217713-58ee-40f1-a28d-4b1b52c293ab.sql",
+    "object_type": "column",
+    "object_name": "regions_detected_at",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS regions_detected_at TIMESTAMP WITH TIME ZONE (nullable, no default). COMMENT: 'Timestamp when regions were last detected'."
+  },
+  {
+    "migration": "20260121080355_91217713-58ee-40f1-a28d-4b1b52c293ab.sql",
+    "object_type": "column",
+    "object_name": "detection_status",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS detection_status TEXT DEFAULT 'pending' (nullable). COMMENT: 'Detection status: pending, processing, completed, failed'. No CHECK constraint enforcing those values."
+  },
+  {
+    "migration": "20260121080355_91217713-58ee-40f1-a28d-4b1b52c293ab.sql",
+    "object_type": "index",
+    "object_name": "idx_site_schematics_detection_status",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_site_schematics_detection_status ON public.site_schematics(detection_status);"
+  },
+  {
+    "migration": "20260121094541_8396c0ac-ce43-427a-a6ed-48645ef9ac70.sql",
+    "object_type": "column",
+    "object_name": "calibrated_width",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS calibrated_width numeric DEFAULT NULL (nullable)."
+  },
+  {
+    "migration": "20260121094541_8396c0ac-ce43-427a-a6ed-48645ef9ac70.sql",
+    "object_type": "column",
+    "object_name": "calibrated_height",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS calibrated_height numeric DEFAULT NULL (nullable)."
+  },
+  {
+    "migration": "20260121094541_8396c0ac-ce43-427a-a6ed-48645ef9ac70.sql",
+    "object_type": "column",
+    "object_name": "is_calibrated",
+    "table": "site_schematics",
+    "action": "create",
+    "detail": "ALTER TABLE public.site_schematics ADD COLUMN IF NOT EXISTS is_calibrated boolean DEFAULT false (nullable)."
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "table",
+    "object_name": "client_access_links",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE TABLE public.client_access_links (shareable magic links): id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; access_token TEXT NOT NULL UNIQUE DEFAULT encode(gen_random_bytes(32), 'hex'); client_id UUID REFERENCES public.clients(id) ON DELETE CASCADE (nullable); site_id UUID REFERENCES public.sites(id) ON DELETE CASCADE (nullable); link_type TEXT NOT NULL DEFAULT 'site' CHECK (link_type IN ('client', 'site', 'subsection')); subsection_id UUID REFERENCES public.subsections(id) ON DELETE CASCADE (nullable); label TEXT (nullable); is_active BOOLEAN NOT NULL DEFAULT true; expires_at TIMESTAMPTZ (nullable); created_by UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT now(); last_accessed_at TIMESTAMPTZ (nullable); access_count INTEGER NOT NULL DEFAULT 0."
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "index",
+    "object_name": "idx_client_access_links_token",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE INDEX idx_client_access_links_token ON public.client_access_links(access_token);"
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "index",
+    "object_name": "idx_client_access_links_client",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE INDEX idx_client_access_links_client ON public.client_access_links(client_id);"
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "index",
+    "object_name": "idx_client_access_links_site",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "CREATE INDEX idx_client_access_links_site ON public.client_access_links(site_id);"
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "rls",
+    "object_name": "client_access_links RLS",
+    "table": "client_access_links",
+    "action": "enable",
+    "detail": "ALTER TABLE public.client_access_links ENABLE ROW LEVEL SECURITY;"
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage access links",
+    "table": "client_access_links",
+    "action": "create",
+    "detail": "FOR ALL (no TO clause). USING (EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = auth.uid() AND role = 'Admin')). No WITH CHECK clause specified (defaults to USING expression for ALL)."
+  },
+  {
+    "migration": "20260122090622_9c76c44a-8b4a-4666-807a-e523b21acfea.sql",
+    "object_type": "function",
+    "object_name": "validate_access_link",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.validate_access_link(token TEXT) RETURNS TABLE(link_id UUID, link_type TEXT, client_id UUID, site_id UUID, subsection_id UUID, is_valid BOOLEAN) LANGUAGE plpgsql SECURITY DEFINER SET search_path = 'public'. Behavior: first UPDATEs public.client_access_links SET last_accessed_at = now(), access_count = access_count + 1 WHERE access_token = token AND is_active = true AND (expires_at IS NULL OR expires_at > now()); then RETURNs the row (id, link_type, client_id, site_id, subsection_id, and is_valid computed as is_active AND (expires_at IS NULL OR expires_at > now())) FROM public.client_access_links WHERE access_token = token LIMIT 1. Tables touched: client_access_links (read+write)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view coc_validations",
+    "table": "coc_validations",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause; applies to all roles including anon). USING (true). Added for public review pages (COC status display)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (true). Added for public review pages (inspection status display)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view floor_plan_pins",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (true). Added for public review pages (floor plan display)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view subsection_floor_plans",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause). USING (true). Added for public review pages (floor plan display)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view subsection_documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "Conditional via DO block: created only IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'subsection_documents' AND cmd = 'SELECT' AND qual = 'true'). Policy: FOR SELECT (no TO clause). USING (true)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view site_documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "Conditional via DO block: created only IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'site_documents' AND cmd = 'SELECT' AND qual = 'true'). Policy: FOR SELECT (no TO clause). USING (true)."
+  },
+  {
+    "migration": "20260123052442_27d0f826-373b-45e8-b6a3-bb0a40fe67f3.sql",
+    "object_type": "policy",
+    "object_name": "Public can view inspection_templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "Conditional via DO block: created only IF NOT EXISTS (SELECT 1 FROM pg_policies WHERE tablename = 'inspection_templates' AND cmd = 'SELECT' AND qual = 'true'). Policy: FOR SELECT (no TO clause). USING (true)."
+  }
+]
