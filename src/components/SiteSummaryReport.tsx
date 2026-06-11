@@ -42,6 +42,7 @@ import {
   type SnagData,
   LAYOUT,
 } from "@/lib/siteSummaryRenderSpec";
+import { factorScores, siteHealthScore } from "@/lib/siteHealth";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
 import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
 
@@ -300,7 +301,14 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
     // Calculate metrics using spec function
     const cocRequired = subsections.filter(s => s.is_coc_required).length;
     const openSnags = allSnags.filter(snag => isSnagOpen(snag.status)).length;
-    const metrics = calculateMetrics(subsectionData, cocRequired, openSnags);
+    // overallHealth is the unified siteHealth number (siteHealth.ts) so the
+    // production report matches the on-screen Site Health.
+    const healthFactors = factorScores(
+      subsections.map(s => ({ id: s.id, metering_status: s.metering_status, meter_serial_number: s.meter_serial_number })),
+      allSnags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level })),
+      allInspections.map(i => ({ subsection_id: i.subsection_id, status: i.status })),
+    );
+    const metrics = calculateMetrics(subsectionData, cocRequired, openSnags, siteHealthScore(healthFactors));
 
     // Calculate asset verification metrics using inspection json_data
     const assetMetrics = calculateAssetMetrics(siteAssets, allInspections);
