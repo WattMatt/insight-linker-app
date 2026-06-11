@@ -511,7 +511,7 @@ const SiteDetail = () => {
         cocRequiredCount: complianceStats.cocRequiredCount,
         cocApprovedCount: complianceStats.cocApprovedCount,
         meteringInstalledCount: complianceStats.meteringInstalledCount,
-        openSnags: (snagsRes || []).filter(snag => !['rectified', 'Rectified'].includes(snag.status || '')).length,
+        openSnags: (snagsRes || []).filter(snag => !['Rectified', 'Closed'].includes(snag.status || '')).length,
       });
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching site data:", error);
