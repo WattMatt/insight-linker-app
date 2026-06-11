@@ -13,8 +13,8 @@ verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Veri
 | # | Chapter | Scope | Status |
 |---|---------|-------|--------|
 | 01 | Architecture & environments | Stack, Vercel/Supabase topology, env vars, deploy process | ⬜ Unread |
-| 02 | Data model | Effective schema from 140 migrations: tables, columns, RLS policies, RPCs/functions, triggers, enums, storage buckets | 🟡 Partial — event logs `_work/migration-events-01..09.json` cover migrations 1–126; batch 10 (≈127–140, incl. the 2026-06-10 security RPC migrations) unscanned; NO synthesis docs written yet |
-| 03 | Auth & access | Auth flows, 5 access contexts, roles, token systems, user lifecycle | 🟡 Partial — all 4 docs on disk; only `auth-flows.md` confirmed complete (agent returned); the other 3 were written but their agents died mid-run (spend limit) — treat as unvalidated until re-checked |
+| 02 | Data model | Effective schema from 140 migrations: tables, columns, RLS policies, RPCs/functions, triggers, enums, storage buckets | ✅ Verified (Phase 1b) — all 140 migrations scanned (`_work/migration-events-01..10.json`); 15 docs in `02-data-model/` (6 tables, 6 rls-policies, 2 rpcs, triggers-enums-storage). Cross-checked vs types.ts → surfaced G-SEC-11, G-OPS-01/02. ⚠️ completeness critic returned null — re-run to formally close coverage |
+| 03 | Auth & access | Auth flows, 5 access contexts, roles, token systems, user lifecycle | ✅ Verified — all 4 docs; the 3 previously-unvalidated docs re-validated against code in Phase 1b |
 | 04 | Routes | All 58 pages: renders, reads/writes, RLS dependency | ⬜ Unread |
 | 05 | Edge functions | All 26: auth model, inputs, side effects, callers | ⬜ Unread |
 | 06 | End-to-end flows | Inspection lifecycle, COC validation, PDF generation (×5 generators), offline sync, QR, invites/email, templates | ⬜ Unread |

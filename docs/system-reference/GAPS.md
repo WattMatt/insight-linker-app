@@ -82,6 +82,12 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Owner:** Claude (download + review + recommendation) · Arno (delete/keep decisions).
 - **Status:** create-user-admin reviewed → G-SEC-09 → **deleted/closed**. Other 6 pending review: abacus-code-review, bulk-validate-coc, audit-orphan-photos, migrate-storage, migrate-images, migrate-firebase-data.
 
+### G-SEC-11 · anon READ+WRITE open on 2 out-of-band tables 🟠 High — fix written, awaiting dashboard apply
+- **Gap:** `contractor_coc_uploads` and `inspection_relink_audit` allow unauthenticated read AND write. Both tier-2 (read) and the 2026-06-10 write-lockdown missed them — they're out-of-band tables (G-OPS-01) absent from both lockdowns' table lists.
+- **Evidence (2026-06-11, anon REST + public anon key):** SELECT → `200 []` (read open, tables empty); INSERT `{}` → `400 23502 null value … project_id` (write passed RLS, stopped only by NOT NULL — no row created). All other probed tables returned `42501` RLS-denied. Zero read/write call sites in src/ or supabase/functions/ (only generated types.ts).
+- **Fix (written):** `supabase/migrations/20260611100000_anon_lockdown_oob_tables.sql` + dashboard copy `docs/security/PENDING-2026-06-11-anon-lockdown-oob-tables.sql` — `REVOKE ALL … FROM anon` on both (PostgREST runs as anon, so this is sufficient and policy-name-independent; breaks nothing since no app writer).
+- **To close (Owner Arno):** apply the PENDING SQL via dashboard SQL editor (no DB creds in repo — I can't apply it), then I re-probe (expect 401 read + write). Then rename PENDING→APPLIED.
+
 ## TEST — verification infrastructure (assessed 2026-06-11; repo has ZERO automated tests, no CI, tsc/eslint gates disabled)
 
 ### G-TEST-01 · RLS/access-matrix regression suite 🟠 (plan agreed: build after Phase 2)
@@ -128,6 +134,22 @@ Periodic job verifying system-reference citations still hold; flags chapters tou
 **Sequencing decision (agreed 2026-06-11):** build TEST items only after their spec source exists —
 G-TEST-01/03 after Phase 2 docs land; 04–07 any time; 08–09 after Phase 3. Writing tests before the
 docs would encode assumptions — the exact failure mode this review exists to kill.
+
+## OPS — process / drift
+
+### G-OPS-01 · Prod schema has drifted from the migrations + types.ts is stale 🔴 High
+- **Gap:** Multiple objects exist in the live DB (confirmed via generated `types.ts`) but appear in **no** `supabase/migrations/` file — applied out-of-band via the dashboard. This is what *caused* G-SEC-11 (the two anon-open tables were never in any lockdown's list). Surfaced by the Phase-1b synthesis types.ts cross-check.
+- **Out-of-band objects found (2026-06-11):**
+  - Tables/columns with no migration: `contractor_coc_uploads.{legend_card_id, site_id, subsection_id}` (types.ts:965+), `inspections.deleted_at` (types.ts:1455), `snags.{assignee, coc_validation_id, deleted_at, snag_type, trade}`, `subsections.{installation_score, installation_status, deleted_at}`, `inspection_signatures_snap_20260421` (a 2026-04-21 dashboard backup snapshot table).
+  - `auth_events` exists in migration 20260525120000 but is **absent from types.ts** → types.ts predates it and is stale (the G-SEC-04 emitters write an untyped table; harmless for edge fns but app code touching it is untyped).
+  - `snags.status` CHECK may have been widened out-of-band (RPCs reference `rectified`/`closed` not in the original `Open`/`Closed` CHECK).
+- **Resolve:** (1) `supabase db pull` / dashboard schema diff to capture every out-of-band change into real migrations; (2) regenerate `types.ts`; (3) reconcile RLS on the recovered tables (folds in G-SEC-11's full policy redesign). This is the confirmed instance of **G-TEST-02** (schema-drift check) — stand that check up so this can't recur silently.
+- **Owner:** Claude (db pull + migration authoring + types regen) · needs DB connection (db password or dashboard) from Arno.
+
+### G-OPS-02 · Several fully-defined tables have no call sites (possible dead schema) 🔵 Low
+- **Gap:** `validation_conversations`, `validation_messages`, `user_storage_connections`, `coc_local_validations`, `qr_codes`, `temp_import` are fully defined (columns/RLS/indexes) but have **zero** read/write call sites in src/ or supabase/functions/. Either dead, planned, or written by an out-of-repo process.
+- **Resolve:** per table, confirm live row counts + intended writer; drop if dead, document if planned. Low priority; revisit during the components/flows phases.
+- **Owner:** Claude (confirm) · Arno (drop decision).
 
 ## PROD — deferred product decisions (carried from June review)
 
