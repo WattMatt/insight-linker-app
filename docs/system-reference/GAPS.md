@@ -199,6 +199,16 @@ docs would encode assumptions — the exact failure mode this review exists to k
 - **Resolve:** per table, confirm live row counts + intended writer; drop if dead, document if planned. Low priority; revisit during the components/flows phases.
 - **Owner:** Claude (confirm) · Arno (drop decision).
 
+### G-OPS-03 · Large dead-code surface (deletion backlog) 🔵 Low — NEW (Phase 4)
+- **Gap:** Phase-4 grep-verified a substantial amount of zero-caller code: ~10 dead components (COCReviewStatus, OfflineImage/PhotoGallery, SiteDrawingInspection, SiteImages, SiteExport, 5 `*Preview` + their barrel, pdf-preview/SubsectionCard…), 14 unused vendored shadcn `ui/` primitives + the unused Sonner toaster, and many dead lib files/exports — incl. **the entire orphaned `src/lib/pdf/` OCR pipeline** (with a stub `ocrEngine` returning `[]`), `usePDFTemplate.ts`, `complianceReportGenerator`, `imagePathFixer.*`, etc. Plus heavy duplicated logic (meter-match ×3, image-compress ×4, QR ×2, status-badge ×3, toast ×2, sample-data ×2). Full list: [FINDINGS-phase4.md](07-components-hooks-lib/FINDINGS-phase4.md) §A/§C.
+- **Resolve:** a focused dead-code-deletion PR (low risk — all grep-verified zero-caller) + a consolidation pass for the duplicated logic. Significantly shrinks maintenance/attack surface.
+- **Owner:** Claude (can do the deletion sweep on request) · Arno (sign-off).
+
+### G-BUG-01 · Stubs/diagnostics that mislead or shipped to prod 🔴 Low-Med — NEW (Phase 4)
+- **Gap:** (1) `storageQuota.clearOldOfflineData` toasts "Old offline data cleared successfully" but deletes **nothing**; `estimateIndexedDBUsage` returns a fabricated estimate — the storage-management UI lies to the user. (2) `ocrEngine.extractTextFromCanvas` is a stub returning `[]`. (3) **A test diagnostic is wired to a prod button** — `pdfMakeConfig.testPdfGeneration` (downloads a hello-world PDF + `alert()`) is on an onClick in `AssetComparisonTable.tsx:565`. Also several stale-brand `'SiteWise'` fallbacks + a hardcoded `arno@wmeng.co.za` in IssueReportDialog/SuggestionDialog (§B/§F).
+- **Resolve:** make `clearOldOfflineData` actually clear (or remove the affordance); remove/guard the prod test button; fix brand fallbacks. Small, self-contained.
+- **Owner:** Claude.
+
 ## PROD — deferred product decisions (carried from June review)
 
 ### G-PROD-01 · PR #11 offline queue engine — DRAFT, device-test matrix required ⚪

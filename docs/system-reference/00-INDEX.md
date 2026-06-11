@@ -20,7 +20,7 @@ verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Veri
 | 04 | Routes | All 52 pages: renders, reads/writes, RLS dependency | ✅ Verified (Phase 2) — 7 docs in `04-routes/`; security flags → SECURITY-FINDINGS-phase2.md |
 | 05 | Edge functions | All 26: auth model, inputs, side effects, callers | ✅ Verified (Phase 2) — 5 docs in `05-edge-functions/`; security flags → SECURITY-FINDINGS-phase2.md |
 | 06 | End-to-end flows | Inspection lifecycle, COC validation, PDF generation (×5 generators), offline sync, QR, invites/email, templates | ✅ Verified (Phase 3) — 7 docs in `06-flows/`; critic: zero reconciliation contradictions, all citations resolved. 46 security flags → SECURITY-FINDINGS-phase3.md (most re-confirm G-SEC-01/12/13/14; new: G-SEC-16…19). Coverage follow-up: access-links/visitor-capture flow not yet traced |
-| 07 | Components, hooks & lib | 166 components, 22 hooks, 47 lib files — per-function docs | ⬜ Unread |
+| 07 | Components, hooks & lib | 166 components, 22 hooks, 47 lib files — per-function docs | ✅ Verified (Phase 4) — 13 docs in `07-components-hooks-lib/`, 833+ symbols; critic 8/8 spot-checks exact. 5 seam-gap files closed via `uncovered-gapfill.md`. 106 findings → FINDINGS-phase4.md (dead code → G-OPS-03; misleading stubs → G-BUG-01; re-confirms G-SEC-13/14/17/02) |
 | 08 | Existing-docs audit | 23 docs graded accurate/stale/superseded | ⬜ Unread |
 
 ## Gap & problem register
