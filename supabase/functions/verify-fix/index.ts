@@ -1,4 +1,5 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -33,6 +34,23 @@ serve(async (req) => {
   }
 
   try {
+    // G-SEC-12: require an authenticated user. The anon key is a valid JWT but resolves
+    // to no user, so anon/anon-key-only callers are rejected. App callers send a real
+    // user JWT via functions.invoke, so this does not affect legitimate use.
+    const supabaseAuth = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
+    );
+    const __authHeader = req.headers.get('Authorization') || '';
+    const __jwt = __authHeader.replace('Bearer ', '');
+    const { data: { user: __caller } = { user: null }, error: __authErr } =
+      __jwt ? await supabaseAuth.auth.getUser(__jwt) : { data: { user: null }, error: new Error('missing token') } as any;
+    if (__authErr || !__caller) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     const request: VerificationRequest = await req.json();
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
 
