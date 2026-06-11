@@ -511,21 +511,24 @@ export function getEnabledSections(sections: ReportSection[]): ReportSection[] {
 export function calculateMetrics(
   subsections: SubsectionData[],
   cocRequiredCount?: number,
-  openSnagCount?: number
+  openSnagCount?: number,
+  overallHealthOverride?: number
 ): SiteSummaryMetrics {
   const subsectionCount = subsections.length;
   const safeDenominator = Math.max(subsections.length, 1);
   const cocRequired = cocRequiredCount ?? subsections.filter(s => s.cocStatus !== null).length;
-  const cocCompliant = subsections.filter(s => 
+  const cocCompliant = subsections.filter(s =>
     ['Approved', 'Valid', 'Pass'].includes(s.cocStatus || '')
   ).length;
-  const meteringInstalled = subsections.filter(s => 
+  const meteringInstalled = subsections.filter(s =>
     s.meteringStatus === 'Installed' || !!s.meterSerialNumber
   ).length;
   const openSnags = openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
   const compliantCount = subsections.filter(s => s.isCompliant).length;
-  
-  const overallHealth = Math.round((compliantCount / safeDenominator) * 100);
+
+  // Prefer the unified siteHealth number (siteHealth.ts) when the caller has it,
+  // so the report matches on-screen Site Health. Fall back to the legacy COC calc.
+  const overallHealth = overallHealthOverride ?? Math.round((compliantCount / safeDenominator) * 100);
   const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
   const meteringData = Math.round((meteringInstalled / safeDenominator) * 100);
   const snagFree = 100 - Math.round((openSnags / safeDenominator) * 100);

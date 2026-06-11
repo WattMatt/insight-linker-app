@@ -109,6 +109,8 @@ export interface SampleKPIs {
   totalInspections: number;
   completedInspections: number;
   snagOpen: number; // Open snags count
+  // Unified Site Health (siteHealth.ts) when available, so reports match on-screen health.
+  overallHealth?: number;
 }
 
 // COC Validation data for preview tables

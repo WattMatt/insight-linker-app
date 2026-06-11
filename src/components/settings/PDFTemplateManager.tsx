@@ -423,6 +423,7 @@ const UnifiedPreviewWrapper: React.FC<UnifiedPreviewWrapperProps> = ({
     totalInspections: kpis.totalInspections,
     completedInspections: kpis.completedInspections,
     snagOpen: kpis.openSnags,
+    overallHealth: kpis.overallHealth,
   };
   
   // Render appropriate preview based on report type
