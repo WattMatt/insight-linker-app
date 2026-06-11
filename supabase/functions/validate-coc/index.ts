@@ -934,6 +934,73 @@ serve(async (req) => {
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
+    // Verify the requesting user (JWT required)
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - please log in again' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = user.id;
+
+    // Verify the document exists and belongs to the supplied subsection
+    const { data: documentRow, error: documentRowError } = await supabase
+      .from('subsection_documents')
+      .select('id, subsection_id, file_url')
+      .eq('id', documentId)
+      .maybeSingle();
+
+    if (documentRowError || !documentRow || documentRow.subsection_id !== subsectionId) {
+      return new Response(
+        JSON.stringify({ error: 'Document does not belong to the specified subsection' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Authorization: Admins always; Contractors only for subsections on their assigned sites
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (roleData?.role !== 'Admin') {
+      let contractorAllowed = false;
+
+      if (roleData?.role === 'Contractor') {
+        const { data: subsectionRow } = await supabase
+          .from('subsections')
+          .select('site_id')
+          .eq('id', subsectionId)
+          .maybeSingle();
+
+        if (subsectionRow?.site_id) {
+          const { data: hasSiteAccess } = await supabase
+            .rpc('contractor_has_site_access', { _user_id: userId, _site_id: subsectionRow.site_id });
+          contractorAllowed = hasSiteAccess === true;
+        }
+      }
+
+      if (!contractorAllowed) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden - insufficient permissions' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
+
     // Fetch validation settings from database or use testSettings if provided
     let validationSettings: ValidationSettings = { ...DEFAULT_SETTINGS };
     
@@ -964,15 +1031,6 @@ serve(async (req) => {
       hierarchy_check_enabled: validationSettings.hierarchy_check_enabled,
       mandatory_failures_for_fail: validationSettings.mandatory_failures_for_fail
     });
-
-    // Get user from auth header
-    const authHeader = req.headers.get('Authorization');
-    let userId = null;
-    if (authHeader) {
-      const token = authHeader.replace('Bearer ', '');
-      const { data: { user } } = await supabase.auth.getUser(token);
-      userId = user?.id;
-    }
 
     console.log('Starting enhanced COC validation for document:', documentId);
 
@@ -1026,15 +1084,17 @@ serve(async (req) => {
       }
     }
 
-    // Extract the storage path from the signed URL
+    // Extract the storage path from the document's stored file_url
+    // (preferred over the caller-supplied documentUrl, which is kept for compatibility only)
+    const sourceUrl = documentRow.file_url || documentUrl;
     let storagePath: string;
-    
-    if (documentUrl.includes('/storage/v1/object/sign/documents/')) {
-      const pathPart = documentUrl.split('/storage/v1/object/sign/documents/')[1];
+
+    if (sourceUrl.includes('/storage/v1/object/sign/documents/')) {
+      const pathPart = sourceUrl.split('/storage/v1/object/sign/documents/')[1];
       storagePath = pathPart.split('?token=')[0];
       storagePath = decodeURIComponent(storagePath);
-    } else if (documentUrl.includes('/storage/v1/object/public/documents/')) {
-      storagePath = documentUrl.split('/storage/v1/object/public/documents/')[1];
+    } else if (sourceUrl.includes('/storage/v1/object/public/documents/')) {
+      storagePath = sourceUrl.split('/storage/v1/object/public/documents/')[1];
       storagePath = decodeURIComponent(storagePath);
     } else {
       throw new Error('Invalid document URL format');

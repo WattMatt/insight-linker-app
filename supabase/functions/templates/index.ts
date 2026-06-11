@@ -344,7 +344,29 @@ Deno.serve(async (req) => {
     const authHeader = req.headers.get('Authorization')
     const expectedApiKey = Deno.env.get('DOCBUILDER_PUBLIC_TOKEN')
 
-    if (expectedApiKey && authHeader !== `Bearer ${expectedApiKey}`) {
+    // Fail closed: never serve data when the API token is not configured
+    if (!expectedApiKey) {
+      return new Response(
+        JSON.stringify({ error: 'DOCBUILDER_PUBLIC_TOKEN is not configured' }),
+        { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      )
+    }
+
+    // Constant-time comparison via SHA-256 digests to avoid timing attacks
+    const providedApiKey = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : ''
+    const encoder = new TextEncoder()
+    const [expectedDigest, providedDigest] = await Promise.all([
+      crypto.subtle.digest('SHA-256', encoder.encode(expectedApiKey)),
+      crypto.subtle.digest('SHA-256', encoder.encode(providedApiKey))
+    ])
+    const expectedBytes = new Uint8Array(expectedDigest)
+    const providedBytes = new Uint8Array(providedDigest)
+    let mismatch = 0
+    for (let i = 0; i < expectedBytes.length; i++) {
+      mismatch |= expectedBytes[i] ^ providedBytes[i]
+    }
+
+    if (mismatch !== 0) {
       return new Response(
         JSON.stringify({ error: 'Invalid API key' }),
         { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -356,8 +378,9 @@ Deno.serve(async (req) => {
     const supabase = createClient(supabaseUrl, supabaseKey)
 
     // Fetch all data in parallel
+    // NOTE: clients table is intentionally NOT queried - client PII (email, contact person)
+    // must never be exposed through this endpoint
     const [
-      { data: clients },
       { data: sites },
       { data: subsections },
       { data: inspections },
@@ -367,7 +390,6 @@ Deno.serve(async (req) => {
       { data: snags },
       { data: siteAssets }
     ] = await Promise.all([
-      supabase.from('clients').select('id, name, company_name, email, contact_person').order('name'),
       supabase.from('sites').select('id, name, address, site_type, client_id').order('name'),
       supabase.from('subsections').select('id, name, description, category, tenant_name, coc_status, coc_number, meter_serial_number, site_id').order('name'),
       supabase.from('inspections').select('id, title, status, inspection_date, inspector_name, site_id, subsection_id, template_id').order('created_at', { ascending: false }),
@@ -379,7 +401,6 @@ Deno.serve(async (req) => {
     ])
 
     // Create lookup maps
-    const clientMap = new Map(clients?.map(c => [c.id, c]) || [])
     const siteMap = new Map(sites?.map(s => [s.id, s]) || [])
     const subsectionMap = new Map(subsections?.map(s => [s.id, s]) || [])
 
@@ -391,8 +412,7 @@ Deno.serve(async (req) => {
         case 'site-summary':
         case 'asset-verification-report':
           availableItems = sites?.map(s => {
-            const client = clientMap.get(s.client_id)
-            return { id: s.id, name: s.name, address: s.address, client: client?.name || null }
+            return { id: s.id, name: s.name, address: s.address, client: null }
           }) || []
           break
         case 'subsection-report':
@@ -483,7 +503,7 @@ Deno.serve(async (req) => {
     })
 
     const summary = {
-      totalClients: clients?.length || 0,
+      totalClients: 0,
       totalSites: sites?.length || 0,
       totalSubsections: subsections?.length || 0,
       totalInspections: inspections?.length || 0,
@@ -511,13 +531,9 @@ Deno.serve(async (req) => {
           coverPage: t.cover_page,
           tenants: t.tenants
         })) || [],
-        clients: clients?.map(c => ({
-          id: c.id,
-          name: c.name,
-          companyName: c.company_name,
-          email: c.email,
-          contactPerson: c.contact_person
-        })) || []
+        // clients key kept for response-shape compatibility, but client PII
+        // (names, emails, contact persons) is no longer exposed
+        clients: []
       }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )

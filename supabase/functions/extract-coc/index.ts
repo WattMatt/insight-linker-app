@@ -910,7 +910,8 @@ serve(async (req) => {
   }
 
   try {
-    const { documentUrl, fileName, retryFields, documentId, subsectionId, forceReextract, userId } = await req.json();
+    // NOTE: body userId is intentionally ignored - extracted_by comes from the verified JWT
+    const { documentUrl, fileName, retryFields, documentId, subsectionId, forceReextract } = await req.json();
     
     console.log('Extract-COC request received:', { 
       fileName, 
@@ -935,6 +936,81 @@ serve(async (req) => {
     }
 
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+
+    // Verify the requesting user (JWT required)
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader) {
+      return new Response(
+        JSON.stringify({ error: 'Missing authorization header' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: { user }, error: authError } = await supabase.auth.getUser(token);
+
+    if (authError || !user) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized - please log in again' }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    const userId = user.id;
+
+    // Verify the document exists and belongs to the supplied subsection (when provided)
+    let documentRow: { id: string; subsection_id: string; file_url: string } | null = null;
+    if (documentId) {
+      const { data: docData, error: docError } = await supabase
+        .from('subsection_documents')
+        .select('id, subsection_id, file_url')
+        .eq('id', documentId)
+        .maybeSingle();
+
+      if (docError || !docData || (subsectionId && docData.subsection_id !== subsectionId)) {
+        return new Response(
+          JSON.stringify({ error: 'Document does not belong to the specified subsection' }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+
+      documentRow = docData;
+    }
+
+    // Authorization: Admins always; Contractors only for subsections on their assigned sites
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .maybeSingle();
+
+    if (roleData?.role !== 'Admin') {
+      let contractorAllowed = false;
+
+      if (roleData?.role === 'Contractor') {
+        const targetSubsectionId = subsectionId || documentRow?.subsection_id;
+        if (targetSubsectionId) {
+          const { data: subsectionRow } = await supabase
+            .from('subsections')
+            .select('site_id')
+            .eq('id', targetSubsectionId)
+            .maybeSingle();
+
+          if (subsectionRow?.site_id) {
+            const { data: hasSiteAccess } = await supabase
+              .rpc('contractor_has_site_access', { _user_id: userId, _site_id: subsectionRow.site_id });
+            contractorAllowed = hasSiteAccess === true;
+          }
+        }
+      }
+
+      if (!contractorAllowed) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden - insufficient permissions' }),
+          { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+    }
 
     // ============ CHECK FOR EXISTING EXTRACTION (CACHING) ============
     if (documentId && !forceReextract && !retryFields) {
@@ -966,29 +1042,31 @@ serve(async (req) => {
     console.log('Starting enhanced COC extraction for:', fileName);
     console.log('Using model: google/gemini-2.5-flash for reliable document analysis');
     
-    // Download document
+    // Download document - prefer the stored file_url from the verified document row
+    // over the caller-supplied documentUrl (kept for compatibility only)
+    const sourceUrl = documentRow?.file_url || documentUrl;
     let fileData: Blob;
-    
+
     try {
-      const urlParts = documentUrl.split('/documents/');
+      const urlParts = sourceUrl.split('/documents/');
       if (urlParts.length === 2) {
         const filePath = decodeURIComponent(urlParts[1]);
         console.log('Downloading from storage path:', filePath);
-        
+
         const { data, error } = await supabase.storage
           .from('documents')
           .download(filePath);
-        
+
         if (error) {
           console.error('Supabase storage download error:', error);
           throw new Error(`Failed to download from storage: ${error.message}`);
         }
-        
+
         fileData = data;
         console.log('Document downloaded successfully from storage');
       } else {
         console.log('Using direct fetch for URL');
-        const docResponse = await fetch(documentUrl);
+        const docResponse = await fetch(sourceUrl);
         
         if (!docResponse.ok) {
           throw new Error(`Failed to download document: ${docResponse.statusText}`);

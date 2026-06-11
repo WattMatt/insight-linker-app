@@ -174,104 +174,41 @@ const PublicSiteReview = () => {
         setVisitorRegistered(true);
       }
 
-      // Fetch company settings
-      const { data: settings } = await supabase
-        .from('settings')
-        .select('company_name, company_logo_url')
-        .maybeSingle();
-      
-      if (settings) {
-        setCompanySettings(settings);
-      }
-
-      // Determine which site to load: routeSiteId (from portfolio drill-down) or link.site_id
+      // Determine which site to load: routeSiteId (from portfolio drill-down) or link.site_id.
+      // Scope enforcement now happens in the DB — the RPC returns null if the site
+      // is outside the token's scope.
       const targetSiteId = routeSiteId || link.site_id;
-      
-      // Fetch site data
-      if (targetSiteId) {
-        const { data: siteData, error: siteError } = await supabase
-          .from('sites')
-          .select(`
-            *,
-            clients!inner (
-              id,
-              name,
-              company_name,
-              logo_url
-            )
-          `)
-          .eq('id', targetSiteId)
-          .single();
 
-        if (siteError) {
-          console.error("Error fetching site:", siteError);
+      if (targetSiteId) {
+        const { data, error: reviewError } = await supabase
+          .rpc('get_public_site_review', { p_token: token, p_site_id: targetSiteId });
+
+        if (reviewError) {
+          console.error("Error fetching site:", reviewError);
           setError("Unable to load site data");
           return;
         }
 
-        setSite(siteData);
-        setClient(siteData.clients);
-
-        // Fetch subsections
-        const { data: subsectionsData } = await supabase
-          .from('subsections')
-          .select('*')
-          .eq('site_id', targetSiteId)
-          .order('name');
-
-        setSubsections(subsectionsData || []);
-
-        // Fetch site documents
-        const { data: docsData } = await supabase
-          .from('site_documents')
-          .select('*')
-          .eq('site_id', targetSiteId)
-          .order('created_at', { ascending: false });
-
-        setSiteDocuments(docsData || []);
-
-        // Fetch site document categories
-        const { data: docCatsData } = await supabase
-          .from('site_document_categories')
-          .select('id, name')
-          .eq('site_id', targetSiteId)
-          .order('order_index');
-
-        setSiteDocCategories(docCatsData || []);
-
-        // Fetch inspections
-        const { data: inspectionsData } = await supabase
-          .from('inspections')
-          .select('*')
-          .eq('site_id', targetSiteId)
-          .order('created_at', { ascending: false });
-
-        setInspections(inspectionsData || []);
-
-        // Fetch snags
-        const subsectionIds = (subsectionsData || []).map(s => s.id);
-        if (subsectionIds.length > 0) {
-          const { data: snagsData } = await supabase
-            .from('snags')
-            .select('id, subsection_id, title, status, risk_level')
-            .in('subsection_id', subsectionIds);
-
-          setSnags(snagsData || []);
-
-          // Fetch subsection documents
-          const { data: subDocsData } = await supabase
-            .from('subsection_documents')
-            .select(`
-              id, file_name, file_url, subsection_id,
-              document_categories(name)
-            `)
-            .in('subsection_id', subsectionIds);
-
-          setSubsectionDocuments((subDocsData || []).map(doc => ({
-            ...doc,
-            category_name: (doc.document_categories as any)?.name || "Uncategorized"
-          })));
+        // Null = invalid token or site outside the token's scope; leaves site/client
+        // unset so the existing "Site Not Found" state renders.
+        if (!data) {
+          return;
         }
+
+        const payload = data as any;
+
+        if (payload.settings) {
+          setCompanySettings(payload.settings);
+        }
+
+        setSite(payload.site);
+        setClient(payload.client);
+        setSubsections(payload.subsections || []);
+        setSiteDocuments(payload.site_documents || []);
+        setSiteDocCategories(payload.site_document_categories || []);
+        setInspections(payload.inspections || []);
+        setSnags(payload.snags || []);
+        setSubsectionDocuments(payload.subsection_documents || []);
       }
     } catch (err) {
       console.error("Error loading data:", err);
@@ -299,26 +236,6 @@ const PublicSiteReview = () => {
         return 'bg-destructive/10 text-destructive border-destructive/20';
       default:
         return 'bg-muted text-muted-foreground';
-    }
-  };
-
-  const getStatusBadgeColor = (status?: string) => {
-    switch (status?.toLowerCase()) {
-      case 'approved':
-      case 'valid':
-      case 'pass':
-      case 'compliant':
-        return 'bg-emerald-500';
-      case 'pending':
-      case 'review':
-        return 'bg-amber-500';
-      case 'fail':
-      case 'failed':
-      case 'expired':
-      case 'missing':
-        return 'bg-destructive';
-      default:
-        return 'bg-muted-foreground';
     }
   };
 
@@ -616,11 +533,6 @@ const PublicSiteReview = () => {
                         <div className="flex items-center gap-2">
                           {subsection.category && (
                             <Badge variant="outline">{subsection.category}</Badge>
-                          )}
-                          {subsection.coc_status && (
-                            <Badge className={`${getStatusBadgeColor(subsection.coc_status)} text-white`}>
-                              COC: {subsection.coc_status}
-                            </Badge>
                           )}
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
                         </div>
