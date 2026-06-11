@@ -101,9 +101,9 @@ Currently-effective policies:
 
 ## qr_scans
 
-- **No such table exists** anywhere in the chronological event log (-01 … -10) or in the tier-2 file. No CREATE TABLE, no `ALTER TABLE … ENABLE ROW LEVEL SECURITY`, no policy ever references `qr_scans`. ⚠️ UNVERIFIED whether it exists outside the captured migrations (e.g. created directly in the dashboard); within ground-truth DDL it is absent.
+- **CORRECTION (Phase 3):** the table DOES exist — created in migration `20251014140001` (`CREATE TABLE public.qr_scans`, RLS enabled, with an anon-INSERT policy `"Anyone can insert scans"` + a read policy). It was missed in the batch event-log extraction. RLS is enabled; anon may INSERT scan rows. (Cross-ref `tables-04.md:275`.) Note: the app never actually inserts scan rows (no `from('qr_scans').insert` in the repo — see G-OPS-02 / SECURITY-FINDINGS-phase3), so the table is effectively unused/dead despite existing.
 
-**Access summary** — N/A (table not present in tracked schema).
+**Access summary** — anon: INSERT allowed (per the `"Anyone can insert scans"` policy) but never exercised by app code; authenticated/admin reads per the read policy in `20251014140001`.
 
 ---
 
@@ -245,5 +245,5 @@ Currently-effective policies:
 ### Cross-table notes
 
 - **Anon read now gated by RPC, not policy.** For `inspections`, `site_documents`, `site_schematics`, `schematic_blocks`, `site_assets`, the only effective anon-readable path post-tier-2 is the token-scoped SECURITY DEFINER RPCs (`get_public_subsection`, `get_public_portfolio`, `get_public_site_review`, `get_public_subsection_review`; `20260610113000`/`20260610130000`, `GRANT EXECUTE … TO anon, authenticated`). `settings` remains anon-readable directly (tier-2 exclusion).
-- **`qr_scans` does not exist** in the tracked schema (see section above).
+- **`qr_scans` EXISTS** (migration `20251014140001`; RLS enabled, anon-INSERT policy) but is unused by app code — see the corrected section above.
 - **No table in this batch is RLS-FORCED.** All show only `ENABLE ROW LEVEL SECURITY`; no `FORCE ROW LEVEL SECURITY` event appears for any of them. Table owners / `service_role` bypass RLS.

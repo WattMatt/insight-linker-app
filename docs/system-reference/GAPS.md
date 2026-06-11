@@ -116,6 +116,26 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **To close (Owner Arno):** apply the migration (`supabase db push` or dashboard SQL editor — no DB creds in repo, I can't apply it), then I re-probe per the migration's verification block (Client/Contractor write → denied; staff write → ok; anon branding read → 200).
 - **Related:** same class as the phase-1 write lockdown (`20260610120000`) and G-SEC-11; full out-of-band policy reconciliation tracked under G-OPS-01.
 
+### G-SEC-16 · COC validation can be gamed / is inconsistent 🔴 High — NEW (Phase 3)
+- **Gap (3 sub-issues, electrical-safety-critical):** (1) **Threshold override** — a caller (Admin or site-scoped Contractor) can pass arbitrary validation thresholds in the request body via `testSettings` (`validate-coc/index.ts:1007-1009`), bypassing the DB `coc_validation_settings` for that run and **potentially forcing a Pass on a non-compliant COC**; the result persists to `coc_validations.status` + subsection `is_compliant`. (2) **Two disagreeing writers of `is_compliant`** — validate-coc's 4-way AND (`:1659`) vs the `sync_coc_compliance_status` trigger's coc_status-derived value (`20260201151127:42-48`); a hierarchy-invalid "Approved" COC can be recomputed compliant by the trigger. (3) **Optimistic pre-write drift** — client pre-writes approved coc_number/type/date before validation (`:354-365`); a failed validation rolls back only client state, leaving approved-but-unvalidated metadata server-side.
+- **Resolve:** ignore/whitelist `testSettings` for persisted runs (or restrict to a dry-run that never writes); make the trigger the single authority for `is_compliant` (or have validate-coc defer to it); move the metadata write to AFTER a Pass. Needs a domain decision on the intended validation authority.
+- **Owner:** Claude (proposal + edge-fn/trigger change) · Arno (sign-off on the validation-authority rule).
+
+### G-SEC-17 · Spoofable evidence provenance 🔴 Medium — NEW (Phase 3)
+- **Gap:** `captured_by`/`created_by`/`uploaded_by` on compliance photos + offline uploads are set from client input with an `'unknown'` fallback and no `auth.uid()` constraint (scoped policies were dropped) — `useOfflinePhotos.ts:163`, `useOfflineFloorPlanAnnotations.ts:87`. Provenance of compliance evidence is forgeable.
+- **Resolve:** set provenance server-side from the JWT (DB column default `auth.uid()` or in an edge fn), not client input. Folds into the G-SEC-13 RLS redesign.
+- **Owner:** Claude.
+
+### G-SEC-18 · template-sync unsigned webhook egress 🔴 Medium — NEW (Phase 3)
+- **Gap:** every inspection_template CRUD POSTs the full template payload to `DOCBUILDER_WEBHOOK_URL` with no signature/auth (`template-sync/index.ts:358-389`); whoever controls that env var receives all template data. `/webhook/register` is a no-op stub.
+- **Resolve:** sign the webhook (HMAC) + verify on the receiver, or drop the egress if DocBuilder is retired. Ties to G-SEC-12 (template-sync is also fail-open).
+- **Owner:** Claude · needs Arno's call on DocBuilder's future.
+
+### G-SEC-19 · Client-only invariants / trust-the-client figures 🔴 Low-Med — NEW (Phase 3)
+- **Gap (cluster):** "Completed requires `quality_rating`" enforced only in TS (`InspectionDetail.tsx:1483`), no DB CHECK; PDF compliance figures computed in-browser and rendered by generate-pdf without recomputation (`GenerateFinalReportButton.tsx`); online authz failures masked as offline retries then silently dropped after 3 tries (`useOfflineSync.ts:447-457`); `cleanup_old_pending_invites()` GRANT EXECUTE TO authenticated with no in-fn auth + no confirmed cron; generate-pdf orphans PDFs on swallowed INSERT failure (`:3054`).
+- **Resolve:** add DB CHECK/trigger for the completion invariant; recompute report figures server-side (or accept once server PDF is retired); surface authz failures distinctly from connectivity; confirm the prune schedule.
+- **Owner:** Claude (per-item) · low priority vs G-SEC-16.
+
 ## TEST — verification infrastructure (assessed 2026-06-11; repo has ZERO automated tests, no CI, tsc/eslint gates disabled)
 
 ### G-TEST-01 · RLS/access-matrix regression suite 🟠 (plan agreed: build after Phase 2)
