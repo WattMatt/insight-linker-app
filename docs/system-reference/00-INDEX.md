@@ -5,8 +5,10 @@ Every entry carries `file:line` (or migration filename) citations. Claims that c
 verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Verified · 🟡 Partial · ⬜ Unread.
 
 **Started:** 2026-06-11 · **Method:** multi-agent workflow review, phased
-**Surface area (counted 2026-06-11):** ~100k LOC TS/TSX · 58 routes · 166 components · 52 views ·
+**Surface area (counted 2026-06-11):** ~100k LOC TS/TSX · 52 routes (page.tsx) · 166 components · 52 views ·
 22 hooks · 47 lib files · 26 edge functions · 140 migrations · 23 pre-existing docs
+
+**Security findings live in [GAPS.md](GAPS.md) (register) + [SECURITY-FINDINGS-phase2.md](SECURITY-FINDINGS-phase2.md) (full 59-flag inventory).**
 
 ## Ledger
 
@@ -15,8 +17,8 @@ verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Veri
 | 01 | Architecture & environments | Stack, Vercel/Supabase topology, env vars, deploy process | ⬜ Unread |
 | 02 | Data model | Effective schema from 140 migrations: tables, columns, RLS policies, RPCs/functions, triggers, enums, storage buckets | ✅ Verified (Phase 1b) — all 140 migrations scanned (`_work/migration-events-01..10.json`); 15 docs in `02-data-model/` (6 tables, 6 rls-policies, 2 rpcs, triggers-enums-storage). Cross-checked vs types.ts → surfaced G-SEC-11, G-OPS-01/02. ⚠️ completeness critic returned null — re-run to formally close coverage |
 | 03 | Auth & access | Auth flows, 5 access contexts, roles, token systems, user lifecycle | ✅ Verified — all 4 docs; the 3 previously-unvalidated docs re-validated against code in Phase 1b |
-| 04 | Routes | All 58 pages: renders, reads/writes, RLS dependency | ⬜ Unread |
-| 05 | Edge functions | All 26: auth model, inputs, side effects, callers | ⬜ Unread |
+| 04 | Routes | All 52 pages: renders, reads/writes, RLS dependency | ✅ Verified (Phase 2) — 7 docs in `04-routes/`; security flags → SECURITY-FINDINGS-phase2.md |
+| 05 | Edge functions | All 26: auth model, inputs, side effects, callers | ✅ Verified (Phase 2) — 5 docs in `05-edge-functions/`; security flags → SECURITY-FINDINGS-phase2.md |
 | 06 | End-to-end flows | Inspection lifecycle, COC validation, PDF generation (×5 generators), offline sync, QR, invites/email, templates | ⬜ Unread |
 | 07 | Components, hooks & lib | 166 components, 22 hooks, 47 lib files — per-function docs | ⬜ Unread |
 | 08 | Existing-docs audit | 23 docs graded accurate/stale/superseded | ⬜ Unread |

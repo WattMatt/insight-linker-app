@@ -13,13 +13,30 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 
 ## SEC — security & configuration (from Phase 1, auth-flows)
 
-### G-SEC-01 · Public signup is OPEN on prod 🟠 High — CONFIRMED, needs dashboard toggle
-- **Gap:** App is invite-only by design, but prod GoTrue allows public self-registration.
-- **Evidence (2026-06-11):** `GET https://oltzgidkjxwsukvkomof.supabase.co/auth/v1/settings` → `disable_signup: false`, `external.email: true`, `mailer_autoconfirm: false`. Anyone can `POST /auth/v1/signup` and obtain an `authenticated` JWT (after email confirmation).
-- **Resolve:** Arno → Supabase dashboard → Authentication → Sign In/Providers → disable "Allow new users to sign up" (or the Email provider's signup). Re-probe `/settings` to confirm `disable_signup: true`.
-- **Owner:** Arno (dashboard) · Claude re-probes to close.
-- **Note (2026-06-11):** tried to flip this programmatically via Supabase Management API; the CLI's stored credential isn't a usable management PAT (`go-k…`, 401 "JWT could not be decoded"). Dashboard (or a freshly generated `sbp_` PAT) is required.
-- **Compounds with G-SEC-09:** open signup + an unauthenticated admin-create endpoint = two independent ways to mint accounts.
+### G-SEC-01 · Open signup → auto-`User` role → all-tenant data 🔴🔴 CRITICAL (escalated 2026-06-11) — #1 dashboard action
+- **Gap (verified chain):** (1) prod GoTrue allows public self-registration (`/auth/v1/settings → disable_signup:false`, `external.email:true`); (2) `handle_new_user` trigger assigns role `'User'` to every new signup except the first (migration "Fix handle_new_user to assign 'User' role by default", :21-27); (3) role `'User'` has `FOR ALL` manage-all policies on sites/subsections/inspections/snags (20251120111033:4-56). **Net: anyone on the internet can self-register and read/write every tenant's core data.** Email confirmation is no barrier (attacker controls their own email).
+- **Resolve (urgent):** Arno → Supabase dashboard → Authentication → disable "Allow new users to sign up". Re-probe `/settings` for `disable_signup:true`. This is necessary but NOT sufficient — see G-SEC-13 (the RLS model lets any *legitimate* authenticated user cross tenants too).
+- **Owner:** Arno (dashboard) · Claude re-probes. (Management-API path unavailable — CLI token isn't a PAT.)
+
+### G-SEC-12 · Unauthenticated/under-auth service-role edge functions 🔴 High (batch) — see SECURITY-FINDINGS-phase2.md §A
+- **Gap:** ~22 edge functions are anon-reachable (`verify_jwt=false`, or `verify_jwt=true` which the public anon key satisfies) with no in-handler auth, holding the service-role key. HIGH: save-template + template-sync (fail-open privileged `inspection_templates` writes), generate-pdf + generate-inspection-pdf (anon service-role doc INSERTs), fix-inspection-photos + fix-tenant-images (anon cross-tenant data mutation), detect-schematic-regions + offline-review (unauth paid-LLM credit burn). Full list + citations in [SECURITY-FINDINGS-phase2.md](SECURITY-FINDINGS-phase2.md) §A.
+- **Resolve:** per function — add in-handler auth (getUser + role/tenant check) the way invite-user/delete-user do, set `verify_jwt=true` won't suffice alone (anon key satisfies it) so the in-handler check is the real fix; DELETE the dead ones (generate-pdf-browserless/-pdfmake/-docx, generate-pdf-google have no callers). The 4 `fix-*`/mutating ones are the most urgent (data integrity).
+- **Owner:** Claude (harden/delete batch, needs go-ahead on which to delete vs guard) · deploys gated.
+
+### G-SEC-13 · RLS has no tenant/role isolation — "any authenticated" model 🔴🔴 Critical (architectural) — see §B
+- **Gap:** Most tables use blanket `FOR ALL`/`USING(true)` or `auth.role()='authenticated'` policies; the tier-2 lockdown's `auth_read_* USING(true)` grants every authenticated user SELECT on all tenants' rows. Tenant isolation in the client-portal and elsewhere is **client-side `.eq('client_id',…)` only**, with no DB enforcement. Any legitimate Client/Contractor/User can read (and often write) any tenant's data via a crafted query. Affects settings, inspection_templates, validation_feedback, floor_plan_*, calendar_events, inspection_signatures, client_access_links, and the whole sites/subsections/inspections tree. Full list in §B.
+- **Resolve:** architectural — design real tenant-scoped RLS (membership-based: `user_clients`/`user_sites` join predicates) and role gating (Admin-only writes on settings/templates/feedback). This is a project, not a patch; scope after the per-table docs are confirmed. Interim: the highest-value quick wins are Admin-gating settings + inspection_templates + validation_feedback writes.
+- **Owner:** Claude (design proposal) · Arno (sign-off — this changes the access model).
+
+### G-SEC-14 · Public storage buckets, anon read+write 🔴 High — see §C
+- **Gap:** `documents` bucket is `public=true` with blanket anon SELECT/INSERT/UPDATE/DELETE `storage.objects` policies `USING(true)`; `inspection-photos` + `site-images` have "Anyone can …" policies. Any anon caller reads/overwrites/deletes every object; all report URLs are world-readable. The 2026-06-11 tier-2 lockdown did not touch storage. (Ties to G-SEC-11 — storage was the other thing both lockdowns skipped.)
+- **Resolve:** restrict `storage.objects` policies to authenticated + path/tenant scoping; decide which buckets must stay public (signed-URL model for private docs). SQL migration; needs dashboard apply.
+- **Owner:** Claude (policy migration) · Arno (apply + public-vs-private decisions).
+
+### G-SEC-15 · `validation-chat` — 27th config.toml entry, no repo source 🔵 Low (folds into G-OPS-01)
+- **Gap:** `config.toml:18-19` declares `[functions.validation-chat] verify_jwt=true` but no `supabase/functions/validation-chat/` exists and 0 repo refs — stale entry or an unversioned prod function (same class as G-SEC-08).
+- **Resolve:** `supabase functions list` already done (not in the 26+7) → likely stale config; delete the config stanza. If it IS deployed, review+delete like G-SEC-08.
+- **Owner:** Claude.
 
 ### G-SEC-02 · Turnstile captcha enforcement unknown 🔴 Medium
 - **Gap:** Client silently degrades to no-captcha when `NEXT_PUBLIC_TURNSTILE_SITE_KEY` is unset (`src/components/CaptchaTurnstile.tsx:20-21`); whether Supabase project-level captcha enforcement is on is dashboard-only state.
