@@ -49,9 +49,12 @@ serve(async (req) => {
       });
     }
 
-    // Initialize Supabase client
+    // Initialize Supabase client.
+    // Service role (not anon): the tier-2 lockdown removed anon SELECT on
+    // subsections, and this function's reads are safe to privilege — it never
+    // returns row data, only resolves an id and 302-redirects to the public page.
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_ANON_KEY')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
 
     // Use the custom domain
