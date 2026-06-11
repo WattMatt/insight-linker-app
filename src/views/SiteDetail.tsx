@@ -27,10 +27,9 @@ import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist"
 import { AssetVerification } from "@/components/site/AssetVerification";
 
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
-import { 
-  fetchFailedValidationsBySubsection, 
-  calculateCocComplianceStats,
-  hasValidCocStatus 
+import {
+  fetchFailedValidationsBySubsection,
+  calculateCocComplianceStats
 } from "@/lib/complianceCalculations";
 
 interface SiteDocument {
@@ -489,25 +488,8 @@ const SiteDetail = () => {
       // Use shared utility for COC compliance calculation
       const complianceStats = calculateCocComplianceStats(subs, failedValidationsBySubsection);
       
-      // Calculate overall compliant count (includes snags check which is site-specific)
-      let compliantCount = 0;
-      subs.forEach(sub => {
-        // Check if any COC validation has failed (using shared utility logic)
-        if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) return;
-        if (sub.is_coc_required && !hasValidCocStatus(sub.coc_status)) return;
-        if (sub.is_coc_required && sub.metering_status === 'Missing' && !sub.meter_serial_number) return;
-        const subsectionSnags = (snagsRes || []).filter(snag =>
-          snag.subsection_id === sub.id &&
-          snag.status !== 'rectified' &&
-          snag.status !== 'Rectified'
-        );
-        if (subsectionSnags.length > 0) return;
-        compliantCount++;
-      });
-
       setStats({
         totalSubsections,
-        compliantCount,
         cocRequiredCount: complianceStats.cocRequiredCount,
         cocApprovedCount: complianceStats.cocApprovedCount,
         meteringInstalledCount: complianceStats.meteringInstalledCount,
