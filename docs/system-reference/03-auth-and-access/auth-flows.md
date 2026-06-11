@@ -197,7 +197,7 @@ Flow (new-user, no temp password):
 5. `supabase.auth.admin.generateLink({ type: 'invite', email, options: { data: { full_name, role }, redirectTo: \`${origin}/auth?type=invite\` } })`
    (`supabase/functions/invite-user/index.ts:351-361`); `origin` taken from the request's
    `origin`/`referer` header (`supabase/functions/invite-user/index.ts:76-77`).
-6. Branded HTML email sent via Resend **from `onboarding@resend.dev`**, linking
+6. Branded HTML email sent via Resend **from `noreply@watsonmattheus.com`** (was `onboarding@resend.dev`; fixed under G-SEC-06, deployed v298), linking
    `inviteData.properties.action_link` (`supabase/functions/invite-user/index.ts:371,451-456`).
 
 Variants:
@@ -444,10 +444,10 @@ Enforcement is client-side only — nothing server-side blocks API access while 
 5. **OTP/recovery token lifetimes** — emails claim "expires in 1 hour"
    (`supabase/functions/send-password-reset/index.ts:144,177`), but actual GoTrue OTP expiry
    is server config, not in repo.
-6. **Invite-email sender mismatch** — invite-user sends from `onboarding@resend.dev`
-   (`supabase/functions/invite-user/index.ts:452`) while send-password-reset uses
-   `noreply@watsonmattheus.com` (`supabase/functions/send-password-reset/index.ts:190`).
-   Possibly intentional (unverified Resend domain at time of writing) — needs confirmation.
+6. ~~**Invite-email sender mismatch**~~ — **RESOLVED (G-SEC-06):** invite-user now also sends
+   from `noreply@watsonmattheus.com` (`supabase/functions/invite-user/index.ts:466`, deployed v298),
+   matching send-password-reset. The old `onboarding@resend.dev` (Resend sandbox sender) only
+   delivered to the account owner, so external invites were likely failing silently.
 7. **invite-user `redirectTo` derives from the request `origin` header**
    (`supabase/functions/invite-user/index.ts:76-77`) rather than the `APP_URL` env used by
    send-password-reset — invite links generated from a preview deployment would point at that

@@ -107,7 +107,8 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Fix (written):** `supabase/migrations/20260611100000_anon_lockdown_oob_tables.sql` + dashboard copy `docs/security/PENDING-2026-06-11-anon-lockdown-oob-tables.sql` — `REVOKE ALL … FROM anon` on both (PostgREST runs as anon, so this is sufficient and policy-name-independent; breaks nothing since no app writer).
 - **To close (Owner Arno):** apply the PENDING SQL via dashboard SQL editor (no DB creds in repo — I can't apply it), then I re-probe (expect 401 read + write). Then rename PENDING→APPLIED.
 
-### G-SEC-12 · authenticated WRITE open on 3 admin-config tables 🟠 High — fix written, awaiting apply
+### G-SEC-20 · authenticated WRITE open on 3 admin-config tables 🟠 High — fix written, awaiting apply
+<!-- (renumbered from a duplicate G-SEC-12; the edge-function batch above is the canonical G-SEC-12) -->
 - **Gap:** `inspection_templates`, `settings`, `validation_feedback` granted write to ANY authenticated principal, although all three are edited only from `src/app/(admin)/` views behind `ProtectedRoute` (admits Admin/User/Moderator; bounces Contractor/Client). A Client/Contractor session — or, since signup is open (G-SEC-01), any self-registered account — could INSERT/UPDATE (and on the FOR-ALL tables, DELETE) via REST.
   - `inspection_templates`: blanket `FOR ALL USING/CHECK (auth.uid() IS NOT NULL)` (`rls-policies-02.md:202`).
   - `settings`: UPDATE + INSERT gated only by `auth.role()='authenticated'` (`rls-policies-04.md:138-139`).
@@ -191,6 +192,7 @@ docs would encode assumptions — the exact failure mode this review exists to k
   - Tables/columns with no migration: `contractor_coc_uploads.{legend_card_id, site_id, subsection_id}` (types.ts:965+), `inspections.deleted_at` (types.ts:1455), `snags.{assignee, coc_validation_id, deleted_at, snag_type, trade}`, `subsections.{installation_score, installation_status, deleted_at}`, `inspection_signatures_snap_20260421` (a 2026-04-21 dashboard backup snapshot table).
   - `auth_events` exists in migration 20260525120000 but is **absent from types.ts** → types.ts predates it and is stale (the G-SEC-04 emitters write an untyped table; harmless for edge fns but app code touching it is untyped).
   - `snags.status` CHECK may have been widened out-of-band (RPCs reference `rectified`/`closed` not in the original `Open`/`Closed` CHECK).
+  - **(Phase-5 critic re-run, `02-data-model/CRITIC-rerun.md`):** `reports`, `compliance_settings`, `compliance_settings_audit` tables, 3 views (`inspection_orphan_summary`, `inspection_photo_refs`, `orphan_photo_refs`), and 9 RPC functions exist in `types.ts` but are documented in NO `02-data-model/` doc and have no tracked migration — same out-of-band/stale-types class. Document + reconcile alongside the db-pull.
 - **Resolve:** (1) `supabase db pull` / dashboard schema diff to capture every out-of-band change into real migrations; (2) regenerate `types.ts`; (3) reconcile RLS on the recovered tables (folds in G-SEC-11's full policy redesign). This is the confirmed instance of **G-TEST-02** (schema-drift check) — stand that check up so this can't recur silently.
 - **Owner:** Claude (db pull + migration authoring + types regen) · needs DB connection (db password or dashboard) from Arno.
 

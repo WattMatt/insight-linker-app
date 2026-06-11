@@ -33,7 +33,7 @@ For an electrical *safety* compliance product, the COC Pass/Fail determination c
 ### template-sync unsigned webhook egress (→ G-SEC-18, Medium)
 Every inspection_template CRUD POSTs the full template payload to `DOCBUILDER_WEBHOOK_URL` with **no signature/auth** (`template-sync/index.ts:358-389`); whoever controls that env var receives all template data. `/webhook/register` is a no-op stub.
 
-### Data-integrity / trust-the-client cluster (→ G-DATA-01, Low-Med)
+### Data-integrity / trust-the-client cluster (→ G-SEC-19, Low-Med)
 - Completion invariant "Completed requires `quality_rating`" enforced only in TS (`InspectionDetail.tsx:1483`), no DB CHECK — a direct REST update bypasses it.
 - PDF compliance figures computed in the browser and rendered by generate-pdf without recomputation (`GenerateFinalReportButton.tsx:60-391`) — a tampered client can emit any compliance rate.
 - Online write failures (incl. genuine RLS/authz denials) are caught and re-queued as "offline", then silently dropped after 3 retries with a toast (`useOfflineSync.ts:447-457`) — masks authz errors as transient connectivity.
