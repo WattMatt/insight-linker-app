@@ -26,6 +26,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { factorScores, siteHealthScore, type SnagForHealth } from "@/lib/siteHealth";
 
 // ============================================================================
 // DATA TYPES - All report types draw from these structures
@@ -245,7 +246,7 @@ function generateSampleFloorPlans(): UnifiedFloorPlan[] {
   ];
 }
 
-function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[], inspections: UnifiedInspection[], floorPlans: UnifiedFloorPlan[]): UnifiedKPIs {
+function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[], inspections: UnifiedInspection[], floorPlans: UnifiedFloorPlan[], snags: SnagForHealth[]): UnifiedKPIs {
   const cocPass = subsections.filter(s => s.cocStatus === 'Pass').length;
   const cocMissing = subsections.filter(s => !s.cocStatus || s.cocStatus === 'Missing').length;
   const cocPending = subsections.filter(s => s.cocStatus === 'Pending').length;
@@ -254,7 +255,15 @@ function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[],
   const openSnags = Math.floor(totalSnags * 0.3);
   const totalPins = floorPlans.reduce((sum, fp) => sum + fp.pinCount, 0);
   const openPins = floorPlans.reduce((sum, fp) => sum + fp.openPinCount, 0);
-  
+
+  // Site Health from the single source of truth (siteHealth.ts). COC is tracked
+  // separately (cocPass/complianceRate above) and is NOT folded into overallHealth.
+  const f = factorScores(
+    subsections.map(s => ({ id: s.id, metering_status: s.meteringStatus, meter_serial_number: s.meterSerialNumber })),
+    snags,
+    inspections.map(i => ({ subsection_id: i.subsectionId, status: i.status })),
+  );
+
   return {
     totalSubsections: subsections.length,
     cocPass,
@@ -277,8 +286,8 @@ function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[],
     totalFloorPlans: floorPlans.length,
     totalPins,
     openPins,
-    overallHealth: subsections.length > 0 ? Math.round((cocPass / subsections.length) * 100) : 0,
-    meteringHealth: subsections.length > 0 ? Math.round((subsections.filter(s => s.meterSerialNumber).length / subsections.length) * 100) : 0,
+    overallHealth: siteHealthScore(f),
+    meteringHealth: f.metering,
     snagFreeRate: subsections.length > 0 ? Math.round(((subsections.length - subsections.filter(s => s.snagCount > 0).length) / subsections.length) * 100) : 0,
   };
 }
@@ -288,7 +297,11 @@ function generateSampleData(): Omit<UnifiedSiteData, 'loading' | 'error' | 'refe
   const assets = generateSampleAssets();
   const inspections = generateSampleInspections();
   const floorPlans = generateSampleFloorPlans();
-  
+  // Expand each subsection's snagCount into open sample snags for the health model.
+  const sampleSnags: SnagForHealth[] = subsections.flatMap(s =>
+    Array.from({ length: s.snagCount }, () => ({ subsection_id: s.id, status: 'Open', risk_level: 'Medium' }))
+  );
+
   return {
     site: {
       id: 'sample-site',
@@ -316,7 +329,7 @@ function generateSampleData(): Omit<UnifiedSiteData, 'loading' | 'error' | 'refe
       validatedAt: new Date().toISOString(),
       validatedBy: 'System',
     })),
-    kpis: calculateKPIs(subsections, assets, inspections, floorPlans),
+    kpis: calculateKPIs(subsections, assets, inspections, floorPlans, sampleSnags),
   };
 }
 
@@ -501,7 +514,19 @@ export function useUnifiedSiteData(siteId: string | null): UnifiedSiteData {
         validatedBy: val.validated_by,
       }));
 
-      const kpis = calculateKPIs(subsections, assets, inspections, floorPlans);
+      // Fetch snags for Site Health (siteHealth.ts needs status + risk_level per subsection)
+      const { data: snagsData } = await supabase
+        .from("snags")
+        .select("subsection_id, status, risk_level")
+        .in("subsection_id", subsectionIds.length > 0 ? subsectionIds : ['none']);
+
+      const healthSnags: SnagForHealth[] = (snagsData || []).map(s => ({
+        subsection_id: s.subsection_id,
+        status: s.status,
+        risk_level: s.risk_level,
+      }));
+
+      const kpis = calculateKPIs(subsections, assets, inspections, floorPlans, healthSnags);
 
       setData({
         site,
