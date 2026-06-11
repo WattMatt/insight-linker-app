@@ -4,7 +4,11 @@ const DB_NAME = 'wm_compliance_offline';
 // the SAME version with the SAME complete store set (see onupgradeneeded). Before
 // this, offlineDB(v3) and offlineInspectionDB(v2) fought over one db name with
 // divergent schemas, causing VersionError / missing object stores.
-const DB_VERSION = 4;
+// v5: added the `queue_blobs` store so the localStorage mutation queue can keep
+// binaries (Blob/File) in IndexedDB instead of JSON.stringify-ing them into {}.
+// Both offlineDB.ts and offlineInspectionDB.ts MUST stay at the same version and
+// create the SAME union of stores — keep the two onupgradeneeded blocks identical.
+const DB_VERSION = 5;
 
 export interface OfflineInspection {
   id: string;
@@ -282,7 +286,51 @@ class OfflineDatabase {
           const templateStore = db.createObjectStore('template_cache', { keyPath: 'id' });
           templateStore.createIndex('cached_at', 'cached_at', { unique: false });
         }
+
+        // v5: queue_blobs — holds the binary payloads of queued mutations so the
+        // localStorage queue only stores a blob id (not the bytes). Keyed by a
+        // crypto.randomUUID() generated at enqueue time. (Shared store: created
+        // identically in offlineInspectionDB.ts — keep the two in sync.)
+        if (!db.objectStoreNames.contains('queue_blobs')) {
+          db.createObjectStore('queue_blobs', { keyPath: 'id' });
+        }
       };
+    });
+  }
+
+  // === Queue Blobs (binary payloads for the localStorage mutation queue) ===
+
+  // Store a Blob/File under a generated id; returns the id to persist in the queue.
+  async putQueueBlob(blob: Blob): Promise<string> {
+    if (!this.db) await this.init();
+    const id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queue_blobs'], 'readwrite');
+      const req = tx.objectStore('queue_blobs').put({ id, blob });
+      req.onsuccess = () => resolve(id);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Re-read a queued blob by id at flush time. Returns null if missing.
+  async getQueueBlob(id: string): Promise<Blob | null> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queue_blobs'], 'readonly');
+      const req = tx.objectStore('queue_blobs').get(id);
+      req.onsuccess = () => resolve(req.result ? (req.result.blob as Blob) : null);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // Delete a queued blob after its mutation uploaded successfully (or was dropped).
+  async deleteQueueBlob(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queue_blobs'], 'readwrite');
+      const req = tx.objectStore('queue_blobs').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
     });
   }
 

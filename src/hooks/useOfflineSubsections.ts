@@ -133,12 +133,16 @@ export function useOfflineSubsections() {
       synced: false,
     });
 
+    // Pass fileName/fileSize explicitly: the File is externalized to queue_blobs as a
+    // bare Blob (which loses .name), so the flush handler can no longer read file.name.
     queueMutation('UPLOAD_DOCUMENT', {
       documentId,
       subsectionId,
       categoryId,
       file,
       filePath,
+      fileName: file.name,
+      fileSize: file.size,
     });
 
     toast.success('Document saved offline. Will upload when online.');
@@ -205,11 +209,13 @@ export function useOfflineSubsections() {
       synced: false,
     });
 
+    // Pass fileName explicitly: the File loses .name once externalized to queue_blobs.
     queueMutation('UPLOAD_FLOOR_PLAN', {
       floorPlanId,
       subsectionId,
       file,
       filePath,
+      fileName: file.name,
     });
 
     toast.success('Floor plan saved offline. Will upload when online.');
