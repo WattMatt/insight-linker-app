@@ -18,6 +18,7 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Evidence (2026-06-11):** `GET https://oltzgidkjxwsukvkomof.supabase.co/auth/v1/settings` → `disable_signup: false`, `external.email: true`, `mailer_autoconfirm: false`. Anyone can `POST /auth/v1/signup` and obtain an `authenticated` JWT (after email confirmation).
 - **Resolve:** Arno → Supabase dashboard → Authentication → Sign In/Providers → disable "Allow new users to sign up" (or the Email provider's signup). Re-probe `/settings` to confirm `disable_signup: true`.
 - **Owner:** Arno (dashboard) · Claude re-probes to close.
+- **Note (2026-06-11):** tried to flip this programmatically via Supabase Management API; the CLI's stored credential isn't a usable management PAT (`go-k…`, 401 "JWT could not be decoded"). Dashboard (or a freshly generated `sbp_` PAT) is required.
 - **Compounds with G-SEC-09:** open signup + an unauthenticated admin-create endpoint = two independent ways to mint accounts.
 
 ### G-SEC-02 · Turnstile captcha enforcement unknown 🔴 Medium
@@ -26,16 +27,22 @@ Status: 🔴 Open · 🟠 Plan agreed, not executed · 🟢 Closed (evidence lin
 - **Resolve:** Arno checks Supabase dashboard (Auth → Attack protection/Captcha) + Vercel prod env for the site key. If enforcement off, enable both sides or remove the dead client path.
 - **Owner:** Arno (dashboard + prod env) · Claude (code change if path removed).
 
-### G-SEC-03 · `send-password-reset` orphan email sender — CONFIRMED deployed 🔴 High
-- **Gap:** Zero app callers (only a comment ref at `src/views/Auth.tsx:27`), absent from `supabase/config.toml` so its `verify_jwt` is whatever it was deployed with.
-- **Evidence (2026-06-11):** `supabase functions list` → `send-password-reset` ACTIVE, v31, updated 2026-05-25. It IS live.
-- **Resolve:** Decide delete vs keep. App uses GoTrue's built-in recovery, so deletion is the simple path. If kept, pin `verify_jwt` in config.toml and rate-limit harder. (Probe its auth like G-SEC-09 before deciding — same `verify_jwt`-bypass-via-anon-key risk applies; it sends email, not creates users, so lower severity.)
-- **Owner:** Arno approves delete · Claude executes.
+### G-SEC-03 · `send-password-reset` — DO NOT DELETE BLIND; may be the live email hook 🔴 High — needs dashboard check
+- **Revised (2026-06-11):** earlier "orphan, delete it" was WRONG to act on. Evidence against deletion: (1) it's a purpose-built branded password-reset email; (2) recently updated (v31, 2026-05-25 — actively maintained); (3) the app's reset flow calls GoTrue `resetPasswordForEmail` ([ForgotPassword.tsx:72](src/views/auth/ForgotPassword.tsx:72)), which routes through a **Send Email auth hook** if one is configured. config.toml has NO hook entry, but the **prod dashboard** can configure a Send Email hook independently. If `send-password-reset` is that hook, deleting it breaks password resets.
+- **Resolve — DASHBOARD CHECK FIRST (Owner Arno):** Supabase → Authentication → Hooks → "Send Email". Is it set to `send-password-reset`?
+  - **If YES:** it's load-bearing — keep. Then harden: confirm it validates the GoTrue hook signature/secret (else it's still a callable open email sender). Claude reviews the hook-signature handling.
+  - **If NO:** confirmed orphan — safe to delete (source is in repo at `supabase/functions/send-password-reset/`; preserve + `supabase functions delete`).
+- **Owner:** Arno (one dashboard check) → Claude executes the resulting action.
 
-### G-SEC-04 · Defined audit events have no emitters 🔴 Low-Med
-- **Gap:** `user_created`, `account_deleted`, `lockout`, `mfa_*`, `account_email_changed` exist in the `auth_events` CHECK + edge-fn allowlists, but `invite-user`/`delete-user` write no audit rows.
-- **Resolve:** Decide intentional-deferral vs omission. If omission: add `auth_events` inserts to invite-user and delete-user (small PR).
-- **Owner:** Arno decides · Claude implements.
+### G-SEC-04 · invite/delete-user wrote no audit rows 🟢 CLOSED 2026-06-11 (deployed) — residual noted
+- **Done:** `user_created` emit added to invite-user (v298, after `admin.createUser`) and `account_deleted` to delete-user (v267, after `admin.deleteUser`). Both best-effort (try/catch, non-fatal — an audit failure can't break the operation), schema-matched to `auth_events` (20260525120000). POPIA §16/§24.
+- **Live-verify (Owner Arno):** one real invite + one real delete, then check `auth_events` has the two rows. (Couldn't auto-test without creating/deleting a real prod user.)
+- **Residual (new, Low):** GoTrue-lifecycle event types still have no emitters — `login`, `logout`, `password_changed`, `password_reset_requested`, `magic_link_requested`, `lockout`, `mfa_*`, `account_email_changed`. These fire inside GoTrue, not these functions; capturing them needs a GoTrue auth hook or client-side `log-auth-event` calls. Tracked as **G-SEC-10**.
+
+### G-SEC-10 · GoTrue-lifecycle auth events uncaptured 🔴 Low
+- **Gap:** `auth_events` allowlist defines login/logout/password_changed/lockout/mfa/email_changed but nothing emits them (only `user_created`/`account_deleted` now do, via G-SEC-04). `log-auth-event` exists as the writer but has callers only for… (verify). POPIA paper trail is partial.
+- **Resolve:** wire client-side `log-auth-event` calls on login/logout/password-change, or a GoTrue Send-Auth-Hook. Scope after Phase 3 (auth flow docs).
+- **Owner:** Claude (implement) · needs design decision on hook-vs-client.
 
 ### G-SEC-05 · Recovery email claims 1-hour expiry; actual expiry is server config 🔴 Low
 - **Gap:** Copy hardcodes "1 hour" (`supabase/functions/send-password-reset/index.ts:144,177`) but GoTrue OTP expiry lives in dashboard config. (Likely moot if G-SEC-03 resolves by deletion.)

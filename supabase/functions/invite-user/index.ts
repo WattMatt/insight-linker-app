@@ -252,6 +252,18 @@ Deno.serve(async (req) => {
       isNewUser = true;
       console.log('New user created:', userId);
 
+      // Audit trail (G-SEC-04 / POPIA §16). Best-effort: an audit failure must
+      // never abort user creation.
+      try {
+        await supabase.from('auth_events').insert({
+          user_id: userId,
+          event_type: 'user_created',
+          metadata: { role, invited_by: user.id, via: 'invite-user' },
+        });
+      } catch (auditErr) {
+        console.warn('auth_events user_created insert failed (non-fatal):', auditErr);
+      }
+
       // Assign role (handle case where trigger already created one)
       const { data: existingRole } = await supabase
         .from('user_roles')
