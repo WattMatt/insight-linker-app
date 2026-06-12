@@ -83,12 +83,6 @@ serve(async (req) => {
         JSON.stringify({
           report_types: [
             {
-              type: "coc_validation",
-              description: "Certificate of Compliance validation report",
-              endpoint: "/generate/coc-validation",
-              required_params: ["subsection_id", "document_id"],
-            },
-            {
               type: "inspection",
               description: "Inspection report with all sections and findings",
               endpoint: "/generate/inspection",
@@ -132,49 +126,6 @@ serve(async (req) => {
       let reportData: any = null;
 
       switch (reportType) {
-        case "coc-validation": {
-          const { subsection_id, document_id } = params;
-          if (!subsection_id || !document_id) {
-            return new Response(
-              JSON.stringify({ error: "bad_request", message: "subsection_id and document_id are required" }),
-              { status: 400, headers: { ...corsHeaders, "Content-Type": "application/json" } }
-            );
-          }
-
-          // Fetch subsection data
-          const { data: subsection } = await supabase
-            .from("subsections")
-            .select("*, sites(name, address, clients(name))")
-            .eq("id", subsection_id)
-            .single();
-
-          // Fetch document data
-          const { data: document } = await supabase
-            .from("subsection_documents")
-            .select("*")
-            .eq("id", document_id)
-            .single();
-
-          // Fetch COC validation data
-          const { data: validation } = await supabase
-            .from("coc_validations")
-            .select("*")
-            .eq("document_id", document_id)
-            .order("created_at", { ascending: false })
-            .limit(1)
-            .single();
-
-          reportData = {
-            report_type: "coc_validation",
-            generated_at: new Date().toISOString(),
-            subsection: subsection || {},
-            document: document || {},
-            validation: validation || null,
-            content_base64: generateCOCValidationPDFBase64(subsection, document, validation),
-          };
-          break;
-        }
-
         case "inspection": {
           const { inspection_id } = params;
           if (!inspection_id) {
@@ -347,37 +298,6 @@ serve(async (req) => {
 });
 
 // PDF Generation functions (simplified base64 text reports)
-function generateCOCValidationPDFBase64(subsection: any, document: any, validation: any): string {
-  const content = `
-COC VALIDATION REPORT
-=====================
-Generated: ${new Date().toISOString()}
-
-SUBSECTION INFORMATION
-----------------------
-Name: ${subsection?.name || "N/A"}
-Site: ${subsection?.sites?.name || "N/A"}
-Client: ${subsection?.sites?.clients?.name || "N/A"}
-
-DOCUMENT INFORMATION
---------------------
-File Name: ${document?.file_name || "N/A"}
-COC Number: ${document?.coc_number || subsection?.coc_number || "N/A"}
-COC Type: ${document?.coc_type || subsection?.coc_type || "N/A"}
-Issue Date: ${document?.coc_issue_date || subsection?.coc_issue_date || "N/A"}
-
-VALIDATION RESULTS
-------------------
-Status: ${validation?.status || "Not validated"}
-Validated At: ${validation?.validated_at || "N/A"}
-${validation?.violations ? `Violations: ${JSON.stringify(validation.violations, null, 2)}` : "No violations found"}
-
-${validation?.report_data ? `Report Data: ${JSON.stringify(validation.report_data, null, 2)}` : ""}
-  `.trim();
-  
-  return btoa(unescape(encodeURIComponent(content)));
-}
-
 function generateInspectionPDFBase64(inspection: any, signatures: any): string {
   const content = `
 INSPECTION REPORT
