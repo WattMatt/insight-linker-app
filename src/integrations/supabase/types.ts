@@ -215,6 +215,36 @@ export type Database = {
           },
         ]
       }
+      auth_events: {
+        Row: {
+          event_type: string
+          id: string
+          ip_address: unknown
+          metadata: Json
+          occurred_at: string
+          user_agent: string | null
+          user_id: string | null
+        }
+        Insert: {
+          event_type: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json
+          occurred_at?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          event_type?: string
+          id?: string
+          ip_address?: unknown
+          metadata?: Json
+          occurred_at?: string
+          user_agent?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       calendar_events: {
         Row: {
           created_at: string | null
@@ -368,545 +398,6 @@ export type Database = {
           updated_at?: string
         }
         Relationships: []
-      }
-      coc_compliance_photos: {
-        Row: {
-          captured_at: string
-          captured_by: string
-          coc_validation_id: string | null
-          created_at: string
-          file_name: string
-          file_size: number
-          id: string
-          latitude: number | null
-          longitude: number | null
-          mime_type: string
-          notes: string | null
-          photo_type: string
-          storage_path: string
-          subsection_id: string
-        }
-        Insert: {
-          captured_at?: string
-          captured_by: string
-          coc_validation_id?: string | null
-          created_at?: string
-          file_name: string
-          file_size: number
-          id?: string
-          latitude?: number | null
-          longitude?: number | null
-          mime_type: string
-          notes?: string | null
-          photo_type: string
-          storage_path: string
-          subsection_id: string
-        }
-        Update: {
-          captured_at?: string
-          captured_by?: string
-          coc_validation_id?: string | null
-          created_at?: string
-          file_name?: string
-          file_size?: number
-          id?: string
-          latitude?: number | null
-          longitude?: number | null
-          mime_type?: string
-          notes?: string | null
-          photo_type?: string
-          storage_path?: string
-          subsection_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coc_compliance_photos_coc_validation_id_fkey"
-            columns: ["coc_validation_id"]
-            isOneToOne: false
-            referencedRelation: "coc_validations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coc_compliance_photos_subsection_id_fkey"
-            columns: ["subsection_id"]
-            isOneToOne: false
-            referencedRelation: "subsections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coc_compliance_photos_snap_20260421: {
-        Row: {
-          captured_at: string | null
-          captured_by: string | null
-          coc_validation_id: string | null
-          created_at: string | null
-          file_name: string | null
-          file_size: number | null
-          id: string | null
-          latitude: number | null
-          longitude: number | null
-          mime_type: string | null
-          notes: string | null
-          photo_type: string | null
-          storage_path: string | null
-          subsection_id: string | null
-        }
-        Insert: {
-          captured_at?: string | null
-          captured_by?: string | null
-          coc_validation_id?: string | null
-          created_at?: string | null
-          file_name?: string | null
-          file_size?: number | null
-          id?: string | null
-          latitude?: number | null
-          longitude?: number | null
-          mime_type?: string | null
-          notes?: string | null
-          photo_type?: string | null
-          storage_path?: string | null
-          subsection_id?: string | null
-        }
-        Update: {
-          captured_at?: string | null
-          captured_by?: string | null
-          coc_validation_id?: string | null
-          created_at?: string | null
-          file_name?: string | null
-          file_size?: number | null
-          id?: string | null
-          latitude?: number | null
-          longitude?: number | null
-          mime_type?: string | null
-          notes?: string | null
-          photo_type?: string | null
-          storage_path?: string | null
-          subsection_id?: string | null
-        }
-        Relationships: []
-      }
-      coc_extractions: {
-        Row: {
-          confidence: string | null
-          created_at: string
-          document_id: string
-          extracted_at: string
-          extracted_by: string | null
-          extracted_data: Json
-          extraction_method: string | null
-          extraction_notes: string | null
-          id: string
-          subsection_id: string
-          updated_at: string
-        }
-        Insert: {
-          confidence?: string | null
-          created_at?: string
-          document_id: string
-          extracted_at?: string
-          extracted_by?: string | null
-          extracted_data?: Json
-          extraction_method?: string | null
-          extraction_notes?: string | null
-          id?: string
-          subsection_id: string
-          updated_at?: string
-        }
-        Update: {
-          confidence?: string | null
-          created_at?: string
-          document_id?: string
-          extracted_at?: string
-          extracted_by?: string | null
-          extracted_data?: Json
-          extraction_method?: string | null
-          extraction_notes?: string | null
-          id?: string
-          subsection_id?: string
-          updated_at?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coc_extractions_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: false
-            referencedRelation: "subsection_documents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coc_extractions_subsection_id_fkey"
-            columns: ["subsection_id"]
-            isOneToOne: false
-            referencedRelation: "subsections"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coc_local_validations: {
-        Row: {
-          afdd_installed: boolean | null
-          bess_fire_protection: boolean | null
-          building_name: string | null
-          certificate_type: string
-          coc_reference_number: string
-          comments: string | null
-          continuity_of_bonding: string | null
-          continuity_ring_circuits: string | null
-          created_at: string
-          created_by: string | null
-          current_rating_a: number | null
-          date_of_issue: string
-          db_supply_name: string | null
-          district_town_city: string | null
-          earth_continuity: number | null
-          earth_leakage_test_button: boolean | null
-          earth_loop_impedance: number | null
-          elevated_voltage_v: number | null
-          erf_lot_no: string | null
-          form_data_json: Json | null
-          form_type: string
-          fraud_risk_score: string
-          gps_coordinates: string | null
-          has_bess: boolean
-          has_signature: boolean
-          has_solar_pv: boolean
-          id: string
-          installation_address: string
-          installation_permanent: boolean | null
-          installation_type: string
-          insulation_resistance: number | null
-          inverter_sync_verified: boolean | null
-          main_switch_type: string | null
-          neutral_loop_impedance_ohm: number | null
-          number_of_poles: number | null
-          phase_configuration: string
-          phase_rotation: string | null
-          phase_rotation_correct: boolean | null
-          polarity_correct: boolean
-          pscc: number | null
-          rcd_rated_current: number
-          rcd_trip_time: number | null
-          registered_person_id_number: string | null
-          registered_person_name: string
-          registered_person_reg_date: string | null
-          registration_category: string
-          registration_number: string
-          regulation_type: string | null
-          short_circuit_withstand_ka: number | null
-          signature_date: string | null
-          site_id: string | null
-          solar_grounding_verified: boolean | null
-          spd_operational: boolean | null
-          suburb_township: string | null
-          supply_frequency: number
-          supply_system_type: string | null
-          supply_voltage: number
-          switching_devices_correct: boolean | null
-          updated_at: string
-          validation_results_json: Json | null
-          validation_status: string
-          voltage_at_main_db: number | null
-          voltage_full_load_b: number | null
-          voltage_full_load_r: number | null
-          voltage_full_load_y: number | null
-          voltage_no_load_b: number | null
-          voltage_no_load_r: number | null
-          voltage_no_load_y: number | null
-        }
-        Insert: {
-          afdd_installed?: boolean | null
-          bess_fire_protection?: boolean | null
-          building_name?: string | null
-          certificate_type: string
-          coc_reference_number: string
-          comments?: string | null
-          continuity_of_bonding?: string | null
-          continuity_ring_circuits?: string | null
-          created_at?: string
-          created_by?: string | null
-          current_rating_a?: number | null
-          date_of_issue: string
-          db_supply_name?: string | null
-          district_town_city?: string | null
-          earth_continuity?: number | null
-          earth_leakage_test_button?: boolean | null
-          earth_loop_impedance?: number | null
-          elevated_voltage_v?: number | null
-          erf_lot_no?: string | null
-          form_data_json?: Json | null
-          form_type?: string
-          fraud_risk_score?: string
-          gps_coordinates?: string | null
-          has_bess?: boolean
-          has_signature?: boolean
-          has_solar_pv?: boolean
-          id?: string
-          installation_address: string
-          installation_permanent?: boolean | null
-          installation_type: string
-          insulation_resistance?: number | null
-          inverter_sync_verified?: boolean | null
-          main_switch_type?: string | null
-          neutral_loop_impedance_ohm?: number | null
-          number_of_poles?: number | null
-          phase_configuration: string
-          phase_rotation?: string | null
-          phase_rotation_correct?: boolean | null
-          polarity_correct?: boolean
-          pscc?: number | null
-          rcd_rated_current?: number
-          rcd_trip_time?: number | null
-          registered_person_id_number?: string | null
-          registered_person_name: string
-          registered_person_reg_date?: string | null
-          registration_category: string
-          registration_number: string
-          regulation_type?: string | null
-          short_circuit_withstand_ka?: number | null
-          signature_date?: string | null
-          site_id?: string | null
-          solar_grounding_verified?: boolean | null
-          spd_operational?: boolean | null
-          suburb_township?: string | null
-          supply_frequency?: number
-          supply_system_type?: string | null
-          supply_voltage?: number
-          switching_devices_correct?: boolean | null
-          updated_at?: string
-          validation_results_json?: Json | null
-          validation_status?: string
-          voltage_at_main_db?: number | null
-          voltage_full_load_b?: number | null
-          voltage_full_load_r?: number | null
-          voltage_full_load_y?: number | null
-          voltage_no_load_b?: number | null
-          voltage_no_load_r?: number | null
-          voltage_no_load_y?: number | null
-        }
-        Update: {
-          afdd_installed?: boolean | null
-          bess_fire_protection?: boolean | null
-          building_name?: string | null
-          certificate_type?: string
-          coc_reference_number?: string
-          comments?: string | null
-          continuity_of_bonding?: string | null
-          continuity_ring_circuits?: string | null
-          created_at?: string
-          created_by?: string | null
-          current_rating_a?: number | null
-          date_of_issue?: string
-          db_supply_name?: string | null
-          district_town_city?: string | null
-          earth_continuity?: number | null
-          earth_leakage_test_button?: boolean | null
-          earth_loop_impedance?: number | null
-          elevated_voltage_v?: number | null
-          erf_lot_no?: string | null
-          form_data_json?: Json | null
-          form_type?: string
-          fraud_risk_score?: string
-          gps_coordinates?: string | null
-          has_bess?: boolean
-          has_signature?: boolean
-          has_solar_pv?: boolean
-          id?: string
-          installation_address?: string
-          installation_permanent?: boolean | null
-          installation_type?: string
-          insulation_resistance?: number | null
-          inverter_sync_verified?: boolean | null
-          main_switch_type?: string | null
-          neutral_loop_impedance_ohm?: number | null
-          number_of_poles?: number | null
-          phase_configuration?: string
-          phase_rotation?: string | null
-          phase_rotation_correct?: boolean | null
-          polarity_correct?: boolean
-          pscc?: number | null
-          rcd_rated_current?: number
-          rcd_trip_time?: number | null
-          registered_person_id_number?: string | null
-          registered_person_name?: string
-          registered_person_reg_date?: string | null
-          registration_category?: string
-          registration_number?: string
-          regulation_type?: string | null
-          short_circuit_withstand_ka?: number | null
-          signature_date?: string | null
-          site_id?: string | null
-          solar_grounding_verified?: boolean | null
-          spd_operational?: boolean | null
-          suburb_township?: string | null
-          supply_frequency?: number
-          supply_system_type?: string | null
-          supply_voltage?: number
-          switching_devices_correct?: boolean | null
-          updated_at?: string
-          validation_results_json?: Json | null
-          validation_status?: string
-          voltage_at_main_db?: number | null
-          voltage_full_load_b?: number | null
-          voltage_full_load_r?: number | null
-          voltage_full_load_y?: number | null
-          voltage_no_load_b?: number | null
-          voltage_no_load_r?: number | null
-          voltage_no_load_y?: number | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coc_local_validations_site_id_fkey"
-            columns: ["site_id"]
-            isOneToOne: false
-            referencedRelation: "sites"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      coc_validation_settings: {
-        Row: {
-          ai_confidence_threshold_percent: number
-          ai_model: string
-          ai_temperature: number
-          auto_fail_earth_resistance_threshold: boolean
-          auto_fail_future_dated: boolean
-          auto_fail_invalid_certificate: boolean
-          auto_fail_missing_initial_ref: boolean
-          auto_fail_missing_signature: boolean
-          certificate_date_validation_enabled: boolean
-          coc_expiry_commercial_years: number
-          coc_expiry_domestic_years: number
-          created_at: string
-          earth_continuity_check_enabled: boolean
-          earth_continuity_max_ohms: number
-          hierarchy_check_enabled: boolean
-          id: string
-          insulation_resistance_check_enabled: boolean
-          insulation_resistance_min_mohms: number
-          mandatory_failures_for_fail: number
-          protective_conductor_check_enabled: boolean
-          rcd_function_check_enabled: boolean
-          rcd_trip_1x_max_ms: number
-          rcd_trip_5x_max_ms: number
-          rcd_trip_max_ms: number
-          safety_critical_failures_for_fail: number
-          signature_check_enabled: boolean
-          updated_at: string
-          updated_by: string | null
-        }
-        Insert: {
-          ai_confidence_threshold_percent?: number
-          ai_model?: string
-          ai_temperature?: number
-          auto_fail_earth_resistance_threshold?: boolean
-          auto_fail_future_dated?: boolean
-          auto_fail_invalid_certificate?: boolean
-          auto_fail_missing_initial_ref?: boolean
-          auto_fail_missing_signature?: boolean
-          certificate_date_validation_enabled?: boolean
-          coc_expiry_commercial_years?: number
-          coc_expiry_domestic_years?: number
-          created_at?: string
-          earth_continuity_check_enabled?: boolean
-          earth_continuity_max_ohms?: number
-          hierarchy_check_enabled?: boolean
-          id?: string
-          insulation_resistance_check_enabled?: boolean
-          insulation_resistance_min_mohms?: number
-          mandatory_failures_for_fail?: number
-          protective_conductor_check_enabled?: boolean
-          rcd_function_check_enabled?: boolean
-          rcd_trip_1x_max_ms?: number
-          rcd_trip_5x_max_ms?: number
-          rcd_trip_max_ms?: number
-          safety_critical_failures_for_fail?: number
-          signature_check_enabled?: boolean
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Update: {
-          ai_confidence_threshold_percent?: number
-          ai_model?: string
-          ai_temperature?: number
-          auto_fail_earth_resistance_threshold?: boolean
-          auto_fail_future_dated?: boolean
-          auto_fail_invalid_certificate?: boolean
-          auto_fail_missing_initial_ref?: boolean
-          auto_fail_missing_signature?: boolean
-          certificate_date_validation_enabled?: boolean
-          coc_expiry_commercial_years?: number
-          coc_expiry_domestic_years?: number
-          created_at?: string
-          earth_continuity_check_enabled?: boolean
-          earth_continuity_max_ohms?: number
-          hierarchy_check_enabled?: boolean
-          id?: string
-          insulation_resistance_check_enabled?: boolean
-          insulation_resistance_min_mohms?: number
-          mandatory_failures_for_fail?: number
-          protective_conductor_check_enabled?: boolean
-          rcd_function_check_enabled?: boolean
-          rcd_trip_1x_max_ms?: number
-          rcd_trip_5x_max_ms?: number
-          rcd_trip_max_ms?: number
-          safety_critical_failures_for_fail?: number
-          signature_check_enabled?: boolean
-          updated_at?: string
-          updated_by?: string | null
-        }
-        Relationships: []
-      }
-      coc_validations: {
-        Row: {
-          created_at: string
-          document_id: string
-          id: string
-          report_data: Json | null
-          status: string
-          subsection_id: string
-          validated_at: string
-          validated_by: string | null
-          violations: Json | null
-        }
-        Insert: {
-          created_at?: string
-          document_id: string
-          id?: string
-          report_data?: Json | null
-          status: string
-          subsection_id: string
-          validated_at?: string
-          validated_by?: string | null
-          violations?: Json | null
-        }
-        Update: {
-          created_at?: string
-          document_id?: string
-          id?: string
-          report_data?: Json | null
-          status?: string
-          subsection_id?: string
-          validated_at?: string
-          validated_by?: string | null
-          violations?: Json | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "coc_validations_document_id_fkey"
-            columns: ["document_id"]
-            isOneToOne: true
-            referencedRelation: "subsection_documents"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "coc_validations_subsection_id_fkey"
-            columns: ["subsection_id"]
-            isOneToOne: false
-            referencedRelation: "subsections"
-            referencedColumns: ["id"]
-          },
-        ]
       }
       compliance_settings: {
         Row: {
@@ -1327,6 +818,13 @@ export type Database = {
             referencedRelation: "inspections"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inspection_signatures_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "my_unresolved_orphans"
+            referencedColumns: ["inspection_id"]
+          },
         ]
       }
       inspection_signatures_snap_20260421: {
@@ -1400,6 +898,13 @@ export type Database = {
             isOneToOne: false
             referencedRelation: "inspections"
             referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "inspection_subsections_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "my_unresolved_orphans"
+            referencedColumns: ["inspection_id"]
           },
         ]
       }
@@ -2253,6 +1758,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "reports_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "my_unresolved_orphans"
+            referencedColumns: ["inspection_id"]
+          },
+          {
             foreignKeyName: "reports_site_id_fkey"
             columns: ["site_id"]
             isOneToOne: false
@@ -2798,6 +2310,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "snags_inspection_id_fkey"
+            columns: ["inspection_id"]
+            isOneToOne: false
+            referencedRelation: "my_unresolved_orphans"
+            referencedColumns: ["inspection_id"]
+          },
+          {
             foreignKeyName: "snags_subsection_id_fkey"
             columns: ["subsection_id"]
             isOneToOne: false
@@ -2907,8 +2426,12 @@ export type Database = {
       subsections: {
         Row: {
           category: string | null
+          coc_expiry_date: string | null
+          coc_failure_reasons: string | null
           coc_issue_date: string | null
           coc_number: string | null
+          coc_reviewed_at: string | null
+          coc_reviewed_by: string | null
           coc_status: string | null
           coc_type: string | null
           created_at: string
@@ -2932,8 +2455,12 @@ export type Database = {
         }
         Insert: {
           category?: string | null
+          coc_expiry_date?: string | null
+          coc_failure_reasons?: string | null
           coc_issue_date?: string | null
           coc_number?: string | null
+          coc_reviewed_at?: string | null
+          coc_reviewed_by?: string | null
           coc_status?: string | null
           coc_type?: string | null
           created_at?: string
@@ -2957,8 +2484,12 @@ export type Database = {
         }
         Update: {
           category?: string | null
+          coc_expiry_date?: string | null
+          coc_failure_reasons?: string | null
           coc_issue_date?: string | null
           coc_number?: string | null
+          coc_reviewed_at?: string | null
+          coc_reviewed_by?: string | null
           coc_status?: string | null
           coc_type?: string | null
           created_at?: string
@@ -3373,161 +2904,6 @@ export type Database = {
         }
         Relationships: []
       }
-      validation_conversations: {
-        Row: {
-          created_at: string | null
-          created_by: string | null
-          document_id: string
-          id: string
-          status: string | null
-          subsection_id: string
-          title: string | null
-          updated_at: string | null
-          validation_id: string
-        }
-        Insert: {
-          created_at?: string | null
-          created_by?: string | null
-          document_id: string
-          id?: string
-          status?: string | null
-          subsection_id: string
-          title?: string | null
-          updated_at?: string | null
-          validation_id: string
-        }
-        Update: {
-          created_at?: string | null
-          created_by?: string | null
-          document_id?: string
-          id?: string
-          status?: string | null
-          subsection_id?: string
-          title?: string | null
-          updated_at?: string | null
-          validation_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "validation_conversations_subsection_id_fkey"
-            columns: ["subsection_id"]
-            isOneToOne: false
-            referencedRelation: "subsections"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "validation_conversations_validation_id_fkey"
-            columns: ["validation_id"]
-            isOneToOne: false
-            referencedRelation: "coc_validations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      validation_feedback: {
-        Row: {
-          conversation_id: string | null
-          created_at: string | null
-          created_by: string | null
-          description: string
-          feedback_type: string
-          id: string
-          implementation_notes: string | null
-          original_finding: string | null
-          reviewed_at: string | null
-          reviewed_by: string | null
-          status: string | null
-          suggested_improvement: string | null
-          title: string
-          validation_id: string | null
-        }
-        Insert: {
-          conversation_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description: string
-          feedback_type: string
-          id?: string
-          implementation_notes?: string | null
-          original_finding?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          status?: string | null
-          suggested_improvement?: string | null
-          title: string
-          validation_id?: string | null
-        }
-        Update: {
-          conversation_id?: string | null
-          created_at?: string | null
-          created_by?: string | null
-          description?: string
-          feedback_type?: string
-          id?: string
-          implementation_notes?: string | null
-          original_finding?: string | null
-          reviewed_at?: string | null
-          reviewed_by?: string | null
-          status?: string | null
-          suggested_improvement?: string | null
-          title?: string
-          validation_id?: string | null
-        }
-        Relationships: [
-          {
-            foreignKeyName: "validation_feedback_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "validation_conversations"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "validation_feedback_validation_id_fkey"
-            columns: ["validation_id"]
-            isOneToOne: false
-            referencedRelation: "coc_validations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      validation_messages: {
-        Row: {
-          content: string
-          conversation_id: string
-          created_at: string | null
-          created_by: string | null
-          id: string
-          metadata: Json | null
-          role: string
-        }
-        Insert: {
-          content: string
-          conversation_id: string
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          metadata?: Json | null
-          role: string
-        }
-        Update: {
-          content?: string
-          conversation_id?: string
-          created_at?: string | null
-          created_by?: string | null
-          id?: string
-          metadata?: Json | null
-          role?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "validation_messages_conversation_id_fkey"
-            columns: ["conversation_id"]
-            isOneToOne: false
-            referencedRelation: "validation_conversations"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
     }
     Views: {
       inspection_orphan_summary: {
@@ -3555,6 +2931,29 @@ export type Database = {
         }
         Relationships: []
       }
+      my_unresolved_orphans: {
+        Row: {
+          best_guess: Json | null
+          candidate_subsections: Json | null
+          created_at: string | null
+          inspection_id: string | null
+          inspection_status: string | null
+          inspection_title: string | null
+          shop_name_orphan: string | null
+          shop_number_orphan: string | null
+          site_id: string | null
+          site_name: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "inspections_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       orphan_photo_refs: {
         Row: {
           bucket: string | null
@@ -3569,8 +2968,36 @@ export type Database = {
       }
     }
     Functions: {
+      _share_link: {
+        Args: { p_token: string }
+        Returns: {
+          access_count: number
+          access_token: string
+          client_id: string | null
+          created_at: string
+          created_by: string | null
+          expires_at: string | null
+          id: string
+          is_active: boolean
+          label: string | null
+          last_accessed_at: string | null
+          link_type: string
+          site_id: string | null
+          subsection_id: string | null
+        }
+        SetofOptions: {
+          from: "*"
+          to: "client_access_links"
+          isOneToOne: true
+          isSetofReturn: false
+        }
+      }
       apply_subsection_recompute: {
         Args: { p_subsection_id: string }
+        Returns: undefined
+      }
+      archive_my_orphan: {
+        Args: { p_inspection_id: string; p_reason?: string }
         Returns: undefined
       }
       audit_orphan_photo_refs: {
@@ -3629,6 +3056,19 @@ export type Database = {
           type: string
         }[]
       }
+      get_public_portfolio: { Args: { p_token: string }; Returns: Json }
+      get_public_site_review: {
+        Args: { p_site_id: string; p_token: string }
+        Returns: Json
+      }
+      get_public_subsection: {
+        Args: { p_subsection_id: string }
+        Returns: Json
+      }
+      get_public_subsection_review: {
+        Args: { p_subsection_id: string; p_token: string }
+        Returns: Json
+      }
       get_rls_policies_for_role: {
         Args: { role_name: string }
         Returns: {
@@ -3671,6 +3111,10 @@ export type Database = {
           shop_number: string
         }[]
       }
+      resolve_my_orphan: {
+        Args: { p_inspection_id: string; p_subsection_id: string }
+        Returns: undefined
+      }
       set_compliance_setting: {
         Args: {
           p_changed_by?: string
@@ -3682,6 +3126,8 @@ export type Database = {
           rows_recomputed: number
         }[]
       }
+      show_limit: { Args: never; Returns: number }
+      show_trgm: { Args: { "": string }; Returns: string[] }
       validate_access_link: {
         Args: { token: string }
         Returns: {
