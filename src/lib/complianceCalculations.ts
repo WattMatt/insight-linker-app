@@ -2,10 +2,9 @@
  * Unified Compliance Calculation Utilities
  *
  * COC compliance is derived directly from the subsection's manual `coc_status` verdict.
- * The old auto-validation engine (coc_validations / validate-coc) was removed; there is no
- * longer a separate validation record — `coc_status` IS the verdict. These pure helpers are
- * the single source of truth for COC compliance counts across Overview, Compliance Dashboard,
- * and the main Dashboard.
+ * The old auto-validation engine was removed; there is no longer a separate validation
+ * record — `coc_status` IS the verdict. These pure helpers are the single source of truth
+ * for COC compliance counts across Overview, Compliance Dashboard, and the main Dashboard.
  *
  * Based on SANS 10142-1 compliance requirements.
  */
