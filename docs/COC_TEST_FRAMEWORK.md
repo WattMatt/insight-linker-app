@@ -1,5 +1,7 @@
 # 🧪 COC Test Framework Documentation
 
+> ⛔ **OBSOLETE 2026-06-12 — the COC validation engine this framework tested was REMOVED.** `validate-coc`/`extract-coc` and the validation tables no longer exist. COC is now a manual verdict; the only COC test of record is `src/lib/cocCompliance.test.ts` (the gate predicate). Kept for historical reference only.
+
 ## Overview
 
 This document provides comprehensive testing guidelines for the Electrical Certificate of Compliance (COC) validation system. It covers test scenarios, expected outcomes, and setup procedures for validating COCs against SANS 10142-1:2020 standards.

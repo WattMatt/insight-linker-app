@@ -1,5 +1,7 @@
 # COC Validation System — Unified Specification
 
+> ⛔ **OBSOLETE 2026-06-12 — this system was REMOVED.** The automated COC validation engine described here (deterministic SANS checks, `validate-coc`/`extract-coc`, validation tables, review/approval UI) no longer exists. COC is now a **manual** Pass/Fail verdict per subsection with a failure report; a failed/expired required COC gates `is_compliant`. Current docs: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md` + `docs/superpowers/plans/2026-06-11-coc-manual-workflow.md`. Kept for historical reference only.
+
 > **Version:** 3.0  
 > **Last Updated:** 2026-03-09  
 > **Standard:** SANS 10142-1:2020  

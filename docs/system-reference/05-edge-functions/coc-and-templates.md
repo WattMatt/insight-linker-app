@@ -1,5 +1,7 @@
 # Edge Functions — COC & Templates
 
+> ⛔ **PARTIALLY SUPERSEDED 2026-06-12.** `validate-coc` and `extract-coc` were **DELETED** from prod and the repo (COC auto-validation engine removed; COC is now a manual verdict). The `validate-coc`/`extract-coc` sections below describe code that no longer exists — retained for historical reference. `templates` was also **edited** (its `coc_validations` read removed; COC report items now derive from `coc_status`). `save-template`/`template-sync`/`templates` otherwise remain. New flow of record: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`.
+
 Ground-truth reference for five edge functions: `validate-coc`, `extract-coc`, `save-template`, `template-sync`, `templates`. Every claim cites `supabase/functions/<name>/index.ts:line`, `supabase/config.toml`, or a cross-doc reference. Inferences not provable in code are tagged **⚠️ UNVERIFIED**.
 
 Shared context:

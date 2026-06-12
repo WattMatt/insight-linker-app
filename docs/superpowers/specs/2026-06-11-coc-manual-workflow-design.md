@@ -1,7 +1,11 @@
 # COC Manual Workflow — Design Spec
 
-**Date:** 2026-06-11 · **Status:** approved-pending-review · **Owner:** Arno + Claude
+**Date:** 2026-06-11 · **Status:** ✅ BUILT + DEPLOYED 2026-06-12 · **Owner:** Arno + Claude
 **Branch:** `feature/coc-manual-workflow`
+
+> **Amendment (2026-06-12) — two design points changed at build time:**
+> 1. **`is_compliant` ownership (supersedes §3/§6 below).** The original design had the COC verdict *drive* `is_compliant` via a simplified `sync_coc_compliance_status` trigger. Arno's decision #1 changed this to a **gate**: COC does NOT own `is_compliant` — the inspection-driven recompute (`apply_subsection_recompute`) does, and a failed/expired *required* COC forces it false. The `sync_coc_compliance_status` trigger was **dropped** (single owner). See `supabase/migrations/20260612120000_coc_compliance_gate.sql`.
+> 2. **Tables dropped outright** (decision #3) — no snapshot; the 6 `coc_*` validation tables + the dependent `validation_feedback`/`validation_conversations`/`validation_messages` cluster were dropped. As-built tracker: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`.
 
 ## 1. Problem / goal
 

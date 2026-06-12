@@ -1,5 +1,7 @@
 # APPLICATION_SPEC.md — WM Compliance (Insight Linker)
 
+> ⚠️ **COC section superseded 2026-06-12.** The automated COC validation engine described in this spec was removed; COC is now a manual Pass/Fail verdict per subsection (+ failure report) that gates `is_compliant`. See `docs/system-reference/00-INDEX.md` → "Post-review changes" and `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`. (This spec predates the 2026-05 Vite→Next migration and is otherwise partly stale — see `docs/system-reference/08-existing-docs-audit/`.)
+
 > **Exhaustive Application Specification**
 > Generated from codebase analysis. Last updated: 2026-04-06.
 > Every page, button, dialog, Supabase table reference, report, branding asset, and data flow is documented.

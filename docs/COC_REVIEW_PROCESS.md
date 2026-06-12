@@ -1,5 +1,7 @@
 # 📋 COC Review Process — Complete Technical Reference
 
+> ⛔ **OBSOLETE 2026-06-12 — the automated COC review/validation pipeline described here was REMOVED.** `validate-coc`/`extract-coc`, the validation tables, and the review/approval UI no longer exist. COC is now a **manual** Pass/Fail verdict per subsection (+ failure report) that gates `is_compliant`. Current docs: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`. Kept for historical reference only.
+
 > **Single source of truth** for the Certificate of Compliance (COC) review pipeline in `wm-compliance`.
 > Based on SANS 10142-1:2020 (Wiring of Premises).
 

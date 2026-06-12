@@ -12,6 +12,12 @@ verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Veri
 
 **Security findings live in [GAPS.md](GAPS.md) (register) + [SECURITY-FINDINGS-phase2.md](SECURITY-FINDINGS-phase2.md) + [phase3](SECURITY-FINDINGS-phase3.md) + [07-…/FINDINGS-phase4.md](07-components-hooks-lib/FINDINGS-phase4.md).**
 
+## Post-review changes (code changed AFTER the review snapshot)
+
+The review documents the app as of 2026-06-11. Later changes that invalidate parts of it are logged here so chapters aren't silently wrong. Dated audits, migration-event logs, and `_work/` extracts are point-in-time records and are NOT retro-edited.
+
+- **2026-06-12 — COC auto-validation engine REMOVED (G-SEC-16 dissolved).** The entire deterministic COC validation pipeline was ripped out and replaced with a manual workflow: COC is now a per-subsection verdict (`coc_status` Pass/Fail/Missing/…) + per-COC failure report; a failed/expired *required* COC **gates** `is_compliant` via `apply_subsection_recompute` (single owner — the old `sync_coc_compliance_status` trigger was dropped). Deleted: `validate-coc`/`extract-coc` edge fns; the `COCPreviewApproval`/`COCPreviewDialog`/`COCReviewStatus`/`COCValidationLogCard`/`InlineViolationOverrides` components; the `ValidationFeedback` view/route/sidebar; 9 tables (`coc_validations`, `coc_extractions`, `coc_validation_settings`, `coc_local_validations`, `coc_compliance_photos`(+snap), `validation_feedback`, `validation_conversations`, `validation_messages`). Edited: `api-reports`/`templates` (derive from `coc_status`), `ComplianceDashboard` (COC section gone, snags kept), `complianceCalculations.ts` (now pure). **Superseded chapter docs:** `06-flows/coc-validation.md` (whole flow), `05-edge-functions/coc-and-templates.md` (validate-coc/extract-coc sections), and the COC tables/trigger in `02-data-model/*`. As-built record: [`../superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`](../superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md) + [plan](../superpowers/plans/2026-06-11-coc-manual-workflow.md). Deployed `main @ ad7f22d`.
+
 ## Ledger
 
 | # | Chapter | Scope | Status |

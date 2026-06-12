@@ -1,5 +1,7 @@
 # Flow — COC Validation (Certificate of Compliance pipeline)
 
+> ⛔ **SUPERSEDED 2026-06-12 — this entire flow was REMOVED.** The COC auto-validation engine (`validate-coc`/`extract-coc`, the SANS deterministic checks, the review/approval/override UI, and the `coc_validations`/`coc_extractions`/`coc_validation_settings`/`coc_local_validations`/`coc_compliance_photos` tables) no longer exists. COC is now a **manual** per-subsection verdict (`subsections.coc_status` = Pass/Fail/Missing/…) plus a per-COC failure report; a failed/expired required COC **gates** `is_compliant` via `apply_subsection_recompute`. New flow of record: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md` + `docs/superpowers/plans/2026-06-11-coc-manual-workflow.md`. The trace below is retained for historical reference only.
+
 Ground-truth trace of the Certificate of Compliance (COC) validation pipeline against SANS 10142-1:2020. Every claim cites a `src` path with `:line`, an edge-function path, a migration filename, or an earlier review chapter. Anything inferred but not provable in code is tagged **⚠️ UNVERIFIED**.
 
 **Charter cross-refs (cited, not re-derived):**
