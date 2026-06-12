@@ -1065,6 +1065,17 @@ serve(async (req) => {
         fileData = data;
         console.log('Document downloaded successfully from storage');
       } else {
+        // SSRF guard (G-SEC-12): only fetch the project's own Supabase host, never an
+        // arbitrary caller-supplied URL (documentUrl is "kept for compatibility only").
+        let __sameHost = false;
+        try {
+          __sameHost = new URL(sourceUrl).host === new URL(Deno.env.get('SUPABASE_URL')!).host;
+        } catch {
+          __sameHost = false;
+        }
+        if (!__sameHost) {
+          throw new Error('Refusing to fetch a non-storage URL');
+        }
         console.log('Using direct fetch for URL');
         const docResponse = await fetch(sourceUrl);
         

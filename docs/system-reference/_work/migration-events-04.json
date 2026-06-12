@@ -1,0 +1,546 @@
+[
+  {
+    "migration": "20251017095131_9a8ba3df-3011-4282-a18e-42ecf40feb00.sql",
+    "object_type": "function",
+    "object_name": "cleanup_old_pending_invites",
+    "table": "pending_user_invites",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.cleanup_old_pending_invites() RETURNS INTEGER, LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = public. Behavior: DELETE FROM public.pending_user_invites WHERE created_at < NOW() - INTERVAL '30 days'; captures ROW_COUNT into deleted_count; then INSERT INTO public.activity_logs (action, details, user_email) VALUES ('cleanup_pending_invites', format('Automatically cleaned up %s old pending invites', deleted_count), 'system'); returns deleted_count. COMMENT ON FUNCTION explains it removes pending invites older than 30 days to reduce email-harvesting exposure; callable manually by admins or via pg_cron."
+  },
+  {
+    "migration": "20251017095131_9a8ba3df-3011-4282-a18e-42ecf40feb00.sql",
+    "object_type": "grant",
+    "object_name": "EXECUTE ON FUNCTION public.cleanup_old_pending_invites()",
+    "table": null,
+    "action": "create",
+    "detail": "GRANT EXECUTE ON FUNCTION public.cleanup_old_pending_invites() TO authenticated. Note: granted to all authenticated users, not just admins (comment says 'admins will use this')."
+  },
+  {
+    "migration": "20251017095131_9a8ba3df-3011-4282-a18e-42ecf40feb00.sql",
+    "object_type": "index",
+    "object_name": "idx_pending_invites_created_at",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_pending_invites_created_at ON public.pending_user_invites(created_at). For efficient cleanup queries."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "table",
+    "object_name": "issue_reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "CREATE TABLE public.issue_reports: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); reported_by UUID REFERENCES auth.users(id) ON DELETE SET NULL; user_email TEXT NOT NULL; user_name TEXT; description TEXT NOT NULL; severity TEXT NOT NULL DEFAULT 'medium'; category TEXT NOT NULL DEFAULT 'general'; status TEXT NOT NULL DEFAULT 'new'; screenshot_url TEXT; page_url TEXT NOT NULL; browser_info JSONB DEFAULT '{}'::jsonb; resolved_at TIMESTAMP WITH TIME ZONE; resolved_by UUID REFERENCES auth.users(id) ON DELETE SET NULL; admin_notes TEXT."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "bucket",
+    "object_name": "issue-screenshots",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets (id, name, public) VALUES ('issue-screenshots', 'issue-screenshots', false) ON CONFLICT (id) DO NOTHING. Private bucket for issue screenshots."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "rls",
+    "object_name": "issue_reports RLS",
+    "table": "issue_reports",
+    "action": "enable",
+    "detail": "ALTER TABLE public.issue_reports ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "policy",
+    "object_name": "Users can create their own issue reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (auth.uid() = reported_by)."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own issue reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (auth.uid() = reported_by)."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all issue reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "policy",
+    "object_name": "Admins can update issue reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "FOR UPDATE TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role)). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "policy",
+    "object_name": "Admins can delete issue reports",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can upload their own issue screenshots",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'issue-screenshots' AND auth.uid()::text = (storage.foldername(name))[1])."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can view their own issue screenshots",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'issue-screenshots' AND auth.uid()::text = (storage.foldername(name))[1])."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can view all issue screenshots",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'issue-screenshots' AND has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251018005315_1d30c9c7-745a-4860-b1b1-f281dc276ae7.sql",
+    "object_type": "trigger",
+    "object_name": "update_issue_reports_updated_at",
+    "table": "issue_reports",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_issue_reports_updated_at BEFORE UPDATE ON public.issue_reports FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251020065437_b54abd96-4eda-439b-877e-4a5484631839.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access to client info",
+    "table": "clients",
+    "action": "create",
+    "detail": "CREATE POLICY \"Public QR code access to client info\" ON public.clients FOR SELECT TO public USING (true). Grants unrestricted anonymous SELECT on clients so QR-code pages can display client information."
+  },
+  {
+    "migration": "20251020065547_c5f5b509-3774-43e5-b73c-a488f18330af.sql",
+    "object_type": "policy",
+    "object_name": "Public can view document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "CREATE POLICY \"Public can view document categories\" ON public.document_categories FOR SELECT TO public USING (true). Grants unrestricted anonymous SELECT on document_categories for QR-code pages."
+  },
+  {
+    "migration": "20251020070622_59d3cf0b-7767-4fa6-adfe-ce7cdcc11d6a.sql",
+    "object_type": "function",
+    "object_name": "cleanup_activity_logs",
+    "table": "activity_logs",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.cleanup_activity_logs() RETURNS trigger, LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = 'public'. Behavior: DELETE FROM public.activity_logs WHERE id NOT IN (SELECT id FROM public.activity_logs ORDER BY created_at DESC LIMIT 20); RETURN NEW. Keeps only the 20 most recent activity_logs rows."
+  },
+  {
+    "migration": "20251020070622_59d3cf0b-7767-4fa6-adfe-ce7cdcc11d6a.sql",
+    "object_type": "trigger",
+    "object_name": "trigger_cleanup_activity_logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "DROP TRIGGER IF EXISTS trigger_cleanup_activity_logs ON public.activity_logs; then CREATE TRIGGER trigger_cleanup_activity_logs AFTER INSERT ON public.activity_logs FOR EACH STATEMENT EXECUTE FUNCTION public.cleanup_activity_logs(). Every insert into activity_logs trims the table to the latest 20 rows."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "table",
+    "object_name": "qr_codes",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.qr_codes: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); qr_code_url text NOT NULL; label text; client_id uuid REFERENCES public.clients(id) ON DELETE CASCADE; site_id uuid REFERENCES public.sites(id) ON DELETE CASCADE; subsection_id uuid REFERENCES public.subsections(id) ON DELETE CASCADE; created_at timestamptz NOT NULL DEFAULT now(); updated_at timestamptz NOT NULL DEFAULT now(); created_by uuid REFERENCES auth.users(id)."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "rls",
+    "object_name": "qr_codes RLS",
+    "table": "qr_codes",
+    "action": "enable",
+    "detail": "ALTER TABLE public.qr_codes ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all QR codes",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their QR codes",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Client'::app_role) AND client_id = get_user_client_id())."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view QR codes for their sites",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM user_sites WHERE user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "policy",
+    "object_name": "Public can view QR codes",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "FOR SELECT TO public USING (true). Unrestricted anonymous SELECT on qr_codes."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "trigger",
+    "object_name": "update_qr_codes_updated_at",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_qr_codes_updated_at BEFORE UPDATE ON public.qr_codes FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "index",
+    "object_name": "idx_qr_codes_client",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "CREATE INDEX idx_qr_codes_client ON public.qr_codes(client_id)."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "index",
+    "object_name": "idx_qr_codes_site",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "CREATE INDEX idx_qr_codes_site ON public.qr_codes(site_id)."
+  },
+  {
+    "migration": "20251020070753_59422a85-6134-454d-867a-e70d1a886abe.sql",
+    "object_type": "index",
+    "object_name": "idx_qr_codes_subsection",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "CREATE INDEX idx_qr_codes_subsection ON public.qr_codes(subsection_id)."
+  },
+  {
+    "migration": "20251020093607_800422ff-162b-4cf6-867a-6b2d690a64ff.sql",
+    "object_type": "function",
+    "object_name": "handle_new_user",
+    "table": "profiles",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS TRIGGER, LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = public. Behavior: INSERT INTO public.profiles (id, email, full_name) VALUES (NEW.id, NEW.email, COALESCE(NEW.raw_user_meta_data->>'full_name', '')); then INSERT INTO public.user_roles (user_id, role) VALUES (NEW.id, CASE WHEN (SELECT COUNT(*) FROM auth.users) = 1 THEN 'Admin'::app_role ELSE 'Admin'::app_role END). Both CASE branches yield 'Admin' — EVERY new signup is assigned the Admin role (inline comment says to change ELSE branch to 'Client'/'Contractor' for default role)."
+  },
+  {
+    "migration": "20251020093607_800422ff-162b-4cf6-867a-6b2d690a64ff.sql",
+    "object_type": "trigger",
+    "object_name": "on_auth_user_created",
+    "table": "auth.users",
+    "action": "create",
+    "detail": "DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users; then CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user()."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "profiles_id_fkey",
+    "table": "profiles",
+    "action": "create",
+    "detail": "Conditional (DO block, only if constraint name absent in pg_constraint): ALTER TABLE public.profiles ADD CONSTRAINT profiles_id_fkey FOREIGN KEY (id) REFERENCES auth.users(id) ON DELETE CASCADE."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "user_roles_user_id_fkey",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.user_roles ADD CONSTRAINT user_roles_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "user_clients_user_id_fkey",
+    "table": "user_clients",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.user_clients ADD CONSTRAINT user_clients_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "user_sites_user_id_fkey",
+    "table": "user_sites",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.user_sites ADD CONSTRAINT user_sites_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE CASCADE."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "activity_logs_user_id_fkey",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.activity_logs ADD CONSTRAINT activity_logs_user_id_fkey FOREIGN KEY (user_id) REFERENCES auth.users(id) ON DELETE SET NULL."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "snags_created_by_fkey",
+    "table": "snags",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.snags ADD CONSTRAINT snags_created_by_fkey FOREIGN KEY (created_by) REFERENCES auth.users(id) ON DELETE SET NULL."
+  },
+  {
+    "migration": "20251020093858_2be55e8a-8d60-4677-9da5-136858567424.sql",
+    "object_type": "constraint",
+    "object_name": "subsection_documents_uploaded_by_fkey",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "Conditional (DO block): ALTER TABLE public.subsection_documents ADD CONSTRAINT subsection_documents_uploaded_by_fkey FOREIGN KEY (uploaded_by) REFERENCES auth.users(id) ON DELETE SET NULL."
+  },
+  {
+    "migration": "20251020123629_e30aa31c-baf1-46f7-ad58-f8bfd42b9762.sql",
+    "object_type": "column",
+    "object_name": "qr_code_url",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN IF NOT EXISTS qr_code_url text. Nullable, no default. COMMENT: 'URL to the pre-generated QR code image in storage'."
+  },
+  {
+    "migration": "20251020123629_e30aa31c-baf1-46f7-ad58-f8bfd42b9762.sql",
+    "object_type": "index",
+    "object_name": "idx_subsections_qr_code_url",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_subsections_qr_code_url ON public.subsections(qr_code_url)."
+  },
+  {
+    "migration": "20251020130110_6c8cad99-9700-40e9-abf0-dead96bc50bc.sql",
+    "object_type": "column",
+    "object_name": "qr_base_url",
+    "table": "settings",
+    "action": "create",
+    "detail": "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS qr_base_url TEXT. Nullable, no default. COMMENT: 'Base URL for QR code links (e.g., your published URL or custom domain)'."
+  },
+  {
+    "migration": "20251022100347_e6759bc9-e992-44ff-8bed-b05750eaf68b.sql",
+    "object_type": "data",
+    "object_name": "inspection_templates row update",
+    "table": "inspection_templates",
+    "action": "update",
+    "detail": "UPDATE inspection_templates SET sections = jsonb_set(sections, '{2,items,4,name}', '\"48V Relay Status\"') WHERE id = '234af65e-f0f3-41f1-9be3-2b5395163d7e' AND name = 'Low Voltage Line Shop Board Audit'. Renames the 'Other' item (section index 2, item index 4) to '48V Relay Status' in one specific inspection template row."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "dropbox_connected",
+    "table": "settings",
+    "action": "create",
+    "detail": "ALTER TABLE public.settings ADD COLUMN IF NOT EXISTS dropbox_connected boolean DEFAULT false. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "google_drive_refresh_token",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS google_drive_refresh_token text. Nullable, no default. OAuth token stored in plaintext in settings table. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "google_drive_access_token",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS google_drive_access_token text. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "google_drive_token_expiry",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS google_drive_token_expiry timestamp with time zone. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "dropbox_refresh_token",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS dropbox_refresh_token text. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "dropbox_access_token",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS dropbox_access_token text. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "dropbox_token_expiry",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS dropbox_token_expiry timestamp with time zone. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "auto_backup_enabled",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS auto_backup_enabled boolean DEFAULT false. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "backup_frequency",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS backup_frequency text DEFAULT 'daily'. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "last_backup_at",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS last_backup_at timestamp with time zone. Nullable, no default. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "column",
+    "object_name": "sync_enabled",
+    "table": "settings",
+    "action": "create",
+    "detail": "ADD COLUMN IF NOT EXISTS sync_enabled boolean DEFAULT false. (Dropped again in 20251027081639.)"
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "table",
+    "object_name": "file_sync_logs",
+    "table": "file_sync_logs",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.file_sync_logs: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); file_path text NOT NULL; file_name text NOT NULL; sync_type text NOT NULL (comment: 'upload'/'download'/'delete'); service text NOT NULL (comment: 'google_drive'/'dropbox'); status text NOT NULL DEFAULT 'pending' (comment: 'pending'/'completed'/'failed'); error_message text; synced_at timestamptz DEFAULT now(); created_at timestamptz DEFAULT now(). No CHECK constraints — the value sets exist only as SQL comments."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "rls",
+    "object_name": "file_sync_logs RLS",
+    "table": "file_sync_logs",
+    "action": "enable",
+    "detail": "ALTER TABLE public.file_sync_logs ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view sync logs",
+    "table": "file_sync_logs",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause, defaults to public role) USING (auth.role() = 'authenticated'). Any authenticated user can view all sync logs."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create sync logs",
+    "table": "file_sync_logs",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause, defaults to public role) WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "index",
+    "object_name": "idx_file_sync_logs_created_at",
+    "table": "file_sync_logs",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_file_sync_logs_created_at ON public.file_sync_logs(created_at DESC)."
+  },
+  {
+    "migration": "20251027075744_d0a3d62f-05ac-43a0-acd4-363ae5890a1a.sql",
+    "object_type": "index",
+    "object_name": "idx_file_sync_logs_service",
+    "table": "file_sync_logs",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_file_sync_logs_service ON public.file_sync_logs(service)."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "table",
+    "object_name": "user_storage_connections",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.user_storage_connections: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE; provider TEXT NOT NULL CHECK (provider IN ('google_drive', 'dropbox')); access_token TEXT; refresh_token TEXT; token_expiry TIMESTAMPTZ; account_email TEXT; connected_at TIMESTAMPTZ DEFAULT now(); last_synced_at TIMESTAMPTZ; sync_enabled BOOLEAN DEFAULT false; auto_backup_enabled BOOLEAN DEFAULT false; created_at TIMESTAMPTZ DEFAULT now(); updated_at TIMESTAMPTZ DEFAULT now(); UNIQUE(user_id, provider). Per-user replacement for the company-wide OAuth columns on settings; tokens stored in plaintext."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "rls",
+    "object_name": "user_storage_connections RLS",
+    "table": "user_storage_connections",
+    "action": "enable",
+    "detail": "ALTER TABLE public.user_storage_connections ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own storage connections",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "FOR SELECT (no TO clause, defaults to public role) USING (auth.uid() = user_id)."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "policy",
+    "object_name": "Users can insert their own storage connections",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "FOR INSERT (no TO clause) WITH CHECK (auth.uid() = user_id)."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own storage connections",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO clause) USING (auth.uid() = user_id). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their own storage connections",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "FOR DELETE (no TO clause) USING (auth.uid() = user_id)."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "trigger",
+    "object_name": "update_user_storage_connections_updated_at",
+    "table": "user_storage_connections",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_user_storage_connections_updated_at BEFORE UPDATE ON public.user_storage_connections FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251027081639_22cefe19-20a8-46df-93a3-f10415c8a441.sql",
+    "object_type": "column",
+    "object_name": "dropbox_connected, google_drive_connected, google_drive_refresh_token, google_drive_access_token, google_drive_token_expiry, dropbox_refresh_token, dropbox_access_token, dropbox_token_expiry, auto_backup_enabled, backup_frequency, last_backup_at, sync_enabled",
+    "table": "settings",
+    "action": "drop",
+    "detail": "Single ALTER TABLE public.settings with 12 DROP COLUMN IF EXISTS clauses, removing the company-wide cloud-storage fields added earlier the same day in 20251027075744 (plus google_drive_connected, which no migration in this batch ever added — IF EXISTS makes it a no-op if absent). Storage connections move to per-user user_storage_connections."
+  },
+  {
+    "migration": "20251027082859_7734c90d-cee6-4b0a-8680-50c1d58d3c0e.sql",
+    "object_type": "bucket",
+    "object_name": "documents",
+    "table": "storage.buckets",
+    "action": "update",
+    "detail": "UPDATE storage.buckets SET public = true WHERE id = 'documents'. Makes the pre-existing 'documents' bucket publicly readable so generated URLs work — all stored documents become fetchable without auth via the public object URL."
+  }
+]

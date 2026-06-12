@@ -1713,6 +1713,19 @@ Deno.serve(async (req: Request) => {
       );
     }
 
+    // G-SEC-12: require an authenticated user. The anon key is a valid JWT but resolves
+    // to no user, so anon/anon-key-only callers are rejected. App callers send a real
+    // user JWT via functions.invoke, so this does not affect legitimate use.
+    const __authHeader = req.headers.get('Authorization') || '';
+    const __jwt = __authHeader.replace('Bearer ', '');
+    const { data: { user: __caller } = { user: null }, error: __authErr } =
+      __jwt ? await getSupabaseClient().auth.getUser(__jwt) : { data: { user: null }, error: new Error('missing token') } as any;
+    if (__authErr || !__caller) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log('[GenerateInspectionPDF] Inspection:', payload.inspection.inspectionId);
     console.log('[GenerateInspectionPDF] Sections:', payload.inspection.sections?.length || 0);
     console.log('[GenerateInspectionPDF] Tenants:', payload.inspection.tenants?.length || 0);

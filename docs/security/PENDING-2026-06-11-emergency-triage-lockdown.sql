@@ -1,0 +1,13 @@
+-- PENDING — apply via the Supabase dashboard SQL editor (project oltzgidkjxwsukvkomof,
+-- account arno@wmeng.co.za). Then rename PENDING→APPLIED and tell Claude to re-probe.
+--
+-- This is the Phase-2 emergency triage (G-SEC-13 quick wins + G-SEC-14).
+-- Canonical SQL: supabase/migrations/20260611110000_emergency_triage_lockdown.sql
+-- Apply that file's contents verbatim (storage anon-write lockdown + settings Admin-only
+-- + remove Client/Contractor write on inspection_templates/validation_feedback).
+--
+-- Apply ALSO, if not yet done:
+--   docs/security/PENDING-2026-06-11-anon-lockdown-oob-tables.sql   (G-SEC-11)
+--
+-- And in the dashboard UI (not SQL): Authentication → disable "Allow new users to
+-- sign up"  (G-SEC-01 — the #1 item; SQL lockdowns above are not sufficient without it).

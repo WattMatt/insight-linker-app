@@ -1,0 +1,1554 @@
+[
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "profiles",
+    "table": "profiles",
+    "action": "create",
+    "detail": "CREATE TABLE public.profiles: id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE; email TEXT NOT NULL; full_name TEXT (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "CREATE TABLE public.clients: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); name TEXT NOT NULL; contact_person TEXT (nullable); email TEXT (nullable); phone TEXT (nullable); created_by UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "CREATE TABLE public.sites: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE; name TEXT NOT NULL; address TEXT (nullable); site_type TEXT (nullable); created_by UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE TABLE public.inspections: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); site_id UUID NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; title TEXT NOT NULL; description TEXT (nullable); status TEXT NOT NULL DEFAULT 'Pending'; inspection_date DATE (nullable); inspector_id UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(); updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "inspection_subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "CREATE TABLE public.inspection_subsections: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); inspection_id UUID NOT NULL REFERENCES public.inspections(id) ON DELETE CASCADE; name TEXT NOT NULL; description TEXT (nullable); order_index INTEGER NOT NULL DEFAULT 0; created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "table",
+    "object_name": "inspection_items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "CREATE TABLE public.inspection_items: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); subsection_id UUID NOT NULL REFERENCES public.inspection_subsections(id) ON DELETE CASCADE; item_name TEXT NOT NULL; status TEXT DEFAULT 'Pending' (nullable); notes TEXT (nullable); image_url TEXT (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "profiles RLS",
+    "table": "profiles",
+    "action": "enable",
+    "detail": "ALTER TABLE public.profiles ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "clients RLS",
+    "table": "clients",
+    "action": "enable",
+    "detail": "ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "sites RLS",
+    "table": "sites",
+    "action": "enable",
+    "detail": "ALTER TABLE public.sites ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "inspections RLS",
+    "table": "inspections",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspections ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "inspection_subsections RLS",
+    "table": "inspection_subsections",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspection_subsections ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "rls",
+    "object_name": "inspection_items RLS",
+    "table": "inspection_items",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspection_items ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Users can view all profiles",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (true)."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own profile",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.uid() = id)."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Users can insert their own profile",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.uid() = id)."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public). WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (defaults to public). USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "function",
+    "object_name": "handle_new_user",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.handle_new_user() RETURNS TRIGGER, LANGUAGE plpgsql, SECURITY DEFINER, SET search_path = public. Behavior: on trigger, INSERTs INTO public.profiles (id, email, full_name) VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name'); RETURN NEW. Touches: public.profiles (insert). Intended for AFTER INSERT ON auth.users."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "trigger",
+    "object_name": "on_auth_user_created",
+    "table": "auth.users",
+    "action": "create",
+    "detail": "CREATE TRIGGER on_auth_user_created AFTER INSERT ON auth.users FOR EACH ROW EXECUTE FUNCTION public.handle_new_user(). Auto-creates a profiles row on user signup."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "function",
+    "object_name": "update_updated_at_column",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.update_updated_at_column() RETURNS TRIGGER, LANGUAGE plpgsql, no SECURITY clause (defaults to INVOKER), no search_path setting. Behavior: NEW.updated_at = NOW(); RETURN NEW. Generic BEFORE UPDATE timestamp-maintenance trigger function."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "trigger",
+    "object_name": "update_profiles_updated_at",
+    "table": "profiles",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_profiles_updated_at BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "trigger",
+    "object_name": "update_clients_updated_at",
+    "table": "clients",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_clients_updated_at BEFORE UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "trigger",
+    "object_name": "update_sites_updated_at",
+    "table": "sites",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_sites_updated_at BEFORE UPDATE ON public.sites FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114352_f0238ce6-c819-49f9-9445-d5b79bd15290.sql",
+    "object_type": "trigger",
+    "object_name": "update_inspections_updated_at",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_inspections_updated_at BEFORE UPDATE ON public.inspections FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_profiles_updated_at",
+    "table": "profiles",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS update_profiles_updated_at ON public.profiles (preparation for function recreation)."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_clients_updated_at",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS update_clients_updated_at ON public.clients."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_sites_updated_at",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS update_sites_updated_at ON public.sites."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_inspections_updated_at",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP TRIGGER IF EXISTS update_inspections_updated_at ON public.inspections."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "function",
+    "object_name": "update_updated_at_column",
+    "table": null,
+    "action": "drop",
+    "detail": "DROP FUNCTION IF EXISTS public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "function",
+    "object_name": "update_updated_at_column",
+    "table": null,
+    "action": "replace",
+    "detail": "Recreated: CREATE OR REPLACE FUNCTION public.update_updated_at_column() RETURNS TRIGGER, LANGUAGE plpgsql, now SECURITY DEFINER with SET search_path = public (the only change vs the original). Behavior unchanged: NEW.updated_at = NOW(); RETURN NEW."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_profiles_updated_at",
+    "table": "profiles",
+    "action": "create",
+    "detail": "Recreated: BEFORE UPDATE ON public.profiles FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_clients_updated_at",
+    "table": "clients",
+    "action": "create",
+    "detail": "Recreated: BEFORE UPDATE ON public.clients FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_sites_updated_at",
+    "table": "sites",
+    "action": "create",
+    "detail": "Recreated: BEFORE UPDATE ON public.sites FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014114445_1195edac-dd33-41e4-a355-8c10546c0f12.sql",
+    "object_type": "trigger",
+    "object_name": "update_inspections_updated_at",
+    "table": "inspections",
+    "action": "create",
+    "detail": "Recreated: BEFORE UPDATE ON public.inspections FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014120224_e944a635-b5b0-4808-b7c8-87c5c2a774e9.sql",
+    "object_type": "table",
+    "object_name": "temp_import",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "CREATE TABLE public.temp_import: id serial primary key; data jsonb (nullable); imported_at timestamp default now() (nullable). COMMENT ON TABLE: 'Temporary table for importing JSON data from external sources'."
+  },
+  {
+    "migration": "20251014120224_e944a635-b5b0-4808-b7c8-87c5c2a774e9.sql",
+    "object_type": "rls",
+    "object_name": "temp_import RLS",
+    "table": "temp_import",
+    "action": "enable",
+    "detail": "ALTER TABLE public.temp_import ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014120224_e944a635-b5b0-4808-b7c8-87c5c2a774e9.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert import data",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated. WITH CHECK (true)."
+  },
+  {
+    "migration": "20251014120224_e944a635-b5b0-4808-b7c8-87c5c2a774e9.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view import data",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (true)."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "enum",
+    "object_name": "app_role",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE TYPE public.app_role AS ENUM ('Admin', 'User', 'Contractor')."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "table",
+    "object_name": "user_roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "CREATE TABLE public.user_roles: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); user_id uuid NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE; role app_role NOT NULL; created_at timestamptz DEFAULT now() (nullable); UNIQUE(user_id, role). Migration comment notes roles deliberately kept separate from profiles."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "rls",
+    "object_name": "user_roles RLS",
+    "table": "user_roles",
+    "action": "enable",
+    "detail": "ALTER TABLE public.user_roles ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "function",
+    "object_name": "has_role",
+    "table": null,
+    "action": "create",
+    "detail": "CREATE OR REPLACE FUNCTION public.has_role(_user_id uuid, _role app_role) RETURNS boolean, LANGUAGE sql, STABLE, SECURITY DEFINER, SET search_path = public. Body: SELECT EXISTS (SELECT 1 FROM public.user_roles WHERE user_id = _user_id AND role = _role). Touches: public.user_roles (select). Used by RLS policies to avoid recursive policy evaluation."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (auth.uid() = user_id)."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (public.has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "policy",
+    "object_name": "Admins can insert roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated. WITH CHECK (public.has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "policy",
+    "object_name": "Admins can update roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "FOR UPDATE TO authenticated. USING (public.has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "policy",
+    "object_name": "Admins can delete roles",
+    "table": "user_roles",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated. USING (public.has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014120311_94cc9de8-04df-4b7b-a1ba-bd725399d5a6.sql",
+    "object_type": "column",
+    "object_name": "status",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS status text DEFAULT 'Active' (nullable)."
+  },
+  {
+    "migration": "20251014120619_17bfa39c-50ea-4700-a84a-a2eb2e47123b.sql",
+    "object_type": "column",
+    "object_name": "priority",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS priority text DEFAULT 'Medium' (nullable). For calendar functionality."
+  },
+  {
+    "migration": "20251014120619_17bfa39c-50ea-4700-a84a-a2eb2e47123b.sql",
+    "object_type": "column",
+    "object_name": "end_date",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS end_date date (nullable, no default)."
+  },
+  {
+    "migration": "20251014120619_17bfa39c-50ea-4700-a84a-a2eb2e47123b.sql",
+    "object_type": "column",
+    "object_name": "assigned_to",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS assigned_to text[] (nullable, no default)."
+  },
+  {
+    "migration": "20251014120619_17bfa39c-50ea-4700-a84a-a2eb2e47123b.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_inspection_date",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_inspection_date ON public.inspections(inspection_date)."
+  },
+  {
+    "migration": "20251014120619_17bfa39c-50ea-4700-a84a-a2eb2e47123b.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_end_date",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_end_date ON public.inspections(end_date)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "table",
+    "object_name": "subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.subsections (hierarchy: Client -> Site -> Subsection -> Inspection; subsections are like electrical boards/panels within a site): id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; site_id UUID NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; name TEXT NOT NULL; description TEXT (nullable); category TEXT (nullable, e.g. 'EE'); coc_status TEXT DEFAULT 'Missing' (nullable); metering_status TEXT DEFAULT 'Missing' (nullable); is_coc_required BOOLEAN DEFAULT true (nullable); is_compliant BOOLEAN DEFAULT true (nullable); created_at TIMESTAMPTZ NOT NULL DEFAULT now(); updated_at TIMESTAMPTZ NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "rls",
+    "object_name": "subsections RLS",
+    "table": "subsections",
+    "action": "enable",
+    "detail": "ALTER TABLE public.subsections ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (auth.role() = 'authenticated'::text). Note: same policy name also exists on inspection_subsections (different table)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated. WITH CHECK (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR UPDATE TO authenticated. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "column",
+    "object_name": "subsection_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS subsection_id UUID REFERENCES public.subsections(id) ON DELETE CASCADE (nullable). Links inspections to subsections."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "index",
+    "object_name": "idx_subsections_site_id",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_subsections_site_id ON public.subsections(site_id)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_subsection_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_subsection_id ON public.inspections(subsection_id)."
+  },
+  {
+    "migration": "20251014123510_4c69dadd-d092-4989-a989-92a7498dd462.sql",
+    "object_type": "trigger",
+    "object_name": "update_subsections_updated_at",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_subsections_updated_at BEFORE UPDATE ON public.subsections FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "bucket",
+    "object_name": "company-logos",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets (id, name, public) VALUES ('company-logos', 'company-logos', true) ON CONFLICT (id) DO NOTHING. PUBLIC bucket."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "bucket",
+    "object_name": "client-logos",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets: ('client-logos', 'client-logos', true) ON CONFLICT (id) DO NOTHING. PUBLIC bucket."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "bucket",
+    "object_name": "site-images",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets: ('site-images', 'site-images', true) ON CONFLICT (id) DO NOTHING. PUBLIC bucket."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "bucket",
+    "object_name": "inspection-photos",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets: ('inspection-photos', 'inspection-photos', true) ON CONFLICT (id) DO NOTHING. PUBLIC bucket (note: public=true even though its SELECT storage policy requires authenticated)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "bucket",
+    "object_name": "documents",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets: ('documents', 'documents', false) ON CONFLICT (id) DO NOTHING. PRIVATE bucket (public = false)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view company logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (bucket_id = 'company-logos')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload company logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (bucket_id = 'company-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update company logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (bucket_id = 'company-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete company logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (bucket_id = 'company-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view client logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (bucket_id = 'client-logos')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload client logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (bucket_id = 'client-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update client logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (bucket_id = 'client-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete client logos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (bucket_id = 'client-logos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view site images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (bucket_id = 'site-images')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload site images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (bucket_id = 'site-images' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update site images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (bucket_id = 'site-images' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete site images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (bucket_id = 'site-images' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can view inspection photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (bucket_id = 'inspection-photos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload inspection photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (bucket_id = 'inspection-photos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update inspection photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (bucket_id = 'inspection-photos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete inspection photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (bucket_id = 'inspection-photos' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can view documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (bucket_id = 'documents' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (bucket_id = 'documents' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (bucket_id = 'documents' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (bucket_id = 'documents' AND auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "table",
+    "object_name": "settings",
+    "table": "settings",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.settings (app branding/configuration): id uuid PRIMARY KEY DEFAULT gen_random_uuid(); company_logo_url text (nullable); login_hero_image_url text (nullable); company_name text DEFAULT 'Watson Mattheus' (nullable); primary_color text DEFAULT '#3B82F6' (nullable); google_drive_connected boolean DEFAULT false (nullable); created_at timestamptz DEFAULT now() (nullable); updated_at timestamptz DEFAULT now() (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "rls",
+    "object_name": "settings RLS",
+    "table": "settings",
+    "action": "enable",
+    "detail": "ALTER TABLE public.settings ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can view settings",
+    "table": "settings",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (defaults to public). USING (true)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update settings",
+    "table": "settings",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert settings",
+    "table": "settings",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "table",
+    "object_name": "activity_logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.activity_logs (dashboard recent activity): id uuid PRIMARY KEY DEFAULT gen_random_uuid(); user_email text NOT NULL; action text NOT NULL; details text (nullable); created_at timestamptz DEFAULT now() (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "rls",
+    "object_name": "activity_logs RLS",
+    "table": "activity_logs",
+    "action": "enable",
+    "detail": "ALTER TABLE public.activity_logs ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view activity logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert activity logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "table",
+    "object_name": "calendar_events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.calendar_events: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); title text NOT NULL; site_name text NOT NULL; start_date date NOT NULL; end_date date (nullable); status text DEFAULT 'Scheduled' (nullable); priority text DEFAULT 'High' (nullable); event_type text (nullable); created_at timestamptz DEFAULT now() (nullable); updated_at timestamptz DEFAULT now() (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "rls",
+    "object_name": "calendar_events RLS",
+    "table": "calendar_events",
+    "action": "enable",
+    "detail": "ALTER TABLE public.calendar_events ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view calendar events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create calendar events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update calendar events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete calendar events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "logo_url",
+    "table": "clients",
+    "action": "create",
+    "detail": "ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS logo_url text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "company_name",
+    "table": "clients",
+    "action": "create",
+    "detail": "ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS company_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "primary_contact_email",
+    "table": "clients",
+    "action": "create",
+    "detail": "ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS primary_contact_email text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "supply_authority",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS supply_authority text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "nominated_max_demand",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS nominated_max_demand text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "consultant_name",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS consultant_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "consultant_company",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS consultant_company text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "consultant_contact",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS consultant_contact text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "site_image_url",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS site_image_url text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "client_logo_url",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS client_logo_url text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "tenant_name",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN IF NOT EXISTS tenant_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "project_name",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS project_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "shop_number",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS shop_number text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "shop_name",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS shop_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "inspector_name",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS inspector_name text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "client_rep",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS client_rep text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "consultant",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS consultant text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "contractor",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS contractor text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "testing_party",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS testing_party text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "location",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS location text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "column",
+    "object_name": "qr_code_url",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS qr_code_url text (nullable)."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "trigger",
+    "object_name": "update_settings_updated_at",
+    "table": "settings",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_settings_updated_at BEFORE UPDATE ON public.settings FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "trigger",
+    "object_name": "update_calendar_events_updated_at",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_calendar_events_updated_at BEFORE UPDATE ON public.calendar_events FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014132137_627a24bc-ffbf-499d-bd22-96df6a7f3bfc.sql",
+    "object_type": "data",
+    "object_name": "settings default row",
+    "table": "settings",
+    "action": "insert",
+    "detail": "INSERT INTO public.settings (company_name) VALUES ('Watson Mattheus') ON CONFLICT DO NOTHING. Seeds the single app-branding settings row."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "table",
+    "object_name": "qr_scans",
+    "table": "qr_scans",
+    "action": "create",
+    "detail": "CREATE TABLE public.qr_scans (QR scan tracking): id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; subsection_id uuid NOT NULL REFERENCES public.subsections(id) ON DELETE CASCADE; scanned_at timestamptz NOT NULL DEFAULT now(); scanned_by uuid REFERENCES auth.users(id) (nullable); ip_address text (nullable); user_agent text (nullable); created_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "rls",
+    "object_name": "qr_scans RLS",
+    "table": "qr_scans",
+    "action": "enable",
+    "detail": "ALTER TABLE public.qr_scans ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view scans",
+    "table": "qr_scans",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can insert scans",
+    "table": "qr_scans",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (defaults to public, i.e. includes anon). WITH CHECK (true). Allows anonymous QR-scan logging."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "table",
+    "object_name": "document_categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "CREATE TABLE public.document_categories: id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; subsection_id uuid NOT NULL REFERENCES public.subsections(id) ON DELETE CASCADE; name text NOT NULL; order_index integer NOT NULL DEFAULT 0; created_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "rls",
+    "object_name": "document_categories RLS",
+    "table": "document_categories",
+    "action": "enable",
+    "detail": "ALTER TABLE public.document_categories ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can manage document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause. USING (auth.role() = 'authenticated'::text). No explicit WITH CHECK (inherits USING expression)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "table",
+    "object_name": "subsection_documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "CREATE TABLE public.subsection_documents: id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; subsection_id uuid NOT NULL REFERENCES public.subsections(id) ON DELETE CASCADE; category_id uuid NOT NULL REFERENCES public.document_categories(id) ON DELETE CASCADE; file_name text NOT NULL; file_url text NOT NULL; file_size bigint (nullable); uploaded_at timestamptz NOT NULL DEFAULT now(); uploaded_by uuid REFERENCES auth.users(id) (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "rls",
+    "object_name": "subsection_documents RLS",
+    "table": "subsection_documents",
+    "action": "enable",
+    "detail": "ALTER TABLE public.subsection_documents ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can manage subsection documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause. USING (auth.role() = 'authenticated'::text). No explicit WITH CHECK."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "column",
+    "object_name": "coc_number",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN coc_number text (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "column",
+    "object_name": "coc_issue_date",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN coc_issue_date date (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "column",
+    "object_name": "coc_type",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN coc_type text (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "column",
+    "object_name": "meter_serial_number",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN meter_serial_number text (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "column",
+    "object_name": "ct_ratio",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN ct_ratio text (nullable)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "table",
+    "object_name": "site_documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "CREATE TABLE public.site_documents: id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; site_id uuid NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; category text NOT NULL; file_name text NOT NULL; file_url text NOT NULL; file_count integer DEFAULT 1 (nullable); created_at timestamptz NOT NULL DEFAULT now(); updated_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "rls",
+    "object_name": "site_documents RLS",
+    "table": "site_documents",
+    "action": "enable",
+    "detail": "ALTER TABLE public.site_documents ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can manage site documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause. USING (auth.role() = 'authenticated'::text). No explicit WITH CHECK."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "table",
+    "object_name": "inspection_templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "CREATE TABLE public.inspection_templates: id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; name text NOT NULL; category text NOT NULL; description text (nullable); sections_count integer DEFAULT 0 (nullable); pages_count integer DEFAULT 0 (nullable); created_at timestamptz NOT NULL DEFAULT now(); updated_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "rls",
+    "object_name": "inspection_templates RLS",
+    "table": "inspection_templates",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspection_templates ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause. WITH CHECK (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause. USING (auth.role() = 'authenticated'::text)."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "trigger",
+    "object_name": "update_site_documents_updated_at",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_site_documents_updated_at BEFORE UPDATE ON public.site_documents FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014140001_3adc740c-7446-410a-a427-957d649c4e3c.sql",
+    "object_type": "trigger",
+    "object_name": "update_inspection_templates_updated_at",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_inspection_templates_updated_at BEFORE UPDATE ON public.inspection_templates FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "column",
+    "object_name": "firebase_id",
+    "table": "clients",
+    "action": "create",
+    "detail": "ALTER TABLE public.clients ADD COLUMN IF NOT EXISTS firebase_id TEXT UNIQUE (nullable). For Firebase-to-Supabase migration tracking. Only clients gets the UNIQUE constraint."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "column",
+    "object_name": "firebase_id",
+    "table": "sites",
+    "action": "create",
+    "detail": "ALTER TABLE public.sites ADD COLUMN IF NOT EXISTS firebase_id TEXT (nullable, NOT unique)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "column",
+    "object_name": "firebase_id",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN IF NOT EXISTS firebase_id TEXT (nullable, NOT unique)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "column",
+    "object_name": "firebase_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS firebase_id TEXT (nullable, NOT unique)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "index",
+    "object_name": "idx_clients_firebase_id",
+    "table": "clients",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_clients_firebase_id ON public.clients(firebase_id)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "index",
+    "object_name": "idx_sites_firebase_id",
+    "table": "sites",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_sites_firebase_id ON public.sites(firebase_id)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "index",
+    "object_name": "idx_subsections_firebase_id",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_subsections_firebase_id ON public.subsections(firebase_id)."
+  },
+  {
+    "migration": "20251014142244_6a0c83d2-744e-4324-88ea-422feed90721.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_firebase_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_firebase_id ON public.inspections(firebase_id)."
+  },
+  {
+    "migration": "20251014161057_1b2dda59-9f57-4fc3-b974-fb363a09b703.sql",
+    "object_type": "column",
+    "object_name": "cover_page",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "ALTER TABLE inspection_templates ADD COLUMN IF NOT EXISTS cover_page JSONB (nullable). Holds {title, subtitle, company_name}."
+  },
+  {
+    "migration": "20251014161057_1b2dda59-9f57-4fc3-b974-fb363a09b703.sql",
+    "object_type": "column",
+    "object_name": "sections",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "ALTER TABLE inspection_templates ADD COLUMN IF NOT EXISTS sections JSONB (nullable). Holds array of {id, name, order_index, items:[{id, name, type, required}]}."
+  },
+  {
+    "migration": "20251014161057_1b2dda59-9f57-4fc3-b974-fb363a09b703.sql",
+    "object_type": "data",
+    "object_name": "mock inspection templates",
+    "table": "inspection_templates",
+    "action": "insert",
+    "detail": "INSERT 14 mock templates with cover_page and sections JSONB: Electrical Installation Certificate, Distribution Board Inspection, Emergency Lighting Test (Electrical); Fire Alarm System Inspection, Fire Extinguisher Inspection, Sprinkler System Test (Fire Safety); Structural Integrity Assessment, Roof Inspection (Structural); HVAC System Inspection, Ventilation System Test (HVAC); Plumbing System Inspection, Backflow Prevention Test (Plumbing); General Safety Audit, Elevator Inspection (Safety). These are placeholder/mock data, fully deleted by the next migration."
+  },
+  {
+    "migration": "20251014161057_1b2dda59-9f57-4fc3-b974-fb363a09b703.sql",
+    "object_type": "data",
+    "object_name": "template statistics recompute",
+    "table": "inspection_templates",
+    "action": "update",
+    "detail": "UPDATE inspection_templates SET sections_count = jsonb_array_length(sections), pages_count = CEIL(jsonb_array_length(sections) * 1.5) WHERE sections IS NOT NULL. Recomputes counters from sections JSONB."
+  },
+  {
+    "migration": "20251014161831_946f7a2f-f651-48f7-8414-6a4382f2e9a0.sql",
+    "object_type": "data",
+    "object_name": "delete all inspection_templates",
+    "table": "inspection_templates",
+    "action": "update",
+    "detail": "DELETE FROM inspection_templates (no WHERE clause) — wipes ALL rows, removing the 14 mock templates inserted by 20251014161057."
+  },
+  {
+    "migration": "20251014161831_946f7a2f-f651-48f7-8414-6a4382f2e9a0.sql",
+    "object_type": "data",
+    "object_name": "real Firebase templates (8)",
+    "table": "inspection_templates",
+    "action": "insert",
+    "detail": "INSERT 8 production templates ported from Firebase, each with detailed sections JSONB (item types: checklist, textarea, text, image, rating) and cover_page JSONB: 1) Electrical Meter Inspection Report (General, 4 sections); 2) Electrical Main Board (EMB) Inspection (Low Voltage & Line Shops, 4 sections); 3) Factory Acceptance Test (FAT) Inspection Report (Low Voltage & Line Shops, 6 sections incl. ABB TruONE ATS commissioning, solar component check, generator integration); 4) Generator Installation Inspection (Generator, 4 sections); 5) Low Voltage Line Shop Board Audit (Low Voltage & Line Shops, 6 sections, image-capture heavy); 6) Miniature Substation Inspection Report (Medium & High Voltage, 5 sections); 7) Miniature Substation Pre-FAT and Post-FAT (Medium & High Voltage, 4 sections); 8) RMU Snagging & Compliance Report (Medium & High Voltage, 3 sections)."
+  },
+  {
+    "migration": "20251014162009_3bf47f66-6819-4806-8e6c-b9adc13d5e5b.sql",
+    "object_type": "data",
+    "object_name": "remaining Firebase templates (3)",
+    "table": "inspection_templates",
+    "action": "insert",
+    "detail": "INSERT the 3 missing templates: 9) Site Summary Report (General, 3 sections: site information, subsection summary, overall status & recommendations); 10) Standalone Solar PV Installation Inspection (Solar & Renewable Energy, 6 sections: PV array, inverter, battery storage, electrical testing, protection & safety, documentation); 11) Standard Progress Report (General, 6 sections: report info, work completed, schedule status, quality control, safety & environmental, upcoming work). Brings template total to 11."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "table",
+    "object_name": "pending_user_invites",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "CREATE TABLE public.pending_user_invites (tracks pending user invites from Firebase migration): id uuid PRIMARY KEY DEFAULT gen_random_uuid(); firebase_id text (nullable); email text NOT NULL UNIQUE; full_name text (nullable); invited_at timestamptz (nullable); created_at timestamptz NOT NULL DEFAULT now(); updated_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "rls",
+    "object_name": "pending_user_invites RLS",
+    "table": "pending_user_invites",
+    "action": "enable",
+    "detail": "ALTER TABLE public.pending_user_invites ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view pending invites",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING (has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "policy",
+    "object_name": "Admins can insert pending invites",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated. WITH CHECK (has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "policy",
+    "object_name": "Admins can update pending invites",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "FOR UPDATE TO authenticated. USING (has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "policy",
+    "object_name": "Admins can delete pending invites",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated. USING (has_role(auth.uid(), 'Admin'))."
+  },
+  {
+    "migration": "20251014164357_37295947-5f1a-4fb6-aa2f-b81d8cf4144d.sql",
+    "object_type": "trigger",
+    "object_name": "update_pending_user_invites_updated_at",
+    "table": "pending_user_invites",
+    "action": "create",
+    "detail": "CREATE TRIGGER update_pending_user_invites_updated_at BEFORE UPDATE ON public.pending_user_invites FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251014172237_cf2b6c0e-4e10-4df0-abc2-8a96d54ef0ab.sql",
+    "object_type": "enum",
+    "object_name": "app_role",
+    "table": null,
+    "action": "alter",
+    "detail": "ALTER TYPE public.app_role ADD VALUE IF NOT EXISTS 'Moderator'. Enum becomes ('Admin', 'User', 'Contractor', 'Moderator')."
+  }
+]

@@ -1,0 +1,58 @@
+# System Reference — Master Index & Verification Ledger
+
+**Charter:** Every function, process, and flow in the app documented from code — nothing assumed.
+Every entry carries `file:line` (or migration filename) citations. Claims that could not be
+verified against code are marked ⚠️ UNVERIFIED. Status per chapter: ✅ Verified · 🟡 Partial · ⬜ Unread.
+
+**Started:** 2026-06-11 · **Method:** multi-agent workflow review, phased
+**Surface area (counted 2026-06-11):** ~100k LOC TS/TSX · 52 routes (page.tsx) · 166 components · 52 views ·
+22 hooks · 47 lib files · 26 edge functions · 142 migrations · 23 pre-existing docs
+
+**Review status: COMPLETE 2026-06-11** — all 8 chapters documented from code with citations across Phases 1–5. Final-sweep critic: substantively complete & trustworthy; "nothing assumed" met. Residual data-model coverage (reports/compliance_settings/3 views/9 RPCs in types.ts) folded into G-OPS-01.
+
+**Security findings live in [GAPS.md](GAPS.md) (register) + [SECURITY-FINDINGS-phase2.md](SECURITY-FINDINGS-phase2.md) + [phase3](SECURITY-FINDINGS-phase3.md) + [07-…/FINDINGS-phase4.md](07-components-hooks-lib/FINDINGS-phase4.md).**
+
+## Ledger
+
+| # | Chapter | Scope | Status |
+|---|---------|-------|--------|
+| 01 | Architecture & environments | Stack, Vercel/Supabase topology, env vars, deploy process | ✅ Verified (Phase 5) — `01-architecture.md` |
+| 02 | Data model | Effective schema from 142 migrations: tables, columns, RLS policies, RPCs/functions, triggers, enums, storage buckets | 🟡 Verified-with-gaps (Phase 1b + critic re-run) — all migrations scanned; 15 docs in `02-data-model/`. Surfaced G-SEC-11, G-OPS-01/02. Critic re-run (`02-data-model/CRITIC-rerun.md`, 10/10 citations) found `reports`/`compliance_settings`/`compliance_settings_audit` + 3 views + 9 RPCs in types.ts still UNDOCUMENTED → folded into G-OPS-01 |
+| 03 | Auth & access | Auth flows, 5 access contexts, roles, token systems, user lifecycle | ✅ Verified — all 4 docs; the 3 previously-unvalidated docs re-validated against code in Phase 1b |
+| 04 | Routes | All 52 pages: renders, reads/writes, RLS dependency | ✅ Verified (Phase 2) — 7 docs in `04-routes/`; security flags → SECURITY-FINDINGS-phase2.md |
+| 05 | Edge functions | All 26: auth model, inputs, side effects, callers | ✅ Verified (Phase 2) — 5 docs in `05-edge-functions/`; security flags → SECURITY-FINDINGS-phase2.md |
+| 06 | End-to-end flows | Inspection lifecycle, COC validation, PDF generation (×5 generators), offline sync, QR, invites/email, templates | ✅ Verified (Phase 3) — 7 docs in `06-flows/`; critic: zero reconciliation contradictions, all citations resolved. 46 security flags → SECURITY-FINDINGS-phase3.md (most re-confirm G-SEC-01/12/13/14; new: G-SEC-16…19). Access-links/visitor-capture flow traced (Phase 5, `06-flows/access-links-and-visitor-capture.md`) |
+| 07 | Components, hooks & lib | 166 components, 22 hooks, 47 lib files — per-function docs | ✅ Verified (Phase 4) — 13 docs in `07-components-hooks-lib/`, 833+ symbols; critic 8/8 spot-checks exact. 5 seam-gap files closed via `uncovered-gapfill.md`. 106 findings → FINDINGS-phase4.md (dead code → G-OPS-03; misleading stubs → G-BUG-01; re-confirms G-SEC-13/14/17/02) |
+| 08 | Existing-docs audit | 23 docs graded accurate/stale/superseded | ✅ Verified (Phase 5) — 3 audit docs in `08-existing-docs-audit/`; most pre-existing docs PARTLY-STALE from the 2026-05-25 Vite→Next migration (cite `src/pages/*`). 2 ground-truth contradictions flagged (COC_REVIEW_PROCESS: extract-coc anon — WRONG, it's JWT-required; COC_TEST_FRAMEWORK tests COC expiry but the engine says COCs never expire) |
+
+## Gap & problem register
+
+Problems found by the review live in **[GAPS.md](GAPS.md)** — each with severity, resolution plan,
+owner, and evidence-required closure. This index tracks *coverage*; GAPS.md tracks *what's wrong*.
+
+## Open questions
+
+(accumulated per phase; promoted to GAPS.md entries once confirmed real — the Phase 1 batch below
+is now G-SEC-01…07 there)
+
+From Phase 1 / auth-flows (2026-06-11):
+1. Is GoTrue `enable_signup=false` actually set in the hosted project? Not verifiable from repo (`supabase/config.toml` has no `[auth]` block); already an open action in `docs/security/2026-06-10-phase1-full-app-review.md:85`.
+2. Is project-level Turnstile captcha enforcement on, and `NEXT_PUBLIC_TURNSTILE_SITE_KEY` set in prod? Client silently degrades to no-captcha when unset (`src/components/CaptchaTurnstile.tsx:20-21`).
+3. **`send-password-reset` edge fn has zero app callers** and is absent from `supabase/config.toml` — if still deployed and anon-invocable, it's an unauthenticated email-sender (only in-isolate 5/min/IP rate limit).
+4. Audit event types `user_created`, `account_deleted`, `lockout`, `mfa_*`, `account_email_changed` are defined but have no emitters — invite-user/delete-user write no `auth_events` rows. Intentional?
+5. Recovery email copy claims 1-hour link expiry (`supabase/functions/send-password-reset/index.ts:144,177`) but actual OTP expiry is server config, not in repo.
+6. ~~Email sender mismatch: invite-user sends from `onboarding@resend.dev`~~ — **RESOLVED (G-SEC-06): invite-user now sends from `noreply@watsonmattheus.com` (`invite-user/index.ts:466`, deployed v298). The earlier auth-flows.md claim was stale.**
+7. **invite-user derives `redirectTo` from request origin/referer** (`invite-user/index.ts:76-77`), not `APP_URL` — invites generated from a preview deployment would link to the preview host.
+
+## Phase 1 run state (2026-06-11)
+
+Workflow run `wf_8c1a2090-7f1` hit the Claude monthly spend limit mid-run (17/24 agents failed).
+Resume after limit raised/reset: re-invoke the saved script with `resumeFromRunId: wf_8c1a2090-7f1` —
+completed agents return cached; failed scan batches, ALL data-model synthesis, 3 auth re-validations,
+and the critic re-run. Script path is recorded in session memory (`system-reference-review`).
+
+## Conventions
+
+- Citations: `src/path/file.tsx:123` or `supabase/migrations/<file>.sql`
+- Prod-applied SQL outside migrations dir (e.g. `docs/security/APPLIED-2026-06-11-tier2-anon-read-lockdown.sql`) is part of effective state and cited explicitly.
+- `_work/` holds intermediate machine-generated extracts (migration event logs) — not human docs.

@@ -1,0 +1,610 @@
+[
+  {
+    "migration": "20251014172735_c6e9844f-0866-4231-ab9b-eab69d39132e.sql",
+    "object_type": "data",
+    "object_name": "user_roles admin seed",
+    "table": "user_roles",
+    "action": "insert",
+    "detail": "INSERT INTO public.user_roles (user_id, role) VALUES ('02847fd1-0cd1-42a7-b5d0-10122b74828e', 'Admin') ON CONFLICT (user_id, role) DO NOTHING. Hardcodes the Admin role for one specific auth user UUID — bootstraps the first administrator account."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "phone",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS phone TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "job_title",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS job_title TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "department",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS department TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "company",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS company TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "address",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS address TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "city",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS city TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "country",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS country TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "postal_code",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS postal_code TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "bio",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS bio TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010134_9e552eb7-e8b8-4e7d-af61-f0ddac644a18.sql",
+    "object_type": "column",
+    "object_name": "avatar_url",
+    "table": "profiles",
+    "action": "create",
+    "detail": "ALTER TABLE public.profiles ADD COLUMN IF NOT EXISTS avatar_url TEXT. Nullable, no default, no references."
+  },
+  {
+    "migration": "20251015010856_b93b0802-94f0-48f4-9b68-3634fd86419f.sql",
+    "object_type": "bucket",
+    "object_name": "profile-images",
+    "table": "storage.buckets",
+    "action": "create",
+    "detail": "INSERT INTO storage.buckets (id, name, public) VALUES ('profile-images', 'profile-images', true) ON CONFLICT (id) DO NOTHING. PUBLIC bucket for user profile images."
+  },
+  {
+    "migration": "20251015010856_b93b0802-94f0-48f4-9b68-3634fd86419f.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can view all profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (default: applies to all roles). USING (bucket_id = 'profile-images'). Anyone can read any object in the profile-images bucket."
+  },
+  {
+    "migration": "20251015010856_b93b0802-94f0-48f4-9b68-3634fd86419f.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can upload their own profile image",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (default: all roles). WITH CHECK (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1]). Upload allowed only into a top-level folder named after the uploader's own auth.uid()."
+  },
+  {
+    "migration": "20251015010856_b93b0802-94f0-48f4-9b68-3634fd86419f.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can update their own profile image",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (default: all roles). USING (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1]). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251015010856_b93b0802-94f0-48f4-9b68-3634fd86419f.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can delete their own profile image",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (default: all roles). USING (bucket_id = 'profile-images' AND auth.uid()::text = (storage.foldername(name))[1])."
+  },
+  {
+    "migration": "20251015020520_32a5b0f5-76a0-4360-be7b-87968045b9ff.sql",
+    "object_type": "column",
+    "object_name": "inspection_template_id",
+    "table": "subsections",
+    "action": "create",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN inspection_template_id uuid REFERENCES public.inspection_templates(id). Nullable, no default, no ON DELETE action (defaults to NO ACTION). COMMENT ON COLUMN: 'Links subsection to its inspection template type'."
+  },
+  {
+    "migration": "20251015020520_32a5b0f5-76a0-4360-be7b-87968045b9ff.sql",
+    "object_type": "index",
+    "object_name": "idx_subsections_template_id",
+    "table": "subsections",
+    "action": "create",
+    "detail": "CREATE INDEX idx_subsections_template_id ON public.subsections(inspection_template_id). Plain btree index."
+  },
+  {
+    "migration": "20251015023536_dd3e4507-2aa2-41e6-a9dd-1436f75fd1a6.sql",
+    "object_type": "column",
+    "object_name": "json_data",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS json_data jsonb DEFAULT '{}'::jsonb. Nullable, default empty JSON object. Stores section/item data for an inspection."
+  },
+  {
+    "migration": "20251015023536_dd3e4507-2aa2-41e6-a9dd-1436f75fd1a6.sql",
+    "object_type": "column",
+    "object_name": "template_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "ALTER TABLE public.inspections ADD COLUMN IF NOT EXISTS template_id uuid REFERENCES public.inspection_templates(id). Nullable, no default, no ON DELETE action (defaults to NO ACTION)."
+  },
+  {
+    "migration": "20251015023536_dd3e4507-2aa2-41e6-a9dd-1436f75fd1a6.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_template_id",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_template_id ON public.inspections(template_id). Plain btree index."
+  },
+  {
+    "migration": "20251015023536_dd3e4507-2aa2-41e6-a9dd-1436f75fd1a6.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_json_data",
+    "table": "inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_json_data ON public.inspections USING gin(json_data). GIN index over the jsonb column."
+  },
+  {
+    "migration": "20251015102828_8f5f0c1e-3952-42ff-9fa1-e8daa9e47cfc.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of ALL subsections rows, for QR code landing pages. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251015102828_8f5f0c1e-3952-42ff-9fa1-e8daa9e47cfc.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of ALL sites rows. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251015102828_8f5f0c1e-3952-42ff-9fa1-e8daa9e47cfc.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of ALL clients rows including contact information. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251015102828_8f5f0c1e-3952-42ff-9fa1-e8daa9e47cfc.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view document categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of all document_categories rows. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251015102828_8f5f0c1e-3952-42ff-9fa1-e8daa9e47cfc.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view subsection documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of all subsection_documents rows. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251015103303_079ba222-db0d-4485-ba22-df42ad3f9cad.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view site documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Grants anonymous read of all site_documents rows, for QR code landing pages. Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251016021446_aee864aa-97f6-4256-92c0-270037c8248f.sql",
+    "object_type": "data",
+    "object_name": "remove 05 Photos categories",
+    "table": "document_categories",
+    "action": "update",
+    "detail": "DELETE FROM public.document_categories WHERE name = '05 Photos'. Removes every '05 Photos' document category row. Any subsection_documents referencing those category rows are affected per the FK's delete behavior (defined elsewhere, not in this batch)."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "table",
+    "object_name": "site_document_categories",
+    "table": "site_document_categories",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.site_document_categories: id UUID NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; site_id UUID NOT NULL REFERENCES public.sites(id) ON DELETE CASCADE; name TEXT NOT NULL; order_index INTEGER NOT NULL DEFAULT 0; created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "rls",
+    "object_name": "site_document_categories RLS",
+    "table": "site_document_categories",
+    "action": "enable",
+    "detail": "ALTER TABLE public.site_document_categories ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can manage site document categories",
+    "table": "site_document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (default: all roles). USING (auth.role() = 'authenticated'). No WITH CHECK clause (FOR ALL without WITH CHECK reuses the USING expression for writes)."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view site document categories",
+    "table": "site_document_categories",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (default: all roles, including anon). USING (true). Later dropped in 20251016035546."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "column",
+    "object_name": "category_id",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "Conditional DO $$ block: if information_schema.columns has no site_documents.category_id, then ALTER TABLE public.site_documents ADD COLUMN category_id UUID REFERENCES public.site_document_categories(id) ON DELETE CASCADE. Nullable, no default."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "data",
+    "object_name": "backfill site_document_categories from site_documents.category",
+    "table": "site_document_categories",
+    "action": "insert",
+    "detail": "INSERT INTO public.site_document_categories (site_id, name, order_index) SELECT DISTINCT sd.site_id, sd.category, CASE sd.category WHEN '01 COC' THEN 1 WHEN '02 Manuals' THEN 2 WHEN '03 Line Diagram' THEN 3 WHEN '04 Metering' THEN 4 WHEN '05 Thermal Reports' THEN 5 WHEN '06 Other' THEN 6 ELSE 99 END FROM public.site_documents sd WHERE sd.category IS NOT NULL ON CONFLICT DO NOTHING. Creates per-site category rows from the legacy free-text site_documents.category field."
+  },
+  {
+    "migration": "20251016021558_9338f335-479a-4f3a-bc57-d9419dfb9be8.sql",
+    "object_type": "data",
+    "object_name": "link site_documents.category_id",
+    "table": "site_documents",
+    "action": "update",
+    "detail": "UPDATE public.site_documents sd SET category_id = sdc.id FROM public.site_document_categories sdc WHERE sd.site_id = sdc.site_id AND sd.category = sdc.name AND sd.category_id IS NULL. Backfills the new FK column by matching on (site_id, category text). Migrates from text categories to FK-based categories."
+  },
+  {
+    "migration": "20251016023327_e0b8f5b5-c473-42c3-bbc7-f3c6476ec105.sql",
+    "object_type": "data",
+    "object_name": "recategorize MV templates",
+    "table": "inspection_templates",
+    "action": "update",
+    "detail": "UPDATE inspection_templates SET category = 'Medium Voltage' WHERE name ILIKE '%miniature substation%' OR name ILIKE '%RMU%' OR name ILIKE '%ring main unit%'. Moves miniature-substation / RMU / ring-main-unit templates into the 'Medium Voltage' category."
+  },
+  {
+    "migration": "20251016030509_dbabc2e4-cdf2-4eae-9d67-82ad2ca0c747.sql",
+    "object_type": "data",
+    "object_name": "seed Site Drawing Inspection template",
+    "table": "inspection_templates",
+    "action": "insert",
+    "detail": "INSERT INTO inspection_templates (name, category, description, sections, cover_page, sections_count, pages_count) VALUES ('Site Drawing Inspection', 'Site Drawing', 'Interactive PDF site drawing inspection with pin-based annotations for marking specific locations and adding photos and notes', '[]'::jsonb, '{}'::jsonb, 0, 1). No ON CONFLICT clause — re-running would duplicate the row."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "column",
+    "object_name": "user_id",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "ALTER TABLE public.activity_logs ADD COLUMN user_id uuid REFERENCES auth.users(id) ON DELETE CASCADE. Nullable, no default. Added for per-user access control."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "data",
+    "object_name": "backfill activity_logs.user_id",
+    "table": "activity_logs",
+    "action": "update",
+    "detail": "UPDATE public.activity_logs SET user_id = profiles.id FROM public.profiles WHERE activity_logs.user_email = profiles.email. Backfills the new user_id column by matching the legacy user_email text to profiles.email. Rows whose email matches no profile keep user_id NULL — those become invisible under the new SELECT policy and uninsertable under the new INSERT policy."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "index",
+    "object_name": "idx_activity_logs_user_id",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "CREATE INDEX idx_activity_logs_user_id ON public.activity_logs(user_id). Plain btree index."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view activity logs",
+    "table": "activity_logs",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view activity logs\" ON public.activity_logs. Removes the permissive any-authenticated-user SELECT policy."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own activity logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (auth.uid() = user_id). Users see only their own log rows."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all activity logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (public.has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert activity logs",
+    "table": "activity_logs",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can insert activity logs\" ON public.activity_logs."
+  },
+  {
+    "migration": "20251016035250_e064da77-54b8-4ded-809b-a6681d97c458.sql",
+    "object_type": "policy",
+    "object_name": "Users can insert their own activity logs",
+    "table": "activity_logs",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (auth.uid() = user_id). Inserts must carry the caller's own user_id."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Users can view all profiles",
+    "table": "profiles",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can view all profiles\" ON public.profiles. Part of 'CRITICAL SECURITY FIX: Remove Public Access to Sensitive Data'."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view profiles",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (true). Any authenticated user can read all profiles (for mentions/assignments). Dropped in the next migration 20251016064350."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view clients",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view clients\" ON public.clients. Removes anon read of client contact information; relies on the pre-existing \"Authenticated users can view clients\" policy."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view sites\" ON public.sites."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view basic site info for QR codes",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Despite the name, the expression still exposes ALL rows/columns to anon; migration comment says the app should query only id and name. Dropped in the next migration 20251016064350."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view subsections\" ON public.subsections."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view basic subsection info for QR codes",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT TO anon USING (true). Despite the name, still full-row anon access; comment defers field limiting to the app. Dropped in the next migration 20251016064350."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view site documents",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view site documents\" ON public.site_documents. Removes anon access entirely; relies on pre-existing \"Authenticated users can manage site documents\" policy."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view subsection documents",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view subsection documents\" ON public.subsection_documents. Removes anon access entirely; relies on pre-existing \"Authenticated users can manage subsection documents\" policy."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view document categories",
+    "table": "document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view document categories\" ON public.document_categories. Removes anon access; relies on pre-existing \"Authenticated users can manage document categories\" policy."
+  },
+  {
+    "migration": "20251016035546_4ea02c08-d2af-456a-a2e2-cacd46327e5d.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view site document categories",
+    "table": "site_document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view site document categories\" ON public.site_document_categories. Removes the USING (true) SELECT policy created in 20251016021558; relies on \"Authenticated users can manage site document categories\"."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view profiles",
+    "table": "profiles",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view profiles\" ON public.profiles. Removes the all-authenticated-users profile read created in the previous migration."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Users can view their own profile",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (auth.uid() = id). Users can read only their own profile row."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all profiles",
+    "table": "profiles",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view clients (drop + recreate)",
+    "table": "clients",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view clients\" then CREATE POLICY \"Authenticated users can view clients\" ON public.clients FOR SELECT TO authenticated USING (auth.role() = 'authenticated'). Net effect: adds explicit TO authenticated role scoping."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create clients (drop + recreate)",
+    "table": "clients",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can create clients\" then CREATE POLICY \"Authenticated users can create clients\" ON public.clients FOR INSERT TO authenticated WITH CHECK (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update clients (drop + recreate)",
+    "table": "clients",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update clients\" then CREATE POLICY \"Authenticated users can update clients\" ON public.clients FOR UPDATE TO authenticated USING (auth.role() = 'authenticated'). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete clients (drop + recreate)",
+    "table": "clients",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete clients\" then CREATE POLICY \"Authenticated users can delete clients\" ON public.clients FOR DELETE TO authenticated USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view basic site info for QR codes",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view basic site info for QR codes\" ON public.sites."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access - minimal data only",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR SELECT TO public USING (true). Despite the name, this is full-row access to ALL roles (TO public, broader than the anon-only policy it replaces). Migration comment says applications should SELECT only id, name for public access."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Public users can view basic subsection info for QR codes",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view basic subsection info for QR codes\" ON public.subsections."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access - subsection name and ID only",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR SELECT TO public USING (true). Despite the name, full-row access for all roles; comment says apps should SELECT only id, name, site_id for public QR access."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Anyone can view settings",
+    "table": "settings",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Anyone can view settings\" ON public.settings."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Public can view branding only",
+    "table": "settings",
+    "action": "create",
+    "detail": "FOR SELECT TO public USING (true). Despite the name, exposes ALL settings columns/rows to all roles; comment says frontend should only fetch company_name, company_logo_url, primary_color for public. Functionally equivalent to the dropped \"Anyone can view settings\" policy."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view all settings",
+    "table": "settings",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (auth.role() = 'authenticated')."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view import data",
+    "table": "temp_import",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view import data\" ON public.temp_import."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert import data",
+    "table": "temp_import",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can insert import data\" ON public.temp_import."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "policy",
+    "object_name": "Only admins can manage import data",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role)). temp_import becomes admin-only because it lacks per-user tracking."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "column",
+    "object_name": "imported_by",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "ALTER TABLE public.temp_import ADD COLUMN IF NOT EXISTS imported_by uuid REFERENCES auth.users(id). Nullable, no default, no ON DELETE action. Added for future user-specific policies."
+  },
+  {
+    "migration": "20251016064350_7ace660c-3ad8-402b-84db-2739d3e6fb38.sql",
+    "object_type": "index",
+    "object_name": "idx_temp_import_user",
+    "table": "temp_import",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_temp_import_user ON public.temp_import(imported_by). Plain btree index. Migration footer also notes leaked-password protection must be enabled manually in the Supabase dashboard (not a SQL change)."
+  }
+]

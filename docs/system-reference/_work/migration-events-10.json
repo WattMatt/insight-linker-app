@@ -1,0 +1,951 @@
+[
+  {
+    "migration": "20260219090420_f8f55711-3403-4e75-90cc-fbb90366a038.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can update inspections for assigned sites",
+    "table": "public.inspections",
+    "action": "create",
+    "detail": "FOR UPDATE on public.inspections (no TO role specified — defaults to PUBLIC). USING: has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM public.user_sites WHERE user_id = auth.uid()). WITH CHECK: has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM public.user_sites WHERE user_id = auth.uid()). Lets Contractors update inspection rows only for sites assigned to them via user_sites."
+  },
+  {
+    "migration": "20260219090420_f8f55711-3403-4e75-90cc-fbb90366a038.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can insert inspections for assigned sites",
+    "table": "public.inspections",
+    "action": "create",
+    "detail": "FOR INSERT on public.inspections (no TO role specified — defaults to PUBLIC). WITH CHECK: has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT site_id FROM public.user_sites WHERE user_id = auth.uid()). Lets Contractors insert inspection rows only for assigned sites."
+  },
+
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "table",
+    "object_name": "public.coc_local_validations",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "CREATE TABLE public.coc_local_validations. Columns: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); site_id uuid REFERENCES public.sites(id) ON DELETE CASCADE (nullable); coc_reference_number text NOT NULL; certificate_type text NOT NULL; installation_address text NOT NULL; registered_person_name text NOT NULL; registration_number text NOT NULL; registration_category text NOT NULL; date_of_issue date NOT NULL; installation_type text NOT NULL; phase_configuration text NOT NULL; supply_voltage numeric NOT NULL DEFAULT 230; supply_frequency numeric NOT NULL DEFAULT 50; insulation_resistance numeric (nullable); earth_loop_impedance numeric (nullable); rcd_trip_time numeric (nullable); rcd_rated_current numeric NOT NULL DEFAULT 30; pscc numeric (nullable); earth_continuity numeric (nullable); voltage_at_main_db numeric (nullable); polarity_correct boolean NOT NULL DEFAULT false; has_signature boolean NOT NULL DEFAULT false; signature_date date (nullable); has_solar_pv boolean NOT NULL DEFAULT false; has_bess boolean NOT NULL DEFAULT false; solar_grounding_verified boolean (nullable); inverter_sync_verified boolean (nullable); bess_fire_protection boolean (nullable); spd_operational boolean (nullable); afdd_installed boolean (nullable); validation_status text NOT NULL DEFAULT 'INVALID'; fraud_risk_score text NOT NULL DEFAULT 'LOW'; validation_results_json jsonb DEFAULT '{}'::jsonb (nullable); created_by uuid REFERENCES auth.users(id) ON DELETE SET NULL (nullable); created_at timestamptz NOT NULL DEFAULT now(); updated_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "rls",
+    "object_name": "coc_local_validations RLS enable",
+    "table": "public.coc_local_validations",
+    "action": "enable",
+    "detail": "ALTER TABLE public.coc_local_validations ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all COC local validations",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: public.has_role(auth.uid(), 'Admin'::app_role). WITH CHECK: public.has_role(auth.uid(), 'Admin'::app_role)."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all COC local validations",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: public.has_role(auth.uid(), 'User'::app_role). WITH CHECK: public.has_role(auth.uid(), 'User'::app_role)."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view COC local validations for assigned sites",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING: public.has_role(auth.uid(), 'Contractor'::app_role) AND site_id IN (SELECT us.site_id FROM public.user_sites us WHERE us.user_id = auth.uid())."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "policy",
+    "object_name": "Users can view own COC local validations",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING: created_by = auth.uid()."
+  },
+  {
+    "migration": "20260309172544_38b551b2-3b98-4cc4-ba4c-0877f2bb8156.sql",
+    "object_type": "trigger",
+    "object_name": "update_coc_local_validations_updated_at",
+    "table": "public.coc_local_validations",
+    "action": "create",
+    "detail": "BEFORE UPDATE ON public.coc_local_validations FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column(). Auto-maintains updated_at."
+  },
+
+  {
+    "migration": "20260310075810_564cfaa3-71b1-47c0-9b8f-e0dc9457d00d.sql",
+    "object_type": "column",
+    "object_name": "coc_local_validations Annexure-1 column set (33 columns)",
+    "table": "public.coc_local_validations",
+    "action": "alter",
+    "detail": "ALTER TABLE public.coc_local_validations ADD COLUMN IF NOT EXISTS (all 33 additive, none with NOT NULL except form_type): form_type text NOT NULL DEFAULT 'annexure1'; form_data_json jsonb DEFAULT '{}'::jsonb; building_name text; gps_coordinates text; suburb_township text; district_town_city text; erf_lot_no text; registered_person_id_number text; regulation_type text; registered_person_reg_date text; supply_system_type text DEFAULT 'TN-S'; installation_permanent boolean DEFAULT true; phase_rotation text; main_switch_type text; number_of_poles integer; current_rating_a numeric; short_circuit_withstand_ka numeric; neutral_loop_impedance_ohm numeric; elevated_voltage_v numeric; voltage_no_load_r numeric; voltage_no_load_y numeric; voltage_no_load_b numeric; voltage_full_load_r numeric; voltage_full_load_y numeric; voltage_full_load_b numeric; continuity_of_bonding text; continuity_ring_circuits text; earth_leakage_test_button boolean; phase_rotation_correct boolean; switching_devices_correct boolean; comments text; db_supply_name text."
+  },
+
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "table",
+    "object_name": "public.coc_compliance_photos",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "CREATE TABLE public.coc_compliance_photos. Columns: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); subsection_id uuid NOT NULL REFERENCES public.subsections(id) ON DELETE CASCADE; coc_validation_id uuid REFERENCES public.coc_validations(id) ON DELETE SET NULL (nullable); photo_type text NOT NULL; storage_path text NOT NULL; file_name text NOT NULL; file_size bigint NOT NULL; mime_type text NOT NULL; captured_at timestamptz NOT NULL DEFAULT now(); captured_by uuid NOT NULL REFERENCES auth.users(id); latitude numeric (nullable); longitude numeric (nullable); notes text (nullable); created_at timestamptz NOT NULL DEFAULT now()."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "index",
+    "object_name": "idx_coc_photos_subsection",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "CREATE INDEX idx_coc_photos_subsection ON public.coc_compliance_photos(subsection_id)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "index",
+    "object_name": "idx_coc_photos_validation",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "CREATE INDEX idx_coc_photos_validation ON public.coc_compliance_photos(coc_validation_id)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "index",
+    "object_name": "idx_coc_photos_captured_by",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "CREATE INDEX idx_coc_photos_captured_by ON public.coc_compliance_photos(captured_by)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "rls",
+    "object_name": "coc_compliance_photos RLS enable",
+    "table": "public.coc_compliance_photos",
+    "action": "enable",
+    "detail": "ALTER TABLE public.coc_compliance_photos ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: public.has_role(auth.uid(), 'Admin'). WITH CHECK: public.has_role(auth.uid(), 'Admin'). NOTE: role literal passed as bare text 'Admin' (no ::app_role cast)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: public.has_role(auth.uid(), 'User'). WITH CHECK: public.has_role(auth.uid(), 'User'). Bare-text role literal (no ::app_role cast)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view COC photos for assigned sites",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING: public.has_role(auth.uid(), 'Contractor') AND subsection_id IN (SELECT s.id FROM public.subsections s WHERE s.site_id IN (SELECT us.site_id FROM public.user_sites us WHERE us.user_id = auth.uid())). Bare-text role literal."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage their own COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: captured_by = auth.uid(). WITH CHECK: captured_by = auth.uid()."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "bucket",
+    "object_name": "coc-photos",
+    "table": "storage.buckets",
+    "action": "insert",
+    "detail": "INSERT INTO storage.buckets (id, name, public) VALUES ('coc-photos', 'coc-photos', true) ON CONFLICT (id) DO NOTHING. Public storage bucket."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload COC photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated. WITH CHECK: bucket_id = 'coc-photos'. Any authenticated user may upload to the coc-photos bucket (no path/owner scoping)."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view COC photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO public. USING: bucket_id = 'coc-photos'. Public (anon) read of all objects in the coc-photos bucket."
+  },
+  {
+    "migration": "20260310083442_1b964afb-fbe3-4c55-9ad2-531d76c72522.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can delete their own COC photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated. USING: bucket_id = 'coc-photos' AND (auth.uid())::text = (storage.foldername(name))[1]. Delete only objects whose first path folder equals the caller's uid. NOTE: superseded by the 20260310085611 migration's owner-based delete policy."
+  },
+
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "table",
+    "object_name": "public.offline_photos",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "CREATE TABLE public.offline_photos. Columns: id uuid NOT NULL DEFAULT gen_random_uuid() PRIMARY KEY; context_type text NOT NULL; context_id uuid NOT NULL; secondary_context_id uuid (nullable); photo_type text NOT NULL; storage_path text NOT NULL; file_name text NOT NULL; file_size bigint NOT NULL; mime_type text NOT NULL; captured_at timestamptz NOT NULL DEFAULT now(); captured_by uuid NOT NULL (no FK); latitude numeric (nullable); longitude numeric (nullable); notes text (nullable); created_at timestamptz NOT NULL DEFAULT now(). Generic photo table for non-COC contexts; no FK constraints on context columns."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "rls",
+    "object_name": "offline_photos RLS enable",
+    "table": "public.offline_photos",
+    "action": "enable",
+    "detail": "ALTER TABLE public.offline_photos ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all offline photos",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: has_role(auth.uid(), 'Admin'::app_role). WITH CHECK: has_role(auth.uid(), 'Admin'::app_role)."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all offline photos",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: has_role(auth.uid(), 'User'::app_role). WITH CHECK: has_role(auth.uid(), 'User'::app_role)."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage their own offline photos",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: captured_by = auth.uid(). WITH CHECK: captured_by = auth.uid()."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view offline photos for assigned sites",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated. USING: has_role(auth.uid(), 'Contractor'::app_role) AND context_id IN ( SELECT s.id FROM subsections s WHERE s.site_id IN (SELECT us.site_id FROM user_sites us WHERE us.user_id = auth.uid()) UNION SELECT si.id FROM sites si WHERE si.id IN (SELECT us.site_id FROM user_sites us WHERE us.user_id = auth.uid()) UNION SELECT i.id FROM inspections i WHERE i.site_id IN (SELECT us.site_id FROM user_sites us WHERE us.user_id = auth.uid()) ). context_id may reference a subsection, site, or inspection belonging to an assigned site."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete coc-photos",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete coc-photos\" ON storage.objects. Removes a (possibly pre-existing) broken delete policy."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "storage_policy",
+    "object_name": "Allow delete for authenticated users",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Allow delete for authenticated users\" ON storage.objects."
+  },
+  {
+    "migration": "20260310085611_954679cb-a199-4078-b21b-79f70f49edfa.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete own coc-photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated. USING: bucket_id = 'coc-photos' AND ( has_role(auth.uid(), 'Admin'::app_role) OR has_role(auth.uid(), 'User'::app_role) OR auth.uid()::text = owner::text ). Admins/Users may delete any coc-photos object; others only their own (owner-matched). Replaces the foldername-based delete policy from migration 20260310083442."
+  },
+
+  {
+    "migration": "20260313070142_6cd46c5f-c280-4370-b0b0-c23bb53c26ed.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert schematic blocks",
+    "table": "public.schematic_blocks",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR INSERT TO authenticated. WITH CHECK: true. Re-targets the INSERT policy at the authenticated role."
+  },
+  {
+    "migration": "20260313070142_6cd46c5f-c280-4370-b0b0-c23bb53c26ed.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update schematic blocks",
+    "table": "public.schematic_blocks",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR UPDATE TO authenticated. USING: true. WITH CHECK: true."
+  },
+  {
+    "migration": "20260313070142_6cd46c5f-c280-4370-b0b0-c23bb53c26ed.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete schematic blocks",
+    "table": "public.schematic_blocks",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR DELETE TO authenticated. USING: true."
+  },
+
+  {
+    "migration": "20260313095510_cbed8b59-80ec-490d-b3a7-2841dbb0dd49.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert schematic blocks",
+    "table": "public.schematic_blocks",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE (idempotent re-apply of the INSERT policy from 20260313070142). FOR INSERT TO authenticated. WITH CHECK: true. Note: this migration does NOT re-create the UPDATE/DELETE policies."
+  },
+
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can manage all COC photos\" ON public.coc_compliance_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view COC photos for assigned sites",
+    "table": "public.coc_compliance_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can view COC photos for assigned sites\" ON public.coc_compliance_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage all COC photos\" ON public.coc_compliance_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage their own COC photos",
+    "table": "public.coc_compliance_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage their own COC photos\" ON public.coc_compliance_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (coc_compliance_photos)",
+    "table": "public.coc_compliance_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true. Replaces the four role-scoped policies with a blanket authenticated-full-access policy."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all offline photos",
+    "table": "public.offline_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can manage all offline photos\" ON public.offline_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view offline photos for assigned sites",
+    "table": "public.offline_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can view offline photos for assigned sites\" ON public.offline_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all offline photos",
+    "table": "public.offline_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage all offline photos\" ON public.offline_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage their own offline photos",
+    "table": "public.offline_photos",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage their own offline photos\" ON public.offline_photos."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (offline_photos)",
+    "table": "public.offline_photos",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true. Replaces the four role-scoped policies with blanket authenticated access."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all floor plan pins",
+    "table": "public.floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can manage all floor plan pins\" ON public.floor_plan_pins."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view floor plan pins for their sites",
+    "table": "public.floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Clients can view floor plan pins for their sites\" ON public.floor_plan_pins."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view floor plan pins for assigned sites",
+    "table": "public.floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can view floor plan pins for assigned sites\" ON public.floor_plan_pins."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all floor plan pins",
+    "table": "public.floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage all floor plan pins\" ON public.floor_plan_pins."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (floor_plan_pins)",
+    "table": "public.floor_plan_pins",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true. Pre-existing public SELECT policy 'Public can view floor_plan_pins' is intentionally retained (comment in migration)."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all document categories",
+    "table": "public.document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can manage all document categories\" ON public.document_categories."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view document categories for their sites",
+    "table": "public.document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Clients can view document categories for their sites\" ON public.document_categories."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view document categories for assigned sites",
+    "table": "public.document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can view document categories for assigned sites\" ON public.document_categories."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all document categories",
+    "table": "public.document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage all document categories\" ON public.document_categories."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (document_categories)",
+    "table": "public.document_categories",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true. Pre-existing 'Public can view document categories' retained (comment)."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all inspection items",
+    "table": "public.inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can manage all inspection items\" ON public.inspection_items."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspection items for assigned sites",
+    "table": "public.inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can view inspection items for assigned sites\" ON public.inspection_items."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can manage all inspection items",
+    "table": "public.inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can manage all inspection items\" ON public.inspection_items."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (inspection_items)",
+    "table": "public.inspection_items",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Admins can delete signatures",
+    "table": "public.inspection_signatures",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can delete signatures\" ON public.inspection_signatures."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create signatures",
+    "table": "public.inspection_signatures",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can create signatures\" ON public.inspection_signatures."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own signatures",
+    "table": "public.inspection_signatures",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can update their own signatures\" ON public.inspection_signatures."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can view signatures for inspections they have access to",
+    "table": "public.inspection_signatures",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can view signatures for inspections they have access to\" ON public.inspection_signatures."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (inspection_signatures)",
+    "table": "public.inspection_signatures",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create comments",
+    "table": "public.floor_plan_pin_comments",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can create comments\" ON public.floor_plan_pin_comments."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view comments",
+    "table": "public.floor_plan_pin_comments",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view comments\" ON public.floor_plan_pin_comments."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their own comments",
+    "table": "public.floor_plan_pin_comments",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can delete their own comments\" ON public.floor_plan_pin_comments."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their own comments",
+    "table": "public.floor_plan_pin_comments",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can update their own comments\" ON public.floor_plan_pin_comments."
+  },
+  {
+    "migration": "20260406131029_84479c75-c2f1-438f-af75-2d238ccb0259.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access (floor_plan_pin_comments)",
+    "table": "public.floor_plan_pin_comments",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: true. WITH CHECK: true."
+  },
+
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "column",
+    "object_name": "snags additive columns (6)",
+    "table": "public.snags",
+    "action": "alter",
+    "detail": "ALTER TABLE snags ADD COLUMN IF NOT EXISTS: project_id text; attachment_urls text[] DEFAULT '{}'; closeout_photo_url text; sign_off_requested_at timestamptz; signed_off_by text; signed_off_at timestamptz. All nullable; attachment_urls defaults to empty array."
+  },
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "table",
+    "object_name": "contractor_coc_uploads",
+    "table": "public.contractor_coc_uploads",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS contractor_coc_uploads. Columns: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); project_id text NOT NULL; section_name text NOT NULL; file_url text NOT NULL; file_name text (nullable); contractor_email text (nullable); notes text (nullable); status text NOT NULL DEFAULT 'submitted'; submitted_at timestamptz DEFAULT now() (nullable). Unqualified name (public schema)."
+  },
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "rls",
+    "object_name": "contractor_coc_uploads RLS enable",
+    "table": "public.contractor_coc_uploads",
+    "action": "enable",
+    "detail": "ALTER TABLE contractor_coc_uploads ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "policy",
+    "object_name": "allow read",
+    "table": "public.contractor_coc_uploads",
+    "action": "create",
+    "detail": "FOR SELECT (no TO role — defaults to PUBLIC, includes anon). USING: true. Unrestricted read of all rows including by anon."
+  },
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "policy",
+    "object_name": "allow insert",
+    "table": "public.contractor_coc_uploads",
+    "action": "create",
+    "detail": "FOR INSERT (no TO role — defaults to PUBLIC, includes anon). WITH CHECK: true. Unrestricted insert."
+  },
+  {
+    "migration": "20260410013045_e3990969-d3ba-4378-94ca-bfa2e8d541b3.sql",
+    "object_type": "policy",
+    "object_name": "allow update",
+    "table": "public.contractor_coc_uploads",
+    "action": "create",
+    "detail": "FOR UPDATE (no TO role — defaults to PUBLIC, includes anon). USING: true. No WITH CHECK clause. Unrestricted update."
+  },
+
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "column",
+    "object_name": "subsections.firebase_id",
+    "table": "public.subsections",
+    "action": "alter",
+    "detail": "ALTER TABLE public.subsections ADD COLUMN IF NOT EXISTS firebase_id text (nullable). Stores the legacy Firebase document key for relink matching."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "index",
+    "object_name": "idx_subsections_firebase_id",
+    "table": "public.subsections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_subsections_firebase_id ON public.subsections(firebase_id) WHERE firebase_id IS NOT NULL. Partial index."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "index",
+    "object_name": "idx_inspections_site_subsection_null",
+    "table": "public.inspections",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_inspections_site_subsection_null ON public.inspections(site_id) WHERE subsection_id IS NULL. Partial index over orphan (unlinked) inspections."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "table",
+    "object_name": "public.inspection_relink_audit",
+    "table": "public.inspection_relink_audit",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.inspection_relink_audit. Columns: id uuid PRIMARY KEY DEFAULT gen_random_uuid(); inspection_id uuid NOT NULL; site_id uuid (nullable); attempted_shop_number text (nullable); attempted_firebase_key text (nullable); match_count integer NOT NULL DEFAULT 0; resolution text NOT NULL; resolved_subsection_id uuid (nullable); created_at timestamptz NOT NULL DEFAULT now(). No FK constraints."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "rls",
+    "object_name": "inspection_relink_audit RLS enable",
+    "table": "public.inspection_relink_audit",
+    "action": "enable",
+    "detail": "ALTER TABLE public.inspection_relink_audit ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "policy",
+    "object_name": "Admins view relink audit",
+    "table": "public.inspection_relink_audit",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR SELECT (no TO role — defaults to PUBLIC). USING: public.has_role(auth.uid(), 'Admin'::app_role)."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "policy",
+    "object_name": "Service inserts relink audit",
+    "table": "public.inspection_relink_audit",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR INSERT (no TO role — defaults to PUBLIC). WITH CHECK: true. Allows any insert (service-role and trigger writes)."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "function",
+    "object_name": "public.normalize_shop_key(_input text)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.normalize_shop_key(_input text) RETURNS text LANGUAGE sql IMMUTABLE (SECURITY INVOKER, no search_path set). Body: SELECT regexp_replace(upper(coalesce(_input, '')), '[^A-Z0-9]', '', 'g'). Uppercases and strips all non-alphanumerics for fuzzy shop-number matching."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "function",
+    "object_name": "public.resolve_inspection_subsection(_site_id uuid, _json jsonb)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.resolve_inspection_subsection(_site_id uuid, _json jsonb) RETURNS TABLE(resolved_id uuid, match_count int, shop_number text, firebase_key text) LANGUAGE plpgsql STABLE SET search_path = public (SECURITY INVOKER). Reads _json->>'subsectionId' (firebase key) and _json->'generalInfo'->>'shopNumber'. First tries exact match on subsections.firebase_id within _site_id; if found returns (id,1,...). Else counts subsections where normalize_shop_key(name)=normalize_shop_key(shop) within site; if exactly 1, returns that id; if >1 returns NULL id with the count; if 0 returns NULL id, 0. Touches public.subsections."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "function",
+    "object_name": "public.inspections_auto_link_subsection()",
+    "table": "public.inspections",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.inspections_auto_link_subsection() RETURNS TRIGGER LANGUAGE plpgsql SET search_path = public (SECURITY INVOKER). When NEW.subsection_id IS NULL AND NEW.json_data IS NOT NULL AND NEW.site_id IS NOT NULL, calls resolve_inspection_subsection(NEW.site_id, NEW.json_data) and, if a single match resolves, sets NEW.subsection_id := resolved id. Returns NEW. Trigger function for inspections."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "trigger",
+    "object_name": "trg_inspections_auto_link_subsection",
+    "table": "public.inspections",
+    "action": "replace",
+    "detail": "DROP TRIGGER IF EXISTS then CREATE TRIGGER trg_inspections_auto_link_subsection BEFORE INSERT OR UPDATE OF json_data, subsection_id ON public.inspections FOR EACH ROW EXECUTE FUNCTION public.inspections_auto_link_subsection()."
+  },
+  {
+    "migration": "20260519045946_ff0d3334-68ec-431a-b213-6a5bc51b25f1.sql",
+    "object_type": "data",
+    "object_name": "one-time orphan relink + firebase_id backfill",
+    "table": "public.inspections",
+    "action": "update",
+    "detail": "Anonymous DO $$ block: loops over inspections WHERE subsection_id IS NULL AND site_id IS NOT NULL AND json_data IS NOT NULL. For each, calls resolve_inspection_subsection; on single match UPDATEs inspections.subsection_id, backfills subsections.firebase_id (when firebase_key present and subsection lacks it), and INSERTs an inspection_relink_audit row with resolution 'auto_relinked'. On no/multiple match, INSERTs audit row with resolution 'multiple_matches' or 'no_match'. Mutates inspections, subsections, and inspection_relink_audit."
+  },
+
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "table",
+    "object_name": "public.auth_events",
+    "table": "public.auth_events",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.auth_events. Columns: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); user_id UUID (nullable, intentionally NO FK to auth.users so audit rows survive user deletion); event_type TEXT NOT NULL CHECK (event_type IN ('login','logout','password_changed','password_reset_requested','magic_link_requested','lockout','mfa_enrolled','mfa_unenrolled','account_deleted','account_email_changed','user_created')); ip_address INET (nullable); user_agent TEXT (nullable); metadata JSONB NOT NULL DEFAULT '{}'; occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW(). POPIA §16/§24 audit trail; written by service-role only."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "constraint",
+    "object_name": "auth_events_event_type_check",
+    "table": "public.auth_events",
+    "action": "create",
+    "detail": "Inline CHECK constraint on auth_events.event_type restricting values to the 11-element whitelist: 'login','logout','password_changed','password_reset_requested','magic_link_requested','lockout','mfa_enrolled','mfa_unenrolled','account_deleted','account_email_changed','user_created'."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "index",
+    "object_name": "idx_auth_events_user_id",
+    "table": "public.auth_events",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_auth_events_user_id ON public.auth_events(user_id)."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "index",
+    "object_name": "idx_auth_events_event_type",
+    "table": "public.auth_events",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_auth_events_event_type ON public.auth_events(event_type)."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "index",
+    "object_name": "idx_auth_events_occurred_at",
+    "table": "public.auth_events",
+    "action": "create",
+    "detail": "CREATE INDEX IF NOT EXISTS idx_auth_events_occurred_at ON public.auth_events(occurred_at DESC)."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "rls",
+    "object_name": "auth_events RLS enable",
+    "table": "public.auth_events",
+    "action": "enable",
+    "detail": "ALTER TABLE public.auth_events ENABLE ROW LEVEL SECURITY. No INSERT/UPDATE/DELETE policy defined — only service-role (which bypasses RLS) can write."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "policy",
+    "object_name": "auth_events: user reads own",
+    "table": "public.auth_events",
+    "action": "replace",
+    "detail": "DROP POLICY IF EXISTS then CREATE. FOR SELECT TO authenticated. USING: user_id = auth.uid(). Affected user can read only their own audit rows."
+  },
+  {
+    "migration": "20260525120000_auth_events_audit.sql",
+    "object_type": "publication",
+    "object_name": "pgrst schema reload",
+    "table": null,
+    "action": "update",
+    "detail": "NOTIFY pgrst, 'reload schema' — instructs PostgREST to reload its schema cache. Not a DDL change but emitted by the migration."
+  },
+
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "function",
+    "object_name": "public._share_link(p_token text)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public._share_link(p_token text) RETURNS public.client_access_links LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public. Body: SELECT * FROM public.client_access_links WHERE access_token = p_token AND is_active = true AND (expires_at IS NULL OR expires_at > now()) LIMIT 1. Internal token resolver. REVOKE ALL ... FROM PUBLIC applied (NOT granted to anon/authenticated) — callable only by the SECURITY DEFINER RPCs. Reads public.client_access_links."
+  },
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "grant",
+    "object_name": "REVOKE ALL ON public._share_link(text) FROM PUBLIC",
+    "table": null,
+    "action": "update",
+    "detail": "REVOKE ALL ON FUNCTION public._share_link(text) FROM PUBLIC. No subsequent GRANT — helper is not directly callable by anon/authenticated."
+  },
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "function",
+    "object_name": "public.get_public_subsection(p_subsection_id uuid)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.get_public_subsection(p_subsection_id uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path = public. Returns NULL when no subsection with that id exists; otherwise a jsonb object with settings (company_name, company_logo_url from settings ORDER BY created_at LIMIT 1), subsection (id, name, tenant_name), site (id, name via subsections JOIN sites), categories (document_categories with nested subsection_documents ordered by order_index/uploaded_at), and snags (id, title, description, status, risk_level, created_at). No token required — QR landing path. Reads settings, subsections, sites, document_categories, subsection_documents, snags."
+  },
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "grant",
+    "object_name": "get_public_subsection(uuid) execute grant",
+    "table": null,
+    "action": "update",
+    "detail": "REVOKE ALL ON FUNCTION public.get_public_subsection(uuid) FROM PUBLIC; then GRANT EXECUTE ON FUNCTION public.get_public_subsection(uuid) TO anon, authenticated."
+  },
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "function",
+    "object_name": "public.get_public_portfolio(p_token text)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.get_public_portfolio(p_token text) RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path = public. Resolves v_link := public._share_link(p_token); returns NULL if v_link.id IS NULL OR v_link.client_id IS NULL (invalid/expired or not client-scoped). Otherwise returns jsonb with settings, client (id, name, company_name, logo_url from clients WHERE id = v_link.client_id), and sites array (per-site id/name/address/site_type/site_image_url plus total_subsections count and open_snags count where status NOT IN ('rectified','closed')) for all sites WHERE client_id = v_link.client_id. Reads client_access_links (via helper), settings, clients, sites, subsections, snags."
+  },
+  {
+    "migration": "20260610113000_public_rpcs_phase1.sql",
+    "object_type": "grant",
+    "object_name": "get_public_portfolio(text) execute grant",
+    "table": null,
+    "action": "update",
+    "detail": "REVOKE ALL ON FUNCTION public.get_public_portfolio(text) FROM PUBLIC; then GRANT EXECUTE ON FUNCTION public.get_public_portfolio(text) TO anon, authenticated."
+  },
+
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to clients",
+    "table": "public.clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"All authenticated users full access to clients\" ON public.clients."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage clients (drop prior)",
+    "table": "public.clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Staff manage clients\" ON public.clients (idempotent pre-drop before re-create)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage clients",
+    "table": "public.clients",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: auth.uid() IS NOT NULL AND NOT public.has_role(auth.uid(), 'Contractor'::app_role) AND NOT public.has_role(auth.uid(), 'Client'::app_role). WITH CHECK: auth.uid() IS NOT NULL AND NOT public.has_role(auth.uid(), 'Contractor'::app_role) AND NOT public.has_role(auth.uid(), 'Client'::app_role). 'Staff' = any authenticated user that is neither Contractor nor Client. Closes Vuln 4/5 write side; anon SELECT policy intentionally left in place for tier-2."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to coc_validations",
+    "table": "public.coc_validations",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"All authenticated users full access to coc_validations\" ON public.coc_validations."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage coc_validations (drop prior)",
+    "table": "public.coc_validations",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Staff manage coc_validations\" ON public.coc_validations (idempotent pre-drop)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage coc_validations",
+    "table": "public.coc_validations",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: auth.uid() IS NOT NULL AND NOT public.has_role(auth.uid(), 'Contractor'::app_role) AND NOT public.has_role(auth.uid(), 'Client'::app_role). WITH CHECK: identical to USING. Staff-only write boundary."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Users can create their own extractions",
+    "table": "public.coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can create their own extractions\" ON public.coc_extractions (removes anon-reachable INSERT policy that admitted extracted_by IS NULL)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Users can update extractions",
+    "table": "public.coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can update extractions\" ON public.coc_extractions (removes existence-only UPDATE policy)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete extractions",
+    "table": "public.coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can delete extractions\" ON public.coc_extractions (removes existence-only DELETE policy)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage coc_extractions (drop prior)",
+    "table": "public.coc_extractions",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Staff manage coc_extractions\" ON public.coc_extractions (idempotent pre-drop)."
+  },
+  {
+    "migration": "20260610120000_phase1_write_lockdown.sql",
+    "object_type": "policy",
+    "object_name": "Staff manage coc_extractions",
+    "table": "public.coc_extractions",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated. USING: auth.uid() IS NOT NULL AND NOT public.has_role(auth.uid(), 'Contractor'::app_role) AND NOT public.has_role(auth.uid(), 'Client'::app_role). WITH CHECK: identical to USING. Edge function extract-coc writes via service_role (bypasses RLS); this admits only staff for manual correction."
+  },
+
+  {
+    "migration": "20260610130000_public_drilldown_rpcs.sql",
+    "object_type": "function",
+    "object_name": "public.get_public_site_review(p_token text, p_site_id uuid)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.get_public_site_review(p_token text, p_site_id uuid) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public. Resolves v_link via public._share_link(p_token); returns NULL on invalid/expired token, on non-existent site, or when the site fails the token scope check (Vuln 7): if link.client_id set, site.client_id must equal it; elsif link.site_id set, p_site_id must equal it; else NULL. On success returns jsonb with settings, site (id, name, address, site_type, site_image_url, supply_authority, nominated_max_demand), client, subsections, snags (joined via subsections), site_documents, site_document_categories, inspections (by site_id), and subsection_documents (joined, with category_name COALESCE 'Uncategorized'). Reads client_access_links, settings, sites, clients, subsections, snags, site_documents, site_document_categories, inspections, subsection_documents, document_categories."
+  },
+  {
+    "migration": "20260610130000_public_drilldown_rpcs.sql",
+    "object_type": "grant",
+    "object_name": "get_public_site_review(text, uuid) execute grant",
+    "table": null,
+    "action": "update",
+    "detail": "REVOKE ALL ON FUNCTION public.get_public_site_review(text, uuid) FROM PUBLIC; then GRANT EXECUTE ON FUNCTION public.get_public_site_review(text, uuid) TO anon, authenticated."
+  },
+  {
+    "migration": "20260610130000_public_drilldown_rpcs.sql",
+    "object_type": "function",
+    "object_name": "public.get_public_subsection_review(p_token text, p_subsection_id uuid)",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.get_public_subsection_review(p_token text, p_subsection_id uuid) RETURNS jsonb LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path = public. Resolves v_link via public._share_link(p_token); looks up the subsection's site_id and site.client_id; returns NULL on invalid token, non-existent subsection, or failed scope check (Vuln 6): if link.client_id set, site.client_id must match; elsif link.site_id set, site_id must match; elsif link.subsection_id set, p_subsection_id must match; else NULL. On success returns jsonb with settings, subsection (id, name, tenant_name, description, category, is_coc_required, metering_status, meter_serial_number, ct_ratio), site, client, documents (subsection_documents LEFT JOIN document_categories), snags, inspections (LEFT JOIN inspection_templates for template_name/sections, with nested signatures from inspection_signatures), and floor_plans (subsection_floor_plans with pins_count from floor_plan_pins). Reads client_access_links, settings, subsections, sites, clients, subsection_documents, document_categories, snags, inspections, inspection_templates, inspection_signatures, subsection_floor_plans, floor_plan_pins."
+  },
+  {
+    "migration": "20260610130000_public_drilldown_rpcs.sql",
+    "object_type": "grant",
+    "object_name": "get_public_subsection_review(text, uuid) execute grant",
+    "table": null,
+    "action": "update",
+    "detail": "REVOKE ALL ON FUNCTION public.get_public_subsection_review(text, uuid) FROM PUBLIC; then GRANT EXECUTE ON FUNCTION public.get_public_subsection_review(text, uuid) TO anon, authenticated."
+  }
+]

@@ -70,6 +70,19 @@ serve(async (req) => {
       throw deleteError;
     }
 
+    // Audit trail (G-SEC-04 / POPIA §24 erasure record). The auth_events row is
+    // intentionally FK-free so it persists after the user is gone. Best-effort:
+    // never fail the delete on an audit error.
+    try {
+      await supabaseClient.from("auth_events").insert({
+        user_id: userId,
+        event_type: "account_deleted",
+        metadata: { deleted_by: user.id },
+      });
+    } catch (auditErr) {
+      console.warn("auth_events account_deleted insert failed (non-fatal):", auditErr);
+    }
+
     return new Response(
       JSON.stringify({
         success: true,

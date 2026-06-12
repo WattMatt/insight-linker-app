@@ -2846,6 +2846,20 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json() as ReportData;
+
+    // G-SEC-12: require an authenticated user. The anon key is a valid JWT but resolves
+    // to no user, so anon/anon-key-only callers are rejected. App callers send a real
+    // user JWT via functions.invoke, so this does not affect legitimate use.
+    const __authHeader = req.headers.get('Authorization') || '';
+    const __jwt = __authHeader.replace('Bearer ', '');
+    const { data: { user: __caller } = { user: null }, error: __authErr } =
+      __jwt ? await getSupabaseClient().auth.getUser(__jwt) : { data: { user: null }, error: new Error('missing token') } as any;
+    if (__authErr || !__caller) {
+      return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+        status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log('Generating PDF for:', body.siteName, 'Type:', body.reportType, 'Subsections:', body.subsections?.length || 0);
     console.log('Asset Verification:', body.assetVerification ? `${body.assetVerification.totalAssets} assets, ${body.assetVerification.schedule?.length || 0} schedule rows` : 'NONE');
     console.log('Fortress Checklist:', body.fortressChecklist ? `${body.fortressChecklist.completed} completed, ${body.fortressChecklist.sections?.length || 0} sections` : 'NONE');

@@ -1,0 +1,1487 @@
+[
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "table",
+    "object_name": "user_sites_history",
+    "table": "user_sites_history",
+    "action": "create",
+    "detail": "CREATE TABLE public.user_sites_history: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); user_id UUID NOT NULL (no FK); site_id UUID NOT NULL (no FK); action TEXT NOT NULL CHECK (action IN ('assigned','removed')); performed_by UUID REFERENCES auth.users(id) (nullable); performed_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT now(); notes TEXT (nullable)."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "rls",
+    "object_name": "user_sites_history",
+    "table": "user_sites_history",
+    "action": "enable",
+    "detail": "ALTER TABLE public.user_sites_history ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view assignment history",
+    "table": "user_sites_history",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "policy",
+    "object_name": "System can insert assignment history",
+    "table": "user_sites_history",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (true) — any authenticated user may insert history rows."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "function",
+    "object_name": "log_user_site_assignment",
+    "table": "user_sites",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.log_user_site_assignment() RETURNS TRIGGER LANGUAGE plpgsql SECURITY DEFINER SET search_path = public. Behavior: on TG_OP='INSERT' inserts (NEW.user_id, NEW.site_id, 'assigned', auth.uid()) into public.user_sites_history(user_id, site_id, action, performed_by) and returns NEW; on TG_OP='DELETE' inserts (OLD.user_id, OLD.site_id, 'removed', auth.uid()) and returns OLD; otherwise returns NULL. Tables touched: public.user_sites_history (INSERT)."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "trigger",
+    "object_name": "log_user_site_insert",
+    "table": "user_sites",
+    "action": "create",
+    "detail": "AFTER INSERT ON public.user_sites FOR EACH ROW EXECUTE FUNCTION public.log_user_site_assignment()."
+  },
+  {
+    "migration": "20251119091647_56f5417f-d8fc-439c-b8ee-87aa78e81070.sql",
+    "object_type": "trigger",
+    "object_name": "log_user_site_delete",
+    "table": "user_sites",
+    "action": "create",
+    "detail": "AFTER DELETE ON public.user_sites FOR EACH ROW EXECUTE FUNCTION public.log_user_site_assignment()."
+  },
+
+  {
+    "migration": "20251120045010_89850619-9989-42f7-9797-6560789b83b3.sql",
+    "object_type": "data",
+    "object_name": "inspection_templates.sections normalization",
+    "table": "inspection_templates",
+    "action": "update",
+    "detail": "Anonymous DO $$ plpgsql block: loops over all inspection_templates WHERE sections IS NOT NULL. If jsonb_typeof(sections)='array': for each element missing/empty 'name', backfills name via jsonb_set from a prettified form of the element's 'id' (regexp_replace(initcap(replace(id,'_',' ')), '([A-Z])', ' \\1', 'g')) falling back to 'Unnamed Section'. If jsonb_typeof(sections)='object' (legacy format): converts each key/value pair to an array element jsonb_build_object('id', key, 'name', COALESCE(value->>'name', prettified key), 'order_index', COALESCE((value->>'order_index')::integer, 0), 'items', COALESCE(value->'items','[]'::jsonb)). If the normalized array is non-empty, UPDATE inspection_templates SET sections = normalized_sections WHERE id = template_record.id. Pure data migration — converts legacy object-shaped sections to array shape and guarantees every section has a name. RAISE NOTICE per template."
+  },
+
+  {
+    "migration": "20251120045029_ad225a07-585f-413a-848f-97a6371a1dd9.sql",
+    "object_type": "function",
+    "object_name": "validate_inspection_templates",
+    "table": "inspection_templates",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION validate_inspection_templates() RETURNS TABLE (template_id uuid, template_name text, issue_type text, issue_description text) LANGUAGE plpgsql SECURITY DEFINER SET search_path = public. Read-only diagnostic: UNION ALL of three checks against inspection_templates: (1) 'Structure' issues via CTE template_analysis (sections IS NULL / not array / empty array); (2) 'Missing Name' for array sections where section->>'name' IS NULL or ''; (3) 'Duplicate ID' for section IDs appearing more than once (note: this first version filters duplicates with WHERE id_count > 1 outside the aggregate, without HAVING — replaced by next migration). COMMENT ON FUNCTION: 'Validates the structure and integrity of inspection templates'. Tables touched: inspection_templates (SELECT only)."
+  },
+  {
+    "migration": "20251120045029_ad225a07-585f-413a-848f-97a6371a1dd9.sql",
+    "object_type": "grant",
+    "object_name": "EXECUTE ON FUNCTION validate_inspection_templates()",
+    "table": null,
+    "action": "create",
+    "detail": "GRANT EXECUTE ON FUNCTION validate_inspection_templates() TO authenticated. (Comment in file says 'to admins' but the grantee is the authenticated role.)"
+  },
+
+  {
+    "migration": "20251120045114_44ed9877-73bb-47f5-b28b-fa4b3da8148f.sql",
+    "object_type": "function",
+    "object_name": "validate_inspection_templates",
+    "table": "inspection_templates",
+    "action": "drop",
+    "detail": "DROP FUNCTION IF EXISTS validate_inspection_templates();"
+  },
+  {
+    "migration": "20251120045114_44ed9877-73bb-47f5-b28b-fa4b3da8148f.sql",
+    "object_type": "function",
+    "object_name": "validate_inspection_templates",
+    "table": "inspection_templates",
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION validate_inspection_templates() RETURNS TABLE (template_id uuid, template_name text, issue_type text, issue_description text) LANGUAGE plpgsql SECURITY DEFINER SET search_path = public. Corrected rewrite of the previous migration's function (same signature, same SECURITY DEFINER): (1) 'Structure' check now a direct SELECT with WHERE sections IS NULL OR jsonb_typeof(sections) != 'array' OR jsonb_array_length(sections) = 0 and an ELSE 'Unknown structure issue' branch; (2) 'Missing Name' check unchanged in substance; (3) 'Duplicate ID' check fixed to use GROUP BY ... HAVING COUNT(*) > 1 in the subquery and reports the count: format('Section ID \"%s\" appears %s times', section_id, id_count). COMMENT ON FUNCTION re-applied: 'Validates the structure and integrity of inspection templates'. Tables touched: inspection_templates (SELECT only)."
+  },
+  {
+    "migration": "20251120045114_44ed9877-73bb-47f5-b28b-fa4b3da8148f.sql",
+    "object_type": "grant",
+    "object_name": "EXECUTE ON FUNCTION validate_inspection_templates()",
+    "table": null,
+    "action": "create",
+    "detail": "GRANT EXECUTE ON FUNCTION validate_inspection_templates() TO authenticated (re-granted after drop/recreate)."
+  },
+
+  {
+    "migration": "20251120045331_2c30ed20-db9a-4389-8a90-9778498cdffe.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can delete subsection documents for their sites",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s JOIN user_sites us ON us.site_id = s.site_id WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120045331_2c30ed20-db9a-4389-8a90-9778498cdffe.sql",
+    "object_type": "policy",
+    "object_name": "Clients can delete their subsection documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT subsections.id FROM subsections WHERE subsections.site_id IN (SELECT sites.id FROM sites WHERE sites.client_id = get_user_client_id())))."
+  },
+  {
+    "migration": "20251120045331_2c30ed20-db9a-4389-8a90-9778498cdffe.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can upload subsection documents for their sites",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s JOIN user_sites us ON us.site_id = s.site_id WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120045331_2c30ed20-db9a-4389-8a90-9778498cdffe.sql",
+    "object_type": "policy",
+    "object_name": "Clients can upload their subsection documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT subsections.id FROM subsections WHERE subsections.site_id IN (SELECT sites.id FROM sites WHERE sites.client_id = get_user_client_id())))."
+  },
+
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete inspection photos",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete inspection photos\" ON storage.objects (removal of overly permissive policy)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update inspection photos",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update inspection photos\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload inspection photos",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can upload inspection photos\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can upload documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete site images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete site images\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update site images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update site images\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload site images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can upload site images\" ON storage.objects."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can upload their own profile images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can upload their own profile images\" ON storage.objects (recreated later in same migration)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can view their own profile images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can view their own profile images\" ON storage.objects (recreated later in same migration)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can update their own profile images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can update their own profile images\" ON storage.objects (recreated later in same migration)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can delete their own profile images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can delete their own profile images\" ON storage.objects (recreated later in same migration)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can view all profile images",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Admins can view all profile images\" ON storage.objects (recreated later in same migration)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can manage all inspection photos",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can upload inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id())). Path convention: first folder segment = site id."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can view inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can delete inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can upload inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can view inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can delete inspection photos for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (bucket_id = 'inspection-photos' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can manage all documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (bucket_id = 'documents' AND has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (bucket_id = 'documents' AND has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can upload documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'documents' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can view documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'documents' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can delete documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (bucket_id = 'documents' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can upload documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'documents' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can view documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'documents' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can delete documents for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (bucket_id = 'documents' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can manage all site images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (bucket_id = 'site-images' AND has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (bucket_id = 'site-images' AND has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can upload site images for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'site-images' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Clients can view site images for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'site-images' AND has_role(auth.uid(), 'Client'::app_role) AND (storage.foldername(name))[1] IN (SELECT s.id::text FROM sites s WHERE s.client_id = get_user_client_id()))."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Contractors can view site images for their sites",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'site-images' AND has_role(auth.uid(), 'Contractor'::app_role) AND (storage.foldername(name))[1] IN (SELECT us.site_id::text FROM user_sites us WHERE us.user_id = auth.uid())). No upload/delete policies for contractors or delete for clients on site-images."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can upload their own profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT TO authenticated WITH CHECK (bucket_id = 'profile-images' AND (storage.foldername(name))[1] = auth.uid()::text). Path convention: first folder segment = user id."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can view their own profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'profile-images' AND (storage.foldername(name))[1] = auth.uid()::text)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can update their own profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE TO authenticated USING (bucket_id = 'profile-images' AND (storage.foldername(name))[1] = auth.uid()::text). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Users can delete their own profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE TO authenticated USING (bucket_id = 'profile-images' AND (storage.foldername(name))[1] = auth.uid()::text)."
+  },
+  {
+    "migration": "20251120051502_3843cc67-3b79-4c47-be4a-e544dd4c03fc.sql",
+    "object_type": "storage_policy",
+    "object_name": "Admins can view all profile images",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT TO authenticated USING (bucket_id = 'profile-images' AND has_role(auth.uid(), 'Admin'::app_role))."
+  },
+
+  {
+    "migration": "20251120051830_0f728c09-ca3c-4f83-9cb1-6cb15188ab4b.sql",
+    "object_type": "function",
+    "object_name": "get_rls_policies_for_role",
+    "table": null,
+    "action": "replace",
+    "detail": "CREATE OR REPLACE FUNCTION public.get_rls_policies_for_role(role_name text) RETURNS TABLE(table_name text, policy_name text, command text, using_expression text, with_check_expression text) LANGUAGE sql SECURITY DEFINER SET search_path = public, pg_catalog. Behavior: introspection query over pg_policies WHERE schemaname = 'public' AND (policyname ILIKE '%' || role_name || '%' OR policyname ILIKE '%authenticated%' OR (role_name = 'Admin' AND policyname ILIKE '%admin%') OR (role_name = 'Client' AND policyname ILIKE '%client%') OR (role_name = 'Contractor' AND policyname ILIKE '%contractor%')); returns tablename, policyname, cmd, COALESCE(qual::text,''), COALESCE(with_check::text,''); ORDER BY tablename, cmd, policyname. Matching is name-pattern based, not role-membership based. No GRANT/REVOKE statement in this migration (default function EXECUTE privileges apply). Tables touched: pg_catalog.pg_policies (SELECT only)."
+  },
+
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "table",
+    "object_name": "user_policy_overrides",
+    "table": "user_policy_overrides",
+    "action": "create",
+    "detail": "CREATE TABLE IF NOT EXISTS public.user_policy_overrides: id UUID PRIMARY KEY DEFAULT gen_random_uuid(); user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE; table_name TEXT NOT NULL; operation TEXT NOT NULL CHECK (operation IN ('SELECT','INSERT','UPDATE','DELETE','ALL')); permission_type TEXT NOT NULL CHECK (permission_type IN ('GRANT','DENY')); condition TEXT (nullable); reason TEXT (nullable); created_by UUID REFERENCES auth.users(id) (nullable); created_at TIMESTAMP WITH TIME ZONE DEFAULT now() (nullable); updated_at TIMESTAMP WITH TIME ZONE DEFAULT now() (nullable)."
+  },
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "rls",
+    "object_name": "user_policy_overrides",
+    "table": "user_policy_overrides",
+    "action": "enable",
+    "detail": "ALTER TABLE public.user_policy_overrides ENABLE ROW LEVEL SECURITY."
+  },
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage policy overrides",
+    "table": "user_policy_overrides",
+    "action": "create",
+    "detail": "FOR ALL TO authenticated USING (has_role(auth.uid(), 'Admin'::app_role)) WITH CHECK (has_role(auth.uid(), 'Admin'::app_role))."
+  },
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "trigger",
+    "object_name": "update_user_policy_overrides_updated_at",
+    "table": "user_policy_overrides",
+    "action": "create",
+    "detail": "BEFORE UPDATE ON public.user_policy_overrides FOR EACH ROW EXECUTE FUNCTION public.update_updated_at_column()."
+  },
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "index",
+    "object_name": "idx_user_policy_overrides_user_id",
+    "table": "user_policy_overrides",
+    "action": "create",
+    "detail": "CREATE INDEX idx_user_policy_overrides_user_id ON public.user_policy_overrides(user_id)."
+  },
+  {
+    "migration": "20251120061340_29a4cccb-992b-47a3-b12c-108886eed9da.sql",
+    "object_type": "index",
+    "object_name": "idx_user_policy_overrides_table_name",
+    "table": "user_policy_overrides",
+    "action": "create",
+    "detail": "CREATE INDEX idx_user_policy_overrides_table_name ON public.user_policy_overrides(table_name)."
+  },
+
+  {
+    "migration": "20251120074459_d72be4fe-2446-4d4a-8d57-345d35bacdf4.sql",
+    "object_type": "policy",
+    "object_name": "Clients can upload their subsection documents",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Clients can upload their subsection documents\" ON subsection_documents (created in 20251120045331). File comment: users need Client role + user_clients mapping, but neither exists."
+  },
+  {
+    "migration": "20251120074459_d72be4fe-2446-4d4a-8d57-345d35bacdf4.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can upload subsection documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (applies to PUBLIC). WITH CHECK (auth.uid() IS NOT NULL AND (has_role(auth.uid(), 'Admin'::app_role) OR (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s INNER JOIN sites si ON s.site_id = si.id WHERE si.client_id = get_user_client_id())) OR (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s INNER JOIN user_sites us ON us.site_id = s.site_id WHERE us.user_id = auth.uid())) OR EXISTS (SELECT 1 FROM subsections s WHERE s.id = subsection_id))). Note: the final 'backwards compatibility' OR EXISTS branch makes the role checks moot — any authenticated user can insert for any existing subsection."
+  },
+  {
+    "migration": "20251120074459_d72be4fe-2446-4d4a-8d57-345d35bacdf4.sql",
+    "object_type": "policy",
+    "object_name": "Clients can delete their subsection documents",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Clients can delete their subsection documents\" ON subsection_documents (created in 20251120045331)."
+  },
+  {
+    "migration": "20251120074459_d72be4fe-2446-4d4a-8d57-345d35bacdf4.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their uploaded documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL AND (has_role(auth.uid(), 'Admin'::app_role) OR uploaded_by = auth.uid() OR (has_role(auth.uid(), 'Client'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s INNER JOIN sites si ON s.site_id = si.id WHERE si.client_id = get_user_client_id())) OR (has_role(auth.uid(), 'Contractor'::app_role) AND subsection_id IN (SELECT s.id FROM subsections s INNER JOIN user_sites us ON us.site_id = s.site_id WHERE us.user_id = auth.uid()))))."
+  },
+
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can upload subsection documents",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can upload subsection documents\" ON subsection_documents (created in 20251120074459)."
+  },
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can upload subsection documents for their sites",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can upload subsection documents for their sites\" ON subsection_documents (created in 20251120045331)."
+  },
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Any authenticated user can upload documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (applies to PUBLIC). WITH CHECK (auth.uid() IS NOT NULL). All site/role scoping removed for INSERT."
+  },
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their uploaded documents",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Users can delete their uploaded documents\" ON subsection_documents (created in 20251120074459)."
+  },
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can delete subsection documents for their sites",
+    "table": "subsection_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Contractors can delete subsection documents for their sites\" ON subsection_documents (created in 20251120045331)."
+  },
+  {
+    "migration": "20251120080137_6ff47814-7f82-4ef5-9362-7038050cc5b2.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete documents",
+    "table": "subsection_documents",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL AND (has_role(auth.uid(), 'Admin'::app_role) OR uploaded_by = auth.uid()))."
+  },
+
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage site document categories",
+    "table": "site_document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view site document categories for their sites",
+    "table": "site_document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to site_document_categories",
+    "table": "site_document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage document categories",
+    "table": "document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view document categories for their sites",
+    "table": "document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public can view document categories",
+    "table": "document_categories",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to document_categories",
+    "table": "document_categories",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage site documents",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their site documents",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view site documents for their sites",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public can view site documents",
+    "table": "site_documents",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to site_documents",
+    "table": "site_documents",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their subsections",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view subsections for their sites",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access - subsection name and ID only",
+    "table": "subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS. Removes anonymous QR-code read path on subsections."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to subsections",
+    "table": "subsections",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their own sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view their assigned sites",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access - minimal data only",
+    "table": "sites",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS. Removes anonymous QR-code read path on sites."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to sites",
+    "table": "sites",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can view inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their inspections",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can update inspections for their sites",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspections for their sites",
+    "table": "inspections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspections",
+    "table": "inspections",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert floor plans",
+    "table": "subsection_floor_plans",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete their floor plans",
+    "table": "subsection_floor_plans",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can update their floor plans",
+    "table": "subsection_floor_plans",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can view floor plans for their subsections",
+    "table": "subsection_floor_plans",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to subsection_floor_plans",
+    "table": "subsection_floor_plans",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can insert pins",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can delete pins",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can update pins",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Users can view pins for accessible floor plans",
+    "table": "floor_plan_pins",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to floor_plan_pins",
+    "table": "floor_plan_pins",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can create snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can delete their own snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Authenticated users can update their own snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their snags",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view snags for their sites",
+    "table": "snags",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to snags",
+    "table": "snags",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage marking checklists",
+    "table": "site_marking_checklist",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can update marking checklists for their sites",
+    "table": "site_marking_checklist",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view marking checklists for their sites",
+    "table": "site_marking_checklist",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to site_marking_checklist",
+    "table": "site_marking_checklist",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage COC validations",
+    "table": "coc_validations",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view COC validations for their sites",
+    "table": "coc_validations",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to coc_validations",
+    "table": "coc_validations",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage inspection items",
+    "table": "inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspection items for their sites",
+    "table": "inspection_items",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspection_items",
+    "table": "inspection_items",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage inspection subsections",
+    "table": "inspection_subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspection subsections for their sites",
+    "table": "inspection_subsections",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspection_subsections",
+    "table": "inspection_subsections",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage inspection templates",
+    "table": "inspection_templates",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view inspection templates",
+    "table": "inspection_templates",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to inspection_templates",
+    "table": "inspection_templates",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage calendar events",
+    "table": "calendar_events",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all calendar events",
+    "table": "calendar_events",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their calendar events",
+    "table": "calendar_events",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view calendar events for their sites",
+    "table": "calendar_events",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to calendar_events",
+    "table": "calendar_events",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage all QR codes",
+    "table": "qr_codes",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Clients can view their QR codes",
+    "table": "qr_codes",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view QR codes for their sites",
+    "table": "qr_codes",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public can view QR codes",
+    "table": "qr_codes",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS. Removes anonymous read access on qr_codes."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to qr_codes",
+    "table": "qr_codes",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can manage clients",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Admins can view all clients",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Contractors can view clients for their sites",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "Public QR code access to client info",
+    "table": "clients",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS. Removes anonymous QR-code read path on clients."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to clients",
+    "table": "clients",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to user_sites",
+    "table": "user_sites",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL). No prior policies dropped for this table in this migration — additive."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to user_clients",
+    "table": "user_clients",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL). No prior policies dropped for this table in this migration — additive."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to validation_conversations",
+    "table": "validation_conversations",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL). No prior policies dropped for this table in this migration — additive."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to validation_messages",
+    "table": "validation_messages",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL). No prior policies dropped for this table in this migration — additive."
+  },
+  {
+    "migration": "20251120080517_643a23ca-0be6-4205-9103-3329d42e412f.sql",
+    "object_type": "policy",
+    "object_name": "All authenticated users full access to validation_feedback",
+    "table": "validation_feedback",
+    "action": "create",
+    "detail": "FOR ALL, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL) WITH CHECK (auth.uid() IS NOT NULL). No prior policies dropped for this table in this migration — additive."
+  },
+
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can view documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can view documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can upload documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can upload documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can update documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can update documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users can delete documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Authenticated users can delete documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Public users can view documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can view documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Public users can download documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Public users can download documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view documents",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DROP POLICY IF EXISTS \"Anyone can view documents\" ON storage.objects."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "(dynamic: all storage.objects policies with name LIKE '%documents%' or '%document%')",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DO $$ block: loops over pg_policies WHERE tablename='objects' AND schemaname='storage' AND (policyname LIKE '%documents%' OR policyname LIKE '%document%'), executing DROP POLICY IF EXISTS %I ON storage.objects for each. Drops every document-related storage policy, including the per-role documents-bucket policies created in 20251120051502."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "bucket",
+    "object_name": "documents",
+    "table": "storage.buckets",
+    "action": "update",
+    "detail": "UPDATE storage.buckets SET public = true WHERE id = 'documents'. Makes the documents bucket publicly readable via public object URLs."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Any authenticated user can view documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (applies to PUBLIC). USING (bucket_id = 'documents' AND auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Any authenticated user can upload documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (applies to PUBLIC). WITH CHECK (bucket_id = 'documents' AND auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Any authenticated user can update documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (applies to PUBLIC). USING (bucket_id = 'documents' AND auth.uid() IS NOT NULL). No WITH CHECK clause."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Any authenticated user can delete documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (applies to PUBLIC). USING (bucket_id = 'documents' AND auth.uid() IS NOT NULL)."
+  },
+  {
+    "migration": "20251120081347_dfe72b01-89cf-4ace-9fa6-39b1a1ccfbab.sql",
+    "object_type": "storage_policy",
+    "object_name": "Public can view documents",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (applies to PUBLIC, including anon). USING (bucket_id = 'documents'). Anonymous read of all documents-bucket objects via the storage API."
+  },
+
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "(dynamic: ALL policies on storage.objects)",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DO $$ block: loops over pg_policies WHERE tablename='objects' AND schemaname='storage' (no name filter), executing DROP POLICY IF EXISTS %I ON storage.objects for each. Drops every storage policy in the database, including all bucket-scoped per-role policies from 20251120051502 and the documents policies from 20251120081347."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "bucket",
+    "object_name": "(all buckets)",
+    "table": "storage.buckets",
+    "action": "update",
+    "detail": "UPDATE storage.buckets SET public = true (no WHERE clause). Every storage bucket — including profile-images, inspection-photos, site-images, documents and any others — becomes publicly readable."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users full access to all buckets - SELECT",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL). No bucket_id filter — any authenticated user can read objects in any bucket."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users full access to all buckets - INSERT",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (applies to PUBLIC). WITH CHECK (auth.uid() IS NOT NULL). No bucket_id filter."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users full access to all buckets - UPDATE",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL). No bucket_id filter, no WITH CHECK clause."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "Authenticated users full access to all buckets - DELETE",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (applies to PUBLIC). USING (auth.uid() IS NOT NULL). No bucket_id filter."
+  },
+  {
+    "migration": "20251120083541_6381caa6-9675-4a9f-918b-d0954835b896.sql",
+    "object_type": "storage_policy",
+    "object_name": "Public can view all buckets",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (applies to PUBLIC, including anon). USING (true). Anonymous read of every object in every bucket."
+  },
+
+  {
+    "migration": "20251120083932_7add3605-ec9c-4049-a8fb-233ff75a3349.sql",
+    "object_type": "storage_policy",
+    "object_name": "(dynamic: ALL policies on storage.objects)",
+    "table": "storage.objects",
+    "action": "drop",
+    "detail": "DO $$ block: loops over pg_policies WHERE tablename='objects' AND schemaname='storage' (no name filter), executing DROP POLICY IF EXISTS %I ON storage.objects for each. Drops all storage policies again, including those created minutes earlier in 20251120083541."
+  },
+  {
+    "migration": "20251120083932_7add3605-ec9c-4049-a8fb-233ff75a3349.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can view all storage",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR SELECT, no TO clause (applies to PUBLIC, including anon). USING (true). No authentication required."
+  },
+  {
+    "migration": "20251120083932_7add3605-ec9c-4049-a8fb-233ff75a3349.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can upload to all storage",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR INSERT, no TO clause (applies to PUBLIC, including anon). WITH CHECK (true). Anonymous users can upload to any bucket."
+  },
+  {
+    "migration": "20251120083932_7add3605-ec9c-4049-a8fb-233ff75a3349.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can update all storage",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR UPDATE, no TO clause (applies to PUBLIC, including anon). USING (true). No WITH CHECK clause. Anonymous users can overwrite any object."
+  },
+  {
+    "migration": "20251120083932_7add3605-ec9c-4049-a8fb-233ff75a3349.sql",
+    "object_type": "storage_policy",
+    "object_name": "Anyone can delete from all storage",
+    "table": "storage.objects",
+    "action": "create",
+    "detail": "FOR DELETE, no TO clause (applies to PUBLIC, including anon). USING (true). Anonymous users can delete any object in any bucket."
+  }
+]
