@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fortress Building Dashboard — Gap Analysis & Build Plan · 2026-06-12</title>
+<style>
+  :root{
+    --bg:#0e1116; --panel:#161b22; --panel2:#1c232d; --line:#2a3340; --line2:#374252;
+    --ink:#e6edf3; --mut:#9aa7b4; --mut2:#6e7d8c;
+    --accent:#4c8dff; --accent2:#7aa2ff;
+    --green:#2ea043; --amber:#d29922; --red:#da3633; --purple:#a371f7; --teal:#2dd4bf;
+    --chip-exist:#1b3a26; --chip-exist-b:#2ea043;
+    --chip-part:#3a3318; --chip-part-b:#d29922;
+    --chip-new:#3a1d1f; --chip-new-b:#da3633;
+    --radius:10px;
+    --mono:"SFMono-Regular", Consolas,"Liberation Mono",Menlo,monospace;
+    --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;padding:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+  a{color:var(--accent2);text-decoration:none}
+  code,.mono{font-family:var(--mono);font-size:.85em}
+  .wrap{display:flex;min-height:100vh}
+  /* sidebar */
+  nav.side{position:sticky;top:0;align-self:flex-start;height:100vh;width:248px;flex:0 0 248px;background:#0b0e13;border-right:1px solid var(--line);padding:18px 0;overflow-y:auto}
+  nav.side h1{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 18px 4px}
+  nav.side .sub{font-size:11px;color:var(--mut2);margin:0 18px 16px}
+  nav.side a{display:block;padding:8px 18px;color:var(--mut);font-size:13.5px;border-left:3px solid transparent;cursor:pointer}
+  nav.side a:hover{background:#11161d;color:var(--ink)}
+  nav.side a.active{color:#fff;border-left-color:var(--accent);background:#11161d}
+  nav.side .grp{margin-top:14px}
+  main{flex:1;min-width:0;padding:34px 44px 90px;max-width:1180px}
+  section.tab{display:none}
+  section.tab.show{display:block;animation:f .25s ease}
+  @keyframes f{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2.page{font-size:26px;margin:0 0 4px;font-weight:680;letter-spacing:-.01em}
+  .lead{color:var(--mut);font-size:15px;margin:0 0 24px;max-width:80ch}
+  h3{font-size:18px;margin:30px 0 12px;font-weight:640;border-bottom:1px solid var(--line);padding-bottom:7px}
+  h4{font-size:14.5px;margin:20px 0 8px;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+  p{margin:0 0 12px;color:#cdd6e0}
+  ul{margin:0 0 14px;padding-left:20px;color:#cdd6e0}
+  li{margin:4px 0}
+  .muted{color:var(--mut)}
+  /* chips */
+  .chip{display:inline-block;font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;border:1px solid;line-height:1.5;white-space:nowrap;vertical-align:middle}
+  .c-exist{background:var(--chip-exist);border-color:var(--chip-exist-b);color:#5cd277}
+  .c-part{background:var(--chip-part);border-color:var(--chip-part-b);color:#e3b341}
+  .c-new{background:var(--chip-new);border-color:var(--chip-new-b);color:#ff7b72}
+  .chip.sm{font-size:10px;padding:1px 6px}
+  /* cards / grid */
+  .cards{display:grid;grid-template-columns:repeat(auto-fill,minmax(248px,1fr));gap:14px;margin:14px 0 8px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:14px 15px}
+  .card .k{font-size:11.5px;color:var(--mut);text-transform:uppercase;letter-spacing:.05em;display:flex;justify-content:space-between;gap:6px;align-items:center}
+  .card .v{font-size:30px;font-weight:700;margin:6px 0 2px;letter-spacing:-.02em}
+  .card .v small{font-size:14px;color:var(--mut);font-weight:500}
+  .card .sub{font-size:12px;color:var(--mut)}
+  .card .link{font-size:11.5px;color:var(--mut2);margin-top:9px;border-top:1px dashed var(--line);padding-top:8px}
+  .card .link b{color:var(--accent2);font-weight:600}
+  /* band bar */
+  .bar{height:6px;border-radius:4px;background:#232c37;overflow:hidden;margin:9px 0 6px}
+  .bar > i{display:block;height:100%;border-radius:4px}
+  .b-green{background:var(--green)} .b-amber{background:var(--amber)} .b-red{background:var(--red)}
+  .b-blue{background:var(--accent)} .b-purple{background:var(--purple)} .b-teal{background:var(--teal)}
+  /* hero */
+  .hero{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:6px 0 10px}
+  .hero .card .v{font-size:34px}
+  /* building identity */
+  .bldg{display:flex;flex-wrap:wrap;gap:8px 26px;background:linear-gradient(180deg,#18202b,#141a22);border:1px solid var(--line);border-radius:var(--radius);padding:16px 20px;margin:4px 0 20px}
+  .bldg .t{font-size:20px;font-weight:680;width:100%}
+  .bldg .m{font-size:12.5px;color:var(--mut)}
+  .bldg .m b{color:var(--ink);font-weight:600}
+  /* tables */
+  table{width:100%;border-collapse:collapse;margin:10px 0 18px;font-size:13px}
+  th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;position:sticky;top:0;background:var(--bg)}
+  tr:hover td{background:#12171e}
+  td.center,th.center{text-align:center}
+  .scorecard td:first-child{font-weight:600}
+  .tag{font-family:var(--mono);font-size:11px;background:#11161d;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--mut)}
+  /* domain section header */
+  .dhead{display:flex;align-items:center;gap:10px;margin:26px 0 4px}
+  .dhead .n{font-size:12px;color:var(--mut2);font-family:var(--mono)}
+  .dhead h3{border:0;margin:0;padding:0;font-size:17px}
+  .dhead .src{margin-left:auto;font-size:11.5px;color:var(--mut2)}
+  /* callout */
+  .note{border-left:3px solid var(--accent);background:#10161f;padding:11px 15px;border-radius:0 8px 8px 0;margin:14px 0;font-size:13.5px;color:#cdd6e0}
+  .note.warn{border-left-color:var(--amber);background:#191507}
+  .note.ok{border-left-color:var(--green);background:#0d1710}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:12px;color:var(--mut);margin:6px 0 18px}
+  .legend span{display:inline-flex;align-items:center;gap:6px}
+  .dot{width:9px;height:9px;border-radius:50%}
+  /* phases */
+  .phase{border:1px solid var(--line);border-radius:var(--radius);padding:0;margin:14px 0;overflow:hidden}
+  .phase .ph{display:flex;align-items:center;gap:12px;padding:12px 16px;background:var(--panel2)}
+  .phase .ph .pn{font-family:var(--mono);font-size:12px;color:#fff;background:var(--accent);border-radius:6px;padding:3px 9px}
+  .phase .ph .pt{font-weight:640;font-size:15px}
+  .phase .ph .pw{margin-left:auto;font-size:12px;color:var(--mut)}
+  .phase .pb{padding:12px 18px}
+  .phase ul{margin:0}
+  /* decisions */
+  .adr{border:1px solid var(--line);border-radius:8px;padding:12px 15px;margin:10px 0;background:var(--panel)}
+  .adr .h{display:flex;gap:10px;align-items:center;font-weight:640;font-size:14.5px}
+  .adr .st{font-family:var(--mono);font-size:11px;padding:2px 8px;border-radius:20px}
+  .st-prop{background:#2a2410;color:#e3b341;border:1px solid #6b5a17}
+  .st-lock{background:#0d2417;color:#5cd277;border:1px solid #1f6b3a}
+  .adr p{margin:7px 0 0;font-size:13px;color:var(--mut)}
+  .foot{margin-top:40px;padding-top:16px;border-top:1px solid var(--line);font-size:12px;color:var(--mut2)}
+  .pill{font-size:11px;color:var(--mut);border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+  .kgrid{display:grid;grid-template-columns:1fr 1fr;gap:0 26px}
+  @media(max-width:1000px){.hero{grid-template-columns:repeat(2,1fr)}.kgrid{grid-template-columns:1fr}}
+  @media(max-width:760px){nav.side{display:none}main{padding:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="side">
+  <h1>Fortress Dashboard</h1>
+  <div class="sub">Insight Linker · WM Compliance<br>Plan · 2026-06-12</div>
+  <a data-go="overview" class="active">Overview &amp; verdict</a>
+  <a data-go="gap">1 · Gap analysis</a>
+  <a data-go="dashboard">2 · Building dashboard</a>
+  <a data-go="kpi">3 · KPI catalogue</a>
+  <a data-go="model">4 · Data model</a>
+  <a data-go="plan">5 · Build plan</a>
+  <a data-go="decisions">6 · Decisions &amp; questions</a>
+  <div class="grp"></div>
+  <a data-go="appendix">Appendix · source files</a>
+</nav>
+<main>
+
+<!-- ============ OVERVIEW ============ -->
+<section id="overview" class="tab show">
+  <h2 class="page">Fortress Building Dashboard — gap analysis &amp; build plan</h2>
+  <p class="lead">Reviewing the existing spec set against the three <b>“Fortress specs”</b> (the Abaqulusi Plaza
+  property-report pack), mapping the gap to what Insight Linker builds today, and proposing a per-building
+  dashboard driven by the Fortress report structure — with every KPI linked to a data source, an app module,
+  and a build status, so it can be added to the application.</p>
+
+  <div class="note warn">
+    <b>One-line task restatement:</b> analyse the 3 Fortress report workbooks vs the current build, produce a
+    gap-based plan, and design a full per-building dashboard with detailed KPIs each clearly linked to the
+    relevant parts of the app — as an addition to Insight Linker. &nbsp;<span class="muted">Status: plan only — nothing built or run yet.</span>
+  </div>
+
+  <h3>What the “Fortress specs” actually are</h3>
+  <p>Three Excel workbooks for <b>Abaqulusi Plaza (Vryheid)</b>, a Fortress / Capital Propfund shopping centre managed under Broll:</p>
+  <table>
+    <tr><th>Workbook</th><th>Cadence</th><th>What it is</th><th>Sheets</th></tr>
+    <tr><td><b>OPS Report</b> (Oct 2025)</td><td>Monthly</td><td>Operations + OHS Act compliance + building inspection + utilities + PPM + masterfile + expense recoveries</td><td>7</td></tr>
+    <tr><td><b>CM Report</b> (Dec 2025)</td><td>Monthly</td><td>Centre-management: trading/turnover, footfall, leasing, tenant OHS &amp; housekeeping, shop specs, incidents</td><td>7</td></tr>
+    <tr><td><b>Annual Inspection Report</b> (2025)</td><td>Annual</td><td>33-section asset &amp; condition audit of every building system (fire, electrical, HVAC, fabric, utilities…) with service history, costs &amp; photos</td><td>1 · 1,092 rows</td></tr>
+  </table>
+
+  <div class="note">
+    <b>Naming clash to resolve.</b> The app <i>already</i> contains a template called
+    <span class="tag">FORTRESS - Complete Compliance Inspection</span> (<code>src/lib/fortressTemplate.ts</code>) — but that is
+    WM’s <b>electrical scope-of-works</b> (RMUs, mini-subs, DBs). The new “Fortress specs” are the client’s
+    <b>property-management report pack</b>, which is far broader. This plan treats them as two different things and
+    proposes calling the new module the <b>Fortress Building Report Pack / Dashboard</b>.
+  </div>
+
+  <h3>Headline verdict</h3>
+  <div class="hero">
+    <div class="card"><div class="k">Fortress domains</div><div class="v">17</div><div class="sub">distinct reporting domains across the 3 workbooks</div></div>
+    <div class="card"><div class="k">Covered today</div><div class="v" style="color:#5cd277">~28%</div><div class="bar"><i class="b-green" style="width:28%"></i></div><div class="sub">4 strong + 4 partial of 17</div></div>
+    <div class="card"><div class="k">Net-new build</div><div class="v" style="color:#ff7b72">9</div><div class="sub">domains with no current home in the app</div></div>
+    <div class="card"><div class="k">KPIs proposed</div><div class="v">38</div><div class="sub">across 8 dashboard groups</div></div>
+  </div>
+
+  <div class="legend">
+    <span><span class="dot" style="background:var(--green)"></span> Exists — reuse / extend</span>
+    <span><span class="dot" style="background:var(--amber)"></span> Partial — schema or UI gap</span>
+    <span><span class="dot" style="background:var(--red)"></span> New — no current home</span>
+  </div>
+
+  <p class="muted">Read order: <b>Gap analysis</b> → <b>Building dashboard</b> (worked with real Abaqulusi data) →
+  <b>KPI catalogue</b> → <b>Data model</b> → <b>Build plan</b> → <b>Decisions</b>.</p>
+</section>
+
+<!-- ============ GAP ANALYSIS ============ -->
+<section id="gap" class="tab">
+  <h2 class="page">1 · Gap analysis — Fortress specs vs current build</h2>
+  <p class="lead">Insight Linker today is an <b>electrical-compliance</b> system: Client → Site → Subsection (board) →
+  Inspection, plus COC, snags, metering, an operational Site-Health score, PDF reports, photos and offline capture.
+  The Fortress pack demands a whole <b>property/facilities-management</b> layer on top of that electrical core.</p>
+
+  <h3>Domain-by-domain scorecard</h3>
+  <table class="scorecard">
+    <tr><th>#</th><th>Fortress domain</th><th>Source sheet(s)</th><th>What the app has today</th><th class="center">Status</th></tr>
+    <tr><td>1</td><td>Electrical compliance &amp; COC</td><td>Annual §6; OPS Building-Insp “Electrical”; OHS 1.2</td><td><code>inspections</code>, COC (building+tenant), board metering, IR-scan template</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>2</td><td>Defects / snags → corrective actions</td><td>OPS Building-Insp “action required”; OHS 4.1 hazards</td><td><code>snags</code> (Open→Rectified→Closed), risk levels, photos</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>3</td><td>Operational health score</td><td>OHS building-compliance %; CM checklist</td><td><code>siteHealth.ts</code> (metering+snags+inspections, redesign in flight)</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>4</td><td>Reports &amp; PDF / photos / offline</td><td>all 3 workbooks</td><td>pdfmake + PdfShift, report templates, <code>offline_photos</code>, Capacitor camera</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>5</td><td>Building condition inspection (Good/Fair/Poor, action timeframe)</td><td>Annual §10–17; OPS Building-Insp (structure/roof/façade/interior/mech)</td><td>Generic inspection engine present, but templates are electrical-only; no condition grade or action-timeframe field</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>6</td><td>Tenant register &amp; per-tenant compliance</td><td>CM “OHS &amp; HK”, “Shop Spec”</td><td><code>tenant_name</code> on subsections + tenant meter/breaker rows in inspections — no first-class tenant entity</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>7</td><td>Masterfile / document index (building-level)</td><td>OPS “Masterfile index”</td><td><code>subsection_documents</code>, <code>document_categories</code> — per-subsection, not a building checklist</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>8</td><td>Monthly operational checklist / cadence</td><td>OPS “Operational Overview”; CM “Building Overview”</td><td><code>inspections</code> + <code>calendar_events</code> exist; no structured monthly OPS checklist</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>9</td><td>OHS Act compliance scoring (whole building)</td><td>OPS “OHS Act Report” (§1–4, weighted)</td><td>— none (electrical COC only)</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>10</td><td>Asset &amp; equipment register (service / next-due / cost / contractor / recovery)</td><td>Annual §4–28 (every system)</td><td>— assets only implied inside inspection items</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>11</td><td>PPM — planned preventative maintenance schedule</td><td>OPS “PPM” (≈28 services × month grid)</td><td>— <code>calendar_events</code> infra exists but no PPM model</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>12</td><td>Utilities reconciliation (water balance, solar/borehole yield, loadshedding)</td><td>OPS “Utilities”; CM “Page 3”</td><td>— electrical board metering only; no utilities ledger</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>13</td><td>Shop-spec register (DB/HVAC/finishes per tenant)</td><td>CM “Shop Spec” (51 cols)</td><td>— none</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>14</td><td>Trading / turnover / density / cost-of-occupancy</td><td>CM “Page 2”</td><td>— none (commercial data)</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>15</td><td>Leasing — vacancy / waiting list / movements / arrears</td><td>CM “Page 2”</td><td>— none (commercial data)</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>16</td><td>Security incident log</td><td>CM “Centre Incidents” (≈25 categories)</td><td><code>issue_reports</code> is app-issues, not centre incidents</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>17</td><td>Contractual expense recoveries</td><td>OPS “Contractural Expense Recoveries”</td><td>— none</td><td class="center"><span class="chip c-new">New</span></td></tr>
+  </table>
+
+  <div class="note">
+    <b>Shape of the gap.</b> The app already nails the <i>electrical safety</i> spine (domains 1–4) and has a reusable
+    inspection + snag + PDF engine. The Fortress pack reframes that spine as one section of a much larger
+    <b>building operations record</b>. The biggest net-new pieces are an <b>asset register</b> (10) and the
+    schedules/ledgers hanging off it — PPM (11), utilities (12), OHS scoring (9). The <b>commercial</b> domains
+    (14–15, trading &amp; leasing) are property-manager data WM may <i>display/import</i> rather than capture.
+  </div>
+
+  <h4>Scope boundary worth confirming</h4>
+  <p>WM Consulting Electrical Engineers’ natural mandate is the <b>engineering/compliance + condition</b> half of the
+  pack (domains 1–13, 16–17). The <b>commercial</b> half (trading, leasing, arrears, footfall, toilet fund) is the
+  centre manager’s data. The dashboard is designed so commercial KPIs are <b>optional import-only tiles</b> — present
+  for a complete building picture, but not blocking the engineering build. See Decision&nbsp;D5.</p>
+</section>
+
+<!-- ============ DASHBOARD ============ -->
+<section id="dashboard" class="tab">
+  <h2 class="page">2 · Per-building dashboard <span class="pill">worked example: Abaqulusi Plaza</span></h2>
+  <p class="lead">The proposed dashboard layout, populated with <b>real values</b> pulled from the three Abaqulusi
+  workbooks. Each KPI card carries a <b>band bar</b>, a <b>target</b>, and a <b>“linked to”</b> line naming the app
+  data source, the Fortress report section it feeds, and its build status. This is the screen the plan builds toward.</p>
+
+  <div class="bldg">
+    <div class="t">Abaqulusi Plaza <span class="muted" style="font-weight:400">(Vryheid Plaza)</span></div>
+    <div class="m"><b>Address</b> Cnr Utrecht &amp; Mason St, Vryheid</div>
+    <div class="m"><b>GLA</b> 16,811 m²</div>
+    <div class="m"><b>Vacancy</b> 0 m² (100% let)</div>
+    <div class="m"><b>Tenants</b> 46 + 4 ATM (42 national)</div>
+    <div class="m"><b>Anchors</b> Shoprite · Boxer · PEP · Ackermans</div>
+    <div class="m"><b>Parking</b> 106 bays + 350 taxi</div>
+    <div class="m"><b>Asset mgr</b> D. De Lange</div>
+    <div class="m"><b>Ops mgr</b> W. Sykes</div>
+    <div class="m"><b>CM</b> S. Mabaso</div>
+    <div class="m"><b>Opened</b> 22 Nov 2023</div>
+  </div>
+
+  <h4>Hero row — the four numbers a building lead reads first</h4>
+  <div class="hero">
+    <div class="card">
+      <div class="k">OHS Act compliance <span class="chip c-new sm">New</span></div>
+      <div class="v" style="color:#e3b341">85<small>%</small></div>
+      <div class="bar"><i class="b-amber" style="width:85%"></i></div>
+      <div class="sub">85 Yes · 10 No · 5 N/A (OPS OHS header)</div>
+      <div class="link">Source <b>ohs_compliance_items</b> · feeds OPS “OHS Act Report”</div>
+    </div>
+    <div class="card">
+      <div class="k">Site Health <span class="chip c-exist sm">Exists</span></div>
+      <div class="v" style="color:#5cd277">82</div>
+      <div class="bar"><i class="b-green" style="width:82%"></i></div>
+      <div class="sub">snags 40% · inspections 35% · metering 25%</div>
+      <div class="link">Source <b>siteHealth.ts</b> · operational score</div>
+    </div>
+    <div class="card">
+      <div class="k">Masterfile complete <span class="chip c-part sm">Partial</span></div>
+      <div class="v" style="color:#5cd277">~95<small>%</small></div>
+      <div class="bar"><i class="b-green" style="width:95%"></i></div>
+      <div class="sub">~40 docs, near-all on file</div>
+      <div class="link">Source <b>masterfile_index</b> · feeds OPS “Masterfile”</div>
+    </div>
+    <div class="card">
+      <div class="k">PPM on-schedule <span class="chip c-new sm">New</span></div>
+      <div class="v" style="color:#e3b341">—</div>
+      <div class="bar"><i class="b-amber" style="width:70%"></i></div>
+      <div class="sub">≈28 service lines tracked monthly</div>
+      <div class="link">Source <b>ppm_tasks</b> · feeds OPS “PPM”</div>
+    </div>
+  </div>
+
+  <!-- GROUP A -->
+  <div class="dhead"><span class="n">A</span><h3>Compliance &amp; OHS</h3><span class="src">OPS OHS Act · Annual §1–6 · OHS 1.1–4</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Electrical COC — building <span class="chip c-exist sm">Exists</span></div><div class="v">Valid</div><div class="sub">CoC 2023-11-22 · IR scan Mar 2025</div><div class="link">Source <b>coc_validations</b> / subsections · §6.2, OHS 1.2.1</div></div>
+    <div class="card"><div class="k">Tenant COC coverage <span class="chip c-part sm">Partial</span></div><div class="v">52<small>/52</small></div><div class="bar"><i class="b-green" style="width:100%"></i></div><div class="sub">all tenants hold electrical COC (12/2024)</div><div class="link">Source <b>tenants.coc_*</b> · CM “OHS &amp; HK”</div></div>
+    <div class="card"><div class="k">Fire compliance <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">Clear</div><div class="sub">rational design + clearance on file</div><div class="link">Source <b>ohs_compliance_items</b> · OHS 1.3 / Annual §4</div></div>
+    <div class="card"><div class="k">Critical equipment serviced <span class="chip c-new sm">New</span></div><div class="v">13<small>/14</small></div><div class="bar"><i class="b-green" style="width:93%"></i></div><div class="sub">sprinkler valve overhaul due 2026</div><div class="link">Source <b>building_assets.next_service</b> · OHS §2</div></div>
+    <div class="card"><div class="k">Occupancy &amp; structure <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">OK</div><div class="sub">occupation cert on file · structural insp done</div><div class="link">Source <b>ohs_compliance_items</b> · OHS 1.1</div></div>
+    <div class="card"><div class="k">Risk assessment / medicals <span class="chip c-new sm">New</span></div><div class="v">Nov ’24</div><div class="sub">annual RA done · medicals Jul ’24</div><div class="link">Source <b>ohs_compliance_items</b> · OHS 2.14</div></div>
+  </div>
+
+  <!-- GROUP B -->
+  <div class="dhead"><span class="n">B</span><h3>Condition &amp; inspection</h3><span class="src">Annual §10–17 · OPS Building Inspection</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Elements acceptable <span class="chip c-part sm">Partial</span></div><div class="v">≈92<small>%</small></div><div class="bar"><i class="b-green" style="width:92%"></i></div><div class="sub">~6 elements flagged (roof leaks, paving, road markings)</div><div class="link">Source <b>inspection_items.condition</b> · Building-Insp</div></div>
+    <div class="card"><div class="k">Immediate-action items <span class="chip c-exist sm">Exists</span></div><div class="v" style="color:#ff7b72">2</div><div class="sub">ongoing roof leaks · ceiling at Code walkway</div><div class="link">Source <b>snags</b> (risk High) · “action required”</div></div>
+    <div class="card"><div class="k">Within-3-months items <span class="chip c-part sm">Partial</span></div><div class="v" style="color:#e3b341">4</div><div class="sub">paving patches · road markings · ext-wall paint</div><div class="link">Source <b>snags</b> / action_timeframe</div></div>
+    <div class="card"><div class="k">Elements Poor <span class="chip c-part sm">Partial</span></div><div class="v">3</div><div class="sub">road markings · disclaimer signs · cleaning equip</div><div class="link">Source <b>inspection_items.condition='Poor'</b></div></div>
+    <div class="card"><div class="k">Last building inspection <span class="chip c-exist sm">Exists</span></div><div class="v">12 Aug</div><div class="sub">by W. Sykes · annual audit Apr 2025</div><div class="link">Source <b>inspections.completed_at</b></div></div>
+    <div class="card"><div class="k">Open snags <span class="chip c-exist sm">Exists</span></div><div class="v">6 <small>open</small></div><div class="sub">2 critical/high · resolution tracked</div><div class="link">Source <b>snags</b> · Site-Health input</div></div>
+  </div>
+
+  <!-- GROUP C -->
+  <div class="dhead"><span class="n">C</span><h3>Assets &amp; PPM</h3><span class="src">Annual §4–28 · OPS PPM</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Assets in register <span class="chip c-new sm">New</span></div><div class="v">≈45</div><div class="sub">fire, HV/LT, gensets, solar, HVAC, pumps…</div><div class="link">Source <b>building_assets</b> · Annual §4–28</div></div>
+    <div class="card"><div class="k">Services due ≤30 days <span class="chip c-new sm">New</span></div><div class="v" style="color:#e3b341">5</div><div class="sub">sprinkler valve · IR scan · aircon minor…</div><div class="link">Source <b>building_assets.next_service</b> · PPM</div></div>
+    <div class="card"><div class="k">Services overdue <span class="chip c-new sm">New</span></div><div class="v" style="color:#ff7b72">1</div><div class="sub">extinguisher service missed Dec ’25 → done Jan</div><div class="link">Source <b>ppm_tasks.status='missed'</b></div></div>
+    <div class="card"><div class="k">Generators on site <span class="chip c-new sm">New</span></div><div class="v">6</div><div class="sub">2×350 kVA line + centre; 607–620 run-hrs</div><div class="link">Source <b>building_assets</b> · Annual §6.4</div></div>
+    <div class="card"><div class="k">Solar plant <span class="chip c-new sm">New</span></div><div class="v">875<small>kW</small></div><div class="sub">1,925 panels · 7×125 kW inverters · 5,300 kWh/day</div><div class="link">Source <b>building_assets</b> · Annual §6.5</div></div>
+    <div class="card"><div class="k">Fire equipment <span class="chip c-new sm">New</span></div><div class="v">144</div><div class="sub">extinguishers · 49 reels · 14 hydrants</div><div class="link">Source <b>building_assets</b> · OHS 2.1 / Annual §4.3</div></div>
+  </div>
+
+  <!-- GROUP D -->
+  <div class="dhead"><span class="n">D</span><h3>Utilities</h3><span class="src">OPS Utilities · CM Page 3</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Solar yield vs predicted <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">90.7<small>%</small></div><div class="bar"><i class="b-green" style="width:90.7%"></i></div><div class="sub">116,212 / 128,166 kWh</div><div class="link">Source <b>utilities_readings</b> · OPS Utilities “Solar”</div></div>
+    <div class="card"><div class="k">Common-area water <span class="chip c-new sm">New</span></div><div class="v" style="color:#e3b341">55.4<small>%</small></div><div class="bar"><i class="b-amber" style="width:55.4%"></i></div><div class="sub">tenant 44.6% · unmetered 17.5%</div><div class="link">Source <b>utilities_readings</b> · OPS “Bulk vs Common”</div></div>
+    <div class="card"><div class="k">Water balance variance <span class="chip c-new sm">New</span></div><div class="v" style="color:#ff7b72">⚠</div><div class="sub">council bulk meter offline — investigate</div><div class="link">Source <b>utilities_readings</b> · OPS Water</div></div>
+    <div class="card"><div class="k">Borehole yield <span class="chip c-new sm">New</span></div><div class="v">1,813<small>KL</small></div><div class="sub">580 KL backup · new yield test awaited</div><div class="link">Source <b>utilities_readings</b> · OPS “Borehole”</div></div>
+    <div class="card"><div class="k">Night water usage <span class="chip c-new sm">New</span></div><div class="v">124.6<small>KL</small></div><div class="sub">22:00–06:00 (per console)</div><div class="link">Source <b>utilities_readings</b> · leak indicator</div></div>
+    <div class="card"><div class="k">Loadshedding hours <span class="chip c-new sm">New</span></div><div class="v">14<small>h</small></div><div class="sub">stage 2 · diesel tracked</div><div class="link">Source <b>utilities_readings</b> · CM Page 3</div></div>
+  </div>
+
+  <!-- GROUP E -->
+  <div class="dhead"><span class="n">E</span><h3>Tenants &amp; compliance</h3><span class="src">CM OHS &amp; HK · Shop Spec</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Tenants tracked <span class="chip c-part sm">Partial</span></div><div class="v">52</div><div class="sub">~15,214 m² let GLA across lines</div><div class="link">Source <b>tenants</b> · CM “OHS &amp; HK”</div></div>
+    <div class="card"><div class="k">Evacuation plan displayed <span class="chip c-new sm">New</span></div><div class="v">50<small>/52</small></div><div class="bar"><i class="b-green" style="width:96%"></i></div><div class="sub">Shwarma &amp; MK Foods outstanding</div><div class="link">Source <b>tenants.evac_displayed</b> · CM OHS &amp; HK</div></div>
+    <div class="card"><div class="k">HVAC service records <span class="chip c-new sm">New</span></div><div class="v">52<small>/52</small></div><div class="bar"><i class="b-green" style="width:100%"></i></div><div class="sub">up-to-date 12/2024</div><div class="link">Source <b>tenants.hvac_service</b></div></div>
+    <div class="card"><div class="k">Food-tenant gas cert <span class="chip c-new sm">New</span></div><div class="v" style="color:#e3b341">1 gap</div><div class="sub">Boxer flammable-liquid cert outstanding</div><div class="link">Source <b>tenants.flammable_cert</b> · CM OHS &amp; HK</div></div>
+    <div class="card"><div class="k">Shop spec on file <span class="chip c-new sm">New</span></div><div class="v">51<small>/52</small></div><div class="sub">KFC spec update in progress</div><div class="link">Source <b>tenant_shop_specs</b> · CM “Shop Spec”</div></div>
+    <div class="card"><div class="k">Amperage actual vs lease <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">OK</div><div class="sub">1 over-spec flag (Old Mutual 80A vs 60A)</div><div class="link">Source <b>tenant_shop_specs.amps_*</b></div></div>
+  </div>
+
+  <!-- GROUP F -->
+  <div class="dhead"><span class="n">F</span><h3>Trading &amp; leasing <span class="chip c-new sm" style="margin-left:6px">import-only</span></h3><span class="src">CM Page 2 · commercial</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Monthly turnover <span class="chip c-new sm">New</span></div><div class="v">R75.5<small>m</small></div><div class="sub">vs R76.7m PY · −1.6% growth</div><div class="link">Source <b>tenant_trading</b> · CM “Turnover”</div></div>
+    <div class="card"><div class="k">Occupancy <span class="chip c-exist sm">Exists</span></div><div class="v" style="color:#5cd277">100<small>%</small></div><div class="bar"><i class="b-green" style="width:100%"></i></div><div class="sub">0 m² vacant · no waiting list</div><div class="link">Source <b>sites.vacancy_m2</b> · CM “Leasing”</div></div>
+    <div class="card"><div class="k">Anchor density (Shoprite) <span class="chip c-new sm">New</span></div><div class="v">5,839</div><div class="sub">Boxer 3,752 · trading density R/m²</div><div class="link">Source <b>tenant_trading.density</b></div></div>
+    <div class="card"><div class="k">Footfall (centre) <span class="chip c-new sm">New</span></div><div class="v">159k</div><div class="sub">+ bus rank 73.8k · +2% YoY</div><div class="link">Source <b>tenant_trading.footcount</b> · CM “Head counts”</div></div>
+    <div class="card"><div class="k">Tenant movements <span class="chip c-new sm">New</span></div><div class="v">3</div><div class="sub">Std Bank, Sanlam, KFC new — all trading</div><div class="link">Source <b>tenant_movements</b> · CM “Tenant Movement”</div></div>
+    <div class="card"><div class="k">Arrears (top-5) <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">R0</div><div class="sub">no line-store arrears reported</div><div class="link">Source <b>tenant_trading.arrears</b></div></div>
+  </div>
+
+  <!-- GROUP G -->
+  <div class="dhead"><span class="n">G</span><h3>Security &amp; incidents</h3><span class="src">CM Centre Incidents · Annual §23</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Incidents this month <span class="chip c-new sm">New</span></div><div class="v">26</div><div class="sub">Dec ’25 · mostly public-order</div><div class="link">Source <b>security_incidents</b> · CM “Centre Incidents”</div></div>
+    <div class="card"><div class="k">Incidents YTD (Jul–Dec) <span class="chip c-new sm">New</span></div><div class="v">145</div><div class="sub">33·31·13·23·19·26 by month</div><div class="link">Source <b>security_incidents</b> (sum)</div></div>
+    <div class="card"><div class="k">Serious crime <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">Low</div><div class="sub">0 armed robbery · arrests trending up</div><div class="link">Source <b>security_incidents.category</b></div></div>
+    <div class="card"><div class="k">Security complement <span class="chip c-new sm">New</span></div><div class="v">9</div><div class="sub">7 day · 2 night · Thompsons SLA</div><div class="link">Source <b>building_assets</b> (services) · Annual §23</div></div>
+    <div class="card"><div class="k">CCTV cameras <span class="chip c-new sm">New</span></div><div class="v">86</div><div class="sub">common area, parking, roof · Hikvision</div><div class="link">Source <b>building_assets</b> · Annual §5.1</div></div>
+    <div class="card"><div class="k">Last night inspection <span class="chip c-part sm">Partial</span></div><div class="v">14 Oct</div><div class="sub">roof inspection 13 Oct</div><div class="link">Source <b>inspections</b> (type) · OPS “General”</div></div>
+  </div>
+
+  <!-- GROUP H -->
+  <div class="dhead"><span class="n">H</span><h3>Documents &amp; recoveries</h3><span class="src">OPS Masterfile · Expense Recoveries</span></div>
+  <div class="cards">
+    <div class="card"><div class="k">Masterfile completeness <span class="chip c-part sm">Partial</span></div><div class="v" style="color:#5cd277">~95<small>%</small></div><div class="bar"><i class="b-green" style="width:95%"></i></div><div class="sub">~40 controlled docs</div><div class="link">Source <b>masterfile_index</b> · OPS “Masterfile”</div></div>
+    <div class="card"><div class="k">Gas recovery <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">150<small>%</small></div><div class="sub">R70.5k recovered / R46.8k spend</div><div class="link">Source <b>expense_recoveries</b> · OPS “Recoveries”</div></div>
+    <div class="card"><div class="k">Generator recovery <span class="chip c-new sm">New</span></div><div class="v" style="color:#ff7b72">3<small>%</small></div><div class="bar"><i class="b-red" style="width:3%"></i></div><div class="sub">R971 recovered / R30.5k spend</div><div class="link">Source <b>expense_recoveries.pct</b></div></div>
+    <div class="card"><div class="k">SLAs signed <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">All</div><div class="sub">contractor mandatories in place</div><div class="link">Source <b>masterfile_index</b> · OPS “General”</div></div>
+    <div class="card"><div class="k">Annual services vs budget <span class="chip c-new sm">New</span></div><div class="v" style="color:#5cd277">On track</div><div class="sub">services completed when due</div><div class="link">Source <b>ppm_tasks</b> · OPS “General”</div></div>
+    <div class="card"><div class="k">Asset register updated <span class="chip c-part sm">Partial</span></div><div class="v" style="color:#e3b341">In&nbsp;prog</div><div class="sub">being compiled on file</div><div class="link">Source <b>building_assets</b> · OPS “General”</div></div>
+  </div>
+
+  <div class="note ok" style="margin-top:24px">
+    <b>Why this layout works for the build.</b> Groups A–B reuse the existing inspection/COC/snag engine almost as-is.
+    Groups C–E are the net-new property layer hanging off one new <code>building_assets</code> + <code>tenants</code>
+    spine. Groups F–H are mostly thin ledgers (often import-from-Excel first, native capture later). The hero row is
+    just four rollups of the groups beneath it.
+  </div>
+</section>
+
+<!-- ============ KPI CATALOGUE ============ -->
+<section id="kpi" class="tab">
+  <h2 class="page">3 · KPI catalogue</h2>
+  <p class="lead">Every dashboard KPI with its formula, the Fortress source it serves, the app data source it reads,
+  a target/threshold band, and its build status. This is the contract the dashboard and the report generator both
+  consume — one definition, used on screen and in the PDF.</p>
+
+  <div class="legend">
+    <span><span class="chip c-exist">Exists</span> reuse current data</span>
+    <span><span class="chip c-part">Partial</span> extend schema</span>
+    <span><span class="chip c-new">New</span> new table/field</span>
+  </div>
+
+  <table>
+    <tr><th>KPI</th><th>Formula / definition</th><th>App source</th><th>Fortress source</th><th>Target / band</th><th class="center">Status</th></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">A · Compliance &amp; OHS</td></tr>
+    <tr><td>OHS Act compliance %</td><td>Σ weighted Yes ÷ Σ weighted applicable items</td><td><code>ohs_compliance_items</code></td><td>OPS OHS Act §1–4</td><td>≥90 grn · 70–89 amb · &lt;70 red</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Building electrical COC valid</td><td>building COC status = Pass &amp; not expired</td><td><code>coc_validations</code>, subsections</td><td>OHS 1.2.1 · Annual §6.2</td><td>Valid / Expiring / Missing</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>Tenant COC coverage %</td><td>tenants with current COC ÷ total tenants</td><td><code>tenants.coc_date</code></td><td>CM OHS &amp; HK</td><td>100% target</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Fire clearance current</td><td>fire CoC + rational design on file &amp; in date</td><td><code>ohs_compliance_items</code>, <code>masterfile_index</code></td><td>OHS 1.3 · Annual §4</td><td>Clear / Lapsed</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Critical-equipment serviced %</td><td>critical assets with in-date service ÷ total critical</td><td><code>building_assets.next_service</code></td><td>OHS §2</td><td>≥95%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Emergency-plan readiness</td><td>evac plans current + signage + last drill ≤6 mo</td><td><code>ohs_compliance_items</code></td><td>OHS 1.4</td><td>Ready / Gaps</td><td class="center"><span class="chip c-new">New</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">B · Condition &amp; inspection</td></tr>
+    <tr><td>Site Health (operational)</td><td>0.40·snags + 0.35·insp + 0.25·metering</td><td><code>siteHealth.ts</code></td><td>(internal rollup)</td><td>≥80 grn · ≥50 amb · &lt;50 red</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>Elements acceptable %</td><td>items condition∈{Good,Fair} ÷ total inspected items</td><td><code>inspection_items.condition</code></td><td>OPS Building-Insp · Annual §10–17</td><td>≥90%</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Immediate-action count</td><td>count snags risk∈{Critical,High} &amp; open</td><td><code>snags</code></td><td>“Immediate action required”</td><td>0 target</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>≤3-month action count</td><td>count snags action_timeframe='3m' &amp; open</td><td><code>snags.action_timeframe</code></td><td>“Action within 3 months”</td><td>trend ↓</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Elements rated Poor</td><td>count items condition='Poor'</td><td><code>inspection_items.condition</code></td><td>Annual “Good/Fair/Poor”</td><td>0 target</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Snag resolution %</td><td>(Rectified+Closed) ÷ total snags</td><td><code>snags.status</code></td><td>OPS hazards 4.1</td><td>≥85%</td><td class="center"><span class="chip c-exist">Exists</span></td></tr>
+    <tr><td>Inspection cadence kept</td><td>last night &amp; roof inspection within target interval</td><td><code>inspections</code> (type+date)</td><td>OPS “General” · CM checklist</td><td>night ≤30d · roof ≤30d</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">C · Assets &amp; PPM</td></tr>
+    <tr><td>Assets in register</td><td>count of building_assets for site</td><td><code>building_assets</code></td><td>Annual §4–28</td><td>completeness vs template</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Services due ≤30 days</td><td>count next_service within 30d</td><td><code>building_assets.next_service</code></td><td>OPS PPM</td><td>cleared on time</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Services overdue</td><td>count next_service &lt; today &amp; not done</td><td><code>ppm_tasks.status='missed'</code></td><td>OPS PPM “service missed”</td><td>0 target</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>PPM on-schedule %</td><td>done ÷ (due+done+missed) for month</td><td><code>ppm_tasks</code></td><td>OPS PPM grid</td><td>≥90%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Generator run-hours to service</td><td>service interval − hours since last service</td><td><code>building_assets.meta</code></td><td>Annual §6.4 · OPS PPM</td><td>&gt;0 buffer</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Service cost YTD</td><td>Σ service_cost over FY</td><td><code>ppm_tasks.cost</code></td><td>Annual “Service fee cost”</td><td>vs budget</td><td class="center"><span class="chip c-new">New</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">D · Utilities</td></tr>
+    <tr><td>Solar yield vs predicted %</td><td>actual_kWh ÷ predicted_kWh</td><td><code>utilities_readings</code></td><td>OPS Utilities “Solar”</td><td>≥90% (SLA)</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Water balance variance %</td><td>(bulk − Σ submeters) ÷ bulk</td><td><code>utilities_readings</code></td><td>OPS Water “Council vs Bulk”</td><td>±5%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Common-area water %</td><td>common_area ÷ total metered</td><td><code>utilities_readings</code></td><td>OPS “Bulk vs Common”</td><td>monitor trend</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Borehole yield %</td><td>actual ÷ predicted yield</td><td><code>utilities_readings</code></td><td>OPS “Borehole”</td><td>vs yield test</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Night water usage</td><td>consumption 22:00–06:00 (leak proxy)</td><td><code>utilities_readings</code></td><td>OPS “Night Usage”</td><td>flag spikes</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Loadshedding hours / diesel</td><td>Σ stage-hours; litres purchased</td><td><code>utilities_readings</code></td><td>CM Page 3</td><td>track</td><td class="center"><span class="chip c-new">New</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">E · Tenants &amp; compliance</td></tr>
+    <tr><td>Tenants tracked / let GLA</td><td>count tenants; Σ gla</td><td><code>tenants</code></td><td>CM OHS &amp; HK</td><td>vs site GLA</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Evac plan displayed %</td><td>tenants evac_displayed=Y ÷ total</td><td><code>tenants.evac_displayed</code></td><td>CM OHS &amp; HK</td><td>100%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>HVAC service records %</td><td>tenants with up-to-date HVAC ÷ total</td><td><code>tenants.hvac_service</code></td><td>CM OHS &amp; HK</td><td>100%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Food-tenant cert gaps</td><td>food tenants missing gas/flammable cert</td><td><code>tenants.flammable_cert</code></td><td>CM OHS &amp; HK</td><td>0 target</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Shop-spec on file %</td><td>tenants with complete spec ÷ total</td><td><code>tenant_shop_specs</code></td><td>CM Shop Spec</td><td>100%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Amperage actual vs lease</td><td>flag actual_amps &gt; lease_amps</td><td><code>tenant_shop_specs.amps_*</code></td><td>CM Shop Spec</td><td>0 over-draw</td><td class="center"><span class="chip c-new">New</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">F · Trading &amp; leasing <span class="chip c-new sm">import-only</span></td></tr>
+    <tr><td>Turnover &amp; growth %</td><td>(this month − PY month) ÷ PY month</td><td><code>tenant_trading</code></td><td>CM Turnover</td><td>≥0%</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Trading density (R/m²)</td><td>annual turnover ÷ GLA</td><td><code>tenant_trading.density</code></td><td>CM Turnover</td><td>vs category bench</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Cost of occupancy (COO)</td><td>rent+ops ÷ turnover, per tenant</td><td><code>tenant_trading.coo</code></td><td>CM Turnover</td><td>healthy band</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Occupancy %</td><td>(GLA − vacant) ÷ GLA</td><td><code>sites.vacancy_m2</code></td><td>CM Leasing</td><td>≥95%</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Footfall &amp; YoY</td><td>month count vs prev YTD</td><td><code>tenant_trading.footcount</code></td><td>CM Head counts</td><td>trend ↑</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Arrears (top-5)</td><td>Σ closing balance of top arrears</td><td><code>tenant_trading.arrears</code></td><td>CM Arrears</td><td>R0 target</td><td class="center"><span class="chip c-new">New</span></td></tr>
+
+    <tr><td colspan="6" style="background:#11161d;color:var(--accent2);font-weight:700">G · Security &amp; H · Documents/recoveries</td></tr>
+    <tr><td>Incidents / month &amp; YTD</td><td>Σ by category; FY total</td><td><code>security_incidents</code></td><td>CM Centre Incidents</td><td>trend ↓</td><td class="center"><span class="chip c-new">New</span></td></tr>
+    <tr><td>Masterfile completeness %</td><td>docs on_file=Y ÷ total controlled docs</td><td><code>masterfile_index</code></td><td>OPS Masterfile</td><td>100%</td><td class="center"><span class="chip c-part">Partial</span></td></tr>
+    <tr><td>Expense recovery % (per service)</td><td>YTD recovery ÷ YTD expense vs budget %</td><td><code>expense_recoveries</code></td><td>OPS Recoveries</td><td>≥ budget %</td><td class="center"><span class="chip c-new">New</span></td></tr>
+  </table>
+</section>
+
+<!-- ============ DATA MODEL ============ -->
+<section id="model" class="tab">
+  <h2 class="page">4 · Data model additions</h2>
+  <p class="lead">The smallest set of new tables that lets the dashboard and the three report types be generated from
+  captured data. Buildings stay on the existing <code>sites</code> table; everything new hangs off <code>site_id</code>.
+  Reuse beats rebuild — the inspection/snag/COC/PDF engine is the spine.</p>
+
+  <div class="note warn">
+    <b>Not verified against live DB.</b> Column names below are proposed. Before any migration, pre-audit the live
+    <code>sites</code>, <code>subsections</code>, <code>snags</code> and <code>document_categories</code> schemas
+    (read-only) — the system-reference docs are partly stale (post-Vite migration). Gate migrations on that audit.
+  </div>
+
+  <h4>Reuse / extend (cheap wins)</h4>
+  <table>
+    <tr><th>Existing</th><th>Change</th><th>Enables</th></tr>
+    <tr><td><code>sites</code></td><td>+ <code>gla_m2</code>, <code>vacancy_m2</code>, <code>parking_bays</code>, <code>taxi_bays</code>, <code>asset_manager</code>, <code>ops_manager</code>, <code>centre_manager</code>, <code>completion_date</code> (or a 1-1 <code>site_profiles</code> extension)</td><td>Building identity header; occupancy KPI</td></tr>
+    <tr><td><code>inspection_items</code></td><td>+ <code>condition</code> enum (Good/Fair/Poor) · + <code>action_timeframe</code> enum (none/3m/immediate)</td><td>Condition KPIs (Group B) without a new engine</td></tr>
+    <tr><td><code>inspection_templates</code></td><td>seed a <b>Building Condition</b> template (structure/façade/roof/interior/fire/mech) &amp; an <b>OPS monthly</b> template</td><td>Annual §10–17 + OPS Building-Insp capture</td></tr>
+    <tr><td><code>snags</code></td><td>confirm <code>action_timeframe</code> maps to risk; finish Open→Rectified→Closed migration (already specced)</td><td>Action-required KPIs</td></tr>
+    <tr><td><code>document_categories</code> / <code>subsection_documents</code></td><td>add building-level scope OR new <code>masterfile_index</code></td><td>Masterfile completeness</td></tr>
+  </table>
+
+  <h4>New tables</h4>
+  <table>
+    <tr><th>Table</th><th>Key columns</th><th>Feeds</th></tr>
+    <tr><td><code>building_assets</code> <span class="chip c-new sm">core</span></td><td>site_id, category, name, make_model, install_date, service_freq, last_service, next_service_due, service_cost, contractor, cost_recovery, status(Good/Fair/Poor), as_built, inspection_freq, meta(jsonb)</td><td>Annual §4–28 · Assets &amp; PPM</td></tr>
+    <tr><td><code>ppm_tasks</code></td><td>site_id, asset_id, service_type, scheduled_month, status(due/done/missed/na), cost, certificate_url, comment</td><td>OPS PPM grid</td></tr>
+    <tr><td><code>ohs_compliance_items</code></td><td>site_id, section, item_code, question, answer(Y/N/NA), weight, evidence_url, comment, period</td><td>OPS OHS Act → compliance %</td></tr>
+    <tr><td><code>utilities_readings</code></td><td>site_id, period, meter_type, council_bulk, bulk_check, common_area, tenant_total, borehole, solar_predicted, solar_actual, night_usage, loadshed_hours, diesel_litres</td><td>OPS Utilities · CM Page 3</td></tr>
+    <tr><td><code>tenants</code> <span class="chip c-new sm">core</span></td><td>site_id, shop_no, name, gla, category, lease_start, coc_date, hvac_service, fire_equipment, evac_displayed, flammable_cert, anchor(bool)</td><td>CM OHS &amp; HK · Leasing</td></tr>
+    <tr><td><code>tenant_shop_specs</code></td><td>tenant_id, db_phase, amps_actual, amps_lease, generator_connected, hvac, lighting, shopfront, roller, ceiling, floor, walls, plumbing</td><td>CM Shop Spec</td></tr>
+    <tr><td><code>tenant_trading</code></td><td>tenant_id, period, turnover, density, coo, growth, footcount, arrears</td><td>CM Page 2 (import-only)</td></tr>
+    <tr><td><code>tenant_movements</code></td><td>site_id, tenant_id, type(new/vacate), dates…, comment</td><td>CM Tenant Movement</td></tr>
+    <tr><td><code>security_incidents</code></td><td>site_id, period, category, count, narrative</td><td>CM Centre Incidents</td></tr>
+    <tr><td><code>masterfile_index</code></td><td>site_id, doc_type, on_file(bool), responsible, comment, file_url</td><td>OPS Masterfile</td></tr>
+    <tr><td><code>expense_recoveries</code></td><td>site_id, period, service, ytd_expense, ytd_recovery, budget_pct, fault_reported, fault_repaired</td><td>OPS Recoveries</td></tr>
+  </table>
+
+  <h4>The single-source-of-truth principle (carry over from Site-Health redesign)</h4>
+  <p>The Site-Health redesign already established the rule: <b>one pure module owns each score, screen + PDF both call it.</b>
+  Extend that — add <code>buildingCompliance.ts</code> (OHS %), <code>ppm.ts</code> (schedule rollups) and
+  <code>utilities.ts</code> (yields/variance) as pure, unit-tested functions next to <code>siteHealth.ts</code>. The dashboard
+  cards, the report generator, and any RLS-safe RPC all read the same functions — no divergent calculators (the exact
+  bug class the redesign was fixing).</p>
+</section>
+
+<!-- ============ PLAN ============ -->
+<section id="plan" class="tab">
+  <h2 class="page">5 · Phased build plan</h2>
+  <p class="lead">Sequenced so each phase ships a usable slice and de-risks the next. Effort is rough order-of-magnitude
+  (S ≈ days, M ≈ 1–2 wks, L ≈ 3–4 wks) for one engineer, assuming the Site-Health redesign lands first.</p>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P0</span><span class="pt">Foundations &amp; audit</span><span class="pw">S–M</span></div>
+    <div class="pb"><ul>
+      <li>Read-only audit of live <code>sites/subsections/snags/document_categories</code> schemas; reconcile with system-reference docs.</li>
+      <li>Land the in-flight <b>Site-Health redesign</b> (single SoT, snag-status migration) — the dashboard depends on it.</li>
+      <li>Extend <code>sites</code> with building-profile fields; build the <b>building identity header</b>.</li>
+      <li>Decide buildings-as-<code>sites</code> vs new entity (Decision D1) and naming vs the existing electrical “FORTRESS” template (D6).</li>
+    </ul></div>
+  </div>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P1</span><span class="pt">Asset register + PPM (the spine)</span><span class="pw">L</span></div>
+    <div class="pb"><ul>
+      <li><code>building_assets</code> + <code>ppm_tasks</code> tables, RLS, CRUD UI, and an Excel importer seeded from the Annual report layout.</li>
+      <li><code>ppm.ts</code> pure rollups → Group C cards (due/overdue/on-schedule).</li>
+      <li>Asset-driven service reminders via existing <code>calendar_events</code> / notifications.</li>
+      <li><b>Why first:</b> it’s the largest net-new domain and most other groups reference assets.</li>
+    </ul></div>
+  </div>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P2</span><span class="pt">Condition inspection + OHS compliance</span><span class="pw">M–L</span></div>
+    <div class="pb"><ul>
+      <li>Add <code>condition</code> + <code>action_timeframe</code> to <code>inspection_items</code>; seed Building-Condition + OPS-monthly templates.</li>
+      <li><code>ohs_compliance_items</code> + <code>buildingCompliance.ts</code> weighted % → hero card + Group A.</li>
+      <li>Wire Group B condition KPIs to the new fields; reuse snag pipeline for action items.</li>
+    </ul></div>
+  </div>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P3</span><span class="pt">Utilities + tenants/shop-spec</span><span class="pw">L</span></div>
+    <div class="pb"><ul>
+      <li><code>utilities_readings</code> + <code>utilities.ts</code> (solar/borehole yield, water balance, night usage) → Group D.</li>
+      <li>First-class <code>tenants</code> + <code>tenant_shop_specs</code>; migrate <code>subsections.tenant_name</code> into it.</li>
+      <li>Tenant compliance matrix (evac/HVAC/COC/flammable) → Group E; Excel import from CM OHS &amp; HK / Shop Spec.</li>
+    </ul></div>
+  </div>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P4</span><span class="pt">Ledgers + report pack generation</span><span class="pw">M</span></div>
+    <div class="pb"><ul>
+      <li>Thin tables: <code>masterfile_index</code>, <code>expense_recoveries</code>, <code>security_incidents</code> → Groups G/H.</li>
+      <li>Generate the <b>OPS</b>, <b>CM</b> and <b>Annual</b> PDF/Excel packs from captured data, reusing the pdfmake/PdfShift pipeline and the shared KPI functions.</li>
+      <li>Commercial tiles (Group F) as <b>import-only</b> from CM Page 2 (Decision D5).</li>
+    </ul></div>
+  </div>
+
+  <div class="phase">
+    <div class="ph"><span class="pn">P5</span><span class="pt">Multi-building portfolio &amp; polish</span><span class="pw">M</span></div>
+    <div class="pb"><ul>
+      <li>Portfolio roll-up across buildings (compliance %, overdue services, incidents) for asset managers.</li>
+      <li>Offline capture parity for asset/PPM/condition; photo evidence per asset (reuse <code>offline_photos</code>).</li>
+      <li>Unit tests on every pure KPI module; visual parity check screen ↔ PDF.</li>
+    </ul></div>
+  </div>
+
+  <div class="note ok"><b>De-risking order:</b> P0 unblocks everything; P1 builds the spine the rest reference; P2 reuses the most existing engine for fast visible value; P3–P4 are mostly data-entry + import + a report generator over a stable model.</div>
+</section>
+
+<!-- ============ DECISIONS ============ -->
+<section id="decisions" class="tab">
+  <h2 class="page">6 · Decisions &amp; open questions</h2>
+  <p class="lead">ADR-style log. All entries are <b>PROPOSED</b> until confirmed — none should be treated as locked. History
+  stays visible; a reversal is a new dated entry, never an edit in place.</p>
+
+  <div class="adr"><div class="h">D1 — Buildings modelled on existing <code>sites</code> <span class="st st-prop">PROPOSED</span></div>
+    <p>Add a building-profile extension rather than a new entity. Reuses all RLS, portals, inspections, COC and PDF wiring. Reversible to a dedicated <code>buildings</code> table if multi-site-per-building emerges.</p></div>
+
+  <div class="adr"><div class="h">D2 — <code>building_assets</code> is the spine of the property layer <span class="st st-prop">PROPOSED</span></div>
+    <p>The Annual report is fundamentally an asset register; PPM, OHS critical-equipment, and service-cost KPIs all read from it. Build it first (P1).</p></div>
+
+  <div class="adr"><div class="h">D3 — OHS Act compliance % is separate from electrical COC <span class="st st-prop">PROPOSED</span></div>
+    <p>Mirrors the Site-Health redesign rule (COC ≠ operational health). OHS % is its own weighted rollup; COC remains the legal-certification fact. Weights live in one named constant.</p></div>
+
+  <div class="adr"><div class="h">D4 — Reuse the inspection engine for building condition <span class="st st-prop">PROPOSED</span></div>
+    <p>Add <code>condition</code> + <code>action_timeframe</code> fields and seed new templates rather than building a second inspection system. Action items flow through the existing snag pipeline.</p></div>
+
+  <div class="adr"><div class="h">D5 — Commercial domains are import-only in v1 <span class="st st-prop">PROPOSED</span></div>
+    <p>Trading, leasing, arrears, footfall and toilet-fund are the centre manager’s data, outside WM’s engineering capture. Display via Excel import (CM Page 2); native capture deferred. Keeps the engineering build unblocked.</p></div>
+
+  <div class="adr"><div class="h">D6 — New module named “Fortress Building Report Pack”, distinct from the electrical FORTRESS template <span class="st st-prop">PROPOSED</span></div>
+    <p>Avoids the naming clash with <code>fortressTemplate.ts</code> (electrical scope-of-works). Consider renaming that template to “WM Electrical Scope” to remove ambiguity.</p></div>
+
+  <div class="adr"><div class="h">D7 — One pure KPI module per score, screen + PDF both call it <span class="st st-prop">PROPOSED</span></div>
+    <p>Extends the Site-Health SoT pattern: <code>buildingCompliance.ts</code>, <code>ppm.ts</code>, <code>utilities.ts</code> as unit-tested pure functions. No divergent calculators.</p></div>
+
+  <h3>Open questions (need Arno)</h3>
+  <ul>
+    <li><b>Scope mandate:</b> is WM delivering the full Fortress pack (incl. commercial), or the engineering/compliance + condition slice with commercial imported? (drives D5)</li>
+    <li><b>Capture vs import:</b> for tenant/turnover/utilities, native data entry in-app, or Excel import to start? (the Excel layouts are stable templates — import is cheap)</li>
+    <li><b>One building = one <code>site</code>?</b> Confirm no multi-report-per-site cadence conflicts (OPS monthly, CM monthly, Annual).</li>
+    <li><b>OHS weighting:</b> who owns the section weights for the compliance %? Is the OPS header’s 85/10/5 split the formula, or illustrative?</li>
+    <li><b>Live schema:</b> can you run (or grant) a read-only pull of the prod <code>sites/subsections/snags</code> schemas to gate migrations?</li>
+  </ul>
+
+  <div class="note"><b>DID / ASSUME / RECOMMEND.</b><br>
+  <b>DID:</b> reviewed the existing spec set + 3 Fortress workbooks; mapped 17 domains to the current build; produced this gap analysis, a per-building dashboard (real Abaqulusi data), a 38-KPI catalogue, a data-model delta and a 6-phase plan. Nothing built or migrated.<br>
+  <b>ASSUME:</b> buildings = <code>sites</code>; WM’s core is engineering/compliance/condition; Excel layouts are stable enough to import; the Site-Health redesign lands first. System-reference docs are partly stale (flagged).<br>
+  <b>RECOMMEND:</b> confirm scope (D5) + capture-vs-import, then start P0 audit and P1 asset register. Park commercial capture until the engineering spine is in.</div>
+</section>
+
+<!-- ============ APPENDIX ============ -->
+<section id="appendix" class="tab">
+  <h2 class="page">Appendix · source files</h2>
+  <h4>Fortress specs reviewed</h4>
+  <table>
+    <tr><th>File</th><th>Sheets</th><th>Used for</th></tr>
+    <tr><td><code>docs/fortress specs/OPS Report Abaqulusi Plaza October 2025.xlsx</code></td><td>Operational Overview, OHS Act Report, Building Inspection, Contractural Expense Recoveries, Utilities, PPM, Masterfile index</td><td>Domains 8–12, 17; OHS %, condition, utilities, PPM, masterfile, recoveries</td></tr>
+    <tr><td><code>docs/fortress specs/ABAQULUSI - CM Report Dec 2025 master copy.xlsx</code></td><td>Building Overview, Page 2 (turnover/leasing), Page 3 (utilities), OHS &amp; HK, Shop Spec, Reviews, Centre Incidents</td><td>Domains 6, 13–16; tenants, trading, incidents</td></tr>
+    <tr><td><code>docs/fortress specs/10.1 Annual Inspection Report 2025 - Abaqulusi.xlsx</code></td><td>Sheet1 · 33 sections · 1,092 rows</td><td>Domains 1, 5, 10; asset register + condition audit</td></tr>
+  </table>
+
+  <h4>Current-build references read</h4>
+  <ul>
+    <li><code>docs/APPLICATION_SPEC.md</code> — app overview (electrical compliance, COC superseded note)</li>
+    <li><code>docs/system-reference/01-architecture.md</code>, <code>02-data-model/tables-*.md</code> — stack &amp; schema (sites, subsections, snags, ~48 tables)</li>
+    <li><code>docs/INSPECTION_SYSTEM.md</code> — inspection engine, templates, snags, PDF</li>
+    <li><code>docs/superpowers/specs/2026-06-11-site-health-marking-redesign-design.md</code> — Site-Health SoT pattern (reused here)</li>
+    <li><code>src/lib/fortressTemplate.ts</code>, <code>src/components/FortressMarkingChecklist.tsx</code> — existing electrical “FORTRESS” template (naming clash)</li>
+  </ul>
+
+  <div class="note warn"><b>Data caveat.</b> Abaqulusi figures in the dashboard are read from the supplied workbooks (some sheets had merged-cell/subtotal layouts; counts like “elements acceptable %” and incident YTD are derived and rounded). They illustrate the layout — they are not a live feed.</div>
+</section>
+
+<div class="foot">
+  Fortress Building Dashboard — gap analysis &amp; build plan · generated 2026-06-12 · single-file, inline, no dependencies ·
+  source of truth for this planning session (not the chat scrollback).
+</div>
+
+</main>
+</div>
+
+<script>
+  var links = document.querySelectorAll('nav.side a[data-go]');
+  var tabs = document.querySelectorAll('section.tab');
+  function go(id){
+    tabs.forEach(function(t){ t.classList.toggle('show', t.id===id); });
+    links.forEach(function(l){ l.classList.toggle('active', l.getAttribute('data-go')===id); });
+    window.scrollTo({top:0,behavior:'instant'});
+  }
+  links.forEach(function(l){ l.addEventListener('click', function(){ go(l.getAttribute('data-go')); }); });
+</script>
+</body>
+</html>
