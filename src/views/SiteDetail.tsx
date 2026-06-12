@@ -27,10 +27,7 @@ import { FortressMarkingChecklist } from "@/components/FortressMarkingChecklist"
 import { AssetVerification } from "@/components/site/AssetVerification";
 
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
-import {
-  fetchFailedValidationsBySubsection,
-  calculateCocComplianceStats
-} from "@/lib/complianceCalculations";
+import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
 
 interface SiteDocument {
   category: string;
@@ -364,7 +361,6 @@ const SiteDetail = () => {
         supabase.from('snags').delete().eq('subsection_id', subsectionId),
         supabase.from('inspections').delete().eq('subsection_id', subsectionId),
         supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
-        supabase.from('coc_validations').delete().eq('subsection_id', subsectionId),
         supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
       ];
 
@@ -421,30 +417,6 @@ const SiteDetail = () => {
 
       if (snagsError) throw snagsError;
 
-      // Fetch COC validations to check for failed validations (same logic as ComplianceDashboard)
-      let failedValidationsBySubsection = new Set<string>();
-      if (subsectionIds.length > 0) {
-        const { data: validations } = await supabase
-          .from('coc_validations')
-          .select('subsection_id, status, validated_at')
-          .in('subsection_id', subsectionIds)
-          .order('validated_at', { ascending: false });
-        
-        // Only consider the MOST RECENT validation per subsection
-        const latestBySubsection = new Map<string, string>();
-        validations?.forEach(validation => {
-          if (!latestBySubsection.has(validation.subsection_id)) {
-            latestBySubsection.set(validation.subsection_id, validation.status);
-          }
-        });
-        
-        latestBySubsection.forEach((status, subsectionId) => {
-          if (status === 'Fail' || status === 'Failed' || status === 'Incomplete') {
-            failedValidationsBySubsection.add(subsectionId);
-          }
-        });
-      }
-
       let siteData = siteRes;
       if (siteData?.site_image_url) {
         try {
@@ -486,7 +458,7 @@ const SiteDetail = () => {
       const totalSubsections = subs.length;
       
       // Use shared utility for COC compliance calculation
-      const complianceStats = calculateCocComplianceStats(subs, failedValidationsBySubsection);
+      const complianceStats = calculateCocComplianceStats(subs);
       
       setStats({
         totalSubsections,

@@ -5,10 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  FAILED_VALIDATION_STATUSES,
-  hasValidCocStatus 
-} from "@/lib/complianceCalculations";
+import { hasValidCocStatus } from "@/lib/complianceCalculations";
 
 interface SubsectionData {
   id: string;
