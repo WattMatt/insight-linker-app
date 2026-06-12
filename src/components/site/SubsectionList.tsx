@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react";
+import { useState, useMemo } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -10,7 +10,7 @@ import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { supabase } from "@/integrations/supabase/client";
+import { hasFailedCocStatus } from "@/lib/complianceCalculations";
 
 // A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
 const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
@@ -35,8 +35,6 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
     const navigate = useNavigate();
     const [deleteId, setDeleteId] = useState<string | null>(null);
     const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
-    // Track which subsections have failed COC validations (including supplementary)
-    const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Record<string, boolean>>({});
 
     const [filters, setFilters] = useState<SubsectionFiltersState>({
         search: "",
@@ -48,35 +46,6 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
         groupBy: "none",
         viewMode: "table",
     });
-
-    // Fetch COC validations to check for any failed supplementary validations
-    useEffect(() => {
-        const fetchCocValidations = async () => {
-            if (subsections.length === 0) return;
-            
-            const subsectionIds = subsections.map(s => s.id);
-            const { data, error } = await supabase
-                .from('coc_validations')
-                .select('subsection_id, status')
-                .in('subsection_id', subsectionIds);
-            
-            if (error) {
-                console.error("Error fetching COC validations:", error);
-                return;
-            }
-            
-            // Group by subsection and check if any have failed
-            const failedMap: Record<string, boolean> = {};
-            data?.forEach(validation => {
-                if (validation.status === 'Fail' || validation.status === 'Failed') {
-                    failedMap[validation.subsection_id] = true;
-                }
-            });
-            setFailedValidationsBySubsection(failedMap);
-        };
-        
-        fetchCocValidations();
-    }, [subsections]);
 
     // Get snag counts per subsection
     const snagCountBySubsection = useMemo(() => {
@@ -257,11 +226,11 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                             </TableCell>
                             <TableCell>
                                 {(() => {
-                                    const hasFailedValidation = failedValidationsBySubsection[sub.id];
                                     const primaryStatus = sub.coc_status;
+                                    const hasFailedValidation = hasFailedCocStatus(primaryStatus);
                                     const isPrimaryApproved = primaryStatus === "Approved" || primaryStatus === "Valid" || primaryStatus === "Pass";
-                                    
-                                    // If any validation failed (including supplementary), show prominent warning
+
+                                    // If the COC verdict is a failure, show prominent warning
                                     if (hasFailedValidation) {
                                         return (
                                             <div className="flex items-center gap-1.5">
@@ -376,10 +345,10 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                     {sub.category || "General"}
                                 </Badge>
                                 {(() => {
-                                    const hasFailedValidation = failedValidationsBySubsection[sub.id];
                                     const primaryStatus = sub.coc_status;
+                                    const hasFailedValidation = hasFailedCocStatus(primaryStatus);
                                     const isPrimaryApproved = primaryStatus === "Approved" || primaryStatus === "Valid" || primaryStatus === "Pass";
-                                    
+
                                     if (hasFailedValidation) {
                                         return (
                                             <Badge variant="destructive" className="text-xs flex items-center gap-1 font-medium" title="COC validation failed - requires attention">

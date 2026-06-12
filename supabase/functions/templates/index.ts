@@ -385,7 +385,6 @@ Deno.serve(async (req) => {
       { data: subsections },
       { data: inspections },
       { data: floorPlans },
-      { data: cocValidations },
       { data: inspectionTemplates },
       { data: snags },
       { data: siteAssets }
@@ -394,7 +393,6 @@ Deno.serve(async (req) => {
       supabase.from('subsections').select('id, name, description, category, tenant_name, coc_status, coc_number, meter_serial_number, site_id').order('name'),
       supabase.from('inspections').select('id, title, status, inspection_date, inspector_name, site_id, subsection_id, template_id').order('created_at', { ascending: false }),
       supabase.from('subsection_floor_plans').select('id, file_name, subsection_id').order('created_at', { ascending: false }),
-      supabase.from('coc_validations').select('id, status, validated_at, subsection_id, document_id').order('validated_at', { ascending: false }),
       supabase.from('inspection_templates').select('id, name, category, description, sections_count, pages_count, sections, cover_page, tenants').order('name'),
       supabase.from('snags').select('id, title, status, risk_level, subsection_id').order('created_at', { ascending: false }),
       supabase.from('site_assets').select('id, premises_id, meter_serial_number, old_meter_serial_number, ct_ratio, breaker_size, meter_type, asset_category, site_id').order('premises_id')
@@ -429,10 +427,10 @@ Deno.serve(async (req) => {
           }) || []
           break
         case 'coc-validation-report':
-          availableItems = cocValidations?.map(v => {
-            const subsection = subsectionMap.get(v.subsection_id)
-            const site = subsection ? siteMap.get(subsection.site_id) : null
-            return { id: v.id, status: v.status, subsection: subsection?.name || null, site: site?.name || null }
+          // COC is now a manual per-subsection verdict (coc_status); no validation records.
+          availableItems = subsections?.filter(s => s.coc_status).map(s => {
+            const site = siteMap.get(s.site_id)
+            return { id: s.id, status: s.coc_status, subsection: s.name || null, site: site?.name || null }
           }) || []
           break
         case 'defect-report':
@@ -508,7 +506,7 @@ Deno.serve(async (req) => {
       totalSubsections: subsections?.length || 0,
       totalInspections: inspections?.length || 0,
       totalFloorPlans: floorPlans?.length || 0,
-      totalCocValidations: cocValidations?.length || 0,
+      totalCocValidations: subsections?.filter(s => s.coc_status).length || 0,
       totalTemplates: inspectionTemplates?.length || 0,
       totalSnags: snags?.length || 0,
       totalAssets: siteAssets?.length || 0

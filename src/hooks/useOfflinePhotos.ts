@@ -231,48 +231,27 @@ export function useOfflinePhotos(
             .from(PHOTOS_BUCKET)
             .getPublicUrl(storagePath);
 
-          // FIX CRITICAL 2: Insert DB record for ALL photo types
-          if (photo.context_type === 'coc') {
-            const { error: dbError } = await supabase
-              .from('coc_compliance_photos')
-              .upsert({
-                id: photo.id,
-                subsection_id: photo.context_id,
-                coc_validation_id: photo.secondary_context_id,
-                photo_type: photo.photo_type,
-                storage_path: storagePath,
-                file_name: photo.file_name,
-                file_size: photo.file_size,
-                mime_type: photo.mime_type,
-                captured_at: photo.captured_at,
-                captured_by: photo.captured_by,
-                latitude: photo.latitude,
-                longitude: photo.longitude,
-                notes: photo.notes
-              });
-            if (dbError) throw dbError;
-          } else {
-            // Insert into unified offline_photos table for non-COC contexts
-            const { error: dbError } = await supabase
-              .from('offline_photos')
-              .upsert({
-                id: photo.id,
-                context_type: photo.context_type,
-                context_id: photo.context_id,
-                secondary_context_id: photo.secondary_context_id,
-                photo_type: photo.photo_type,
-                storage_path: storagePath,
-                file_name: photo.file_name,
-                file_size: photo.file_size,
-                mime_type: photo.mime_type,
-                captured_at: photo.captured_at,
-                captured_by: photo.captured_by,
-                latitude: photo.latitude,
-                longitude: photo.longitude,
-                notes: photo.notes
-              });
-            if (dbError) throw dbError;
-          }
+          // Insert DB record into the unified offline_photos table for all contexts
+          // (incl. COC - context_type self-describes the photo).
+          const { error: dbError } = await supabase
+            .from('offline_photos')
+            .upsert({
+              id: photo.id,
+              context_type: photo.context_type,
+              context_id: photo.context_id,
+              secondary_context_id: photo.secondary_context_id,
+              photo_type: photo.photo_type,
+              storage_path: storagePath,
+              file_name: photo.file_name,
+              file_size: photo.file_size,
+              mime_type: photo.mime_type,
+              captured_at: photo.captured_at,
+              captured_by: photo.captured_by,
+              latitude: photo.latitude,
+              longitude: photo.longitude,
+              notes: photo.notes
+            });
+          if (dbError) throw dbError;
 
           photo.synced = true;
           photo.remote_url = publicUrl;
@@ -312,11 +291,7 @@ export function useOfflinePhotos(
       if (photo?.synced && photo.remote_url) {
         const storagePath = `${photo.context_type}/${photo.context_id}/${photo.photo_type}/${photo.id}.jpg`;
         await supabase.storage.from(PHOTOS_BUCKET).remove([storagePath]);
-        if (photo.context_type === 'coc') {
-          await supabase.from('coc_compliance_photos').delete().eq('id', id);
-        } else {
-          await supabase.from('offline_photos').delete().eq('id', id);
-        }
+        await supabase.from('offline_photos').delete().eq('id', id);
       }
       await offlineDB.deleteOfflinePhoto(id);
       await loadPhotos();

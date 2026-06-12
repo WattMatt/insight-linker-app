@@ -6,6 +6,8 @@ export interface SubsectionData {
   cocType?: string;
   cocStatus?: string;
   cocIssueDate?: string;
+  cocExpiryDate?: string;
+  cocFailureReasons?: string;
   meterSerialNumber?: string;
   meteringStatus?: string;
   ctRatio?: string;

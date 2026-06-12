@@ -281,15 +281,6 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
       : { data: [], error: null };
     const allSnags = snagsRes.data || [];
 
-    // Get COC validations
-    const cocValidationsQuery = await supabase
-      .from("coc_validations")
-      .select("*")
-      .in("subsection_id", subsectionIds)
-      .order("validated_at", { ascending: false });
-
-    const cocValidations = cocValidationsQuery.data || [];
-
     // Transform subsections to card format with snags and asset breaker size
     const subsectionCardData: SubsectionCardData[] = subsections.map(sub => 
       transformToSubsectionCardData(sub, allSnags, qrBaseUrl, siteAssets)
@@ -462,22 +453,20 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
         case "coc-validations":
         case "documents": // Support legacy section ID
-          if (cocValidations.length > 0) {
+          // COC verdict is now the subsection's manual coc_status; list the required subsections.
+          const cocSubsections = subsections.filter(s => s.is_coc_required || s.coc_status);
+          if (cocSubsections.length > 0) {
             if (spec?.pageBreakBefore) {
               content.push({ text: '', pageBreak: 'before' });
             }
             content.push(createSectionHeader(title, 'primary'));
 
-            const validationRows = cocValidations.slice(0, 20).map(v => {
-              const report = (v.report_data || {}) as any;
-              const subsection = subsections.find(s => s.id === v.subsection_id);
-              return {
-                subsection: subsection?.name || 'Unknown',
-                cocNumber: report.cocNumber || '-',
-                status: report.overallStatus || v.status,
-                date: new Date(v.validated_at).toLocaleDateString(),
-              };
-            });
+            const validationRows = cocSubsections.slice(0, 20).map(sub => ({
+              subsection: sub.name || 'Unknown',
+              cocNumber: sub.coc_number || '-',
+              status: sub.coc_status || 'Missing',
+              date: sub.coc_issue_date ? new Date(sub.coc_issue_date).toLocaleDateString() : '-',
+            }));
 
             // Use COC_VALIDATION_COLUMNS from spec
             content.push(createDataTable(

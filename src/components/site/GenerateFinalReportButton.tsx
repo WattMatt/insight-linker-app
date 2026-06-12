@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { completeDownloadHandoff, createPendingDownloadHandoff } from '@/lib/downloadHandoff';
 import { downloadFile } from '@/lib/fileDownload';
 import { getCategoryAbbreviation } from '@/lib/subsectionCategories';
+import { hasValidCocStatus } from '@/lib/complianceCalculations';
 import { factorScores, siteHealthScore } from '@/lib/siteHealth';
 import {
   Dialog,
@@ -109,7 +110,6 @@ export function GenerateFinalReportButton({
         siteDocsRes,
         subsectionDocsRes,
         inspectionsRes,
-        cocValidationsRes,
       ] = await Promise.all([
         subsectionIds.length > 0
           ? supabase.from('snags').select('id, subsection_id, title, status, risk_level, description').in('subsection_id', subsectionIds)
@@ -122,10 +122,6 @@ export function GenerateFinalReportButton({
           ? supabase.from('subsection_documents').select('subsection_id, file_name, category_id, document_categories(name)').in('subsection_id', subsectionIds)
           : Promise.resolve({ data: [], error: null }),
         supabase.from('inspections').select('id, json_data, subsection_id, status').eq('site_id', site.id),
-        // Fetch COC validations to get latest status per subsection
-        subsectionIds.length > 0
-          ? supabase.from('coc_validations').select('id, subsection_id, status, validated_at, violations').in('subsection_id', subsectionIds).order('validated_at', { ascending: false })
-          : Promise.resolve({ data: [], error: null }),
       ]);
 
       const allSnags = snagsRes.data || [];
@@ -135,19 +131,7 @@ export function GenerateFinalReportButton({
       const siteDocs = siteDocsRes.data || [];
       const subDocs = subsectionDocsRes.data || [];
       const inspections = inspectionsRes.data || [];
-      const cocValidations = cocValidationsRes.data || [];
       const qrBaseUrl = settings?.qr_base_url || (typeof window !== 'undefined' ? window.location.origin : 'https://insight-linker-app.vercel.app');
-
-      // Build map of LATEST validation per subsection (same logic as ComplianceDashboard)
-      const latestValidationBySubsection = new Map<string, { status: string; violations: any }>();
-      cocValidations.forEach(v => {
-        if (!latestValidationBySubsection.has(v.subsection_id)) {
-          latestValidationBySubsection.set(v.subsection_id, { 
-            status: v.status, 
-            violations: v.violations 
-          });
-        }
-      });
 
       // Transform subsections with full data
       const transformedSubsections = subs.map(sub => {
@@ -165,9 +149,8 @@ export function GenerateFinalReportButton({
                  tradeAsNorm.endsWith(` - ${subNameNorm}`);
         });
 
-        // Get latest validation status for this subsection
-        const latestValidation = latestValidationBySubsection.get(sub.id);
-        const validationStatus = latestValidation?.status || null;
+        // COC verdict is the subsection's manual coc_status
+        const validationStatus = sub.coc_status || null;
 
         return {
           id: sub.id,
@@ -194,18 +177,11 @@ export function GenerateFinalReportButton({
         };
       });
 
-      // Calculate summary stats using LATEST validations (same logic as ComplianceDashboard)
+      // Calculate summary stats from the manual coc_status verdict
       const cocRequired = subs.filter(s => s.is_coc_required).length;
-      
-      // Count compliant based on coc_status AND no failed latest validation
-      const cocValidCount = subs.filter(s => {
-        const latestValidation = latestValidationBySubsection.get(s.id);
-        // If latest validation failed, not compliant
-        if (latestValidation && ['Fail', 'Failed', 'Incomplete'].includes(latestValidation.status)) {
-          return false;
-        }
-        return ['Approved', 'Valid', 'Pass'].includes(s.coc_status || '');
-      }).length;
+
+      // Count compliant based on the manual coc_status verdict
+      const cocValidCount = subs.filter(s => hasValidCocStatus(s.coc_status)).length;
       
       const meteringInstalled = subs.filter(s => s.meter_serial_number).length;
       const openSnagsTotal = allSnags.filter(s => isSnagOpen(s.status)).length;
@@ -446,55 +422,22 @@ export function GenerateFinalReportButton({
         enabledSections[section.id] = section.enabled;
       });
 
-      // If COC Annexes are enabled, fetch detailed validation data
+      // If COC Annexes are enabled, derive annex rows from each subsection's manual coc_status verdict
       let cocAnnexes: any[] = [];
       if (enabledSections['coc-annexes']) {
-        const subsectionIds = data.subsections.map((s: any) => s.id);
-        if (subsectionIds.length > 0) {
-          const { data: validations } = await supabase
-            .from('coc_validations')
-            .select(`
-              id, 
-              subsection_id, 
-              status, 
-              validated_at, 
-              violations,
-              report_data,
-              subsections!inner (
-                id,
-                name,
-                tenant_name,
-                category,
-                coc_number,
-                coc_type,
-                coc_issue_date
-              )
-            `)
-            .in('subsection_id', subsectionIds)
-            .order('validated_at', { ascending: false });
-          
-          // Get only the latest validation per subsection
-          const latestValidations = new Map<string, any>();
-          validations?.forEach(v => {
-            if (!latestValidations.has(v.subsection_id)) {
-              latestValidations.set(v.subsection_id, v);
-            }
-          });
-          
-          cocAnnexes = Array.from(latestValidations.values()).map(v => ({
-            subsectionId: v.subsection_id,
-            subsectionName: v.subsections?.name || 'Unknown',
-            tenantName: v.subsections?.tenant_name,
-            category: v.subsections?.category,
-            cocNumber: v.subsections?.coc_number,
-            cocType: v.subsections?.coc_type,
-            cocIssueDate: v.subsections?.coc_issue_date,
-            status: v.status,
-            validatedAt: v.validated_at,
-            violations: v.violations,
-            reportData: v.report_data,
-          }));
-        }
+        cocAnnexes = data.subsections.map((s: any) => ({
+          subsectionId: s.id,
+          subsectionName: s.name || 'Unknown',
+          tenantName: s.tenantName,
+          category: s.category,
+          cocNumber: s.cocNumber,
+          cocType: s.cocType,
+          cocIssueDate: s.cocIssueDate,
+          status: s.cocStatus || 'Missing',
+          validatedAt: '',
+          violations: undefined,
+          reportData: undefined,
+        }));
       }
 
       const result = await generatePdf({

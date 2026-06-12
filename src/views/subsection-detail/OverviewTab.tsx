@@ -19,7 +19,7 @@ interface OverviewTabProps {
   isNotCompliant: boolean;
   openSnagsCount: number;
   snags: any[];
-  cocValidations: Record<string, any>;
+  cocValidations?: Record<string, any>;
   supabaseDocuments: any[];
   subsectionId: string | undefined;
   siteId: string | undefined;
@@ -41,7 +41,7 @@ export function OverviewTab({
   isNotCompliant,
   openSnagsCount,
   snags,
-  cocValidations,
+  cocValidations = {},
   supabaseDocuments,
   subsectionId,
   siteId,

@@ -4,7 +4,9 @@
 
 **Goal:** Replace the automated COC validation engine with a manual workflow — upload a COC, record a Pass/Fail verdict + number + issue/expiry dates (staff can override), and on Fail capture free-text reasons and generate a per-COC PDF report.
 
-**Architecture:** `coc_status` (manual verdict) on `subsections` drives `is_compliant` via a simplified trigger (Pass + not expired). A small `CocReviewForm` replaces the AI-approval UI; a focused report module renders the per-COC PDF. The AI extraction + deterministic engine (`extract-coc`, `validate-coc`, `coc_validation_settings`, `coc_extractions`, `coc_local_validations`, `coc_validations`) and their UI are deleted. Sequenced so the app works at every step (trigger first, tables dropped last).
+**Architecture:** `coc_status` (manual verdict) on `subsections` is a GATE on `is_compliant`, integrated into the existing inspection-driven recompute (`apply_subsection_recompute`): `is_compliant = inspection_compliant AND NOT(is_coc_required AND COC-failed)`. A failed/expired COC forces non-compliant; a Pass does NOT auto-promote (inspections still own the base). The old `sync_coc_compliance_status` BEFORE-trigger is dropped (single owner). A small `CocReviewForm` replaces the AI-approval UI; a focused report module renders the per-COC PDF. The AI extraction + deterministic engine (`extract-coc`, `validate-coc`, `coc_validation_settings`, `coc_extractions`, `coc_local_validations`, `coc_validations`, `coc_compliance_photos` + its snapshot) and their UI are deleted. Sequenced replacement-first so the app works at every step (gate + form first, tables dropped last).
+
+**DECISIONS LOCKED (Arno, 2026-06-12):** (1) failed COC FORCES non-compliant — gate in recompute; (2) replacement-first; (3) drop the 6 coc validation tables OUTRIGHT (no snapshot). Verified inventory: `docs/superpowers/COC-VALIDATION-STRIPOUT-TRACKER.md`.
 
 **Tech Stack:** TypeScript, React 18, Next.js 15, Supabase (Management API via PAT for prod DB/edge changes), vitest.
 
@@ -20,8 +22,9 @@
 
 | File | Responsibility |
 |------|----------------|
-| `supabase/migrations/20260611160000_coc_manual_workflow.sql` (new) | Columns + status remap + new trigger; tables dropped in a later migration |
-| `supabase/migrations/20260611170000_drop_coc_validation_tables.sql` (new) | Drop the 4 validation tables (Task 7, after code stops reading them) |
+| `supabase/migrations/20260611160000_coc_manual_workflow.sql` (LIVE) | Columns + status remap + (old informational trigger, superseded by Task 1) |
+| `supabase/migrations/20260612120000_coc_compliance_gate.sql` (new, Task 1) | Drop the informational BEFORE-trigger; add the COC gate into `apply_subsection_recompute`; backfill |
+| `supabase/migrations/20260612130000_drop_coc_validation_tables.sql` (new, Task 7) | Drop the 6 validation tables outright (after code stops reading them) |
 | `src/lib/cocCompliance.ts` (new) | Pure `deriveIsCompliant()` + status helpers + tests |
 | `src/lib/cocCompliance.test.ts` (new) | Unit tests |
 | `src/components/CocReviewForm.tsx` (new) | The manual verdict form |
@@ -34,60 +37,84 @@
 
 ---
 
-## Task 1: DB — columns, status remap, simplified trigger (apply via PAT)
+## Task 1: DB — COC gate in the recompute path (apply via PAT)
 
-**Files:** Create `supabase/migrations/20260611160000_coc_manual_workflow.sql`
+> Migration `20260611160000` (columns + status remap + the OLD informational `sync_coc_compliance_status` trigger) and `20260611161000` (permissive CHECK) are ALREADY LIVE. This task SUPERSEDES the informational trigger with the gate-in-recompute design (decision #1). It drops the BEFORE-trigger and integrates the COC verdict into `apply_subsection_recompute` so there is a SINGLE owner of `is_compliant`.
+
+**Files:** Create `supabase/migrations/20260612120000_coc_compliance_gate.sql`
 
 - [ ] **Step 1: Write the migration**
 
 ```sql
--- COC manual workflow: add fields, normalise status, derive is_compliant from the manual
--- verdict + expiry (no longer from coc_validations). Validation tables dropped in a later migration.
+-- COC verdict becomes a GATE on is_compliant, integrated into the inspection-driven
+-- recompute. A failed/expired COC forces non-compliant; a Pass does NOT auto-promote.
+-- Drops the old informational BEFORE-trigger so is_compliant has a single owner.
 
-ALTER TABLE public.subsections
-  ADD COLUMN IF NOT EXISTS coc_expiry_date    date,
-  ADD COLUMN IF NOT EXISTS coc_failure_reasons text,
-  ADD COLUMN IF NOT EXISTS coc_reviewed_by    uuid REFERENCES auth.users(id),
-  ADD COLUMN IF NOT EXISTS coc_reviewed_at    timestamptz;
-
--- Normalise the messy coc_status vocabulary to: Missing | Pending | Pass | Fail | N/A
-UPDATE public.subsections SET coc_status = CASE
-  WHEN coc_status IN ('Approved','Valid','Pass')      THEN 'Pass'
-  WHEN coc_status IN ('Failed','Fail','Rejected')     THEN 'Fail'
-  WHEN coc_status IN ('Pending','pending')            THEN 'Pending'
-  WHEN coc_status = 'N/A'                             THEN 'N/A'
-  ELSE 'Missing'
-END;
-ALTER TABLE public.subsections ALTER COLUMN coc_status SET DEFAULT 'Missing';
-ALTER TABLE public.subsections DROP CONSTRAINT IF EXISTS subsections_coc_status_check;
-ALTER TABLE public.subsections ADD CONSTRAINT subsections_coc_status_check
-  CHECK (coc_status IN ('Missing','Pending','Pass','Fail','N/A'));
-
--- Replace the compliance trigger body (stops reading coc_validations)
-CREATE OR REPLACE FUNCTION public.sync_coc_compliance_status()
-RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path TO 'public' AS $fn$
-BEGIN
-  IF NOT COALESCE(NEW.is_coc_required, false) THEN
-    NEW.is_compliant := true;
-  ELSE
-    NEW.is_compliant := (NEW.coc_status = 'Pass'
-      AND (NEW.coc_expiry_date IS NULL OR NEW.coc_expiry_date >= current_date));
-  END IF;
-  RETURN NEW;
-END;
-$fn$;
-
--- Recreate the trigger so it also fires on coc_expiry_date changes
 DROP TRIGGER IF EXISTS trg_sync_coc_compliance ON public.subsections;
-CREATE TRIGGER trg_sync_coc_compliance
-  BEFORE INSERT OR UPDATE OF coc_status, is_coc_required, coc_expiry_date
-  ON public.subsections FOR EACH ROW EXECUTE FUNCTION public.sync_coc_compliance_status();
+DROP FUNCTION IF EXISTS public.sync_coc_compliance_status();
 
--- Backfill is_compliant under the new rule
-UPDATE public.subsections SET is_compliant = (
-  NOT COALESCE(is_coc_required,false)
-  OR (coc_status='Pass' AND (coc_expiry_date IS NULL OR coc_expiry_date >= current_date))
-);
+-- Re-create apply_subsection_recompute with the COC gate appended. Body is the live
+-- definition plus the gate block (vocab-tolerant for the transitional old-flow writes).
+CREATE OR REPLACE FUNCTION public.apply_subsection_recompute(p_subsection_id uuid)
+ RETURNS void
+ LANGUAGE plpgsql
+AS $function$
+declare
+  r record;
+  v_is_compliant boolean;
+  c record;
+  v_coc_fail boolean;
+begin
+  if p_subsection_id is null then return; end if;
+
+  select * into r from public.recompute_subsection_installation_status(p_subsection_id);
+
+  v_is_compliant := case r.status
+    when 'compliant'          then true
+    when 'non_compliant'      then false
+    when 'requires_attention' then false
+    when 'incomplete'         then null
+  end;
+
+  -- COC gate: a required COC that is failed/rejected, or an expired pass, forces
+  -- is_compliant = false. Vocab-tolerant (old flow may still write Failed/Approved).
+  select s.is_coc_required, s.coc_status, s.coc_expiry_date
+    into c
+    from public.subsections s where s.id = p_subsection_id;
+  v_coc_fail := coalesce(c.is_coc_required, false) and (
+       c.coc_status in ('Fail','Failed','Rejected')
+    or (c.coc_status in ('Pass','Approved','Valid')
+        and c.coc_expiry_date is not null
+        and c.coc_expiry_date < current_date)
+  );
+  if v_coc_fail then
+    v_is_compliant := false;
+  end if;
+
+  update public.subsections s
+     set installation_status = r.status,
+         installation_score  = r.score,
+         is_compliant        = v_is_compliant,
+         updated_at          = now()
+   where s.id = p_subsection_id
+     and s.deleted_at is null
+     and (
+       coalesce(s.installation_status, '') <> coalesce(r.status, '')
+       or coalesce(s.installation_score, -1) <> coalesce(r.score, -1)
+       or coalesce(s.is_compliant, false) <> coalesce(v_is_compliant, false)
+     );
+end;
+$function$;
+
+-- Backfill: recompute every live subsection so is_compliant reflects the gate.
+DO $do$
+DECLARE rec record;
+BEGIN
+  FOR rec IN SELECT id FROM public.subsections WHERE deleted_at IS NULL LOOP
+    PERFORM public.apply_subsection_recompute(rec.id);
+  END LOOP;
+END;
+$do$;
 
 NOTIFY pgrst, 'reload schema';
 ```
@@ -98,19 +125,22 @@ NOTIFY pgrst, 'reload schema';
 
 - [ ] **Step 3: Verify**
 
-Query: `select coc_status, count(*) from public.subsections group by 1 order by 2 desc`
-Expected: only `Missing/Pending/Pass/Fail/N/A` values. And `select conname from pg_constraint where conname='subsections_coc_status_check'` returns 1 row.
+- `SELECT tgname FROM pg_trigger WHERE tgname='trg_sync_coc_compliance'` → **0 rows** (BEFORE-trigger gone).
+- `SELECT proname FROM pg_proc WHERE proname='sync_coc_compliance_status'` → **0 rows**.
+- Gate works: pick a subsection that is currently compliant + `is_coc_required=true`, set `coc_status='Fail'`, confirm `is_compliant` flips to false; set it back to `Pass`, confirm it returns to the inspection-driven value. (Use a scratch update, then restore.)
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add supabase/migrations/20260611160000_coc_manual_workflow.sql
-git commit -m "feat(db): COC manual-workflow columns + status remap + simplified trigger"
+git add supabase/migrations/20260612120000_coc_compliance_gate.sql
+git commit -m "feat(db): COC verdict gates is_compliant via recompute (drop informational trigger)"
 ```
 
 ---
 
-## Task 2: Pure compliance helper (TDD)
+## Task 2: Pure COC-gate helper (TDD)
+
+> NOTE the gate semantics (decision #1): `is_compliant` is OWNED by the DB recompute (inspection base AND not COC-gated). The client does NOT compute final compliance — it reads `is_compliant` from the row. This helper is the client-side MIRROR of the DB gate predicate, for display ("COC is blocking compliance" / "expired") only. It deliberately does NOT take inspection state and must NOT be used as the source of truth.
 
 **Files:** Create `src/lib/cocCompliance.ts`, `src/lib/cocCompliance.test.ts`
 
@@ -118,34 +148,39 @@ git commit -m "feat(db): COC manual-workflow columns + status remap + simplified
 
 ```ts
 import { describe, it, expect } from 'vitest';
-import { deriveIsCompliant, COC_STATUSES, isExpired } from './cocCompliance';
+import { cocFailsGate, COC_STATUSES, isExpired } from './cocCompliance';
 
-describe('deriveIsCompliant', () => {
-  const today = '2026-06-11';
-  it('not required => compliant regardless of status', () => {
-    expect(deriveIsCompliant({ isCocRequired: false, cocStatus: 'Fail', cocExpiryDate: null }, today)).toBe(true);
+describe('cocFailsGate (mirror of the DB recompute gate)', () => {
+  const today = '2026-06-12';
+  it('not required => never gates, even on Fail', () => {
+    expect(cocFailsGate({ isCocRequired: false, cocStatus: 'Fail', cocExpiryDate: null }, today)).toBe(false);
   });
-  it('required + Pass + no expiry => compliant', () => {
-    expect(deriveIsCompliant({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: null }, today)).toBe(true);
+  it('required + Fail => gates (forces non-compliant)', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Fail', cocExpiryDate: null }, today)).toBe(true);
   });
-  it('required + Pass + future expiry => compliant', () => {
-    expect(deriveIsCompliant({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: '2027-01-01' }, today)).toBe(true);
+  it('required + legacy "Failed"/"Rejected" => gates (vocab-tolerant)', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Failed', cocExpiryDate: null }, today)).toBe(true);
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Rejected', cocExpiryDate: null }, today)).toBe(true);
   });
-  it('required + Pass + past expiry => not compliant', () => {
-    expect(deriveIsCompliant({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: '2025-01-01' }, today)).toBe(false);
+  it('required + Pass + future expiry => does NOT gate', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: '2027-01-01' }, today)).toBe(false);
   });
-  it('required + Fail => not compliant', () => {
-    expect(deriveIsCompliant({ isCocRequired: true, cocStatus: 'Fail', cocExpiryDate: null }, today)).toBe(false);
+  it('required + Pass + past expiry => gates', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: '2025-01-01' }, today)).toBe(true);
   });
-  it('required + Missing => not compliant', () => {
-    expect(deriveIsCompliant({ isCocRequired: true, cocStatus: 'Missing', cocExpiryDate: null }, today)).toBe(false);
+  it('required + Pass + no expiry => does NOT gate', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Pass', cocExpiryDate: null }, today)).toBe(false);
+  });
+  it('required + Missing/Pending => does NOT gate (inspections decide)', () => {
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Missing', cocExpiryDate: null }, today)).toBe(false);
+    expect(cocFailsGate({ isCocRequired: true, cocStatus: 'Pending', cocExpiryDate: null }, today)).toBe(false);
   });
 });
 
 describe('isExpired', () => {
-  it('null expiry is never expired', () => expect(isExpired(null, '2026-06-11')).toBe(false));
-  it('past date is expired', () => expect(isExpired('2025-01-01', '2026-06-11')).toBe(true));
-  it('today is not expired', () => expect(isExpired('2026-06-11', '2026-06-11')).toBe(false));
+  it('null expiry is never expired', () => expect(isExpired(null, '2026-06-12')).toBe(false));
+  it('past date is expired', () => expect(isExpired('2025-01-01', '2026-06-12')).toBe(true));
+  it('today is not expired', () => expect(isExpired('2026-06-12', '2026-06-12')).toBe(false));
 });
 
 describe('COC_STATUSES', () => {
@@ -158,13 +193,17 @@ describe('COC_STATUSES', () => {
 Run: `npm test -- cocCompliance`
 Expected: FAIL — cannot resolve `./cocCompliance`.
 
-- [ ] **Step 3: Implement**
+- [ ] **Step 3: Implement** (mirror the DB gate in `apply_subsection_recompute` exactly)
 
 ```ts
 export const COC_STATUSES = ['Missing','Pending','Pass','Fail','N/A'] as const;
 export type CocStatus = typeof COC_STATUSES[number];
 
-export interface CocComplianceInput {
+// Vocab-tolerant sets — must match the DB gate during the old-flow transition.
+const FAILED_VALUES = new Set(['Fail','Failed','Rejected']);
+const PASS_VALUES = new Set(['Pass','Approved','Valid']);
+
+export interface CocGateInput {
   isCocRequired?: boolean | null;
   cocStatus?: string | null;
   cocExpiryDate?: string | null; // ISO yyyy-mm-dd
@@ -175,9 +214,17 @@ export function isExpired(cocExpiryDate: string | null | undefined, today: strin
   return cocExpiryDate < today;
 }
 
-export function deriveIsCompliant(s: CocComplianceInput, today: string): boolean {
-  if (!s.isCocRequired) return true;
-  return s.cocStatus === 'Pass' && !isExpired(s.cocExpiryDate, today);
+/**
+ * Client-side mirror of the DB recompute COC gate. Returns true when a required COC
+ * forces the subsection non-compliant (failed, or an expired pass). NOT the source of
+ * truth for is_compliant — that is owned by apply_subsection_recompute in the DB.
+ */
+export function cocFailsGate(s: CocGateInput, today: string): boolean {
+  if (!s.isCocRequired) return false;
+  const status = s.cocStatus ?? '';
+  if (FAILED_VALUES.has(status)) return true;
+  if (PASS_VALUES.has(status) && isExpired(s.cocExpiryDate, today)) return true;
+  return false;
 }
 ```
 
@@ -189,7 +236,7 @@ Run: `npm test -- cocCompliance`  → Expected: PASS.
 
 ```bash
 git add src/lib/cocCompliance.ts src/lib/cocCompliance.test.ts
-git commit -m "feat(coc): pure compliance helper with tests"
+git commit -m "feat(coc): pure COC-gate helper with tests"
 ```
 
 ---
@@ -295,7 +342,7 @@ git commit -m "feat(coc): manual COC review form"
 
 - [ ] **Step 3: Type-check** `npx tsc --noEmit 2>&1 | grep "CocMeteringTab.tsx" || echo "clean"` — expect no NEW errors (pre-existing baseline errors elsewhere are fine).
 
-- [ ] **Step 4: Visual check** — open a subsection's COC tab, mark Pass/Fail, save, confirm the row updates and `is_compliant` flips (Pass→compliant, Fail→not), and the Fail path shows the reasons box.
+- [ ] **Step 4: Visual check** — open a subsection's COC tab, mark Fail, save, confirm `is_compliant` becomes false (the DB recompute gate fires); mark Pass, confirm the COC gate releases and `is_compliant` returns to the inspection-driven value (Pass does NOT auto-promote a subsection whose inspections fail). The Fail path shows the reasons box. Form must `refetch()` after save so the UI reflects the recompute.
 
 - [ ] **Step 5: Commit** `git add src/views/subsection-detail/CocMeteringTab.tsx && git commit -m "feat(coc): manual review form in the subsection COC tab"`
 
@@ -374,26 +421,31 @@ rm -rf supabase/functions/validate-coc supabase/functions/extract-coc
 
 ---
 
-## Task 7: Drop the validation tables (apply via PAT)
+## Task 7: Drop the validation tables OUTRIGHT (apply via PAT)
 
-**Files:** Create `supabase/migrations/20260611170000_drop_coc_validation_tables.sql`
+> Decision #3: drop all 6 validation tables permanently, NO snapshot. VERIFIED prod tables (2026-06-12): `coc_validations` (239 rows), `coc_extractions` (53), `coc_validation_settings` (1), `coc_local_validations` (0), `coc_compliance_photos` (0), `coc_compliance_photos_snap_20260421` (0). All are validation-engine artefacts. KEEP `contractor_coc_uploads` (separate manual-upload table, anon-locked) — confirm it's untouched.
+
+**Files:** Create `supabase/migrations/20260612130000_drop_coc_validation_tables.sql`
 
 - [ ] **Step 1: Write the migration** (only after Task 6 confirmed nothing reads them):
 
 ```sql
-DROP TABLE IF EXISTS public.coc_validations       CASCADE;
-DROP TABLE IF EXISTS public.coc_extractions       CASCADE;
-DROP TABLE IF EXISTS public.coc_validation_settings CASCADE;
-DROP TABLE IF EXISTS public.coc_local_validations CASCADE;
+-- Drop the COC auto-validation engine tables outright (no snapshot — decision #3).
+DROP TABLE IF EXISTS public.coc_validations                    CASCADE;
+DROP TABLE IF EXISTS public.coc_extractions                    CASCADE;
+DROP TABLE IF EXISTS public.coc_validation_settings            CASCADE;
+DROP TABLE IF EXISTS public.coc_local_validations              CASCADE;
+DROP TABLE IF EXISTS public.coc_compliance_photos              CASCADE;
+DROP TABLE IF EXISTS public.coc_compliance_photos_snap_20260421 CASCADE;
 NOTIFY pgrst, 'reload schema';
--- Kept: coc_compliance_photos (evidence), contractor_coc_uploads (upload table).
+-- Kept: contractor_coc_uploads (manual upload target, anon-locked per G-SEC-11).
 ```
 
 - [ ] **Step 2: Apply via the Management API** (`POST …/database/query`). Expected HTTP 201.
 
-- [ ] **Step 3: Verify** `select table_name from information_schema.tables where table_schema='public' and table_name like 'coc_%'` → expect only `coc_compliance_photos` (and `contractor_coc_uploads` if it matches a different prefix). The 4 validation tables are gone.
+- [ ] **Step 3: Verify** `select table_name from information_schema.tables where table_schema='public' and table_name like 'coc%'` → **expect 0 rows**. Confirm `contractor_coc_uploads` still exists.
 
-- [ ] **Step 4: Commit** `git add supabase/migrations/20260611170000_drop_coc_validation_tables.sql && git commit -m "feat(db): drop COC validation tables (manual workflow replaces them)"`
+- [ ] **Step 4: Commit** `git add supabase/migrations/20260612130000_drop_coc_validation_tables.sql && git commit -m "feat(db): drop COC validation tables outright (manual workflow replaces them)"`
 
 ---
 
@@ -401,7 +453,7 @@ NOTIFY pgrst, 'reload schema';
 
 - [ ] **Step 1: Tests** `npm test` → all pass (cocCompliance + siteHealth if present on this branch).
 - [ ] **Step 2: Type-check delta** `npx tsc --noEmit 2>&1 | wc -l` is not higher than the pre-branch baseline (the branch introduces no new errors).
-- [ ] **Step 3: End-to-end manual** on a real subsection: upload a COC → mark Fail with reasons → `is_compliant` shows false → generate report (lists reasons) → staff override to Pass with a future expiry → `is_compliant` flips true. Re-confirm no COC validation/extraction UI remains anywhere.
+- [ ] **Step 3: End-to-end manual** on a real subsection (pick one whose inspections already pass): upload a COC → mark Fail with reasons → `is_compliant` shows false (gate) → generate report (lists reasons) → staff override to Pass with a future expiry → `is_compliant` returns to true (gate released, inspections pass). Also confirm a subsection with FAILING inspections stays non-compliant even when COC=Pass. Re-confirm no COC validation/extraction UI remains anywhere.
 - [ ] **Step 4: Regenerate types** `types.ts` should be regenerated (Management API or `supabase gen types`) so the dropped tables + new columns are reflected; commit it.
 - [ ] **Step 5: Update GAPS** note in `docs/system-reference/GAPS.md`: G-SEC-16 (COC validation gaming) is **dissolved** — the engine is removed; `extract-coc`/`validate-coc` deleted from prod. Commit.
 

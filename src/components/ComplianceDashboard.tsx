@@ -1,9 +1,7 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent } from "@/components/ui/dialog";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   LineChart, 
@@ -18,32 +16,23 @@ import {
   Cell,
   Legend
 } from "recharts";
-import { 
-  TrendingUp, 
-  TrendingDown, 
+import {
+  TrendingUp,
+  TrendingDown,
   Minus,
-  Shield, 
-  FileCheck, 
-  Gauge, 
+  Shield,
+  FileCheck,
+  Gauge,
   AlertTriangle,
   CheckCircle2,
   XCircle,
-  Clock,
-  RefreshCw,
-  RotateCcw,
-  Loader2
+  Clock
 } from "lucide-react";
-import { format, subDays, startOfDay } from "date-fns";
+import { format, subDays } from "date-fns";
 import {
-  fetchFailedValidationsBySubsection,
-  calculateCocComplianceStats,
-  VALID_COC_STATUSES
+  calculateCocComplianceStats
 } from "@/lib/complianceCalculations";
-import { COCPreviewDialog } from "@/components/COCPreviewDialog";
-import { COCPreviewApproval } from "@/components/COCPreviewApproval";
-import { COCValidationLogCard, type ValidationRecord as ImportedValidationRecord } from "@/components/compliance/COCValidationLogCard";
 import { factorScores, siteHealthScore } from "@/lib/siteHealth";
-import { toast } from "sonner";
 
 // Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
 // (written by InspectionDetail.handleItemChange, read by ComprehensiveInspectionReport).
@@ -104,38 +93,9 @@ interface CategoryScore {
 interface TrendDataPoint {
   date: string;
   score: number;
-  coc: number;
   metering: number;
   snags: number;
 }
-
-interface ValidationRecord {
-  id: string;
-  document_id: string;
-  subsection_id: string;
-  subsection_name: string;
-  status: string;
-  validated_at: string;
-  violations: Array<{
-    clause: string;
-    description: string;
-    reason?: string;
-    riskLevel?: string;
-    immediateAction?: string;
-    evidence?: string;
-    section?: string;
-  }>;
-  report_data: any;
-  document: {
-    id: string;
-    file_name: string;
-    file_url: string;
-    uploaded_at: string;
-  } | null;
-}
-
-// Alias for backward compatibility
-type FailedValidation = ValidationRecord;
 
 export const ComplianceDashboard = ({ siteId, subsections, inspections }: ComplianceDashboardProps) => {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
@@ -144,311 +104,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [healthSnags, setHealthSnags] = useState<Array<{ subsection_id: string; status: string | null; risk_level: string | null }>>([]);
   const [healthInspections, setHealthInspections] = useState<Array<{ subsection_id: string | null; status: string | null }>>([]);
   const [loading, setLoading] = useState(true);
-  const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
-  const [failedValidations, setFailedValidations] = useState<FailedValidation[]>([]);
-  const [allValidations, setAllValidations] = useState<ValidationRecord[]>([]);
-  
-  const [previewDoc, setPreviewDoc] = useState<ImportedValidationRecord['document']>(null);
-  const [previewValidation, setPreviewValidation] = useState<{ status: string; violations: any[]; report_data?: any } | null>(null);
-  const [previewOpen, setPreviewOpen] = useState(false);
-
-  // Review COC state
-  const [reviewingDocId, setReviewingDocId] = useState<string | null>(null);
-  const [cocPreviewData, setCocPreviewData] = useState<any>(null);
-  const [showCocPreview, setShowCocPreview] = useState(false);
-  const [pendingReviewDoc, setPendingReviewDoc] = useState<{id: string, url: string, name: string, subsectionId: string} | null>(null);
-
-  // Fetch ALL COC validations with full details - shows complete history log
-  const fetchAllValidations = useCallback(async () => {
-    if (subsections.length === 0) {
-      setAllValidations([]);
-      setFailedValidations([]);
-      return;
-    }
-    
-    const subsectionIds = subsections.map(s => s.id);
-    console.log('[ComplianceDashboard] Fetching validations for', subsectionIds.length, 'subsections');
-    
-    // First get the failed set for compliance calculation (uses latest per subsection)
-    const failedSet = await fetchFailedValidationsBySubsection(subsectionIds);
-    setFailedValidationsBySubsection(failedSet);
-    
-    // Fetch ALL validations history for this site's subsections with FULL data
-    const { data: validations, error } = await supabase
-      .from('coc_validations')
-      .select(`
-        id,
-        document_id,
-        subsection_id,
-        status,
-        validated_at,
-        violations,
-        report_data
-      `)
-      .in('subsection_id', subsectionIds)
-      .order('validated_at', { ascending: false })
-      .limit(100); // Limit to most recent 100 for performance
-    
-    if (error) {
-      console.error('[ComplianceDashboard] Error fetching validation details:', error);
-      return;
-    }
-    
-    console.log('[ComplianceDashboard] Raw validations from DB:', validations?.length || 0);
-    
-    if (!validations || validations.length === 0) {
-      setAllValidations([]);
-      setFailedValidations([]);
-      return;
-    }
-    
-    // Fetch document details for ALL validations (not just latest)
-    const documentIds = [...new Set(validations.map(v => v.document_id).filter(Boolean))];
-    const { data: documents } = await supabase
-      .from('subsection_documents')
-      .select('id, file_name, file_url, uploaded_at')
-      .in('id', documentIds.length > 0 ? documentIds : ['none']);
-    
-    const docMap = new Map(documents?.map(d => [d.id, d]) || []);
-    
-    // Map subsection names
-    const subsectionMap = new Map(subsections.map(s => [s.id, s.name]));
-    
-    // Build FULL validation history list (not just latest per subsection)
-    const fullValidations: ValidationRecord[] = validations.map(v => ({
-      id: v.id,
-      document_id: v.document_id,
-      subsection_id: v.subsection_id,
-      subsection_name: subsectionMap.get(v.subsection_id) || 'Unknown',
-      status: v.status,
-      validated_at: v.validated_at,
-      violations: (v.violations as any[]) || [],
-      report_data: v.report_data,
-      document: docMap.get(v.document_id) || null,
-    }));
-    
-    console.log('[ComplianceDashboard] Loaded validation history:', fullValidations.length, 'records, with violations:', 
-      fullValidations.filter(v => v.violations.length > 0).length);
-    setAllValidations(fullValidations);
-    
-    // Also set failed validations for backward compatibility
-    const failedOnly = fullValidations.filter(v => 
-      ['Fail', 'Failed', 'Incomplete'].includes(v.status)
-    );
-    setFailedValidations(failedOnly);
-  }, [subsections]);
-
-
-  // Handle Review COC - extract COC data for a validation's document
-  const handleReviewCoc = useCallback(async (validation: ValidationRecord) => {
-    if (!validation.document) {
-      toast.error('No document associated with this validation');
-      return;
-    }
-
-    const doc = validation.document;
-    setReviewingDocId(doc.id);
-
-    try {
-      let signedUrl = doc.file_url;
-      
-      // For storage URLs, get a proper accessible URL
-      if (doc.file_url.includes('/storage/v1/object/')) {
-        // Try to extract the file path from the URL
-        const publicMatch = doc.file_url.match(/\/storage\/v1\/object\/public\/documents\/(.+)/);
-        const privateMatch = doc.file_url.match(/\/storage\/v1\/object\/(?:sign|authenticated)\/documents\/(.+)/);
-        const filePath = publicMatch?.[1] || privateMatch?.[1];
-        
-        if (filePath) {
-          const decodedPath = decodeURIComponent(filePath.split('?')[0]); // strip query params
-          
-          // Since documents bucket is public, use public URL
-          const { data: publicData } = supabase.storage
-            .from('documents')
-            .getPublicUrl(decodedPath);
-          
-          if (publicData?.publicUrl) {
-            signedUrl = publicData.publicUrl;
-          } else {
-            // Fallback to signed URL
-            const { data: signedData, error: signError } = await supabase.storage
-              .from('documents')
-              .createSignedUrl(decodedPath, 3600);
-            if (signError) {
-              console.error('Failed to create signed URL:', signError, 'path:', decodedPath);
-              toast.error('Failed to access document');
-              return;
-            }
-            signedUrl = signedData.signedUrl;
-          }
-        } else {
-          console.error('Could not extract file path from URL:', doc.file_url);
-          // Use the URL as-is as fallback
-        }
-      }
-
-      toast.info('Extracting COC information...');
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
-        body: {
-          documentUrl: signedUrl,
-          fileName: doc.file_name,
-          documentId: doc.id,
-          subsectionId: validation.subsection_id,
-          forceReextract: false,
-          userId: user?.id
-        }
-      });
-
-      if (extractionError) {
-        toast.error(`Failed to extract COC data: ${extractionError.message || 'Unknown error'}`);
-        return;
-      }
-      if (extractionData?.error) {
-        toast.error(`Extraction error: ${extractionData.error}`);
-        return;
-      }
-
-      if (extractionData?.extractedData) {
-        setCocPreviewData(extractionData.extractedData);
-        setPendingReviewDoc({ id: doc.id, url: signedUrl, name: doc.file_name, subsectionId: validation.subsection_id });
-        setShowCocPreview(true);
-        toast.success(extractionData.cached ? 'Loaded cached extraction.' : 'COC information extracted! Review before verification.');
-      } else {
-        toast.error('No data could be extracted from the document');
-      }
-    } catch (error) {
-      toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setReviewingDocId(null);
-    }
-  }, []);
-
-  const normalizeCocType = (type?: string): string => {
-    if (!type) return '';
-    const lower = type.toLowerCase();
-    if (lower === 'initial') return 'Initial';
-    if (lower === 'temporary') return 'Temporary';
-    if (lower === 'supplementary') return 'Supplementary';
-    if (lower.includes('not marked') || lower === 'notmarked') return 'Not Marked';
-    return type;
-  };
-
-  const handleApproveAndVerify = useCallback(async (approvedData: Record<string, unknown>) => {
-    if (!pendingReviewDoc) {
-      toast.error('No document pending verification');
-      return;
-    }
-
-    const docId = pendingReviewDoc.id;
-    setReviewingDocId(docId);
-    setShowCocPreview(false);
-
-    try {
-      toast.info('Starting SANS 10142-1 verification...');
-      const normalizedCocType = normalizeCocType(approvedData.cocType as string);
-
-      const subsectionUpdateData: Record<string, string> = {};
-      if (approvedData.cocNumber) subsectionUpdateData.coc_number = approvedData.cocNumber as string;
-      if (normalizedCocType) subsectionUpdateData.coc_type = normalizedCocType;
-      if (approvedData.cocIssueDate) subsectionUpdateData.coc_issue_date = approvedData.cocIssueDate as string;
-
-      if (Object.keys(subsectionUpdateData).length > 0) {
-        await supabase.from('subsections').update(subsectionUpdateData).eq('id', pendingReviewDoc.subsectionId);
-      }
-
-      const docUpdateData: Record<string, string> = {};
-      if (approvedData.cocNumber) docUpdateData.coc_number = approvedData.cocNumber as string;
-      if (normalizedCocType) docUpdateData.coc_type = normalizedCocType;
-      if (approvedData.cocIssueDate) docUpdateData.coc_issue_date = approvedData.cocIssueDate as string;
-
-      if (Object.keys(docUpdateData).length > 0) {
-        await supabase.from('subsection_documents').update(docUpdateData).eq('id', docId);
-      }
-
-      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
-        body: {
-          documentId: docId,
-          documentUrl: pendingReviewDoc.url,
-          subsectionId: pendingReviewDoc.subsectionId,
-          approvedCocType: normalizedCocType
-        }
-      });
-
-      if (validationError || validationData?.error) {
-        toast.error(`Verification failed: ${validationError?.message || validationData?.error || 'Unknown error'}`);
-        return;
-      }
-
-      if (validationData?.success || validationData?.status) {
-        const status = validationData.status || validationData.report?.overallStatus;
-        if (status === 'Pass') toast.success('✅ COC verification passed!');
-        else if (status === 'Fail') toast.error(`❌ COC verification failed: ${validationData.violations?.length || 0} violations found`);
-        else toast.warning('⚠️ COC verification incomplete');
-
-        const docCocStatus = status === 'Pass' ? 'Approved' : status === 'Fail' ? 'Failed' : '';
-        if (docCocStatus) {
-          await supabase.from('subsection_documents').update({ coc_status: docCocStatus }).eq('id', docId);
-        }
-      }
-
-      await fetchAllValidations();
-    } catch (err) {
-      toast.error(`Verification failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
-    } finally {
-      setReviewingDocId(null);
-      setPendingReviewDoc(null);
-    }
-  }, [pendingReviewDoc, fetchAllValidations]);
-
-  const handleRejectReview = useCallback(() => {
-    setShowCocPreview(false);
-    setCocPreviewData(null);
-    setPendingReviewDoc(null);
-  }, []);
-
-  // Fetch validations on mount and when subsections change
-  useEffect(() => {
-    fetchAllValidations();
-  }, [fetchAllValidations]);
-
-  // Real-time subscription to coc_validations for live updates during bulk runs
-  useEffect(() => {
-    if (subsections.length === 0) return;
-    
-    const subsectionIds = new Set(subsections.map(s => s.id));
-    
-    const channel = supabase
-      .channel(`coc_validations_${siteId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'coc_validations'
-        },
-        (payload) => {
-          // Check if the change affects one of our subsections
-          const newRecord = payload.new as { subsection_id?: string } | undefined;
-          const oldRecord = payload.old as { subsection_id?: string } | undefined;
-          const affectedSubsectionId = newRecord?.subsection_id || oldRecord?.subsection_id;
-          
-          if (affectedSubsectionId && subsectionIds.has(affectedSubsectionId)) {
-            console.log('[ComplianceDashboard] Real-time: COC validation change detected:', payload.eventType);
-            // Re-fetch all validations when changes occur
-            fetchAllValidations();
-          }
-        }
-      )
-      .subscribe((status) => {
-        console.log('[ComplianceDashboard] Real-time subscription status:', status);
-      });
-    
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [siteId, subsections, fetchAllValidations]);
 
   // Calculate overall Site Health score from the single source of truth (siteHealth.ts).
   // COC is tracked separately and is intentionally NOT folded into this score.
@@ -465,7 +120,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     ];
     
     // COC Compliance - using shared utility calculation
-    const complianceStats = calculateCocComplianceStats(subsections, failedValidationsBySubsection);
+    const complianceStats = calculateCocComplianceStats(subsections);
     categories[0].total = complianceStats.cocRequiredCount;
     categories[0].compliant = complianceStats.cocApprovedCount;
     categories[0].score = complianceStats.cocComplianceRate;
@@ -585,7 +240,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           trend.push({
             date: format(date, 'MMM dd'),
             score: Math.round(dayScore),
-            coc: Math.round(Math.max(0, categoryScores[0].score - (i * 0.3) + variance)),
             metering: Math.round(Math.max(0, categoryScores[1].score - (i * 0.2) + variance)),
             snags: Math.round(Math.max(0, categoryScores[2].score - (i * 0.4) + variance)),
           });
@@ -696,8 +350,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
             <Progress value={overallScore} className="mt-4 h-3" />
             <p className="text-sm text-muted-foreground mt-2">
               {subsections.filter(s => {
-                // Check for failed validations (including supplementary)
-                if (s.is_coc_required && failedValidationsBySubsection.has(s.id)) return false;
                 if (s.is_coc_required && s.coc_status !== 'Approved' && s.coc_status !== 'Valid' && s.coc_status !== 'Pass') return false;
                 if (s.is_coc_required && s.metering_status === 'Missing') return false;
                 return true;
@@ -775,18 +427,9 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
                   dot={false}
                   activeDot={{ r: 6 }}
                 />
-                <Line 
-                  type="monotone" 
-                  dataKey="coc" 
-                  name="COC"
-                  stroke="hsl(var(--chart-1))" 
-                  strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="metering" 
+                <Line
+                  type="monotone"
+                  dataKey="metering"
                   name="Metering"
                   stroke="hsl(var(--chart-2))" 
                   strokeWidth={2}
@@ -906,73 +549,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           </CardContent>
         </Card>
       </div>
-
-      {/* COC Validation History Section - with override support */}
-      <COCValidationLogCard
-        allValidations={allValidations}
-        onPreview={(validation) => {
-          setPreviewDoc(validation.document);
-          setPreviewValidation({
-            status: validation.status,
-            violations: validation.violations,
-            report_data: validation.report_data,
-          });
-          setPreviewOpen(true);
-        }}
-        onValidationsChanged={fetchAllValidations}
-        onReviewCoc={handleReviewCoc}
-        reviewingDocId={reviewingDocId}
-      />
-
-      {/* COC Preview Dialog */}
-      <COCPreviewDialog
-        open={previewOpen}
-        onClose={() => {
-          setPreviewOpen(false);
-          setPreviewDoc(null);
-          setPreviewValidation(null);
-        }}
-        document={previewDoc}
-        validation={previewValidation}
-      />
-
-      {/* COC Review & Approval Dialog */}
-      <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
-          {pendingReviewDoc && (
-            <COCPreviewApproval
-              extractedData={cocPreviewData}
-              documentName={pendingReviewDoc.name}
-              documentUrl={pendingReviewDoc.url}
-              onApprove={handleApproveAndVerify}
-              onReject={handleRejectReview}
-              isProcessing={reviewingDocId === pendingReviewDoc.id}
-              onExtract={() => {
-                if (pendingReviewDoc) {
-                  // Re-extract by creating a temporary validation record to pass
-                  const tempValidation: ValidationRecord = {
-                    id: '',
-                    document_id: pendingReviewDoc.id,
-                    subsection_id: pendingReviewDoc.subsectionId,
-                    subsection_name: '',
-                    status: '',
-                    validated_at: '',
-                    violations: [],
-                    report_data: null,
-                    document: {
-                      id: pendingReviewDoc.id,
-                      file_name: pendingReviewDoc.name,
-                      file_url: pendingReviewDoc.url,
-                      uploaded_at: '',
-                    },
-                  };
-                  handleReviewCoc(tempValidation);
-                }
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
     </div>
   );
 };

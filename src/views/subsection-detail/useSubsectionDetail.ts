@@ -8,11 +8,9 @@ import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
   SubsectionData,
   SiteData,
-  CocDocData,
   SupabaseDocument,
   DocumentCategory,
   EditFormData,
-  PendingDocumentForVerification,
 } from "./types";
 
 // Normalize COC type to proper casing
@@ -43,7 +41,6 @@ export function useSubsectionDetail() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState("overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
-  const [cocDataByDocument, setCocDataByDocument] = useState<Record<string, CocDocData>>({});
   const [meterSerialNumber, setMeterSerialNumber] = useState<string>("");
   const [ctRatio, setCtRatio] = useState<string>("");
   const [saving, setSaving] = useState(false);
@@ -77,24 +74,10 @@ export function useSubsectionDetail() {
   });
   const [snags, setSnags] = useState<any[]>([]);
   const [openSnagsCount, setOpenSnagsCount] = useState(0);
-  const [cocValidations, setCocValidations] = useState<Record<string, any>>({});
-  const [cocExtractions, setCocExtractions] = useState<Record<string, any>>({});
-  const [validatingDocId, setValidatingDocId] = useState<string | null>(null);
-  const [reExtractingDocId, setReExtractingDocId] = useState<string | null>(null);
-  const [selectedValidationDocId, setSelectedValidationDocId] = useState<string | null>(null);
-  const [validationReportOpen, setValidationReportOpen] = useState(false);
-
-  const selectedValidation = selectedValidationDocId ? cocValidations[selectedValidationDocId] : null;
   const [deleteSubsectionDialogOpen, setDeleteSubsectionDialogOpen] = useState(false);
-  const [cocPreviewData, setCocPreviewData] = useState<any>(null);
-  const [showCocPreview, setShowCocPreview] = useState(false);
-  const [pendingDocumentForVerification, setPendingDocumentForVerification] = useState<PendingDocumentForVerification | null>(null);
   const [offlineDocuments, setOfflineDocuments] = useState<any[]>([]);
   const [offlineFloorPlans, setOfflineFloorPlans] = useState<any[]>([]);
-  const [cocPreviewDoc, setCocPreviewDoc] = useState<{id: string, file_name: string, file_url: string, uploaded_at: string} | null>(null);
-  const [cocPreviewDialogOpen, setCocPreviewDialogOpen] = useState(false);
   const [previewDocument, setPreviewDocument] = useState<{file_name: string, file_url: string} | null>(null);
-  const [editingExtractionDoc, setEditingExtractionDoc] = useState<{id: string, url: string, name: string} | null>(null);
 
   // Offline capabilities
   const { updateSubsection, uploadDocument, uploadFloorPlan, getOfflineData, isOnline } = useOfflineSubsections();
@@ -168,23 +151,6 @@ export function useSubsectionDetail() {
 
       if (error) throw error;
       setSupabaseDocuments(data || []);
-
-      if (data && data.length > 0) {
-        const initialCocData: Record<string, CocDocData> = {};
-        data.forEach(doc => {
-          if (doc.coc_type || doc.coc_status || doc.coc_number || doc.coc_issue_date) {
-            initialCocData[doc.id] = {
-              cocType: normalizeCocType(doc.coc_type),
-              cocStatus: normalizeCocStatus(doc.coc_status),
-              cocNumber: doc.coc_number || '',
-              cocIssueDate: doc.coc_issue_date || ''
-            };
-          }
-        });
-        if (Object.keys(initialCocData).length > 0) {
-          setCocDataByDocument(prev => ({ ...prev, ...initialCocData }));
-        }
-      }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching Supabase documents:", error);
     }
@@ -205,85 +171,6 @@ export function useSubsectionDetail() {
       setOpenSnagsCount(allSnags.filter(s => s.status === 'Open').length);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching snags:", error);
-    }
-  };
-
-  const fetchCocValidations = async () => {
-    if (!subsectionId) return;
-    try {
-      const { data, error } = await supabase
-        .from('coc_validations')
-        .select('*')
-        .eq('subsection_id', subsectionId);
-
-      if (error) throw error;
-      const validationsMap: Record<string, any> = {};
-      data?.forEach(validation => {
-        validationsMap[validation.document_id] = validation;
-      });
-      setCocValidations(validationsMap);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error("Error fetching COC validations:", error);
-    }
-  };
-
-  const fetchCocExtractions = async () => {
-    if (!subsectionId) return;
-    try {
-      const { data, error } = await supabase
-        .from('coc_extractions')
-        .select('*')
-        .eq('subsection_id', subsectionId);
-
-      if (error) throw error;
-
-      const extractionsMap: Record<string, any> = {};
-      const cocDataFromExtractions: Record<string, CocDocData> = {};
-
-      data?.forEach(extraction => {
-        extractionsMap[extraction.document_id] = extraction;
-
-        if (extraction.extracted_data && typeof extraction.extracted_data === 'object') {
-          const extractedData = extraction.extracted_data as Record<string, any>;
-          const adminDetails = extractedData.administrativeDetails as Record<string, any> || {};
-
-          const cocNumber = extractedData.cocNumber || adminDetails.cocNumber || '';
-          const cocIssueDate = extractedData.cocIssueDate || adminDetails.cocIssueDate || '';
-          const cocType = normalizeCocType(extractedData.cocType);
-          const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' :
-                            extractedData.overallStatus === 'Fail' ? 'Failed' :
-                            normalizeCocStatus(extractedData.cocStatus);
-
-          if (cocNumber || cocIssueDate || cocType || cocStatus) {
-            cocDataFromExtractions[extraction.document_id] = {
-              cocNumber,
-              cocIssueDate,
-              cocType,
-              cocStatus
-            };
-          }
-        }
-      });
-
-      setCocExtractions(extractionsMap);
-
-      if (Object.keys(cocDataFromExtractions).length > 0) {
-        setCocDataByDocument(prev => {
-          const merged = { ...prev };
-          Object.entries(cocDataFromExtractions).forEach(([docId, extractionCocData]) => {
-            const existing = (prev[docId] || {}) as Partial<CocDocData>;
-            merged[docId] = {
-              cocNumber: existing.cocNumber || extractionCocData.cocNumber || '',
-              cocIssueDate: existing.cocIssueDate || extractionCocData.cocIssueDate || '',
-              cocType: existing.cocType || extractionCocData.cocType || '',
-              cocStatus: existing.cocStatus || extractionCocData.cocStatus || ''
-            };
-          });
-          return merged;
-        });
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error("Error fetching COC extractions:", error);
     }
   };
 
@@ -415,24 +302,14 @@ export function useSubsectionDetail() {
         cocIssueDate: fullSubsection.coc_issue_date,
         cocType: fullSubsection.coc_type,
         cocStatus: fullSubsection.coc_status,
+        cocExpiryDate: (fullSubsection as any).coc_expiry_date,
+        cocFailureReasons: (fullSubsection as any).coc_failure_reasons,
         meterSerialNumber: fullSubsection.meter_serial_number,
         meteringStatus: fullSubsection.metering_status,
         ctRatio: fullSubsection.ct_ratio,
         isCocRequired: fullSubsection.is_coc_required ?? true,
         inspections: inspectionsObj
       });
-
-      if (fullSubsection.coc_type || fullSubsection.coc_status) {
-        setCocDataByDocument(prev => ({
-          ...prev,
-          'subsection-default': {
-            cocType: fullSubsection.coc_type || '',
-            cocStatus: fullSubsection.coc_status || '',
-            cocNumber: fullSubsection.coc_number || '',
-            cocIssueDate: fullSubsection.coc_issue_date || ''
-          }
-        }));
-      }
 
       setMeterSerialNumber(fullSubsection.meter_serial_number || '');
       setCtRatio(fullSubsection.ct_ratio || '');
@@ -487,8 +364,6 @@ export function useSubsectionDetail() {
         await fetchTemplates();
         await fetchDocumentCategories();
         await fetchSupabaseDocuments();
-        await fetchCocExtractions();
-        await fetchCocValidations();
         await fetchSnags();
       };
       loadAllData();
@@ -544,406 +419,6 @@ export function useSubsectionDetail() {
 
   const generateQRCode = async () => {
     setQrCodeUrl('generated');
-  };
-
-  // ─── Handlers: COC Validation & Extraction ─────────────────────
-
-  const handleManualValidation = async (documentId: string, documentUrl: string) => {
-    try {
-      setValidatingDocId(documentId);
-      toast.info("Starting AI validation...");
-
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) {
-        toast.error('Please log in to validate documents');
-        setValidatingDocId(null);
-        return;
-      }
-
-      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
-        body: { documentId, documentUrl, subsectionId }
-      });
-
-      if (validationError) {
-        if (process.env.NODE_ENV === 'development') console.error('Validation error:', validationError);
-        toast.error(`Validation failed: ${validationError.message || 'Unknown error'}`);
-        return;
-      }
-
-      if (validationData?.error) {
-        if (process.env.NODE_ENV === 'development') console.error('Function returned error:', validationData.error);
-        toast.error(`Validation error: ${validationData.error}`);
-        return;
-      }
-
-      if (validationData?.success || validationData?.status) {
-        const result = validationData.report || validationData;
-
-        let cocNumberExtracted = result.cocNumber || result.administrativeDetails?.cocNumber;
-        let cocIssueDateExtracted = result.administrativeDetails?.cocIssueDate || result.cocIssueDate;
-
-        if (!cocIssueDateExtracted) {
-          cocIssueDateExtracted = result.administrativeDetails?.registrationDate || result.installationDate || result.testDate || result.evaluationDate;
-        }
-
-        const isValidDate = (dateStr: string | null | undefined) => {
-          if (!dateStr) return false;
-          if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) return false;
-          const date = new Date(dateStr);
-          return date instanceof Date && !isNaN(date.getTime());
-        };
-
-        const isValidCocNumber = (cocNum: string | null | undefined) => {
-          if (!cocNum) return false;
-          if (cocNum.toLowerCase().includes('not provided') ||
-              cocNum.toLowerCase().includes('not found') ||
-              cocNum.toLowerCase().includes('n/a')) return false;
-          return cocNum.trim().length > 0;
-        };
-
-        const updateData: any = {};
-        if (isValidCocNumber(cocNumberExtracted)) updateData.coc_number = cocNumberExtracted;
-        if (isValidDate(cocIssueDateExtracted)) updateData.coc_issue_date = cocIssueDateExtracted;
-        if (result.overallStatus === 'Pass' || result.status === 'Pass') updateData.coc_status = 'Approved';
-        else if (result.overallStatus === 'Fail' || result.status === 'Fail') updateData.coc_status = 'Failed';
-
-        if (Object.keys(updateData).length > 0) {
-          try {
-            const { error: updateError } = await supabase
-              .from('subsections')
-              .update(updateData)
-              .eq('id', subsectionId);
-
-            if (updateError) {
-              if (process.env.NODE_ENV === 'development') console.error('Error auto-updating COC fields:', updateError);
-            } else {
-              if (subsection) {
-                setSubsection({
-                  ...subsection,
-                  cocNumber: cocNumberExtracted || subsection.cocNumber,
-                  cocIssueDate: cocIssueDateExtracted || subsection.cocIssueDate,
-                  cocStatus: updateData.coc_status || subsection.cocStatus
-                });
-              }
-            }
-          } catch (error) {
-            if (process.env.NODE_ENV === 'development') console.error('Error during auto-population:', error);
-          }
-        }
-
-        try {
-          const cocCategory = documentCategories.find(cat =>
-            cat.name.toLowerCase().includes('coc') || cat.name === '01 COC'
-          );
-          if (cocCategory) {
-            const reportContent = JSON.stringify(result, null, 2);
-            const reportBlob = new Blob([reportContent], { type: 'application/json' });
-            const reportFileName = `Validation_Report_${cocNumberExtracted || 'Unknown'}_${new Date().toISOString().split('T')[0]}.json`;
-            const reportPath = `${subsectionId}/${cocCategory.name}/${Date.now()}-${reportFileName}`;
-            const { data: uploadData, error: uploadError } = await supabase.storage
-              .from('documents')
-              .upload(reportPath, reportBlob, { contentType: 'application/json', upsert: false });
-            if (!uploadError && uploadData) {
-              const { data: urlData } = supabase.storage.from('documents').getPublicUrl(reportPath);
-              await supabase.from('subsection_documents').insert({
-                subsection_id: subsectionId,
-                category_id: cocCategory.id,
-                file_name: reportFileName,
-                file_url: urlData.publicUrl,
-                uploaded_by: session.user.id
-              });
-            }
-          }
-        } catch (docError) {
-          if (process.env.NODE_ENV === 'development') console.error('Error creating validation report document:', docError);
-        }
-
-        if (result.overallStatus === 'Pass' || result.status === 'Pass') {
-          toast.success('COC validation passed! Report saved to documents.' + (cocNumberExtracted ? ` COC #${cocNumberExtracted} extracted.` : ''));
-        } else if (result.overallStatus === 'Fail' || result.status === 'Fail') {
-          toast.error(`COC validation failed: ${result.criticalFailures?.length || result.violations?.length || 0} violations found. Report saved to documents.`);
-        } else {
-          toast.warning(`COC validation incomplete. Report saved to documents.`);
-        }
-
-        await Promise.all([
-          fetchCocValidations(),
-          fetchSubsectionData(),
-          fetchSupabaseDocuments()
-        ]);
-      } else {
-        toast.error('No validation result returned');
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Error during manual validation:', error);
-      toast.error(`Failed to validate: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setValidatingDocId(null);
-    }
-  };
-
-  const handleExtractCocData = async (documentId: string, documentUrl: string, fileName: string, forceReextract = false) => {
-    try {
-      setValidatingDocId(documentId);
-      if (forceReextract) setReExtractingDocId(documentId);
-      toast.info(forceReextract ? "Re-extracting COC information..." : "Extracting COC information...");
-
-      let signedUrl = documentUrl;
-      if (documentUrl.includes('/storage/v1/object/')) {
-        const urlParts = documentUrl.split('/documents/');
-        if (urlParts.length === 2) {
-          const filePath = decodeURIComponent(urlParts[1]);
-          const { data: signedData, error: signError } = await supabase.storage
-            .from('documents')
-            .createSignedUrl(filePath, 3600);
-          if (signError) {
-            if (process.env.NODE_ENV === 'development') console.error('Error creating signed URL:', signError);
-            toast.error('Failed to access document');
-            return;
-          }
-          signedUrl = signedData.signedUrl;
-        }
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-
-      const { data: extractionData, error: extractionError } = await supabase.functions.invoke('extract-coc', {
-        body: { documentUrl: signedUrl, fileName, documentId, subsectionId, forceReextract, userId: user?.id }
-      });
-
-      if (extractionError) {
-        if (process.env.NODE_ENV === 'development') console.error('Extraction error:', extractionError);
-        toast.error(`Failed to extract COC data: ${extractionError.message || 'Unknown error'}`);
-        return;
-      }
-
-      if (extractionData?.error) {
-        if (process.env.NODE_ENV === 'development') console.error('Function returned error:', extractionData.error);
-        toast.error(`Extraction error: ${extractionData.error}`);
-        return;
-      }
-
-      if (extractionData?.extractedData) {
-        if (extractionData.extractionId) {
-          setCocExtractions(prev => ({
-            ...prev,
-            [documentId]: {
-              id: extractionData.extractionId,
-              document_id: documentId,
-              subsection_id: subsectionId,
-              extracted_data: extractionData.extractedData,
-              confidence: extractionData.extractedData.confidence || 'medium',
-              extraction_method: extractionData.model,
-              extracted_at: new Date().toISOString()
-            }
-          }));
-        }
-
-        setCocPreviewData(extractionData.extractedData);
-        setShowCocPreview(true);
-        setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
-
-        if (extractionData.cached) {
-          toast.success('Loaded cached extraction. Review and update if needed.');
-        } else {
-          toast.success('COC information extracted! Please review before verification.');
-        }
-      } else {
-        toast.error('No data could be extracted from the document');
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Error during COC extraction:', error);
-      toast.error(`Failed to extract: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setValidatingDocId(null);
-      setReExtractingDocId(null);
-    }
-  };
-
-  const handleEditExtraction = async (documentId: string, documentUrl: string, fileName: string) => {
-    const existingExtraction = cocExtractions[documentId];
-
-    if (existingExtraction?.extracted_data) {
-      const extractedData = existingExtraction.extracted_data;
-
-      const cocNumber = extractedData.cocNumber || extractedData.administrativeDetails?.cocNumber || '';
-      const cocIssueDate = extractedData.cocIssueDate || extractedData.administrativeDetails?.cocIssueDate || '';
-      const cocType = normalizeCocType(extractedData.cocType);
-      const cocStatus = extractedData.overallStatus === 'Pass' ? 'Approved' :
-                        extractedData.overallStatus === 'Fail' ? 'Failed' :
-                        normalizeCocStatus(extractedData.cocStatus);
-
-      setCocDataByDocument(prev => ({
-        ...prev,
-        [documentId]: {
-          ...prev[documentId],
-          cocNumber: cocNumber || prev[documentId]?.cocNumber || '',
-          cocIssueDate: cocIssueDate || prev[documentId]?.cocIssueDate || '',
-          cocType: cocType || prev[documentId]?.cocType || '',
-          cocStatus: cocStatus || prev[documentId]?.cocStatus || ''
-        }
-      }));
-
-      const docUpdateData: Record<string, string> = {};
-      if (cocNumber) docUpdateData.coc_number = cocNumber;
-      if (cocIssueDate) docUpdateData.coc_issue_date = cocIssueDate;
-      if (cocType) docUpdateData.coc_type = cocType;
-      if (cocStatus) docUpdateData.coc_status = cocStatus;
-
-      if (Object.keys(docUpdateData).length > 0) {
-        await supabase.from('subsection_documents').update(docUpdateData).eq('id', documentId);
-        toast.success('COC fields auto-populated from extraction data');
-      }
-
-      setCocPreviewData(extractedData);
-      setShowCocPreview(true);
-
-      let signedUrl = documentUrl;
-      if (documentUrl.includes('/storage/v1/object/')) {
-        const urlParts = documentUrl.split('/documents/');
-        if (urlParts.length === 2) {
-          const filePath = decodeURIComponent(urlParts[1]);
-          const { data: signedData, error: signError } = await supabase.storage
-            .from('documents')
-            .createSignedUrl(filePath, 3600);
-          if (!signError && signedData) signedUrl = signedData.signedUrl;
-        }
-      }
-
-      setPendingDocumentForVerification({ id: documentId, url: signedUrl, name: fileName });
-    } else {
-      handleExtractCocData(documentId, documentUrl, fileName, false);
-    }
-  };
-
-  const handleApproveAndVerify = async (approvedData: any) => {
-    if (!pendingDocumentForVerification) {
-      toast.error('No document pending verification');
-      return;
-    }
-
-    const docId = pendingDocumentForVerification.id;
-
-    try {
-      setValidatingDocId(docId);
-      setShowCocPreview(false);
-      toast.info("Starting SANS 10142-1 verification...");
-
-      const normalizedCocType = normalizeCocType(approvedData.cocType);
-
-      const subsectionUpdateData: any = {};
-      if (approvedData.cocNumber) subsectionUpdateData.coc_number = approvedData.cocNumber;
-      if (normalizedCocType) subsectionUpdateData.coc_type = normalizedCocType;
-      if (approvedData.cocIssueDate) subsectionUpdateData.coc_issue_date = approvedData.cocIssueDate;
-
-      if (Object.keys(subsectionUpdateData).length > 0) {
-        await supabase.from('subsections').update(subsectionUpdateData).eq('id', subsectionId);
-      }
-
-      const docUpdateData: any = {};
-      if (approvedData.cocNumber) docUpdateData.coc_number = approvedData.cocNumber;
-      if (normalizedCocType) docUpdateData.coc_type = normalizedCocType;
-      if (approvedData.cocIssueDate) docUpdateData.coc_issue_date = approvedData.cocIssueDate;
-
-      if (Object.keys(docUpdateData).length > 0) {
-        await supabase.from('subsection_documents').update(docUpdateData).eq('id', docId);
-      }
-
-      // Preserve any prior local COC state so we can roll back if validate-coc fails.
-      const priorCocData = cocDataByDocument[docId];
-      setCocDataByDocument(prev => ({
-        ...prev,
-        [docId]: {
-          ...prev[docId],
-          cocNumber: approvedData.cocNumber || prev[docId]?.cocNumber || '',
-          cocType: normalizedCocType || prev[docId]?.cocType || '',
-          cocIssueDate: approvedData.cocIssueDate || prev[docId]?.cocIssueDate || '',
-          cocStatus: prev[docId]?.cocStatus || ''
-        }
-      }));
-
-      const { data: validationData, error: validationError } = await supabase.functions.invoke('validate-coc', {
-        body: {
-          documentId: docId,
-          documentUrl: pendingDocumentForVerification.url,
-          subsectionId,
-          approvedCocType: normalizedCocType
-        }
-      });
-
-      if (validationError || validationData?.error) {
-        // Roll back the optimistic write so a failed validation leaves local state intact.
-        setCocDataByDocument(prev => {
-          const next = { ...prev };
-          if (priorCocData) {
-            next[docId] = priorCocData;
-          } else {
-            delete next[docId];
-          }
-          return next;
-        });
-        toast.error(`Verification failed: ${validationError?.message || validationData?.error || 'Unknown error'}`);
-        return;
-      }
-
-      if (validationData?.success || validationData?.status) {
-        const result = validationData.report || validationData;
-        const status = validationData.status || result.overallStatus;
-
-        let docCocStatus = '';
-        if (status === 'Pass') {
-          docCocStatus = 'Approved';
-          toast.success('COC verification passed!');
-        } else if (status === 'Fail') {
-          docCocStatus = 'Failed';
-          toast.error(`COC verification failed: ${validationData.violations?.length || result.criticalFailures?.length || 0} violations found`);
-        } else {
-          toast.warning(`COC verification incomplete`);
-        }
-
-        const cocNumber = approvedData.cocNumber || result.cocNumber || result.administrativeDetails?.cocNumber || '';
-        const cocIssueDate = approvedData.cocIssueDate || result.cocIssueDate || result.administrativeDetails?.cocIssueDate || '';
-        const cocType = normalizeCocType(approvedData.cocType);
-
-        const updateData: Record<string, string> = {};
-        if (docCocStatus) updateData.coc_status = docCocStatus;
-        if (cocNumber) updateData.coc_number = cocNumber;
-        if (cocIssueDate) updateData.coc_issue_date = cocIssueDate;
-        if (cocType) updateData.coc_type = cocType;
-
-        if (Object.keys(updateData).length > 0) {
-          await supabase.from('subsection_documents').update(updateData).eq('id', docId);
-          setCocDataByDocument(prev => ({
-            ...prev,
-            [docId]: {
-              ...prev[docId],
-              cocNumber: cocNumber || prev[docId]?.cocNumber || '',
-              cocIssueDate: cocIssueDate || prev[docId]?.cocIssueDate || '',
-              cocType: cocType || prev[docId]?.cocType || '',
-              cocStatus: docCocStatus || prev[docId]?.cocStatus || ''
-            }
-          }));
-        }
-
-        await fetchCocValidations();
-        await new Promise(resolve => setTimeout(resolve, 200));
-        await fetchSupabaseDocuments();
-      }
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('Error during verification:', error);
-      toast.error(`Verification failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
-    } finally {
-      setValidatingDocId(null);
-      setPendingDocumentForVerification(null);
-      setCocPreviewData(null);
-    }
-  };
-
-  const handleRejectPreview = () => {
-    setShowCocPreview(false);
-    setCocPreviewData(null);
-    setPendingDocumentForVerification(null);
-    toast.info('COC verification cancelled');
   };
 
   // ─── Handlers: Subsection CRUD ─────────────────────────────────
@@ -1054,7 +529,6 @@ export function useSubsectionDetail() {
         supabase.from('snags').delete().eq('subsection_id', subsectionId),
         supabase.from('inspections').delete().eq('subsection_id', subsectionId),
         supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
-        supabase.from('coc_validations').delete().eq('subsection_id', subsectionId),
         supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
       ];
       await Promise.all(deletions);
@@ -1125,93 +599,6 @@ export function useSubsectionDetail() {
     } finally {
       setSaving(false);
     }
-  };
-
-  const handleSaveCocDetails = async (documentId: string) => {
-    if (!subsection) return;
-    const docData = cocDataByDocument[documentId];
-    if (!docData) { toast.error("No data to save for this document"); return; }
-
-    try {
-      setSaving(true);
-      // Only overwrite a coc field when a non-empty value is provided; never
-      // clobber an existing value (incl. an Approved status) with an empty one.
-      const updateData: Record<string, string> = {};
-      if (docData.cocType) updateData.coc_type = docData.cocType;
-      if (docData.cocStatus) updateData.coc_status = docData.cocStatus;
-      if (docData.cocNumber) updateData.coc_number = docData.cocNumber;
-      if (docData.cocIssueDate) updateData.coc_issue_date = docData.cocIssueDate;
-
-      if (Object.keys(updateData).length > 0) {
-        const { error: updateError } = await supabase
-          .from('subsection_documents')
-          .update(updateData)
-          .eq('id', documentId);
-
-        if (updateError) {
-          if (process.env.NODE_ENV === 'development') console.error("Error updating document COC details:", updateError);
-          throw updateError;
-        }
-      }
-
-      setSubsection({
-        ...subsection,
-        cocType: docData.cocType || subsection.cocType,
-        cocStatus: docData.cocStatus || subsection.cocStatus,
-        cocNumber: docData.cocNumber || subsection.cocNumber,
-        cocIssueDate: docData.cocIssueDate || subsection.cocIssueDate
-      });
-
-      if (Object.keys(updateData).length > 0) {
-        const { error: subsectionError } = await supabase
-          .from('subsections')
-          .update(updateData)
-          .eq('id', subsectionId);
-
-        if (subsectionError) {
-          if (process.env.NODE_ENV === 'development') console.error("Error updating subsection COC details:", subsectionError);
-        }
-      }
-
-      toast.success("COC details saved successfully");
-      await fetchSupabaseDocuments();
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error("Error saving COC details:", error);
-      toast.error("Failed to save COC details");
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const getDocCocData = (docId: string): CocDocData => {
-    if (!cocDataByDocument[docId]) {
-      const doc = supabaseDocuments.find(d => d.id === docId);
-      if (doc && (doc.coc_number || doc.coc_issue_date || doc.coc_type || doc.coc_status)) {
-        return {
-          cocType: normalizeCocType(doc.coc_type),
-          cocStatus: normalizeCocStatus(doc.coc_status),
-          cocNumber: doc.coc_number || '',
-          cocIssueDate: doc.coc_issue_date || ''
-        };
-      }
-      return {
-        cocType: normalizeCocType(subsection?.cocType),
-        cocStatus: normalizeCocStatus(subsection?.cocStatus),
-        cocNumber: subsection?.cocNumber || '',
-        cocIssueDate: subsection?.cocIssueDate || ''
-      };
-    }
-    return cocDataByDocument[docId];
-  };
-
-  const updateDocCocData = (docId: string, field: string, value: string) => {
-    setCocDataByDocument(prev => ({
-      ...prev,
-      [docId]: {
-        ...getDocCocData(docId),
-        [field]: value
-      }
-    }));
   };
 
   const getCocDocuments = () => getSupabaseCocDocuments();
@@ -1650,27 +1037,7 @@ export function useSubsectionDetail() {
     actualClientId,
     isOnline,
 
-    // COC data
-    cocDataByDocument,
-    cocValidations,
-    cocExtractions,
-    cocPreviewData,
-    showCocPreview,
-    setShowCocPreview,
-    pendingDocumentForVerification,
-    cocPreviewDoc,
-    setCocPreviewDoc,
-    cocPreviewDialogOpen,
-    setCocPreviewDialogOpen,
-    validatingDocId,
-    reExtractingDocId,
-    selectedValidation,
-    selectedValidationDocId,
-    setSelectedValidationDocId,
-    validationReportOpen,
-    setValidationReportOpen,
-    getDocCocData,
-    updateDocCocData,
+    // COC / document getters
     getCocDocuments,
     getSupabaseCocDocuments,
     getMeteringDocuments,
@@ -1742,17 +1109,11 @@ export function useSubsectionDetail() {
     companyLogo,
 
     // Handlers
-    handleManualValidation,
-    handleExtractCocData,
-    handleEditExtraction,
-    handleApproveAndVerify,
-    handleRejectPreview,
     handleOpenEditDialog,
     handleCreateSubsection,
     handleSaveEdit,
     handleDeleteSubsection,
     handleSaveMeteringDetails,
-    handleSaveCocDetails,
     handleCreateCategory,
     handleDeleteCategory,
     handleDocumentUpload,
@@ -1764,6 +1125,6 @@ export function useSubsectionDetail() {
     handleDeleteInspection,
     handleFixTemplateLinks,
     fetchSupabaseDocuments,
-    fetchCocValidations,
+    fetchSubsectionData,
   };
 }
