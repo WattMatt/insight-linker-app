@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fortress Build Roadmap — APPROVED build spec · 2026-06-12</title>
+<style>
+  :root{
+    --bg:#0e1116;--panel:#161b22;--panel2:#1c232d;--line:#2a3340;--ink:#e6edf3;--mut:#9aa7b4;--mut2:#6e7d8c;
+    --accent:#4c8dff;--accent2:#7aa2ff;--green:#2ea043;--amber:#d29922;--red:#da3633;--purple:#a371f7;--teal:#2dd4bf;
+    --mono:"SFMono-Regular",Consolas,Menlo,monospace;--sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--sans);font-size:15px;line-height:1.55}
+  a{color:var(--accent2);text-decoration:none}
+  code,.mono{font-family:var(--mono);font-size:.85em}
+  .wrap{display:flex;min-height:100vh}
+  nav.side{position:sticky;top:0;align-self:flex-start;height:100vh;width:250px;flex:0 0 250px;background:#0b0e13;border-right:1px solid var(--line);padding:18px 0;overflow-y:auto}
+  nav.side h1{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--mut);margin:0 18px 2px}
+  nav.side .sub{font-size:11px;color:var(--mut2);margin:0 18px 14px}
+  nav.side a{display:block;padding:7px 18px;color:var(--mut);font-size:13px;border-left:3px solid transparent;cursor:pointer}
+  nav.side a:hover{background:#11161d;color:var(--ink)}
+  nav.side a.active{color:#fff;border-left-color:var(--accent);background:#11161d}
+  main{flex:1;min-width:0;padding:32px 44px 90px;max-width:1140px}
+  section.tab{display:none}section.tab.show{display:block;animation:f .25s ease}
+  @keyframes f{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+  h2.page{font-size:25px;margin:0 0 4px;font-weight:680;letter-spacing:-.01em}
+  .lead{color:var(--mut);font-size:15px;margin:0 0 22px;max-width:82ch}
+  h3{font-size:17px;margin:26px 0 10px;font-weight:640;border-bottom:1px solid var(--line);padding-bottom:6px}
+  h4{font-size:13.5px;margin:18px 0 7px;color:var(--accent2);text-transform:uppercase;letter-spacing:.05em}
+  p{margin:0 0 11px;color:#cdd6e0}ul{margin:0 0 13px;padding-left:20px;color:#cdd6e0}li{margin:4px 0}
+  .badge{display:inline-block;font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px;background:#0d2417;color:#5cd277;border:1px solid #1f6b3a}
+  .chip{display:inline-block;font-size:10.5px;font-weight:600;padding:1px 7px;border-radius:20px;border:1px solid;white-space:nowrap}
+  .c-exist{background:#1b3a26;border-color:#2ea043;color:#5cd277}
+  .c-part{background:#3a3318;border-color:#d29922;color:#e3b341}
+  .c-new{background:#3a1d1f;border-color:#da3633;color:#ff7b72}
+  .cx{background:#10161f;border-color:#2a3340;color:var(--mut)}
+  table{width:100%;border-collapse:collapse;margin:10px 0 18px;font-size:12.5px}
+  th,td{text-align:left;padding:7px 9px;border-bottom:1px solid var(--line);vertical-align:top}
+  th{color:var(--mut);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.04em}
+  tr:hover td{background:#12171e}
+  .tag{font-family:var(--mono);font-size:11px;background:#11161d;border:1px solid var(--line);border-radius:5px;padding:1px 5px;color:var(--mut)}
+  .note{border-left:3px solid var(--accent);background:#10161f;padding:11px 15px;border-radius:0 8px 8px 0;margin:13px 0;font-size:13.5px;color:#cdd6e0}
+  .note.warn{border-left-color:var(--amber);background:#191507}
+  .note.ok{border-left-color:var(--green);background:#0d1710}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+  .box{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin:10px 0}
+  pre{background:#0b0e13;border:1px solid var(--line);border-radius:8px;padding:13px 15px;overflow:auto;font-family:var(--mono);font-size:12px;color:#cbd5e1;line-height:1.5}
+  .sprint{border:1px solid var(--line);border-radius:10px;margin:14px 0;overflow:hidden}
+  .sprint .sh{display:flex;align-items:center;gap:12px;padding:11px 15px;background:var(--panel2)}
+  .sprint .sh .sn{font-family:var(--mono);font-size:12px;color:#fff;background:var(--accent);border-radius:6px;padding:3px 9px}
+  .sprint .sh .st{font-weight:640;font-size:15px}
+  .sprint .sh .sw{margin-left:auto;font-size:12px;color:var(--mut)}
+  .sprint .sb{padding:6px 16px 12px}
+  .task{display:flex;gap:10px;padding:7px 0;border-bottom:1px dashed var(--line);font-size:13px}
+  .task:last-child{border-bottom:0}
+  .task .id{font-family:var(--mono);font-size:11px;color:var(--mut2);flex:0 0 52px}
+  .task .d{flex:1}
+  .task .d .f{font-family:var(--mono);font-size:11px;color:var(--accent2);display:block;margin-top:2px}
+  .task .cx2{flex:0 0 30px;text-align:right;font-family:var(--mono);font-size:11px;color:var(--mut)}
+  .feat{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px;margin:10px 0}
+  .feat .ft{font-weight:640;font-size:14px;display:flex;gap:8px;align-items:center}
+  .feat .us{font-size:12.5px;color:var(--mut);font-style:italic;margin:5px 0}
+  .feat ul{margin:4px 0 0;font-size:12.5px}
+  .adr{border:1px solid var(--line);border-radius:8px;padding:11px 14px;margin:9px 0;background:var(--panel)}
+  .adr .h{display:flex;gap:9px;align-items:center;font-weight:640;font-size:14px}
+  .stt{font-family:var(--mono);font-size:10.5px;padding:2px 8px;border-radius:20px}
+  .st-prop{background:#2a2410;color:#e3b341;border:1px solid #6b5a17}
+  .st-lock{background:#0d2417;color:#5cd277;border:1px solid #1f6b3a}
+  .adr p{margin:6px 0 0;font-size:12.5px;color:var(--mut)}
+  .pipe{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px;margin:12px 0}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:12px 14px}
+  .pcard .pn{font-size:11px;color:var(--mut2);font-family:var(--mono)}
+  .pcard .pt{font-weight:640;font-size:13.5px;margin:3px 0 5px}
+  .pcard .pk{font-family:var(--mono);font-size:11px;color:var(--accent2);display:block;margin:2px 0}
+  .pcard .pd{font-size:12px;color:var(--mut)}
+  .foot{margin-top:38px;padding-top:15px;border-top:1px solid var(--line);font-size:12px;color:var(--mut2)}
+  @media(max-width:980px){.grid2,.pipe{grid-template-columns:1fr}nav.side{display:none}main{padding:20px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<nav class="side">
+  <h1>Fortress Build Roadmap</h1>
+  <div class="sub">Insight Linker · <span class="badge" style="font-size:9px;padding:1px 7px">APPROVED-DRAFT</span><br>2026-06-12</div>
+  <a data-go="reqs" class="active">1 · Requirements &amp; scope</a>
+  <a data-go="stack">2 · Tech stack</a>
+  <a data-go="arch">3 · Architecture</a>
+  <a data-go="model">4 · Data model</a>
+  <a data-go="features">5 · Feature breakdown</a>
+  <a data-go="sprints">6 · Sprint plan (file-level)</a>
+  <a data-go="structure">7 · Project structure</a>
+  <a data-go="risks">8 · Risks &amp; mitigations</a>
+  <a data-go="pipeline">9 · Skill / plugin pipeline</a>
+  <a data-go="decisions">10 · Decisions &amp; open items</a>
+</nav>
+<main>
+
+<!-- 1 REQUIREMENTS -->
+<section id="reqs" class="tab show">
+  <h2 class="page">Build Roadmap — Fortress Building Report Pack</h2>
+  <p class="lead">Consolidated build specification. Turns the gap analysis + dashboard design + validated schema into a
+  manageable, file-level, sprint-sequenced plan that reuses the existing Insight Linker engine and ships value early.</p>
+
+  <div class="note ok"><b>Scope locked (this session):</b> <b>full Fortress pack — all 17 domains incl. commercial</b>,
+  <b>Excel-import-first</b>. Buildings = existing <code>sites</code>. One pure KPI module per score, screen + PDF share it.</div>
+
+  <h3>Problem &amp; outcome</h3>
+  <p>WM produces three Fortress report types per building (OPS monthly, CM monthly, Annual) by hand in Excel. The data
+  lives nowhere queryable, KPIs are recomputed per report, and the app today only covers the electrical-compliance
+  slice. <b>Outcome:</b> capture every Fortress domain once, drive a per-building dashboard + the three report packs from
+  one data model, so a building lead sees compliance, condition, assets, utilities, tenants and incidents live, and the
+  reports generate themselves.</p>
+
+  <h3>MVP vs deferred</h3>
+  <div class="grid2">
+    <div class="box"><h4>In v1 (native capture)</h4>
+      <ul><li>Building profile + identity header</li><li>Asset register + PPM</li><li>OHS compliance % + building condition</li><li>Utilities reconciliation</li><li>Tenant register + shop specs + compliance matrix</li><li>Masterfile, expense recoveries, incidents</li><li>Per-building dashboard (8 KPI groups) + OPS/CM/Annual PDF packs</li></ul></div>
+    <div class="box"><h4>In v1 (import-only) · deferred native</h4>
+      <ul><li>Trading / turnover / density / COO</li><li>Tenant movements, vacancy, arrears, footfall, toilet fund</li><li><span class="muted">— displayed &amp; reported, populated from CM Page 2 import; native entry forms = V2</span></li></ul>
+      <h4>Not v1</h4>
+      <ul><li>Multi-building portfolio analytics (Sprint 5 / stretch)</li><li>Tenant-isolation RLS rework beyond read-scoping (G-SEC-13 track)</li><li>Live finance-system integration (MDA/Nimbus)</li></ul></div>
+  </div>
+
+  <h3>Success metric</h3>
+  <p>Abaqulusi Plaza’s <b>OPS + CM + Annual reports generate from captured data with zero manual Excel assembly</b>, and
+  the dashboard’s 38 KPIs match the generated PDFs exactly (screen↔PDF parity test passes). Baseline today: 0 of 3
+  reports automated.</p>
+</section>
+
+<!-- 2 TECH STACK -->
+<section id="stack" class="tab">
+  <h2 class="page">2 · Tech stack — reuse, don’t reinvent</h2>
+  <p class="lead">No new platform choices. Every pick is the existing app stack; the discipline is <i>where</i> new logic
+  lives, not <i>what</i> it’s written in. Justifications trace to the builder’s skills and the existing codebase.</p>
+  <table>
+    <tr><th>Layer</th><th>Choice</th><th>Why (constraint-traced)</th></tr>
+    <tr><td>Frontend</td><td>Next.js 15 App Router + React 18 + TS</td><td>Already the app; team knows it; dashboard is server-data + client cards</td></tr>
+    <tr><td>UI</td><td>Tailwind + shadcn/ui + Recharts</td><td>Existing component system &amp; chart lib — dashboard groups reuse card primitives</td></tr>
+    <tr><td>Server state</td><td>TanStack Query</td><td>Existing data-fetch pattern; per-building queries cache cleanly</td></tr>
+    <tr><td>Backend / DB</td><td>Supabase Postgres + RLS + Edge Functions</td><td>Migration already written &amp; PG-validated; RLS posture matches existing tables</td></tr>
+    <tr><td>KPI logic</td><td>Pure TS modules next to <code>siteHealth.ts</code></td><td>Established single-source-of-truth pattern; unit-testable without DB</td></tr>
+    <tr><td>Import</td><td><code>xlsx</code> (SheetJS) in an Edge Function + staging table</td><td>Workbooks are the source; server-side parse keeps the client thin</td></tr>
+    <tr><td>Reports</td><td>pdfmake (primary) / PdfShift fallback</td><td>Existing PDF pipeline; report packs reuse it, fed by the KPI modules</td></tr>
+    <tr><td>Offline</td><td>Capacitor + IndexedDB + Workbox</td><td>Existing offline layer; asset/condition capture extends it in Sprint 5</td></tr>
+  </table>
+  <h4>Rejected</h4>
+  <p><span class="tag">new microservice for reports</span> — rejected: edge functions + pure modules suffice.
+  <span class="tag">a separate analytics DB for commercial data</span> — rejected: import-to-Postgres is enough at this scale.
+  <span class="tag">client-side Excel parsing</span> — rejected: large workbooks + validation belong server-side.</p>
+</section>
+
+<!-- 3 ARCHITECTURE -->
+<section id="arch" class="tab">
+  <h2 class="page">3 · Architecture</h2>
+  <p class="lead">The property layer hangs off <code>sites</code>; one import pipeline feeds the new tables; one set of
+  pure KPI modules feeds both the dashboard and the three report generators.</p>
+<pre>
+                         ┌─────────────────────────── CLIENT (Next.js App Router) ───────────────────────────┐
+                         │  /sites/[id]/fortress  →  Dashboard (8 KPI groups)        Import wizard (preview)  │
+                         │        │  TanStack Query                                          │                │
+                         └────────┼──────────────────────────────────────────────────────────┼───────────────┘
+                                  │ reads (RLS-scoped)                                         │ upload .xlsx
+                                  ▼                                                            ▼
+   ┌──────────────────────────────────────────────┐         ┌──────────────────────────────────────────────┐
+   │  PURE KPI MODULES  (src/lib, no I/O)          │         │  EDGE FN: import-fortress-workbook            │
+   │  siteHealth.ts · buildingCompliance.ts        │◀────────│  SheetJS parse → versioned column-map →       │
+   │  ppm.ts · utilities.ts · reportKpis.ts        │  same   │  validate (arity, unmapped cols) → preview →  │
+   └───────────────┬───────────────────────────────┘  math   │  commit to staging → upsert into tables       │
+                   │                                          └───────────────────┬──────────────────────────┘
+        ┌──────────┴───────────┐                                                  │
+        ▼                      ▼                                                  ▼
+┌───────────────┐   ┌────────────────────┐         ┌──────────────────────────────────────────────────────┐
+│ Dashboard     │   │ REPORT GENERATORS  │         │  SUPABASE POSTGRES  (RLS: read scoped by user_sites)   │
+│ cards (screen)│   │ OPS · CM · Annual  │────────▶│  sites(+profile) · building_assets · ppm_tasks ·       │
+└───────────────┘   │ pdfmake/PdfShift   │         │  ohs_compliance_items · building_condition_items ·     │
+                    └────────────────────┘         │  utilities_readings · tenants · tenant_shop_specs ·    │
+                    screen ↔ PDF parity test       │  tenant_trading · tenant_movements · masterfile_index ·│
+                    asserts both call KPI modules   │  expense_recoveries · security_incidents               │
+                                                    └────────────────────────────────────────────────────────┘
+</pre>
+  <div class="note"><b>Key rule:</b> dashboards and report generators NEVER compute a KPI inline — they import the pure
+  modules. This is the bug class the Site-Health redesign exists to kill; we extend it, not repeat it.</div>
+</section>
+
+<!-- 4 DATA MODEL -->
+<section id="model" class="tab">
+  <h2 class="page">4 · Data model</h2>
+  <p class="lead">Already built &amp; PG-validated in <code>supabase/migrations/20260612200000_fortress_building_layer.sql</code>
+  (47 statements). 12 tables + 13 <code>sites</code> profile columns. Below is the relationship skeleton + the v1 changes
+  still to make.</p>
+  <table>
+    <tr><th>Entity</th><th>Key fields</th><th>Relationships</th><th>Status</th></tr>
+    <tr><td><code>sites</code> (+profile)</td><td>gla_m2, vacancy_m2, parking_bays, asset/ops/centre_manager…</td><td>belongs_to clients; has_many everything below</td><td><span class="chip c-part">extend</span></td></tr>
+    <tr><td><code>building_assets</code></td><td>category, name, make_model, last/next_service, cost, condition</td><td>has_many ppm_tasks</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>ppm_tasks</code></td><td>service_type, scheduled_month, status(due/done/missed/na)</td><td>belongs_to asset?, site</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>ohs_compliance_items</code></td><td>item_code, question, answer(Y/N/NA), weight</td><td>belongs_to site</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>building_condition_items</code></td><td>area, element, acceptable, action_level, condition</td><td>belongs_to site</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>utilities_readings</code></td><td>period, water/solar/borehole, night_usage, loadshed</td><td>unique(site,period)</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>tenants</code></td><td>shop_no, name, gla, coc_date, evac_displayed, flammable_cert</td><td>has_many shop_specs, trading</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>tenant_shop_specs</code></td><td>db_phase, amps_actual/lease, hvac, finishes</td><td>belongs_to tenant</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>tenant_trading</code></td><td>turnover, density, coo, growth, footcount, arrears</td><td>belongs_to tenant? (import-only)</td><td><span class="chip c-new">new</span></td></tr>
+    <tr><td><code>tenant_movements</code>·<code>security_incidents</code>·<code>masterfile_index</code>·<code>expense_recoveries</code></td><td>thin ledgers</td><td>belongs_to site</td><td><span class="chip c-new">new</span></td></tr>
+  </table>
+  <h4>v1 data-model changes still required (Sprint 0–2)</h4>
+  <ul>
+    <li><b>Pre-audit</b> live <code>sites/subsections/snags/document_categories</code> before applying (docs are partly stale).</li>
+    <li><b>RLS hardening:</b> swap blanket <code>USING(true)</code> SELECT for membership-scoped reads via <code>user_sites</code>/<code>user_clients</code> (gated by <code>/security-review</code>).</li>
+    <li><b>Condition fields:</b> decide D4 — keep <code>building_condition_items</code> OR add <code>condition</code>+<code>action_timeframe</code> to <code>inspection_items</code> and fold in.</li>
+    <li><b>Tenant migration:</b> backfill <code>tenants</code> from <code>subsections.tenant_name</code>; keep both in sync until subsections drop the column.</li>
+    <li><b>Import staging:</b> add <code>fortress_import_batches</code> (id, site_id, sheet, status, row_counts, errors jsonb) for the preview/commit flow.</li>
+  </ul>
+</section>
+
+<!-- 5 FEATURES -->
+<section id="features" class="tab">
+  <h2 class="page">5 · Feature breakdown</h2>
+  <p class="lead">Each MVP feature as a buildable unit: user story · acceptance criteria · complexity (S/M/L/XL) · deps.</p>
+
+  <div class="feat"><div class="ft">F1 · Building profile &amp; identity header <span class="chip c-part">extend</span> <span class="tag">S</span></div>
+    <div class="us">As a building lead, I want each site to carry its property profile so the dashboard shows GLA, occupancy, managers and anchors at a glance.</div>
+    <ul><li>Sites edit form captures the 13 profile fields; header renders them</li><li>Occupancy % = (gla−vacancy)/gla computed in a pure helper</li><li>Empty/legacy sites show “—”, never crash</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: migration applied</div></div>
+
+  <div class="feat"><div class="ft">F2 · Excel import pipeline (framework) <span class="chip c-new">new</span> <span class="tag">L</span></div>
+    <div class="us">As an admin, I want to upload a Fortress workbook and preview what will load before committing, so a template change can’t silently corrupt data.</div>
+    <ul><li>Edge fn parses a sheet via a <b>versioned column-map</b> (not hard-coded indices)</li><li>Preview shows row counts, unmapped columns, arity errors; commit is blocked on errors</li><li>Re-run is idempotent (deterministic keys, upsert)</li><li>Batch recorded in <code>fortress_import_batches</code></li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: migration; blocks F3–F11 import paths</div></div>
+
+  <div class="feat"><div class="ft">F3 · Asset register + PPM <span class="chip c-new">new</span> <span class="tag">L</span></div>
+    <div class="us">As an ops manager, I want every building system as an asset with its service dates so I see what’s due, overdue and on-schedule.</div>
+    <ul><li>CRUD + import for <code>building_assets</code>; PPM grid from <code>ppm_tasks</code></li><li><code>ppm.ts</code> returns due≤30d, overdue, on-schedule% (unit-tested)</li><li>Service reminders via existing <code>calendar_events</code>/notifications</li><li>Dashboard Group C cards bind to <code>ppm.ts</code></li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2</div></div>
+
+  <div class="feat"><div class="ft">F4 · OHS compliance % <span class="chip c-new">new</span> <span class="tag">M</span></div>
+    <div class="us">As a compliance lead, I want a weighted building OHS % separate from electrical COC.</div>
+    <ul><li><code>buildingCompliance.ts</code> weighted rollup with tunable weights constant</li><li>Hero card + Group A; bands via shared <code>getHealthBand()</code></li><li>Per-section drill-down (occupancy, fire, critical equipment…)</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2; reuses siteHealth band helper</div></div>
+
+  <div class="feat"><div class="ft">F5 · Building condition inspection <span class="chip c-part">extend</span> <span class="tag">M</span></div>
+    <div class="us">As an inspector, I want to grade building elements Good/Fair/Poor with an action timeframe, reusing the inspection engine.</div>
+    <ul><li>D4 resolved: condition + action_level captured; action items flow to <code>snags</code></li><li>Seed Building-Condition + OPS-monthly templates</li><li>Group B KPIs (acceptable %, immediate/3-month counts, Poor count)</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: snag lifecycle migration; site-health redesign</div></div>
+
+  <div class="feat"><div class="ft">F6 · Utilities reconciliation <span class="chip c-new">new</span> <span class="tag">M</span></div>
+    <div class="us">As an ops manager, I want solar/borehole yield, water balance and night usage tracked monthly.</div>
+    <ul><li><code>utilities.ts</code>: yield %, water-balance variance, night-usage flag</li><li>Group D cards; variance &gt;±5% flags red</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2</div></div>
+
+  <div class="feat"><div class="ft">F7 · Tenant register + shop specs + compliance matrix <span class="chip c-new">new</span> <span class="tag">L</span></div>
+    <div class="us">As a centre manager, I want every tenant with shop spec and compliance flags (evac, HVAC, COC, gas).</div>
+    <ul><li><code>tenants</code> backfilled from <code>subsections.tenant_name</code></li><li>Shop-spec import; amperage actual-vs-lease over-draw flag</li><li>Group E compliance matrix</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2</div></div>
+
+  <div class="feat"><div class="ft">F8 · Ledgers — masterfile · recoveries · incidents <span class="chip c-new">new</span> <span class="tag">M</span></div>
+    <div class="us">As a building lead, I want masterfile completeness, expense recovery % and incident trends.</div>
+    <ul><li>CRUD + import for the three ledgers; Groups G/H</li><li>Masterfile % and recovery-vs-budget computed in helpers</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2</div></div>
+
+  <div class="feat"><div class="ft">F9 · Commercial import (trading/movements) <span class="chip cx">import-only</span> <span class="tag">M</span></div>
+    <div class="us">As an asset manager, I want trading/density/COO/footfall/arrears shown, imported from CM Page 2.</div>
+    <ul><li>Import-only; no native entry UI v1 (Decision D5)</li><li>Group F tiles flagged “imported” with source period</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F2</div></div>
+
+  <div class="feat"><div class="ft">F10 · Per-building dashboard <span class="chip c-part">extend</span> <span class="tag">L</span></div>
+    <div class="us">As any building user, I want one screen with hero KPIs + 8 grouped cards, each linked to its source.</div>
+    <ul><li>Route <code>/sites/[id]/fortress</code>; cards bind only to pure KPI modules</li><li>Band colours consistent everywhere</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F3–F9</div></div>
+
+  <div class="feat"><div class="ft">F11 · Report pack generation (OPS/CM/Annual) <span class="chip c-part">extend</span> <span class="tag">L</span></div>
+    <div class="us">As WM, I want the three reports generated from captured data, matching the dashboard exactly.</div>
+    <ul><li>Three generators reuse pdfmake pipeline, fed by <code>reportKpis.ts</code></li><li>Screen↔PDF parity test on a fixture building</li></ul>
+    <div class="muted" style="font-size:12px;margin-top:5px">Deps: F10</div></div>
+</section>
+
+<!-- 6 SPRINTS -->
+<section id="sprints" class="tab">
+  <h2 class="page">6 · Sprint plan — file-level tasks</h2>
+  <p class="lead">Riskiest/most-depended-on first (import framework + asset spine), value visible by Sprint 1.
+  Paths are real repo locations. Effort: optimistic <b>8 wks</b> · expected <b>10 wks</b> · pessimistic <b>13 wks</b> (1 engineer).</p>
+
+  <div class="sprint"><div class="sh"><span class="sn">S0</span><span class="st">Foundation &amp; audit</span><span class="sw">~1 wk</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S0-1</span><div class="d">Read-only audit of live <code>sites/subsections/snags/document_categories</code>; reconcile vs system-reference<span class="f">docs/sessions/fortress-schema-audit.md (new)</span></div><span class="cx2">S</span></div>
+      <div class="task"><span class="id">S0-2</span><div class="d">Land Site-Health redesign (dependency) — confirm merged<span class="f">src/lib/siteHealth.ts · snag-status migration</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S0-3</span><div class="d">Rename electrical FORTRESS template → “WM Electrical Scope” (D6)<span class="f">src/lib/fortressTemplate.ts → wmElectricalScope.ts; update refs</span></div><span class="cx2">S</span></div>
+      <div class="task"><span class="id">S0-4</span><div class="d">Apply <code>building_layer</code> migration to a staging branch; add <code>fortress_import_batches</code><span class="f">supabase/migrations/20260612200000…sql (+ new migration)</span></div><span class="cx2">S</span></div>
+      <div class="task"><span class="id">S0-5</span><div class="d">RLS hardening: membership-scoped SELECT; run <code>/security-review</code> on the schema<span class="f">supabase/migrations/2026…_fortress_rls_scope.sql</span></div><span class="cx2">M</span></div>
+    </div></div>
+
+  <div class="sprint"><div class="sh"><span class="sn">S1</span><span class="st">Import framework + asset register + PPM</span><span class="sw">~2 wks</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S1-1</span><div class="d">Edge fn: parse workbook via versioned column-map; preview + validate<span class="f">supabase/functions/import-fortress-workbook/index.ts</span></div><span class="cx2">L</span></div>
+      <div class="task"><span class="id">S1-2</span><div class="d">Column-map config per sheet (OPS/CM/Annual)<span class="f">src/lib/fortress/columnMaps.ts</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S1-3</span><div class="d">Import wizard UI (upload → preview → commit)<span class="f">src/components/fortress/ImportWizard.tsx</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S1-4</span><div class="d">Asset register CRUD + list/filter by category<span class="f">src/components/fortress/AssetRegister.tsx · hooks/useBuildingAssets.ts</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S1-5</span><div class="d"><code>ppm.ts</code> pure rollups + unit tests<span class="f">src/lib/fortress/ppm.ts · ppm.test.ts</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S1-6</span><div class="d">Dashboard Group C cards bind to ppm.ts<span class="f">src/components/fortress/dashboard/AssetsPpmGroup.tsx</span></div><span class="cx2">S</span></div>
+    </div></div>
+
+  <div class="sprint"><div class="sh"><span class="sn">S2</span><span class="st">OHS compliance + building condition</span><span class="sw">~2 wks</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S2-1</span><div class="d"><code>buildingCompliance.ts</code> weighted % + tests<span class="f">src/lib/fortress/buildingCompliance.ts(+test)</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S2-2</span><div class="d">OHS items CRUD/import + section drill-down<span class="f">src/components/fortress/OhsChecklist.tsx</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S2-3</span><div class="d">Resolve D4; add condition/action fields or wire condition table<span class="f">supabase/migrations/2026…_inspection_condition.sql</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S2-4</span><div class="d">Seed Building-Condition + OPS-monthly templates<span class="f">src/lib/templates/buildingCondition.ts</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S2-5</span><div class="d">Dashboard Groups A &amp; B<span class="f">src/components/fortress/dashboard/{Compliance,Condition}Group.tsx</span></div><span class="cx2">S</span></div>
+    </div></div>
+
+  <div class="sprint"><div class="sh"><span class="sn">S3</span><span class="st">Utilities + tenants + shop specs</span><span class="sw">~2 wks</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S3-1</span><div class="d"><code>utilities.ts</code> (yields, variance, night) + tests; Group D<span class="f">src/lib/fortress/utilities.ts(+test)</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S3-2</span><div class="d">Tenant register CRUD/import; backfill from subsections.tenant_name<span class="f">src/components/fortress/TenantRegister.tsx · migration</span></div><span class="cx2">L</span></div>
+      <div class="task"><span class="id">S3-3</span><div class="d">Shop-spec import + amperage over-draw flag; Group E matrix<span class="f">src/components/fortress/ShopSpecMatrix.tsx</span></div><span class="cx2">M</span></div>
+    </div></div>
+
+  <div class="sprint"><div class="sh"><span class="sn">S4</span><span class="st">Ledgers + commercial import + report packs</span><span class="sw">~2 wks</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S4-1</span><div class="d">Masterfile / recoveries / incidents CRUD+import; Groups G/H<span class="f">src/components/fortress/{Masterfile,Recoveries,Incidents}.tsx</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S4-2</span><div class="d">Commercial import (trading/movements), import-only tiles; Group F<span class="f">src/components/fortress/dashboard/TradingGroup.tsx</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S4-3</span><div class="d"><code>reportKpis.ts</code> + OPS/CM/Annual generators on pdfmake<span class="f">src/lib/fortress/reports/{ops,cm,annual}.ts</span></div><span class="cx2">L</span></div>
+      <div class="task"><span class="id">S4-4</span><div class="d">Screen↔PDF parity test on Abaqulusi fixture<span class="f">src/lib/fortress/reports/parity.test.ts</span></div><span class="cx2">M</span></div>
+    </div></div>
+
+  <div class="sprint"><div class="sh"><span class="sn">S5</span><span class="st">Portfolio, offline, hardening</span><span class="sw">~1–2 wks</span></div>
+    <div class="sb">
+      <div class="task"><span class="id">S5-1</span><div class="d">Portfolio rollup across buildings (compliance, overdue, incidents)<span class="f">src/app/(admin)/fortress-portfolio/page.tsx</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S5-2</span><div class="d">Offline capture parity for asset/PPM/condition + photos<span class="f">src/lib/offlineInspectionDB.ts (extend)</span></div><span class="cx2">M</span></div>
+      <div class="task"><span class="id">S5-3</span><div class="d">codebase-audit-cleanup sweep · deploy-checklist · pre-mortem<span class="f">docs/sessions/fortress-preflight.md</span></div><span class="cx2">M</span></div>
+    </div></div>
+</section>
+
+<!-- 7 STRUCTURE -->
+<section id="structure" class="tab">
+  <h2 class="page">7 · Project structure</h2>
+  <p class="lead">Where the new code lives in the existing Next.js app. A single <code>fortress/</code> namespace keeps the
+  property layer cohesive and easy to review; pure logic stays out of components.</p>
+<pre>
+src/
+  lib/
+    siteHealth.ts                 ← existing (reused)
+    fortress/
+      columnMaps.ts               ← versioned per-sheet import maps
+      buildingCompliance.ts       ← OHS % (pure) + .test.ts
+      ppm.ts                      ← service/PPM rollups (pure) + .test.ts
+      utilities.ts                ← yields/variance (pure) + .test.ts
+      reportKpis.ts               ← the one KPI surface reports consume
+      reports/{ops,cm,annual}.ts  ← pdfmake generators + parity.test.ts
+    templates/buildingCondition.ts
+    wmElectricalScope.ts          ← renamed from fortressTemplate.ts (D6)
+  hooks/
+    useBuildingAssets.ts  useOhs.ts  useUtilities.ts  useTenants.ts  useFortressDashboard.ts
+  components/
+    fortress/
+      ImportWizard.tsx  AssetRegister.tsx  OhsChecklist.tsx
+      TenantRegister.tsx  ShopSpecMatrix.tsx  Masterfile.tsx  Recoveries.tsx  Incidents.tsx
+      dashboard/{Compliance,Condition,AssetsPpm,Utilities,Tenants,Trading,Security,Documents}Group.tsx
+  app/
+    (admin)/sites/[id]/fortress/page.tsx     ← per-building dashboard
+    (admin)/fortress-portfolio/page.tsx      ← portfolio rollup (S5)
+supabase/
+  migrations/20260612200000_fortress_building_layer.sql   ← done
+  migrations/2026…_fortress_rls_scope.sql                 ← S0-5
+  migrations/2026…_inspection_condition.sql               ← S2-3
+  functions/import-fortress-workbook/index.ts             ← S1-1
+  seeds/fortress_abaqulusi_seed.sql                       ← done
+</pre>
+</section>
+
+<!-- 8 RISKS -->
+<section id="risks" class="tab">
+  <h2 class="page">8 · Risks &amp; mitigations</h2>
+  <table>
+    <tr><th>Risk</th><th>Likelihood</th><th>Impact</th><th>Mitigation</th></tr>
+    <tr><td>Workbook layout drift breaks imports</td><td>High</td><td>Med</td><td>Versioned column-maps + preview/validate + reject on arity mismatch (F2); never hard-code indices</td></tr>
+    <tr><td>Tenant data leaks across buildings (G-SEC-13)</td><td>Med</td><td>High</td><td>Membership-scoped RLS (S0-5); <code>/security-review</code> gates apply</td></tr>
+    <tr><td>Screen ↔ PDF KPI drift</td><td>Med</td><td>High</td><td>Single pure KPI modules; parity test (S4-4); no inline calc</td></tr>
+    <tr><td>Scope sprawl (full pack is large)</td><td>High</td><td>Med</td><td>Value-first sequencing; commercial import-only; portfolio = S5/stretch</td></tr>
+    <tr><td>Stale schema docs cause a bad migration</td><td>Med</td><td>High</td><td>Pre-audit (S0-1) gates every migration; ON CONFLICT-safe seed</td></tr>
+    <tr><td>Naming clash (two “Fortress”)</td><td>High</td><td>Low</td><td>Rename electrical template in S0-3 before any UI</td></tr>
+    <tr><td>Offline parity for new tables underestimated</td><td>Med</td><td>Med</td><td>Deferred to S5; not on the v1 critical path</td></tr>
+  </table>
+  <div class="note warn"><b>Load-bearing assumption:</b> the three workbook layouts are stable enough to map once.
+  If the client changes templates often, import-first economics weaken and native forms move earlier. Validate by
+  diffing 2–3 months of each report before committing the column-maps.</div>
+</section>
+
+<!-- 9 PIPELINE -->
+<section id="pipeline" class="tab">
+  <h2 class="page">9 · Skill / plugin pipeline per phase</h2>
+  <p class="lead">Which skill runs when, so the roadmap stays complete, the code stays clean, the DB is correct, and the
+  first run is green with nothing assumed.</p>
+  <div class="pipe">
+    <div class="pcard"><div class="pn">PLAN</div><div class="pt">Lock decisions</div><span class="pk">engineering:architecture</span><span class="pk">engineering:system-design</span><div class="pd">ADRs for D1–D7; module boundaries before code</div></div>
+    <div class="pcard"><div class="pn">DB</div><div class="pt">Schema &amp; migrations</div><span class="pk">data-schema-designer</span><span class="pk">data-migration-script</span><div class="pd">Validate 12-table model; harden migrations (up/down, backfill, pre-audit)</div></div>
+    <div class="pcard"><div class="pn">BUILD</div><div class="pt">Backend slices</div><span class="pk">api-endpoint-generator</span><span class="pk">webhook-handler</span><div class="pd">RPCs/edge fns per table + the import function</div></div>
+    <div class="pcard"><div class="pn">BUILD</div><div class="pt">Frontend</div><span class="pk">frontend-design</span><span class="pk">ui-uplift</span><div class="pd">Dashboard groups + import wizard, on shadcn</div></div>
+    <div class="pcard"><div class="pn">CLEAN</div><div class="pt">Every PR</div><span class="pk">engineering:code-review</span><span class="pk">refactor-readability</span><div class="pd">Correctness/security/readability gate before merge</div></div>
+    <div class="pcard"><div class="pn">TEST</div><div class="pt">Green first run</div><span class="pk">engineering:testing-strategy</span><span class="pk">unit-test-writer</span><div class="pd">Tests on pure KPI modules + parity test</div></div>
+    <div class="pcard"><div class="pn">VERIFY</div><div class="pt">Nothing overlooked</div><span class="pk">codebase-audit-cleanup</span><span class="pk">pre-mortem-analyst</span><div class="pd">Whole-repo sweep + “what breaks” pass</div></div>
+    <div class="pcard"><div class="pn">SECURE</div><div class="pt">RLS / isolation</div><span class="pk">/security-review</span><span class="pk">security-audit</span><div class="pd">Gate schema + portal reads (G-SEC-13)</div></div>
+    <div class="pcard"><div class="pn">SHIP</div><div class="pt">Pre-flight</div><span class="pk">engineering:deploy-checklist</span><div class="pd">Migrations, flags, rollback triggers</div></div>
+  </div>
+  <h4>Plugins / connectors</h4>
+  <p><b>GitHub</b> (engineering plugin) — code-review &amp; security-review run on real diffs/PRs.
+  <b>Linear or Asana</b> (design plugin) — hold this sprint backlog as tracked tickets (S0-1 … S5-3).
+  I can push the 26 file-level tasks above straight in.</p>
+</section>
+
+<!-- 10 DECISIONS -->
+<section id="decisions" class="tab">
+  <h2 class="page">10 · Decisions &amp; open items</h2>
+  <p class="lead">Carried from the gap-analysis ADR log; scope answers from this session promote two to LOCKED.</p>
+  <div class="adr"><div class="h">D1 — Buildings on existing <code>sites</code> <span class="stt st-prop">PROPOSED</span></div><p>Profile extension, not a new entity. Reuses RLS/portals/PDF.</p></div>
+  <div class="adr"><div class="h">D2 — <code>building_assets</code> is the spine <span class="stt st-prop">PROPOSED</span></div><p>Built first (S1); PPM/OHS/cost KPIs read from it.</p></div>
+  <div class="adr"><div class="h">D3 — OHS % separate from electrical COC <span class="stt st-prop">PROPOSED</span></div><p>Own weighted rollup; COC stays the legal fact.</p></div>
+  <div class="adr"><div class="h">D4 — Reuse inspection engine for condition <span class="stt st-prop">PROPOSED → decide in S2-3</span></div><p>Add condition+action fields vs keep <code>building_condition_items</code>. Either works; pick during S2.</p></div>
+  <div class="adr"><div class="h">D5 — Commercial domains import-only in v1 <span class="stt st-lock">LOCKED 2026-06-12</span></div><p>Confirmed this session: full pack scope, but trading/movements/arrears/footfall are import-only — no native entry UI v1.</p></div>
+  <div class="adr"><div class="h">D6 — Rename electrical FORTRESS template <span class="stt st-prop">PROPOSED → do in S0-3</span></div><p>→ “WM Electrical Scope” to clear the naming clash before UI.</p></div>
+  <div class="adr"><div class="h">D7 — One pure KPI module per score <span class="stt st-lock">LOCKED 2026-06-12</span></div><p>buildingCompliance/ppm/utilities/reportKpis are the only calculators; screen + PDF both import them.</p></div>
+  <div class="adr"><div class="h">D8 — Excel-import-first capture <span class="stt st-lock">LOCKED 2026-06-12</span></div><p>Confirmed this session. Native forms follow per table in V2.</p></div>
+
+  <h4>Open items to resolve before/at build</h4>
+  <ul>
+    <li>Live schema pre-audit (S0-1) — needs a read-only DB pull or your grant.</li>
+    <li>OHS section weights — who owns them; is the OPS 85/10/5 the formula or illustrative?</li>
+    <li>RLS read-scoping model — by <code>user_sites</code>, <code>user_clients</code>, or both? (security-review confirms.)</li>
+    <li>D4 condition modelling — decide in S2-3 against real inspection-items usage.</li>
+  </ul>
+
+  <div class="note ok"><b>DID</b> — built the full roadmap: requirements, reuse-first stack, architecture, data model (already migrated &amp; validated), 11 features, 26 file-level tasks across 6 sprints, project structure, risks, skill pipeline, decision log. <b>ASSUME</b> — buildings=sites; workbook layouts stable enough to map once; site-health redesign lands first. <b>RECOMMEND</b> — run S0 (audit + rename + RLS scope) first; push these 26 tasks to Linear/Asana; gate the schema with <code>/security-review</code> before apply.</div>
+</section>
+
+<div class="foot">Fortress Build Roadmap · build-planner output · 2026-06-12 · single-file, inline, no dependencies · source of truth for the build session.</div>
+</main>
+</div>
+<script>
+  var links=document.querySelectorAll('nav.side a[data-go]'),tabs=document.querySelectorAll('section.tab');
+  function go(id){tabs.forEach(t=>t.classList.toggle('show',t.id===id));links.forEach(l=>l.classList.toggle('active',l.getAttribute('data-go')===id));window.scrollTo({top:0});}
+  links.forEach(l=>l.addEventListener('click',()=>go(l.getAttribute('data-go'))));
+</script>
+</body>
+</html>

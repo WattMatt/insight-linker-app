@@ -145,7 +145,7 @@ export function useSubsectionDetail() {
     try {
       const { data, error } = await supabase
         .from('subsection_documents')
-        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_type, coc_status')
+        .select('id, file_name, file_url, category_id, uploaded_at, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status')
         .eq('subsection_id', subsectionId)
         .order('uploaded_at', { ascending: false });
 
@@ -604,9 +604,15 @@ export function useSubsectionDetail() {
   const getCocDocuments = () => getSupabaseCocDocuments();
 
   const getSupabaseCocDocuments = () => {
-    const cocCategory = documentCategories.find(cat => cat.name.toLowerCase().includes('coc'));
-    if (!cocCategory) return [];
-    return supabaseDocuments.filter(doc => doc.category_id === cocCategory.id);
+    // COC certificate categories only — exclude "COC Validation Reports" (old engine output).
+    const cocCatIds = documentCategories
+      .filter(cat => {
+        const n = cat.name.toLowerCase();
+        return n.includes('coc') && !n.includes('validation') && !n.includes('report');
+      })
+      .map(cat => cat.id);
+    if (cocCatIds.length === 0) return [];
+    return supabaseDocuments.filter(doc => cocCatIds.includes(doc.category_id));
   };
 
   const getMeteringDocuments = () => getSupabaseMeteringDocuments();

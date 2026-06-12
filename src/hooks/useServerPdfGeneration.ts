@@ -104,6 +104,14 @@ interface ReportData {
   generatedAt?: string;
   enabledSections?: Record<string, boolean>;
   cocAnnexes?: COCAnnexData[];
+  cocHierarchy?: CocHierarchyGroup[];
+}
+
+export interface CocHierarchyGroup {
+  subsectionName: string;
+  tenantName?: string | null;
+  rollup: 'Pass' | 'Fail' | 'Pending' | 'Missing';
+  rows: { type: string; number: string; issue: string; expiry: string; verdict: string }[];
 }
 
 export function useServerPdfGeneration() {

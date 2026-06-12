@@ -591,6 +591,14 @@ interface COCAnnexData {
   reportData?: any;
 }
 
+// Grouped COC hierarchy (one entry per DB/tenant subsection)
+interface CocHierarchyGroup {
+  subsectionName: string;
+  tenantName?: string | null;
+  rollup: 'Pass' | 'Fail' | 'Pending' | 'Missing';
+  rows: { type: string; number: string; issue: string; expiry: string; verdict: string }[]; // Initial row first, then supplementaries
+}
+
 type ReportType = 'site-summary' | 'compliance' | 'inspection' | 'floor-plan' | 'coc-validation' | 'site-drawing' | 'fortress-checklist' | 'calendar' | 'inspection-template';
 
 interface ReportData {
@@ -615,6 +623,7 @@ interface ReportData {
   generatedAt?: string;
   enabledSections?: Record<string, boolean>;
   cocAnnexes?: COCAnnexData[];
+  cocHierarchy?: CocHierarchyGroup[];
   // COC Validation specific
   cocValidation?: COCValidationData;
   // Inspection specific
@@ -1496,13 +1505,14 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   const enabledSections = data.enabledSections || {};
   const isSectionEnabled = (id: string) => enabledSections[id] !== false; // Default true if not specified
   const hasCOCAnnexes = isSectionEnabled('coc-annexes') && data.cocAnnexes && data.cocAnnexes.length > 0;
-  
+  const hasCOCHierarchy = isSectionEnabled('coc-annexes') && !!data.cocHierarchy && data.cocHierarchy.length > 0;
+
   // Calculate total pages: 1 cover + 1 TOC + summary pages + subsection pages + annex pages
   const subsectionPages = Math.ceil((data.subsections?.length || 0) / 2);
   const hasAssetVerification = !!data.assetVerification && (data.assetVerification.totalAssets > 0);
   const hasFortressChecklist = !!data.fortressChecklist && (data.fortressChecklist.completed > 0 || data.fortressChecklist.pending > 0);
   const annexPages = hasCOCAnnexes ? data.cocAnnexes!.length : 0; // 1 page per annex
-  const summaryPagesCount = 2 + (hasAssetVerification ? 1 : 0) + (hasFortressChecklist ? 1 : 0);
+  const summaryPagesCount = 2 + (hasAssetVerification ? 1 : 0) + (hasFortressChecklist ? 1 : 0) + (hasCOCHierarchy ? 1 : 0);
   // Total: cover (unnumbered) + TOC (page 1) + summary pages + subsection pages + annexes
   const totalPages = 1 + summaryPagesCount + subsectionPages + annexPages;
   
@@ -1517,6 +1527,9 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   }
   if (hasFortressChecklist) {
     tocEntries.push({ title: 'Fortress Checklist', page: tocPage++ });
+  }
+  if (hasCOCHierarchy) {
+    tocEntries.push({ title: 'Certificates of Compliance', page: tocPage++ });
   }
   if ((data.subsections?.length || 0) > 0) {
     tocEntries.push({ title: 'Subsection Details', page: tocPage });
@@ -1616,7 +1629,16 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
     ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
   </div>
   ` : ''}
-  
+
+  ${hasCOCHierarchy ? `
+  <!-- Page ${currentPage}: Certificates of Compliance -->
+  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white; page-break-after: always;">
+    ${generatePageHeader('Site Summary Report', accentColor)}
+    ${generateCOCHierarchySection(data.cocHierarchy!, accentColor)}
+    ${generatePageFooter(currentPage++, '{{TOTAL_PAGES}}', generatedAt)}
+  </div>
+  ` : ''}
+
   <!-- Subsection Pages -->
   ${subsectionPagesHtml}
   
@@ -1628,6 +1650,80 @@ async function generateSiteSummaryHTML(data: ReportData): Promise<string> {
   
   // Replace page number placeholders
   return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
+}
+
+// Generate the grouped "Certificates of Compliance" hierarchy section (one block per DB/tenant subsection)
+function generateCOCHierarchySection(groups: CocHierarchyGroup[], accentColor: string): string {
+  const rollupPill = (rollup: CocHierarchyGroup['rollup']) => {
+    const map: Record<CocHierarchyGroup['rollup'], { label: string; color: string }> = {
+      Fail: { label: 'Non-compliant', color: COLORS.error },
+      Pass: { label: 'Compliant', color: COLORS.success },
+      Missing: { label: 'No COC', color: COLORS.textMuted },
+      Pending: { label: 'Pending', color: COLORS.textMuted },
+    };
+    const { label, color } = map[rollup] || map.Pending;
+    return `<span style="display: inline-block; padding: 3px 10px; border-radius: 10px; background: ${color}; color: white; font-size: 8pt; font-weight: 600;">${label}</span>`;
+  };
+
+  const verdictColor = (verdict: string) =>
+    verdict?.toLowerCase() === 'pass' ? COLORS.success :
+    verdict?.toLowerCase() === 'fail' ? COLORS.error : COLORS.textMuted;
+
+  const groupsHtml = groups.map((group) => {
+    const heading = group.subsectionName + (group.tenantName ? ` · ${group.tenantName}` : '');
+
+    const body = group.rows.length === 0
+      ? `<p style="margin: 8px 0 0 0; font-size: 9pt; color: ${COLORS.textMuted};">No certificate uploaded.</p>`
+      : `
+        <table style="width: 100%; margin-top: 8px;" cellpadding="0" cellspacing="0">
+          <tr style="background: ${COLORS.lightGray};">
+            <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Type</td>
+            <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 22%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">COC number</td>
+            <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Issue</td>
+            <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 18%; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">Expiry</td>
+            <td style="padding: 5px 8px; font-weight: 600; font-size: 8pt; width: 12%; text-align: center; border-bottom: 1px solid ${COLORS.border};">Verdict</td>
+          </tr>
+          ${group.rows.map((row) => `
+          <tr>
+            <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${row.type || '-'}</td>
+            <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${row.number || '-'}</td>
+            <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${row.issue || '-'}</td>
+            <td style="padding: 5px 8px; font-size: 8pt; border-right: 1px solid ${COLORS.border}; border-bottom: 1px solid ${COLORS.border};">${row.expiry || '-'}</td>
+            <td style="padding: 5px 8px; font-size: 8pt; text-align: center; border-bottom: 1px solid ${COLORS.border}; color: ${verdictColor(row.verdict)}; font-weight: 600;">${row.verdict || '-'}</td>
+          </tr>
+          `).join('')}
+        </table>
+      `;
+
+    return `
+      <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
+        <tr>
+          <td style="background: ${COLORS.lightGray}; color: ${COLORS.primary}; padding: 6px 12px; font-weight: 600; font-size: 10pt; border-bottom: 2px solid ${accentColor};">
+            ${heading}
+          </td>
+          <td style="background: ${COLORS.lightGray}; padding: 6px 12px; text-align: right; border-bottom: 2px solid ${accentColor};">
+            ${rollupPill(group.rollup)}
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="border: 1px solid ${COLORS.border}; border-top: none; padding: 10px 12px;">
+            ${body}
+          </td>
+        </tr>
+      </table>
+    `;
+  }).join('');
+
+  return `
+    <table style="width: 100%; margin-bottom: 12px;" cellpadding="0" cellspacing="0">
+      <tr>
+        <td style="background: ${accentColor}; color: white; padding: 8px 12px; font-weight: 600; font-size: 11pt;">
+          Certificates of Compliance
+        </td>
+      </tr>
+    </table>
+    ${groupsHtml}
+  `;
 }
 
 // Generate COC Verification Annex Pages - Two-page layout matching standalone COC Validation Report

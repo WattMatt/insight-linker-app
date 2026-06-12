@@ -9,6 +9,7 @@ import { downloadFile } from '@/lib/fileDownload';
 import { getCategoryAbbreviation } from '@/lib/subsectionCategories';
 import { hasValidCocStatus } from '@/lib/complianceCalculations';
 import { factorScores, siteHealthScore } from '@/lib/siteHealth';
+import { toCocDoc, groupCocDocuments, cocDocFails } from '@/lib/cocHierarchy';
 import {
   Dialog,
   DialogContent,
@@ -119,7 +120,7 @@ export function GenerateFinalReportButton({
         supabase.from('site_marking_checklist').select('section_name, is_checked, status').eq('site_id', site.id),
         supabase.from('site_documents').select('id, file_name, category, site_document_categories(name)').eq('site_id', site.id),
         subsectionIds.length > 0
-          ? supabase.from('subsection_documents').select('subsection_id, file_name, category_id, document_categories(name)').in('subsection_id', subsectionIds)
+          ? supabase.from('subsection_documents').select('id, subsection_id, file_name, file_url, coc_number, coc_issue_date, coc_expiry_date, coc_type, coc_status, category_id, document_categories(name)').in('subsection_id', subsectionIds)
           : Promise.resolve({ data: [], error: null }),
         supabase.from('inspections').select('id, json_data, subsection_id, status').eq('site_id', site.id),
       ]);
@@ -373,6 +374,32 @@ export function GenerateFinalReportButton({
         snagFree: Math.round(((subs.length - Math.min(openSnagsTotal, subs.length)) / Math.max(subs.length, 1)) * 100),
       };
 
+      // Per-document COC hierarchy (Initial + supplementaries) grouped by DB/tenant.
+      const cocToday = new Date().toISOString().slice(0, 10);
+      const isCocCert = (name?: string | null) => {
+        const n = (name || '').toLowerCase();
+        return n.includes('coc') && !n.includes('validation') && !n.includes('report');
+      };
+      const cocHierarchy = subs.map((sub) => {
+        const docs = subDocs
+          .filter((d: any) => d.subsection_id === sub.id && isCocCert(d.document_categories?.name))
+          .map((d: any) => toCocDoc(d));
+        const g = groupCocDocuments(docs, cocToday);
+        const ordered = [g.initial, ...g.supplementaries].filter(Boolean) as ReturnType<typeof toCocDoc>[];
+        return {
+          subsectionName: sub.name || 'Unknown',
+          tenantName: sub.tenant_name || null,
+          rollup: g.rollup,
+          rows: ordered.map((d, i) => ({
+            type: i === 0 ? 'Initial' : d.cocType,
+            number: d.cocNumber || '—',
+            issue: d.cocIssueDate || '—',
+            expiry: d.cocExpiryDate || '—',
+            verdict: cocDocFails(d, cocToday) ? 'Fail' : d.cocStatus,
+          })),
+        };
+      });
+
       return {
         subsections: transformedSubsections,
         summaryStats,
@@ -381,6 +408,7 @@ export function GenerateFinalReportButton({
         documentsSummary,
         assetVerification,
         fortressChecklist,
+        cocHierarchy,
         companyLogoUrl: companyLogoUrl || settings?.company_logo_url,
         accentColor: accentColor || settings?.primary_color || '#2563eb',
       };
@@ -460,6 +488,7 @@ export function GenerateFinalReportButton({
         generatedAt: new Date().toLocaleDateString('en-ZA'),
         enabledSections,
         cocAnnexes: cocAnnexes.length > 0 ? cocAnnexes : undefined,
+        cocHierarchy: data.cocHierarchy,
       });
 
       if (result) {

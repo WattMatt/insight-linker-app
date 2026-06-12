@@ -2328,6 +2328,7 @@ export type Database = {
       subsection_documents: {
         Row: {
           category_id: string
+          coc_expiry_date: string | null
           coc_issue_date: string | null
           coc_number: string | null
           coc_status: string | null
@@ -2342,6 +2343,7 @@ export type Database = {
         }
         Insert: {
           category_id: string
+          coc_expiry_date?: string | null
           coc_issue_date?: string | null
           coc_number?: string | null
           coc_status?: string | null
@@ -2356,6 +2358,7 @@ export type Database = {
         }
         Update: {
           category_id?: string
+          coc_expiry_date?: string | null
           coc_issue_date?: string | null
           coc_number?: string | null
           coc_status?: string | null
@@ -3113,6 +3116,10 @@ export type Database = {
       }
       resolve_my_orphan: {
         Args: { p_inspection_id: string; p_subsection_id: string }
+        Returns: undefined
+      }
+      rollup_subsection_coc_status: {
+        Args: { p_subsection_id: string }
         Returns: undefined
       }
       set_compliance_setting: {

@@ -7,8 +7,7 @@ import { Label } from "@/components/ui/label";
 import { FileText, Upload, Download, Trash2, Eye, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { CocReviewForm } from "@/components/CocReviewForm";
-import { isExpired } from "@/lib/cocCompliance";
+import { CocCertificateList } from "@/components/coc/CocCertificateList";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
 interface CocMeteringTabProps {
@@ -64,9 +63,6 @@ export function CocMeteringTab({
   fetchSupabaseDocuments,
   refetchSubsection,
 }: CocMeteringTabProps) {
-  const today = new Date().toISOString().slice(0, 10);
-  const cocExpired = isExpired(subsection.cocExpiryDate, today);
-
   return (
     <div className="space-y-6">
       {/* Certificates of Compliance */}
@@ -80,93 +76,15 @@ export function CocMeteringTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
-          {/* Subsection-level COC verdict */}
-          <div className="border rounded-lg p-4 space-y-4">
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-muted-foreground">COC verdict:</span>
-              <Badge
-                variant={subsection.cocStatus === 'Fail' ? 'destructive' : 'outline'}
-                className={subsection.cocStatus === 'Pass' && !cocExpired ? 'bg-green-500/10 text-green-600' : undefined}
-              >
-                {subsection.cocStatus || 'Missing'}
-              </Badge>
-              {cocExpired && (
-                <Badge variant="destructive" className="text-xs">Expired</Badge>
-              )}
-            </div>
-            <CocReviewForm
-              subsectionId={subsectionId!}
-              initial={{
-                coc_status: subsection.cocStatus as "Pass" | "Fail" | undefined,
-                coc_number: subsection.cocNumber,
-                coc_issue_date: subsection.cocIssueDate,
-                coc_expiry_date: subsection.cocExpiryDate,
-                coc_failure_reasons: subsection.cocFailureReasons,
-              }}
-              onSaved={() => {
-                fetchSupabaseDocuments();
-                refetchSubsection();
-              }}
-            />
-          </div>
-
-          {/* Existing COC Documents */}
-          {(() => {
-            const cocDocs = getCocDocuments();
-            const supabaseCocDocs = getSupabaseCocDocuments();
-            const hasDocs = cocDocs.length > 0 || supabaseCocDocs.length > 0;
-
-            return hasDocs ? (
-              <div className="space-y-2">
-                {supabaseCocDocs.map((doc) => (
-                  <div
-                    key={doc.id}
-                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
-                  >
-                    <div className="flex items-center gap-3 flex-1">
-                      <FileText className="h-4 w-4 text-muted-foreground" />
-                      <div>
-                        <span className="text-sm font-medium">{doc.file_name}</span>
-                        <p className="text-xs text-muted-foreground">
-                          {new Date(doc.uploaded_at).toLocaleDateString()}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
-                        title="Preview document"
-                      >
-                        <Eye className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
-                        title="Download document"
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => setDeleteDocumentId(doc.id)}
-                        disabled={deletingDocumentId === doc.id}
-                      >
-                        {deletingDocumentId === doc.id ? (
-                          <Loader2 className="h-4 w-4 text-destructive animate-spin" />
-                        ) : (
-                          <Trash2 className="h-4 w-4 text-destructive" />
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : null;
-          })()}
+          {/* Per-document COC capture: Initial + supplementaries, each with a Pass/Fail */}
+          <CocCertificateList
+            cocDocuments={getSupabaseCocDocuments()}
+            deletingDocumentId={deletingDocumentId}
+            onSaved={() => { fetchSupabaseDocuments(); refetchSubsection(); }}
+            setPreviewDocument={setPreviewDocument}
+            handleDownloadDocument={handleDownloadDocument}
+            setDeleteDocumentId={setDeleteDocumentId}
+          />
 
           {/* Upload New COC */}
           <div>
