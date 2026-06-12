@@ -51,11 +51,11 @@ Tables LIKE `coc%` and live row counts:
 ## F. Other edge fns that READ coc (KEEP — they only read coc_status for reports)
 `api-reports`, `templates`, `generate-pdf` reference `coc` — confirm read-only, leave intact.
 
-## G. Replacement (manual workflow — plan Tasks 2-4, NOT built)
-- [ ] `cocCompliance` helper (TDD)
-- [ ] `CocReviewForm` — upload + Pass/Fail + COC number + issue/expiry + failure reasons
-- [ ] per-COC failure report (`cocReport.ts`)
-- [ ] Regenerate `src/integrations/supabase/types.ts` after table drops.
+## G. Replacement (manual workflow)
+- [x] `cocCompliance` helper (TDD)
+- [x] `CocReviewForm` — upload + Pass/Fail + COC number + issue/expiry + failure reasons
+- [x] ~~per-COC failure report (`cocReport.ts`)~~ — **REMOVED 2026-06-12 per Arno:** the "Download COC report" button + `cocReport.ts` were deleted (report deliverable dropped). COC card now shows verdict + form only.
+- [x] Regenerate `src/integrations/supabase/types.ts` after table drops.
 
 ---
 

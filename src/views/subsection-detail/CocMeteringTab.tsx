@@ -4,12 +4,10 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileText, Upload, Download, Trash2, Eye, Loader2, AlertCircle, FileDown } from "lucide-react";
+import { FileText, Upload, Download, Trash2, Eye, Loader2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CocReviewForm } from "@/components/CocReviewForm";
-import { generateCocReport } from "@/lib/cocReport";
-import { downloadBlob } from "@/lib/fileDownload";
 import { isExpired } from "@/lib/cocCompliance";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
@@ -69,23 +67,6 @@ export function CocMeteringTab({
   const today = new Date().toISOString().slice(0, 10);
   const cocExpired = isExpired(subsection.cocExpiryDate, today);
 
-  const handleDownloadCocReport = async () => {
-    try {
-      const blob = await generateCocReport({
-        subsectionName: subsection.name ?? '',
-        coc_status: subsection.cocStatus ?? 'Missing',
-        coc_number: subsection.cocNumber,
-        coc_issue_date: subsection.cocIssueDate,
-        coc_expiry_date: subsection.cocExpiryDate,
-        coc_failure_reasons: subsection.cocFailureReasons,
-      });
-      await downloadBlob(blob, `COC-${subsection.name}.pdf`);
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error("Error generating COC report:", error);
-      toast.error("Failed to generate COC report");
-    }
-  };
-
   return (
     <div className="space-y-6">
       {/* Certificates of Compliance */}
@@ -101,27 +82,17 @@ export function CocMeteringTab({
         <CardContent className="space-y-6">
           {/* Subsection-level COC verdict */}
           <div className="border rounded-lg p-4 space-y-4">
-            <div className="flex items-center justify-between gap-4 flex-wrap">
-              <div className="flex items-center gap-2">
-                <span className="text-sm text-muted-foreground">COC verdict:</span>
-                <Badge
-                  variant={subsection.cocStatus === 'Fail' ? 'destructive' : 'outline'}
-                  className={subsection.cocStatus === 'Pass' && !cocExpired ? 'bg-green-500/10 text-green-600' : undefined}
-                >
-                  {subsection.cocStatus || 'Missing'}
-                </Badge>
-                {cocExpired && (
-                  <Badge variant="destructive" className="text-xs">Expired</Badge>
-                )}
-              </div>
-              <Button
-                size="sm"
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">COC verdict:</span>
+              <Badge
                 variant={subsection.cocStatus === 'Fail' ? 'destructive' : 'outline'}
-                onClick={handleDownloadCocReport}
+                className={subsection.cocStatus === 'Pass' && !cocExpired ? 'bg-green-500/10 text-green-600' : undefined}
               >
-                <FileDown className="h-4 w-4 mr-1" />
-                Download COC report
-              </Button>
+                {subsection.cocStatus || 'Missing'}
+              </Badge>
+              {cocExpired && (
+                <Badge variant="destructive" className="text-xs">Expired</Badge>
+              )}
             </div>
             <CocReviewForm
               subsectionId={subsectionId!}
