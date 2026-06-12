@@ -4,21 +4,20 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { FileText, Upload, Download, Trash2, Eye, RefreshCw, Loader2, AlertCircle } from "lucide-react";
-import { format } from "date-fns";
+import { FileText, Upload, Download, Trash2, Eye, Loader2, AlertCircle, FileDown } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { InlineViolationOverrides } from "@/components/compliance/InlineViolationOverrides";
-import type { SubsectionData, SupabaseDocument, DocumentCategory, CocDocData } from "./types";
+import { CocReviewForm } from "@/components/CocReviewForm";
+import { generateCocReport } from "@/lib/cocReport";
+import { downloadBlob } from "@/lib/fileDownload";
+import { isExpired } from "@/lib/cocCompliance";
+import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
 interface CocMeteringTabProps {
   subsection: SubsectionData;
   subsectionId: string | undefined;
   supabaseDocuments: SupabaseDocument[];
   documentCategories: DocumentCategory[];
-  cocValidations: Record<string, any>;
-  cocExtractions: Record<string, any>;
-  validatingDocId: string | null;
   deletingDocumentId: string | null;
   uploadingFile: boolean;
   setUploadingFile: (v: boolean) => void;
@@ -26,33 +25,19 @@ interface CocMeteringTabProps {
   setUploadFile: (file: File | null) => void;
   setDeleteDocumentId: (id: string | null) => void;
   setPreviewDocument: (doc: {file_name: string, file_url: string} | null) => void;
-  setCocPreviewDoc: (doc: {id: string, file_name: string, file_url: string, uploaded_at: string} | null) => void;
-  setCocPreviewDialogOpen: (open: boolean) => void;
-  setSelectedValidationDocId: (id: string | null) => void;
-  setValidationReportOpen: (open: boolean) => void;
   meterSerialNumber: string;
   setMeterSerialNumber: (v: string) => void;
   ctRatio: string;
   setCtRatio: (v: string) => void;
   saving: boolean;
-  getDocCocData: (docId: string) => CocDocData;
   getCocDocuments: () => SupabaseDocument[];
   getSupabaseCocDocuments: () => SupabaseDocument[];
   getMeteringDocuments: () => SupabaseDocument[];
   getSupabaseMeteringDocuments: () => SupabaseDocument[];
-  handleExtractCocData: (documentId: string, documentUrl: string, fileName: string, forceReextract?: boolean) => void;
-  handleEditExtraction: (documentId: string, documentUrl: string, fileName: string) => void;
   handleDownloadDocument: (url: string, fileName: string) => void;
   handleSaveMeteringDetails: () => void;
   fetchSupabaseDocuments: () => void;
-  fetchCocValidations: () => void;
-  // COC preview state
-  showCocPreview: boolean;
-  setShowCocPreview: (v: boolean) => void;
-  pendingDocumentForVerification: {id: string, url: string, name: string} | null;
-  cocPreviewData: any;
-  setCocPreviewData: React.Dispatch<React.SetStateAction<any>>;
-  setPendingDocumentForVerification: React.Dispatch<React.SetStateAction<{id: string, url: string, name: string} | null>>;
+  refetchSubsection: () => void;
 }
 
 export function CocMeteringTab({
@@ -60,9 +45,6 @@ export function CocMeteringTab({
   subsectionId,
   supabaseDocuments,
   documentCategories,
-  cocValidations,
-  cocExtractions,
-  validatingDocId,
   deletingDocumentId,
   uploadingFile,
   setUploadingFile,
@@ -70,33 +52,40 @@ export function CocMeteringTab({
   setUploadFile,
   setDeleteDocumentId,
   setPreviewDocument,
-  setCocPreviewDoc,
-  setCocPreviewDialogOpen,
-  setSelectedValidationDocId,
-  setValidationReportOpen,
   meterSerialNumber,
   setMeterSerialNumber,
   ctRatio,
   setCtRatio,
   saving,
-  getDocCocData,
   getCocDocuments,
   getSupabaseCocDocuments,
   getMeteringDocuments,
   getSupabaseMeteringDocuments,
-  handleExtractCocData,
-  handleEditExtraction,
   handleDownloadDocument,
   handleSaveMeteringDetails,
   fetchSupabaseDocuments,
-  fetchCocValidations,
-  showCocPreview,
-  setShowCocPreview,
-  pendingDocumentForVerification,
-  cocPreviewData,
-  setCocPreviewData,
-  setPendingDocumentForVerification,
+  refetchSubsection,
 }: CocMeteringTabProps) {
+  const today = new Date().toISOString().slice(0, 10);
+  const cocExpired = isExpired(subsection.cocExpiryDate, today);
+
+  const handleDownloadCocReport = async () => {
+    try {
+      const blob = await generateCocReport({
+        subsectionName: subsection.name ?? '',
+        coc_status: subsection.cocStatus ?? 'Missing',
+        coc_number: subsection.cocNumber,
+        coc_issue_date: subsection.cocIssueDate,
+        coc_expiry_date: subsection.cocExpiryDate,
+        coc_failure_reasons: subsection.cocFailureReasons,
+      });
+      await downloadBlob(blob, `COC-${subsection.name}.pdf`);
+    } catch (error) {
+      if (process.env.NODE_ENV === 'development') console.error("Error generating COC report:", error);
+      toast.error("Failed to generate COC report");
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Certificates of Compliance */}
@@ -110,6 +99,46 @@ export function CocMeteringTab({
           </div>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* Subsection-level COC verdict */}
+          <div className="border rounded-lg p-4 space-y-4">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">COC verdict:</span>
+                <Badge
+                  variant={subsection.cocStatus === 'Fail' ? 'destructive' : 'outline'}
+                  className={subsection.cocStatus === 'Pass' && !cocExpired ? 'bg-green-500/10 text-green-600' : undefined}
+                >
+                  {subsection.cocStatus || 'Missing'}
+                </Badge>
+                {cocExpired && (
+                  <Badge variant="destructive" className="text-xs">Expired</Badge>
+                )}
+              </div>
+              <Button
+                size="sm"
+                variant={subsection.cocStatus === 'Fail' ? 'destructive' : 'outline'}
+                onClick={handleDownloadCocReport}
+              >
+                <FileDown className="h-4 w-4 mr-1" />
+                Download COC report
+              </Button>
+            </div>
+            <CocReviewForm
+              subsectionId={subsectionId!}
+              initial={{
+                coc_status: subsection.cocStatus as "Pass" | "Fail" | undefined,
+                coc_number: subsection.cocNumber,
+                coc_issue_date: subsection.cocIssueDate,
+                coc_expiry_date: subsection.cocExpiryDate,
+                coc_failure_reasons: subsection.cocFailureReasons,
+              }}
+              onSaved={() => {
+                fetchSupabaseDocuments();
+                refetchSubsection();
+              }}
+            />
+          </div>
+
           {/* Existing COC Documents */}
           {(() => {
             const cocDocs = getCocDocuments();
@@ -117,159 +146,51 @@ export function CocMeteringTab({
             const hasDocs = cocDocs.length > 0 || supabaseCocDocs.length > 0;
 
             return hasDocs ? (
-              <div className="space-y-4">
+              <div className="space-y-2">
                 {supabaseCocDocs.map((doc) => (
-                  <div key={doc.id} className="border rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-4">
-                      <div className="flex items-center gap-3 flex-1">
-                        <FileText className="h-5 w-5 text-muted-foreground" />
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="font-medium">{doc.file_name}</p>
-                            {cocValidations[doc.id] && (
-                              <div className="flex items-center gap-2">
-                                <Badge
-                                  variant={
-                                    cocValidations[doc.id].status === 'Pass' ? 'default' :
-                                    cocValidations[doc.id].status === 'Fail' ? 'destructive' :
-                                    'secondary'
-                                  }
-                                  className="text-xs"
-                                >
-                                  {cocValidations[doc.id].status}
-                                </Badge>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  onClick={() => {
-                                    setSelectedValidationDocId(doc.id);
-                                    setValidationReportOpen(true);
-                                  }}
-                                  title="View full validation report"
-                                  className="h-6 w-6 p-0"
-                                >
-                                  <Eye className="h-3 w-3" />
-                                </Button>
-                              </div>
-                            )}
-                          </div>
-                          <p className="text-sm text-muted-foreground">
-                            {new Date(doc.uploaded_at).toLocaleDateString()}
-                          </p>
-                          {cocValidations[doc.id]?.violations && cocValidations[doc.id].violations.length > 0 && (
-                            <InlineViolationOverrides
-                              validationId={cocValidations[doc.id].id}
-                              violations={cocValidations[doc.id].violations}
-                              reportData={cocValidations[doc.id].report_data}
-                              onChanged={() => fetchCocValidations()}
-                            />
-                          )}
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Button
-                          size="sm"
-                          variant="secondary"
-                          onClick={() => {
-                            setCocPreviewDoc(doc as any);
-                            setCocPreviewDialogOpen(true);
-                          }}
-                          title="Preview COC with validation details"
-                        >
-                          <Eye className="h-4 w-4 mr-1" />
-                          Preview
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            if (cocExtractions[doc.id]) {
-                              handleEditExtraction(doc.id, doc.file_url, doc.file_name);
-                            } else {
-                              handleExtractCocData(doc.id, doc.file_url, doc.file_name);
-                            }
-                          }}
-                          disabled={validatingDocId === doc.id}
-                          title={cocExtractions[doc.id] ? "Review existing COC extraction" : "Extract and verify COC against SANS 10142-1"}
-                        >
-                          {validatingDocId === doc.id ? (
-                            <RefreshCw className="h-4 w-4 animate-spin" />
-                          ) : cocExtractions[doc.id] ? (
-                            'Review COC'
-                          ) : (
-                            'Verify COC'
-                          )}
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
-                          title="Preview document"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
-                        >
-                          <Download className="h-4 w-4" />
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => setDeleteDocumentId(doc.id)}
-                          disabled={deletingDocumentId === doc.id}
-                        >
-                          {deletingDocumentId === doc.id ? (
-                            <Loader2 className="h-4 w-4 text-destructive animate-spin" />
-                          ) : (
-                            <Trash2 className="h-4 w-4 text-destructive" />
-                          )}
-                        </Button>
-                      </div>
-                    </div>
-
-                    {/* COC Details */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-3 bg-muted/50 rounded-lg">
+                  <div
+                    key={doc.id}
+                    className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors"
+                  >
+                    <div className="flex items-center gap-3 flex-1">
+                      <FileText className="h-4 w-4 text-muted-foreground" />
                       <div>
-                        <p className="text-xs text-muted-foreground">COC Number</p>
-                        <p className="font-medium text-sm">{getDocCocData(doc.id).cocNumber || '-'}</p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">Issue Date</p>
-                        <p className="font-medium text-sm">
-                          {getDocCocData(doc.id).cocIssueDate
-                            ? format(new Date(getDocCocData(doc.id).cocIssueDate), "PPP")
-                            : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">COC Type</p>
-                        <p className="font-medium text-sm">
-                          {getDocCocData(doc.id).cocType ? (
-                            <Badge variant="outline" className="text-xs">
-                              {getDocCocData(doc.id).cocType}
-                            </Badge>
-                          ) : '-'}
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-xs text-muted-foreground">COC Status</p>
-                        <p className="font-medium text-sm">
-                          {getDocCocData(doc.id).cocStatus === 'Approved' ? (
-                            <Badge className="bg-green-500 text-white text-xs">Approved</Badge>
-                          ) : getDocCocData(doc.id).cocStatus === 'Failed' ? (
-                            <Badge variant="destructive" className="text-xs">Failed</Badge>
-                          ) : '-'}
+                        <span className="text-sm font-medium">{doc.file_name}</span>
+                        <p className="text-xs text-muted-foreground">
+                          {new Date(doc.uploaded_at).toLocaleDateString()}
                         </p>
                       </div>
                     </div>
-                    {!cocValidations[doc.id] && !cocExtractions[doc.id] && (
-                      <p className="text-xs text-muted-foreground mt-2">
-                        Click "Verify COC" to extract and validate this certificate. Data will be saved automatically.
-                      </p>
-                    )}
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setPreviewDocument({ file_name: doc.file_name, file_url: doc.file_url })}
+                        title="Preview document"
+                      >
+                        <Eye className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
+                        title="Download document"
+                      >
+                        <Download className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => setDeleteDocumentId(doc.id)}
+                        disabled={deletingDocumentId === doc.id}
+                      >
+                        {deletingDocumentId === doc.id ? (
+                          <Loader2 className="h-4 w-4 text-destructive animate-spin" />
+                        ) : (
+                          <Trash2 className="h-4 w-4 text-destructive" />
+                        )}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -358,22 +279,6 @@ export function CocMeteringTab({
                         if (!newDoc) throw new Error("Document saved but no record returned");
 
                         toast.success("COC document uploaded successfully!");
-
-                        if (newDoc && urlData.publicUrl) {
-                          const { data: signedData } = await supabase.storage
-                            .from('documents')
-                            .createSignedUrl(uploadData.path, 3600);
-
-                          const previewUrl = signedData?.signedUrl || urlData.publicUrl;
-
-                          setCocPreviewData(null);
-                          setShowCocPreview(true);
-                          setPendingDocumentForVerification({
-                            id: newDoc.id,
-                            url: previewUrl,
-                            name: sanitizedFileName
-                          });
-                        }
 
                         setUploadCategoryId(null);
                         setUploadFile(null);

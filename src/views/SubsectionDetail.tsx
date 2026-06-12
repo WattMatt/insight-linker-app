@@ -139,7 +139,6 @@ const SubsectionDetail = () => {
             isNotCompliant={hook.isNotCompliant}
             openSnagsCount={hook.openSnagsCount}
             snags={hook.snags}
-            cocValidations={hook.cocValidations}
             supabaseDocuments={hook.supabaseDocuments}
             subsectionId={hook.subsectionId}
             siteId={hook.siteId}
@@ -226,9 +225,6 @@ const SubsectionDetail = () => {
             subsectionId={hook.subsectionId}
             supabaseDocuments={hook.supabaseDocuments}
             documentCategories={hook.documentCategories}
-            cocValidations={hook.cocValidations}
-            cocExtractions={hook.cocExtractions}
-            validatingDocId={hook.validatingDocId}
             deletingDocumentId={hook.deletingDocumentId}
             uploadingFile={hook.uploadingFile}
             setUploadingFile={hook.setUploadingFile}
@@ -236,32 +232,19 @@ const SubsectionDetail = () => {
             setUploadFile={hook.setUploadFile}
             setDeleteDocumentId={hook.setDeleteDocumentId}
             setPreviewDocument={hook.setPreviewDocument}
-            setCocPreviewDoc={hook.setCocPreviewDoc}
-            setCocPreviewDialogOpen={hook.setCocPreviewDialogOpen}
-            setSelectedValidationDocId={hook.setSelectedValidationDocId}
-            setValidationReportOpen={hook.setValidationReportOpen}
             meterSerialNumber={hook.meterSerialNumber}
             setMeterSerialNumber={hook.setMeterSerialNumber}
             ctRatio={hook.ctRatio}
             setCtRatio={hook.setCtRatio}
             saving={hook.saving}
-            getDocCocData={hook.getDocCocData}
             getCocDocuments={hook.getCocDocuments}
             getSupabaseCocDocuments={hook.getSupabaseCocDocuments}
             getMeteringDocuments={hook.getMeteringDocuments}
             getSupabaseMeteringDocuments={hook.getSupabaseMeteringDocuments}
-            handleExtractCocData={hook.handleExtractCocData}
-            handleEditExtraction={hook.handleEditExtraction}
             handleDownloadDocument={hook.handleDownloadDocument}
             handleSaveMeteringDetails={hook.handleSaveMeteringDetails}
             fetchSupabaseDocuments={hook.fetchSupabaseDocuments}
-            fetchCocValidations={hook.fetchCocValidations}
-            showCocPreview={hook.showCocPreview}
-            setShowCocPreview={hook.setShowCocPreview}
-            pendingDocumentForVerification={hook.pendingDocumentForVerification}
-            cocPreviewData={hook.cocPreviewData}
-            setCocPreviewData={() => {}}
-            setPendingDocumentForVerification={() => {}}
+            refetchSubsection={hook.fetchSubsectionData}
           />
         </TabsContent>
       </Tabs>
@@ -278,19 +261,6 @@ const SubsectionDetail = () => {
         deleteSubsectionDialogOpen={hook.deleteSubsectionDialogOpen}
         setDeleteSubsectionDialogOpen={hook.setDeleteSubsectionDialogOpen}
         handleDeleteSubsection={hook.handleDeleteSubsection}
-        showCocPreview={hook.showCocPreview}
-        setShowCocPreview={hook.setShowCocPreview}
-        cocPreviewData={hook.cocPreviewData}
-        pendingDocumentForVerification={hook.pendingDocumentForVerification}
-        validatingDocId={hook.validatingDocId}
-        handleApproveAndVerify={hook.handleApproveAndVerify}
-        handleRejectPreview={hook.handleRejectPreview}
-        handleExtractCocData={hook.handleExtractCocData}
-        cocPreviewDialogOpen={hook.cocPreviewDialogOpen}
-        setCocPreviewDialogOpen={hook.setCocPreviewDialogOpen}
-        cocPreviewDoc={hook.cocPreviewDoc}
-        setCocPreviewDoc={hook.setCocPreviewDoc}
-        cocValidations={hook.cocValidations}
         previewDocument={hook.previewDocument}
         setPreviewDocument={hook.setPreviewDocument}
       />

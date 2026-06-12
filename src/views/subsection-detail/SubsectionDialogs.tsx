@@ -4,8 +4,6 @@ import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SUBSECTION_CATEGORIES } from "@/lib/subsectionCategories";
-import { COCPreviewApproval } from "@/components/COCPreviewApproval";
-import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import type { SubsectionData, EditFormData } from "./types";
 
@@ -22,21 +20,6 @@ interface SubsectionDialogsProps {
   deleteSubsectionDialogOpen: boolean;
   setDeleteSubsectionDialogOpen: (open: boolean) => void;
   handleDeleteSubsection: () => void;
-  // COC Preview dialog
-  showCocPreview: boolean;
-  setShowCocPreview: (open: boolean) => void;
-  cocPreviewData: any;
-  pendingDocumentForVerification: {id: string, url: string, name: string} | null;
-  validatingDocId: string | null;
-  handleApproveAndVerify: (data: any) => void;
-  handleRejectPreview: () => void;
-  handleExtractCocData: (documentId: string, documentUrl: string, fileName: string, forceReextract?: boolean) => void;
-  // COC Preview Dialog (detailed)
-  cocPreviewDialogOpen: boolean;
-  setCocPreviewDialogOpen: (open: boolean) => void;
-  cocPreviewDoc: {id: string, file_name: string, file_url: string, uploaded_at: string} | null;
-  setCocPreviewDoc: (doc: any) => void;
-  cocValidations: Record<string, any>;
   // Document Preview
   previewDocument: {file_name: string, file_url: string} | null;
   setPreviewDocument: (doc: {file_name: string, file_url: string} | null) => void;
@@ -53,19 +36,6 @@ export function SubsectionDialogs({
   deleteSubsectionDialogOpen,
   setDeleteSubsectionDialogOpen,
   handleDeleteSubsection,
-  showCocPreview,
-  setShowCocPreview,
-  cocPreviewData,
-  pendingDocumentForVerification,
-  validatingDocId,
-  handleApproveAndVerify,
-  handleRejectPreview,
-  handleExtractCocData,
-  cocPreviewDialogOpen,
-  setCocPreviewDialogOpen,
-  cocPreviewDoc,
-  setCocPreviewDoc,
-  cocValidations,
   previewDocument,
   setPreviewDocument,
 }: SubsectionDialogsProps) {
@@ -200,31 +170,6 @@ export function SubsectionDialogs({
         </DialogContent>
       </Dialog>
 
-      {/* COC Preview and Approval Dialog */}
-      <Dialog open={showCocPreview} onOpenChange={setShowCocPreview}>
-        <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
-          {pendingDocumentForVerification && (
-            <COCPreviewApproval
-              extractedData={cocPreviewData}
-              documentName={pendingDocumentForVerification.name}
-              documentUrl={pendingDocumentForVerification.url}
-              onApprove={handleApproveAndVerify}
-              onReject={handleRejectPreview}
-              isProcessing={validatingDocId === pendingDocumentForVerification.id}
-              onExtract={() => {
-                if (pendingDocumentForVerification) {
-                  handleExtractCocData(
-                    pendingDocumentForVerification.id,
-                    pendingDocumentForVerification.url,
-                    pendingDocumentForVerification.name
-                  );
-                }
-              }}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
-
       {/* Delete Subsection Confirmation Dialog */}
       <AlertDialog open={deleteSubsectionDialogOpen} onOpenChange={setDeleteSubsectionDialogOpen}>
         <AlertDialogContent>
@@ -245,17 +190,6 @@ export function SubsectionDialogs({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
-      {/* COC Preview Dialog */}
-      <COCPreviewDialog
-        open={cocPreviewDialogOpen}
-        onClose={() => {
-          setCocPreviewDialogOpen(false);
-          setCocPreviewDoc(null);
-        }}
-        document={cocPreviewDoc}
-        validation={cocPreviewDoc ? cocValidations[cocPreviewDoc.id] : null}
-      />
 
       {/* Document Preview Dialog */}
       <DocumentPreviewDialog
