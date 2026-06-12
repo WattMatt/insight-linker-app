@@ -206,12 +206,12 @@ export const SiteSummaryFullPreview: React.FC<SiteSummaryFullPreviewProps> = ({
   // Use actual inspections
   const sampleInspections = inspections.length > 0 ? inspections : [];
 
-  // Calculate metrics
-  const metrics = calculateMetrics(subsectionData, kpis?.cocRequired, kpis?.snagOpen);
+  // Calculate metrics. overallHealth comes from the unified siteHealth number
+  // (kpis.overallHealth) so the report matches on-screen Site Health.
+  const metrics = calculateMetrics(subsectionData, kpis?.cocRequired, kpis?.snagOpen, kpis?.overallHealth);
   if (kpis) {
     metrics.subsectionCount = kpis.totalSubsections || metrics.subsectionCount;
     metrics.cocCompliant = kpis.cocPass || metrics.cocCompliant;
-    metrics.overallHealth = metrics.subsectionCount > 0 ? Math.round((metrics.cocCompliant / metrics.subsectionCount) * 100) : 0;
   }
 
   // Calculate category health

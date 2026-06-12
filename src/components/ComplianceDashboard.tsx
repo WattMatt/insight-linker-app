@@ -34,15 +34,15 @@ import {
   Loader2
 } from "lucide-react";
 import { format, subDays, startOfDay } from "date-fns";
-import { 
-  fetchFailedValidationsBySubsection, 
+import {
+  fetchFailedValidationsBySubsection,
   calculateCocComplianceStats,
-  hasValidCocStatus,
   VALID_COC_STATUSES
 } from "@/lib/complianceCalculations";
 import { COCPreviewDialog } from "@/components/COCPreviewDialog";
 import { COCPreviewApproval } from "@/components/COCPreviewApproval";
 import { COCValidationLogCard, type ValidationRecord as ImportedValidationRecord } from "@/components/compliance/COCValidationLogCard";
+import { factorScores, siteHealthScore } from "@/lib/siteHealth";
 import { toast } from "sonner";
 
 // Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
@@ -140,6 +140,9 @@ type FailedValidation = ValidationRecord;
 export const ComplianceDashboard = ({ siteId, subsections, inspections }: ComplianceDashboardProps) => {
   const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [snagCounts, setSnagCounts] = useState({ open: 0, inProgress: 0, closed: 0 });
+  // Health-model inputs (siteHealth.ts is the single source of truth for the overall score)
+  const [healthSnags, setHealthSnags] = useState<Array<{ subsection_id: string; status: string | null; risk_level: string | null }>>([]);
+  const [healthInspections, setHealthInspections] = useState<Array<{ subsection_id: string | null; status: string | null }>>([]);
   const [loading, setLoading] = useState(true);
   const [failedValidationsBySubsection, setFailedValidationsBySubsection] = useState<Set<string>>(new Set());
   const [failedValidations, setFailedValidations] = useState<FailedValidation[]>([]);
@@ -447,39 +450,10 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     };
   }, [siteId, subsections, fetchAllValidations]);
 
-  // Calculate overall compliance score using shared utility
+  // Calculate overall Site Health score from the single source of truth (siteHealth.ts).
+  // COC is tracked separately and is intentionally NOT folded into this score.
   const calculateOverallScore = () => {
-    if (subsections.length === 0) return 0;
-    
-    let compliantCount = 0;
-    
-    subsections.forEach(sub => {
-      // Check if any COC validation has failed (using shared utility)
-      if (sub.is_coc_required && failedValidationsBySubsection.has(sub.id)) {
-        return;
-      }
-      
-      // COC Check using shared utility
-      if (sub.is_coc_required && !hasValidCocStatus(sub.coc_status)) {
-        return;
-      }
-      
-      // Metering Check
-      if (sub.is_coc_required && sub.metering_status === 'Missing') {
-        return;
-      }
-      
-      // Snag Check
-      const latestInspection = inspections.find(i => i.subsection_id === sub.id);
-      if (latestInspection?.json_data) {
-        const jsonData = latestInspection.json_data;
-        if (hasOpenInspectionItems(jsonData)) return;
-      }
-
-      compliantCount++;
-    });
-    
-    return Math.round((compliantCount / subsections.length) * 100);
+    return siteHealthScore(factorScores(subsections, healthSnags, healthInspections));
   };
 
   // Calculate category-specific scores using shared utility
@@ -534,24 +508,43 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   // Fetch snag data and generate trend data
   useEffect(() => {
     const fetchData = async () => {
+      // Health-model inputs, populated below so the trend baseline can use fresh data.
+      let fetchedHealthSnags: Array<{ subsection_id: string; status: string | null; risk_level: string | null }> = [];
+      let fetchedHealthInspections: Array<{ subsection_id: string | null; status: string | null }> = [];
+
       try {
         // Fetch snags for this site's subsections
         const subsectionIds = subsections.map(s => s.id);
-        
+
         if (subsectionIds.length > 0) {
           const { data: snags } = await supabase
             .from('snags')
-            .select('id, status, created_at, rectified_at')
+            .select('id, subsection_id, status, risk_level, created_at, rectified_at')
             .in('subsection_id', subsectionIds);
-          
+
           if (snags) {
             setSnagCounts({
               open: snags.filter(s => s.status === 'Open' || s.status === 'open').length,
               inProgress: snags.filter(s => s.status === 'In Progress' || s.status === 'in_progress').length,
               closed: snags.filter(s => s.status === 'Closed' || s.status === 'closed' || s.status === 'Rectified').length,
             });
+            // Feed the health model (siteHealth.ts) with the fields it needs.
+            fetchedHealthSnags = snags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level }));
+            setHealthSnags(fetchedHealthSnags);
           }
-          
+
+          // Fetch inspection statuses for the health model (the inspections prop carries
+          // json_data, not status, so we load status here from the same source pattern).
+          const { data: inspectionRows } = await supabase
+            .from('inspections')
+            .select('subsection_id, status')
+            .in('subsection_id', subsectionIds);
+
+          if (inspectionRows) {
+            fetchedHealthInspections = inspectionRows.map(i => ({ subsection_id: i.subsection_id, status: i.status }));
+            setHealthInspections(fetchedHealthInspections);
+          }
+
           // Fetch floor plan pins for this site
           const { data: floorPlans } = await supabase
             .from('subsection_floor_plans')
@@ -575,9 +568,10 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           }
         }
         
-        // Generate trend data for last 30 days (simulated based on current state)
+        // Generate trend data for last 30 days (simulated based on current state).
+        // Use the freshly-fetched health inputs so the baseline isn't a render behind.
         const categoryScores = calculateCategoryScores();
-        const currentScore = calculateOverallScore();
+        const currentScore = siteHealthScore(factorScores(subsections, fetchedHealthSnags, fetchedHealthInspections));
         
         const trend: TrendDataPoint[] = [];
         for (let i = 29; i >= 0; i--) {

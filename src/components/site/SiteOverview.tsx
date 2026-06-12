@@ -2,13 +2,13 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { 
   Layers, Shield, AlertCircle, CheckCircle, MapPin, Building, User, Mail,
-  FileText, TrendingUp, TrendingDown, Minus, Target, ClipboardCheck, ArrowRight,
-  Sparkles
+  FileText, TrendingUp, TrendingDown, Minus, Target, ClipboardCheck, ArrowRight
 } from "lucide-react";
 import { Site, SiteStats } from "@/types/site";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { cn } from "@/lib/utils";
+import { factorScores, siteHealthScore, readiness, getHealthBand } from "@/lib/siteHealth";
 
 interface SiteOverviewProps {
   site: Site;
@@ -211,28 +211,30 @@ export function SiteOverview({ site, stats, onTabChange }: SiteOverviewProps) {
       
       const { data: inspections } = await supabase
         .from("inspections")
-        .select("id, status, inspection_date")
+        .select("id, status, inspection_date, subsection_id")
         .eq("site_id", site.id);
       
       const completedInspections = inspections?.filter(i => i.status === "Completed" || i.status === "Done").length || 0;
       const pendingInspections = inspections?.filter(i => i.status === "Pending" || i.status === "Scheduled").length || 0;
       
+      let snags: { subsection_id: string; status: string | null; risk_level: string | null }[] = [];
       let snagStats = { critical: 0, high: 0, medium: 0, low: 0, rectified: 0, total: 0 };
       if (subsectionIds.length > 0) {
-        const { data: snags } = await supabase
+        const { data: snagsData } = await supabase
           .from("snags")
-          .select("status, risk_level")
+          .select("subsection_id, status, risk_level")
           .in("subsection_id", subsectionIds);
-        
-        snagStats.total = snags?.length || 0;
-        snagStats.rectified = snags?.filter(s => s.status === "rectified" || s.status === "Rectified").length || 0;
-        snagStats.critical = snags?.filter(s => s.risk_level === "Critical" && s.status !== "rectified" && s.status !== "Rectified").length || 0;
-        snagStats.high = snags?.filter(s => s.risk_level === "High" && s.status !== "rectified" && s.status !== "Rectified").length || 0;
+
+        snags = snagsData || [];
+        snagStats.total = snags.length;
+        snagStats.rectified = snags.filter(s => s.status === "Rectified" || s.status === "Closed").length;
+        snagStats.critical = snags.filter(s => s.risk_level === "Critical" && s.status === "Open").length;
+        snagStats.high = snags.filter(s => s.risk_level === "High" && s.status === "Open").length;
       }
 
       const { data: subsectionDetails } = await supabase
         .from("subsections")
-        .select("metering_status, meter_serial_number")
+        .select("id, metering_status, meter_serial_number")
         .eq("site_id", site.id);
 
       const meteringInstalled = subsectionDetails?.filter(s => 
@@ -249,7 +251,10 @@ export function SiteOverview({ site, stats, onTabChange }: SiteOverviewProps) {
         floorPlanStats,
         inspections: { total: inspections?.length || 0, completed: completedInspections, pending: pendingInspections },
         snagStats,
-        metering: { installed: meteringInstalled, pending: meteringPending, total: subsectionDetails?.length || 0 }
+        metering: { installed: meteringInstalled, pending: meteringPending, total: subsectionDetails?.length || 0 },
+        subsections: subsectionDetails || [],
+        snags: (snags || []),
+        inspectionsRaw: inspections || [],
       };
     },
     staleTime: 30000
@@ -261,19 +266,13 @@ export function SiteOverview({ site, stats, onTabChange }: SiteOverviewProps) {
     ? Math.round((stats.cocApprovedCount / stats.cocRequiredCount) * 100)
     : 100;
 
-  const siteHealthRate = stats.totalSubsections > 0
-    ? Math.round((stats.compliantCount / stats.totalSubsections) * 100)
-    : 100;
-
-  const snagResolutionRate = extendedStats?.snagStats.total 
-    ? Math.round((extendedStats.snagStats.rectified / extendedStats.snagStats.total) * 100)
-    : 100;
-
-  const getHealthStatus = (rate: number): "success" | "warning" | "danger" => {
-    if (rate >= 80) return "success";
-    if (rate >= 50) return "warning";
-    return "danger";
-  };
+  const subs = extendedStats?.subsections ?? [];
+  const snags = extendedStats?.snags ?? [];
+  const inspectionsRaw = extendedStats?.inspectionsRaw ?? [];
+  const factors = factorScores(subs, snags, inspectionsRaw);
+  const healthScore = siteHealthScore(factors);
+  const ready = readiness(subs, snags, inspectionsRaw);
+  const getHealthStatus = getHealthBand;
 
   return (
     <div className="space-y-6 animate-fade-in">
@@ -281,48 +280,36 @@ export function SiteOverview({ site, stats, onTabChange }: SiteOverviewProps) {
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
         <KPICard
           title="Site Health"
-          value={`${siteHealthRate}%`}
-          subtitle={`${stats.compliantCount} of ${stats.totalSubsections} fully compliant`}
+          value={healthScore}
+          subtitle={`Metering ${factors.metering} · Snags ${factors.snags} · Inspections ${factors.inspections}`}
           icon={<CheckCircle className="h-6 w-6" />}
-          progress={siteHealthRate}
-          status={getHealthStatus(siteHealthRate)}
+          progress={healthScore}
+          status={getHealthStatus(healthScore)}
           onClick={onTabChange ? () => onTabChange("compliance") : undefined}
-          details={[
-            { label: "Compliant", value: stats.compliantCount },
-            { label: "Non-compliant", value: stats.totalSubsections - stats.compliantCount }
-          ]}
           delay={0}
         />
-
         <KPICard
-          title="COC Compliance"
-          value={`${cocComplianceRate}%`}
-          subtitle={`${stats.cocApprovedCount} of ${stats.cocRequiredCount} approved`}
-          icon={<Shield className="h-6 w-6" />}
-          progress={cocComplianceRate}
-          status={getHealthStatus(cocComplianceRate)}
-          onClick={onTabChange ? () => onTabChange("subsections") : undefined}
+          title="Readiness"
+          value={`${ready.ready} / ${ready.total}`}
+          subtitle="Subsections ready"
+          icon={<Target className="h-6 w-6" />}
+          status={ready.total > 0 && ready.ready === ready.total ? "success" : "warning"}
           details={[
-            { label: "Approved", value: stats.cocApprovedCount },
-            { label: "Pending", value: stats.cocRequiredCount - stats.cocApprovedCount }
+            { label: "Need metering", value: ready.failing.metering },
+            { label: "Critical/High open snags", value: ready.failing.snags },
+            { label: "Inspection incomplete", value: ready.failing.inspection },
           ]}
           delay={50}
         />
-
         <KPICard
-          title="Open Snags"
-          value={stats.openSnags}
-          subtitle="Issues requiring attention"
-          icon={<AlertCircle className="h-6 w-6" />}
-          status={stats.openSnags === 0 ? "success" : stats.openSnags > 10 ? "danger" : "warning"}
+          title="COC"
+          value={`${cocComplianceRate}%`}
+          subtitle={`${stats.cocApprovedCount} of ${stats.cocRequiredCount} validated · informational`}
+          icon={<Shield className="h-6 w-6" />}
+          status="info"
           onClick={onTabChange ? () => onTabChange("subsections") : undefined}
-          details={extendedStats ? [
-            { label: "Critical/High", value: (extendedStats.snagStats.critical + extendedStats.snagStats.high) },
-            { label: "Rectified", value: extendedStats.snagStats.rectified }
-          ] : undefined}
           delay={100}
         />
-
         <KPICard
           title="Subsections"
           value={stats.totalSubsections}
@@ -381,20 +368,6 @@ export function SiteOverview({ site, stats, onTabChange }: SiteOverviewProps) {
             { label: "Closed", value: extendedStats.floorPlanStats.closed }
           ] : undefined}
           delay={300}
-        />
-
-        <KPICard
-          title="Snag Resolution"
-          value={`${snagResolutionRate}%`}
-          subtitle="Issues resolved"
-          icon={<Sparkles className="h-6 w-6" />}
-          progress={snagResolutionRate}
-          status={getHealthStatus(snagResolutionRate)}
-          details={extendedStats ? [
-            { label: "Total Snags", value: extendedStats.snagStats.total },
-            { label: "Rectified", value: extendedStats.snagStats.rectified }
-          ] : undefined}
-          delay={350}
         />
       </div>
 

@@ -35,7 +35,6 @@ export interface Subsection {
 
 export interface SiteStats {
     totalSubsections: number;
-    compliantCount: number;
     cocApprovedCount: number;
     cocRequiredCount: number;
     meteringInstalledCount: number;

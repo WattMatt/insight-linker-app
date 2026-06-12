@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { completeDownloadHandoff, createPendingDownloadHandoff } from '@/lib/downloadHandoff';
 import { downloadFile } from '@/lib/fileDownload';
 import { getCategoryAbbreviation } from '@/lib/subsectionCategories';
+import { factorScores, siteHealthScore } from '@/lib/siteHealth';
 import {
   Dialog,
   DialogContent,
@@ -120,7 +121,7 @@ export function GenerateFinalReportButton({
         subsectionIds.length > 0
           ? supabase.from('subsection_documents').select('subsection_id, file_name, category_id, document_categories(name)').in('subsection_id', subsectionIds)
           : Promise.resolve({ data: [], error: null }),
-        supabase.from('inspections').select('id, json_data').eq('site_id', site.id),
+        supabase.from('inspections').select('id, json_data, subsection_id, status').eq('site_id', site.id),
         // Fetch COC validations to get latest status per subsection
         subsectionIds.length > 0
           ? supabase.from('coc_validations').select('id, subsection_id, status, validated_at, violations').in('subsection_id', subsectionIds).order('validated_at', { ascending: false })
@@ -382,9 +383,15 @@ export function GenerateFinalReportButton({
         })),
       };
 
-      // Calculate health metrics
+      // Calculate health metrics. overallHealth is the unified siteHealth number
+      // (siteHealth.ts) so the report matches on-screen Site Health.
+      const healthFactors = factorScores(
+        subs.map(s => ({ id: s.id, metering_status: s.metering_status, meter_serial_number: s.meter_serial_number })),
+        allSnags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level })),
+        inspections.map(i => ({ subsection_id: i.subsection_id, status: i.status })),
+      );
       const healthMetrics = {
-        overallHealth: Math.round((compliantCount / Math.max(subs.length, 1)) * 100),
+        overallHealth: siteHealthScore(healthFactors),
         cocCompliance: Math.round((cocValidCount / Math.max(cocRequired || subs.length, 1)) * 100),
         meteringData: Math.round((meteringInstalled / Math.max(subs.length, 1)) * 100),
         snagFree: Math.round(((subs.length - Math.min(openSnagsTotal, subs.length)) / Math.max(subs.length, 1)) * 100),
