@@ -507,41 +507,16 @@ export const useSampleReportData = (reportType: ReportType, referenceSiteId?: st
           );
           setSubsections(subsectionsWithCounts);
 
-          // Fetch actual COC validations from database
-          const subsectionIds = subsectionsWithCounts.map(s => s.id);
-          const { data: cocValidationsData } = await supabase
-            .from("coc_validations")
-            .select(`
-              id, status, validated_at,
-              subsection_documents!inner(coc_number, subsection_id),
-              subsections!inner(name)
-            `)
-            .in("subsection_id", subsectionIds);
-
-          if (cocValidationsData && cocValidationsData.length > 0) {
-            const cocVals: SampleCocValidation[] = cocValidationsData.map(val => {
-              const doc = val.subsection_documents as any;
-              const sub = val.subsections as any;
-              return {
-                subsectionName: sub?.name || 'Unknown',
-                cocNumber: doc?.coc_number || '-',
-                status: val.status || 'Pending',
-                date: val.validated_at ? new Date(val.validated_at).toLocaleDateString() : '-',
-              };
-            });
-            setCocValidations(cocVals);
-          } else {
-            // Generate from subsection COC status if no validations exist
-            const cocVals: SampleCocValidation[] = subsectionsWithCounts
-              .filter(sub => sub.cocStatus)
-              .map(sub => ({
-                subsectionName: sub.name,
-                cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
-                status: sub.cocStatus || 'Pending',
-                date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
-              }));
-            setCocValidations(cocVals);
-          }
+          // COC verdict is now the subsection's manual coc_status - derive sample rows from it.
+          const cocVals: SampleCocValidation[] = subsectionsWithCounts
+            .filter(sub => sub.cocStatus)
+            .map(sub => ({
+              subsectionName: sub.name,
+              cocNumber: sub.cocStatus === 'Pass' ? `COC-${sub.id.substring(0, 6).toUpperCase()}` : '-',
+              status: sub.cocStatus || 'Pending',
+              date: sub.cocStatus === 'Pass' ? new Date().toLocaleDateString() : '-',
+            }));
+          setCocValidations(cocVals);
         } else {
           // No subsections found - use sample data for subsections
           console.log('[useSampleReportData] No subsections found - using sample subsections');

@@ -27,6 +27,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { factorScores, siteHealthScore, type SnagForHealth } from "@/lib/siteHealth";
+import { hasValidCocStatus, hasFailedCocStatus } from "@/lib/complianceCalculations";
 
 // ============================================================================
 // DATA TYPES - All report types draw from these structures
@@ -493,26 +494,20 @@ export function useUnifiedSiteData(siteId: string | null): UnifiedSiteData {
         })
       );
 
-      // Fetch COC validations
-      const { data: cocValidationsData } = await supabase
-        .from("coc_validations")
-        .select(`
-          id, status, validated_at, validated_by, subsection_id, document_id,
-          subsection_documents(coc_number),
-          subsections(name)
-        `)
-        .in("subsection_id", subsectionIds.length > 0 ? subsectionIds : ['none']);
-
-      const cocValidations: UnifiedCocValidation[] = (cocValidationsData || []).map(val => ({
-        id: val.id,
-        subsectionId: val.subsection_id || '',
-        subsectionName: (val.subsections as any)?.name || 'Unknown',
-        documentId: val.document_id || '',
-        cocNumber: (val.subsection_documents as any)?.coc_number || null,
-        status: val.status,
-        validatedAt: val.validated_at,
-        validatedBy: val.validated_by,
-      }));
+      // COC verdict is the subsection's manual coc_status. Derive a validation row for each
+      // subsection that has a Pass/Fail verdict so downstream previews keep their COC view.
+      const cocValidations: UnifiedCocValidation[] = subsections
+        .filter(s => hasValidCocStatus(s.cocStatus) || hasFailedCocStatus(s.cocStatus))
+        .map((s) => ({
+          id: `coc-${s.id}`,
+          subsectionId: s.id,
+          subsectionName: s.name,
+          documentId: '',
+          cocNumber: s.cocNumber,
+          status: s.cocStatus || '',
+          validatedAt: '',
+          validatedBy: null,
+        }));
 
       // Fetch snags for Site Health (siteHealth.ts needs status + risk_level per subsection)
       const { data: snagsData } = await supabase
