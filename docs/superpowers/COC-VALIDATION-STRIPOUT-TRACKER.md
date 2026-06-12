@@ -1,6 +1,6 @@
 # COC Validation/Review Strip-Out — Tracked Inventory
 
-**Created:** 2026-06-12. **Status:** inventory complete (verified), removal NOT started.
+**Created:** 2026-06-12. **Status:** ✅ COMPLETE + DEPLOYED 2026-06-12 (main @ 96b746c). Validation engine fully removed; manual COC verdict gates is_compliant; 9 tables dropped; edge fns deleted; G-SEC-16 dissolved. Plus removed the dependent ValidationFeedback cluster (validation_feedback/conversations/messages) exposed by the FK CASCADE.
 **Goal:** remove the entire COC *auto-validation + review/approval/extraction* engine. Keep COC as a **manual** record (upload + Pass/Fail verdict + failure report). See `specs/2026-06-11-coc-manual-workflow-design.md` + `plans/2026-06-11-coc-manual-workflow.md`.
 
 **Two groups — do not conflate:**
