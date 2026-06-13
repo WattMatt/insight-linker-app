@@ -33,3 +33,14 @@ export function enqueueOfflineMutation(
     window.dispatchEvent(new Event('offline-queue-updated'));
   }
 }
+
+// Order a drained queue so json_data overwrites run before json_data appends.
+// SYNC_INSPECTION overwrites an inspection's json_data; UPLOAD_INSPECTION_IMAGE appends
+// a photo URL to it via read-modify-write. If an upload drains before a queued full
+// save, the save clobbers the freshly-appended photo URL (the blob is safe in storage,
+// but it's orphaned — never shown). Running uploads LAST guarantees appends survive.
+// Stable sort: relative order is otherwise preserved.
+export function orderQueueForSync<T extends { type: string }>(queue: T[]): T[] {
+  const rank = (type: string) => (type === 'UPLOAD_INSPECTION_IMAGE' ? 1 : 0);
+  return [...queue].sort((a, b) => rank(a.type) - rank(b.type));
+}

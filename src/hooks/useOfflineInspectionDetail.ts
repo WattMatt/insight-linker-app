@@ -171,6 +171,32 @@ export function useOfflineInspectionDetail({
     }
   }, [inspectionId, cachedData]);
 
+  // Full-record offline save: queue the ENTIRE inspection update (status,
+  // quality_rating, project_name, json_data, …) so an offline Save loses nothing on
+  // sync — not just json_data. Deduped per inspection (a day of edits = one pending
+  // push). The enqueue is the durability guarantee; refreshing the local json_data
+  // cache (best-effort) lets an offline reload show the edit.
+  const queueFullInspectionSave = useCallback(async (
+    fields: Record<string, any>
+  ): Promise<boolean> => {
+    if (!inspectionId) return false;
+
+    try {
+      enqueueOfflineMutation('SYNC_INSPECTION', { id: inspectionId, fields }, { dedupeKey: inspectionId });
+
+      if (fields.json_data !== undefined) {
+        await offlineInspectionDB.updateCachedInspectionData(inspectionId, fields.json_data);
+        const updated = await offlineInspectionDB.getCachedInspection(inspectionId);
+        if (updated) setCachedData(updated);
+      }
+      setHasPendingChanges(true);
+      return true;
+    } catch (error) {
+      console.error('Failed to queue offline inspection save:', error);
+      return false;
+    }
+  }, [inspectionId]);
+
   // Add offline image with compression
   const addOfflineImage = useCallback(async (
     file: File | Blob,
@@ -310,6 +336,7 @@ export function useOfflineInspectionDetail({
     cacheInspection,
     getCachedInspection,
     saveInspectionSection,
+    queueFullInspectionSave,
     addOfflineImage,
     getSectionImages,
     deleteOfflineImage,
