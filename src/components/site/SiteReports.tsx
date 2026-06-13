@@ -30,6 +30,7 @@ import {
 interface SiteReportsProps {
     site: Site;
     readOnly?: boolean;
+    autoOpenGenerate?: boolean;
 }
 
 interface SavedReport {
@@ -50,7 +51,7 @@ const REPORT_CATEGORIES = [
     'COC Validation Reports'
 ];
 
-export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
+export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false, autoOpenGenerate = false }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
     const [reports, setReports] = useState<SavedReport[]>([]);
     const [loading, setLoading] = useState(true);
