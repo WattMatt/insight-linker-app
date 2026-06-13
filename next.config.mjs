@@ -1,4 +1,8 @@
 import withPWAInit from "@ducanh2912/next-pwa";
+import { fileURLToPath } from "url";
+import { dirname } from "path";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
 
 // Polyfill browser-only globals for pdfjs-dist in Node.js
 if (typeof globalThis.DOMMatrix === 'undefined') {
@@ -93,6 +97,10 @@ const withPWA = withPWAInit({
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+
+  // Pin the workspace root to this project. A stray empty lockfile at
+  // ~/package-lock.json otherwise makes Next infer the home dir as the root.
+  outputFileTracingRoot: __dirname,
 
   // Audit baseline: 109 strict-mode type errors and an eslint config issue
   // remain post-Vite-migration. Tracked separately. Editors still surface them.
