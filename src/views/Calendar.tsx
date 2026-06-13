@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
@@ -30,6 +30,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { useUnifiedPdfGeneration, CalendarReportData } from "@/hooks/useUnifiedPdfGeneration";
@@ -48,10 +59,14 @@ interface CalendarEvent {
 
 const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-  const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
+  const [selectedEventDay, setSelectedEventDay] = useState<Date | null>(null);
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [viewMode, setViewMode] = useState<"year" | "agenda">("year");
+  const [siteFilter, setSiteFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [deleteTarget, setDeleteTarget] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState({
     title: "",
     site_id: "",
@@ -97,13 +112,40 @@ const Calendar = () => {
     },
   });
 
-  const getEventsForDay = (day: Date) => {
-    return events?.filter(event => {
+  // Events after applying the site + status filters. Drives both the grid and the agenda.
+  const filteredEvents = useMemo(() => {
+    return (events ?? []).filter(event => {
+      if (siteFilter !== "all" && event.site_name !== siteFilter) return false;
+      if (statusFilter !== "all" && event.status !== statusFilter) return false;
+      return true;
+    });
+  }, [events, siteFilter, statusFilter]);
+
+  // Distinct site names for the site filter dropdown.
+  const distinctSites = useMemo(() => {
+    return Array.from(new Set((events ?? []).map(e => e.site_name))).sort();
+  }, [events]);
+
+  // Agenda: filtered events grouped by month label, each group sorted by start_date.
+  const agendaGroups = useMemo(() => {
+    const sorted = [...filteredEvents].sort((a, b) => a.start_date.localeCompare(b.start_date));
+    const groups: { label: string; events: CalendarEvent[] }[] = [];
+    for (const event of sorted) {
+      const label = format(parseISO(event.start_date), "MMMM yyyy");
+      const existing = groups.find(g => g.label === label);
+      if (existing) existing.events.push(event);
+      else groups.push({ label, events: [event] });
+    }
+    return groups;
+  }, [filteredEvents]);
+
+  const getEventsForDay = (day: Date): CalendarEvent[] => {
+    return filteredEvents.filter(event => {
       const eventDate = parseISO(event.start_date);
-      
+
       // Check if it's the start date
       if (isSameDay(eventDate, day)) return true;
-      
+
       // Check if it's within the date range (start to end).
       // Guard against malformed rows (end before start): isWithinInterval throws a
       // RangeError on an inverted interval, which would crash every day cell.
@@ -115,7 +157,7 @@ const Calendar = () => {
       }
 
       return false;
-    }) || [];
+    });
   };
 
   const getPriorityColor = (priority: string | null) => {
@@ -185,6 +227,27 @@ const Calendar = () => {
       event_type: "",
     });
     setIsEventDialogOpen(true);
+  };
+
+  // Clicking a day: if it has events, open the day-detail dialog; otherwise open the
+  // Add dialog prefilled with that date.
+  const handleDayClick = (day: Date, hasEvents: boolean) => {
+    if (hasEvents) {
+      setSelectedEventDay(day);
+    } else {
+      setEditingEvent(null);
+      setFormData({
+        title: "",
+        site_id: "",
+        site_name: "",
+        start_date: format(day, "yyyy-MM-dd"),
+        end_date: "",
+        status: "Scheduled",
+        priority: "Medium",
+        event_type: "",
+      });
+      setIsEventDialogOpen(true);
+    }
   };
 
   const openEditEventDialog = (event: CalendarEvent) => {
@@ -275,8 +338,9 @@ const Calendar = () => {
     }
   };
 
-  const handleDeleteEvent = async (eventId: string) => {
-    if (!confirm("Are you sure you want to delete this event?")) return;
+  const handleDeleteEvent = async () => {
+    if (!deleteTarget) return;
+    const eventId = deleteTarget.id;
 
     try {
       const { error } = await supabase
@@ -293,6 +357,22 @@ const Calendar = () => {
         description: "Failed to delete event",
         variant: "destructive",
       });
+    } finally {
+      setDeleteTarget(null);
+    }
+  };
+
+  // A colored dot class for an event's status, used as a status cue on event bars and lists.
+  const getStatusDotColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "completed":
+        return "bg-green-500";
+      case "in progress":
+        return "bg-orange-500";
+      case "scheduled":
+        return "bg-blue-500";
+      default:
+        return "bg-muted-foreground";
     }
   };
 
@@ -384,6 +464,42 @@ const Calendar = () => {
             </Button>
           </div>
 
+          {/* View toggle + filters */}
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between mb-6">
+            <Tabs value={viewMode} onValueChange={(v) => setViewMode(v as "year" | "agenda")}>
+              <TabsList>
+                <TabsTrigger value="year">Year</TabsTrigger>
+                <TabsTrigger value="agenda">Agenda</TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="flex flex-wrap gap-2">
+              <Select value={siteFilter} onValueChange={setSiteFilter}>
+                <SelectTrigger className="w-[180px]" aria-label="Filter by site">
+                  <SelectValue placeholder="All sites" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All sites</SelectItem>
+                  {distinctSites.map((name) => (
+                    <SelectItem key={name} value={name}>{name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+
+              <Select value={statusFilter} onValueChange={setStatusFilter}>
+                <SelectTrigger className="w-[160px]" aria-label="Filter by status">
+                  <SelectValue placeholder="All statuses" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All statuses</SelectItem>
+                  <SelectItem value="Scheduled">Scheduled</SelectItem>
+                  <SelectItem value="In Progress">In Progress</SelectItem>
+                  <SelectItem value="Completed">Completed</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+
           {/* 12 Month Grid — with explicit loading / error / empty states */}
           {isLoading ? (
             <div className="flex items-center justify-center py-16 text-muted-foreground">
@@ -400,7 +516,7 @@ const Calendar = () => {
               <CalendarDays className="h-8 w-8 mb-2 opacity-50" />
               <p>No events scheduled for {currentYear}.</p>
             </div>
-          ) : (
+          ) : viewMode === "year" ? (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {monthsInYear.map(month => {
               const monthStart = startOfMonth(month);
@@ -439,62 +555,97 @@ const Calendar = () => {
                         const isToday = isSameDay(day, new Date());
                         const hasEvents = dayEvents.length > 0;
 
+                        // Show at most 3 event bars; the rest collapse into a "+N" badge.
+                        const visibleEvents = dayEvents.slice(0, 3);
+                        const overflowCount = dayEvents.length - visibleEvents.length;
+
                         return (
                           <div key={day.toISOString()} className="aspect-square p-1 relative">
                             <button
-                              onClick={() => dayEvents.length > 0 && setSelectedEvent(dayEvents[0])}
+                              onClick={() => handleDayClick(day, hasEvents)}
+                              aria-label={
+                                `${format(day, "EEEE, MMMM d, yyyy")}` +
+                                (hasEvents
+                                  ? `, ${dayEvents.length} event${dayEvents.length === 1 ? "" : "s"}`
+                                  : ", no events")
+                              }
                               className={cn(
-                                "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium relative z-10",
+                                "w-full h-full text-xs rounded flex items-center justify-center transition-all font-medium relative z-10 cursor-pointer hover:bg-muted/50",
                                 isToday && "ring-2 ring-blue-500",
-                                hasEvents && "cursor-pointer font-semibold",
-                                !hasEvents && "cursor-default text-muted-foreground"
+                                hasEvents && "font-semibold",
+                                !hasEvents && "text-muted-foreground"
                               )}
                             >
                               {format(day, "d")}
                             </button>
-                            
+
                             {/* Event bars - positioned absolutely behind the date */}
-                            {hasEvents && dayEvents.map((event, idx) => {
+                            {hasEvents && visibleEvents.map((event, idx) => {
                               const eventStart = parseISO(event.start_date);
                               const eventEnd = event.end_date ? parseISO(event.end_date) : eventStart;
                               const isEventStart = isSameDay(day, eventStart);
                               const isEventEnd = isSameDay(day, eventEnd);
                               const siteColor = getSiteColor(event.site_name);
-                              
+
                               // Calculate if this is the first day of the event in this month
                               const isFirstInMonth = isEventStart || !isSameMonth(eventStart, month);
-                              
+
                               return (
                                 <Tooltip key={`${event.id}-${idx}`}>
                                   <TooltipTrigger asChild>
-                                    <div
+                                    <button
+                                      type="button"
+                                      aria-label={`${event.title} — ${event.site_name} (${event.status})`}
                                       className={cn(
-                                        "absolute z-10 transition-all cursor-pointer rounded-sm",
+                                        "absolute z-10 transition-all cursor-pointer rounded-sm border-l-2",
                                         siteColor.bg,
                                         "opacity-70 hover:opacity-100"
                                       )}
                                       style={{
-                                        top: `${20 + idx * 8}%`,
-                                        height: '6px',
-                                        left: isFirstInMonth ? '10%' : '0',
-                                        right: isEventEnd || !isSameMonth(eventEnd, month) ? '10%' : '0',
-                                        borderRadius: `${isFirstInMonth ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isEventEnd || !isSameMonth(eventEnd, month) ? '3px' : '0'} ${isFirstInMonth ? '3px' : '0'}`
+                                        top: `${18 + idx * 22}%`,
+                                        height: '8px',
+                                        left: isFirstInMonth ? '8%' : '0',
+                                        right: isEventEnd || !isSameMonth(eventEnd, month) ? '8%' : '0',
+                                        borderLeftColor: 'currentColor',
                                       }}
                                       onClick={(e) => {
                                         e.stopPropagation();
-                                        setSelectedEvent(event);
+                                        handleDayClick(day, true);
                                       }}
-                                    />
+                                    >
+                                      <span
+                                        className={cn(
+                                          "absolute -left-px top-1/2 -translate-y-1/2 h-2 w-1 rounded-sm",
+                                          getStatusDotColor(event.status)
+                                        )}
+                                      />
+                                    </button>
                                   </TooltipTrigger>
                                   <TooltipContent side="top" className="z-50">
                                     <div className="text-xs space-y-1">
                                       <p className="font-semibold">{event.site_name}</p>
                                       <p className="text-muted-foreground">{event.title}</p>
+                                      <p className="text-muted-foreground">{event.status}</p>
                                     </div>
                                   </TooltipContent>
                                 </Tooltip>
                               );
                             })}
+
+                            {/* "+N more" badge for days with > 3 events */}
+                            {overflowCount > 0 && (
+                              <button
+                                type="button"
+                                aria-label={`${overflowCount} more event${overflowCount === 1 ? "" : "s"} on ${format(day, "MMMM d, yyyy")}`}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDayClick(day, true);
+                                }}
+                                className="absolute bottom-0 right-0 z-20 px-1 text-[9px] leading-none font-semibold rounded-sm bg-muted text-muted-foreground hover:bg-muted-foreground hover:text-background"
+                              >
+                                +{overflowCount}
+                              </button>
+                            )}
                           </div>
                         );
                       })}
@@ -513,6 +664,61 @@ const Calendar = () => {
               );
             })}
           </div>
+          ) : (
+            /* Agenda view: chronological list grouped by month */
+            agendaGroups.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+                <CalendarDays className="h-8 w-8 mb-2 opacity-50" />
+                <p>No events match the current filters.</p>
+              </div>
+            ) : (
+              <div className="space-y-6">
+                {agendaGroups.map((group) => (
+                  <div key={group.label} className="space-y-2">
+                    <h3 className="text-sm font-semibold text-muted-foreground sticky top-0 bg-background py-1">
+                      {group.label}
+                    </h3>
+                    <div className="space-y-2">
+                      {group.events.map((event) => (
+                        <div
+                          key={event.id}
+                          className="flex items-center gap-3 rounded-md border p-3"
+                        >
+                          <span
+                            className={cn("h-2.5 w-2.5 shrink-0 rounded-full", getStatusDotColor(event.status))}
+                            aria-hidden="true"
+                          />
+                          <div className="min-w-0 flex-1">
+                            <p className="font-medium truncate">{event.title}</p>
+                            <p className="text-xs text-muted-foreground truncate">
+                              {event.site_name}
+                              {event.event_type ? ` · ${event.event_type}` : ""}
+                              {" · "}
+                              {event.start_date}
+                              {event.end_date ? ` → ${event.end_date}` : ""}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={cn("shrink-0", getStatusColor(event.status))}>
+                            {event.status}
+                          </Badge>
+                          <Badge variant="outline" className={cn("shrink-0", getPriorityColor(event.priority))}>
+                            {event.priority}
+                          </Badge>
+                          <div className="flex shrink-0 gap-1">
+                            <Button variant="ghost" size="sm" onClick={() => openEditEventDialog(event)} aria-label="Edit event">
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                            <Button variant="ghost" size="sm" onClick={() => setDeleteTarget(event)} aria-label="Delete event">
+                              <Trash2 className="h-4 w-4 text-destructive" />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )
           )}
           </TooltipProvider>
         </CardContent>
@@ -583,7 +789,7 @@ const Calendar = () => {
                         <Button
                           variant="ghost"
                           size="sm"
-                          onClick={() => handleDeleteEvent(event.id)}
+                          onClick={() => setDeleteTarget(event)}
                         >
                           <Trash2 className="h-4 w-4 text-destructive" />
                         </Button>
@@ -735,6 +941,93 @@ const Calendar = () => {
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* Day-detail Dialog: lists all events on the selected day */}
+      <Dialog open={!!selectedEventDay} onOpenChange={(open) => !open && setSelectedEventDay(null)}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedEventDay ? format(selectedEventDay, "EEEE, MMMM d, yyyy") : ""}
+            </DialogTitle>
+            <DialogDescription>
+              {selectedEventDay
+                ? `${getEventsForDay(selectedEventDay).length} event(s) on this day`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 py-2 max-h-[60vh] overflow-y-auto">
+            {selectedEventDay &&
+              getEventsForDay(selectedEventDay).map((event) => (
+                <div key={event.id} className="rounded-md border p-3 space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-medium truncate">{event.title}</p>
+                      <p className="text-xs text-muted-foreground truncate">
+                        {event.site_name}
+                        {event.event_type ? ` · ${event.event_type}` : ""}
+                      </p>
+                    </div>
+                    <div className="flex shrink-0 gap-1">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Edit event"
+                        onClick={() => {
+                          setSelectedEventDay(null);
+                          openEditEventDialog(event);
+                        }}
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </Button>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        aria-label="Delete event"
+                        onClick={() => setDeleteTarget(event)}
+                      >
+                        <Trash2 className="h-4 w-4 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge variant="outline" className={getStatusColor(event.status)}>
+                      {event.status}
+                    </Badge>
+                    <Badge variant="outline" className={getPriorityColor(event.priority)}>
+                      {event.priority}
+                    </Badge>
+                    <span className="text-xs text-muted-foreground">
+                      {event.start_date}
+                      {event.end_date ? ` → ${event.end_date}` : ""}
+                    </span>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation */}
+      <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete event?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This will permanently delete
+              {deleteTarget ? ` "${deleteTarget.title}"` : " this event"}. This action cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDeleteEvent}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Delete
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 };
