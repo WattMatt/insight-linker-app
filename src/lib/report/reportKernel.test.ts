@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatDate, formatDateTime, localDateStamp, percent } from './reportKernel';
+import { formatDate, formatDateTime, localDateStamp, percent, clampPageNumbers } from './reportKernel';
 
 describe('formatDate', () => {
   it('formats a valid date day-first, full month, padded day', () => {
@@ -61,5 +61,20 @@ describe('percent', () => {
   });
   it('honors a custom fallback', () => {
     expect(percent(1, 0, '—')).toBe('—');
+  });
+});
+
+describe('clampPageNumbers', () => {
+  it('passes through when not skipping the cover', () => {
+    expect(clampPageNumbers(2, 5, false)).toEqual({ page: 2, total: 5 });
+  });
+  it('shifts by one when skipping the cover', () => {
+    expect(clampPageNumbers(2, 5, true)).toEqual({ page: 1, total: 4 });
+  });
+  it('never returns 0 or negative (no "Page 0 of 0")', () => {
+    expect(clampPageNumbers(1, 1, true)).toEqual({ page: 1, total: 1 });
+  });
+  it('never lets page exceed total', () => {
+    expect(clampPageNumbers(5, 4, false)).toEqual({ page: 4, total: 4 });
   });
 });

@@ -49,3 +49,19 @@ export function percent(numerator: number, denominator: number, fallback = '0%')
   if (!denominator || isNaN(denominator) || isNaN(numerator)) return fallback;
   return `${Math.round((numerator / denominator) * 100)}%`;
 }
+
+/**
+ * Compute the page numbers shown in a footer, accounting for a skipped cover
+ * page, and clamp so we never display 0/negative or page > total.
+ */
+export function clampPageNumbers(
+  currentPage: number,
+  pageCount: number,
+  skipFirstPage: boolean,
+): { page: number; total: number } {
+  const rawPage = skipFirstPage ? currentPage - 1 : currentPage;
+  const rawTotal = skipFirstPage ? pageCount - 1 : pageCount;
+  const total = Math.max(1, rawTotal);
+  const page = Math.min(Math.max(1, rawPage), total);
+  return { page, total };
+}
