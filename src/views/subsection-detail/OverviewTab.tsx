@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -7,6 +8,7 @@ import { AlertCircle, FileText, ExternalLink } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { useSearchParams } from "@/lib/navigation";
 import type { SubsectionData, SiteData, EditFormData } from "./types";
 
 interface OverviewTabProps {
@@ -52,6 +54,17 @@ export function OverviewTab({
   setActiveTab,
   navigate,
 }: OverviewTabProps) {
+  const [searchParams] = useSearchParams();
+  const highlightSnagId = searchParams.get("snag");
+  useEffect(() => {
+    if (!highlightSnagId) return;
+    const el = document.querySelector(`[data-snag-id="${highlightSnagId}"]`);
+    el?.scrollIntoView({ behavior: "smooth", block: "center" });
+    el?.classList.add("ring-2", "ring-primary");
+    const t = setTimeout(() => el?.classList.remove("ring-2", "ring-primary"), 2500);
+    return () => clearTimeout(t);
+  }, [highlightSnagId]);
+
   return (
     <div className="space-y-4">
       {/* Compliance Alert */}
@@ -339,7 +352,7 @@ export function OverviewTab({
             {snags.length > 0 && (
               <div className="mt-3 space-y-2">
                 {snags.slice(0, 5).map((snag) => (
-                  <div key={snag.id} className="flex items-center justify-between p-2 border rounded text-sm">
+                  <div key={snag.id} data-snag-id={snag.id} className="flex items-center justify-between p-2 border rounded text-sm">
                     <span className="truncate flex-1 mr-2">{snag.title}</span>
                     <div className="flex items-center gap-2">
                       <Badge
