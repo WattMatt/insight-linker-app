@@ -20,10 +20,18 @@ export function useAuthSession() {
       setSession(s);
       setIsLoading(false);
     });
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setIsLoading(false);
-    });
+    supabase.auth.getSession()
+      .then(({ data }) => {
+        setSession(data.session);
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        // Fail CLOSED: if the session can't be read, treat as signed out (the route guard
+        // then redirects to login) rather than leaving the app stuck on the auth loader.
+        console.error("Failed to read auth session:", err);
+        setSession(null);
+        setIsLoading(false);
+      });
     return () => subscription.unsubscribe();
   }, []);
 

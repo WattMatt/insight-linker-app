@@ -9,10 +9,16 @@ export const useUserRole = () => {
   const [userId, setUserId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Get initial user
-    supabase.auth.getUser().then(({ data: { user } }) => {
-      setUserId(user?.id ?? null);
-    });
+    // Get the initial user id from getSession (reads localStorage — works OFFLINE) rather
+    // than getUser (network). Offline, getUser fails → no userId → the role query stays
+    // disabled → a returning user is treated as role-less and misrouted off their pages.
+    // With the id from the cached session, the role query serves its react-query cache.
+    supabase.auth.getSession()
+      .then(({ data: { session } }) => setUserId(session?.user?.id ?? null))
+      .catch((err) => {
+        console.error("Failed to read session for user role:", err);
+        setUserId(null);
+      });
 
     // Listen for auth changes and invalidate role cache when user changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {

@@ -30,6 +30,11 @@ const withPWA = withPWAInit({
   register: true,
   skipWaiting: true,
   disable: process.env.NODE_ENV === "development",
+  // Precache /offline and serve it when a navigation to an uncached route fails while
+  // offline — otherwise the browser shows a blank/error page (the app had no fallback).
+  fallbacks: {
+    document: "/offline",
+  },
   workboxOptions: {
     maximumFileSizeToCacheInBytes: 5 * 1024 * 1024, // 5MB
     cleanupOutdatedCaches: true,

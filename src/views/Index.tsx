@@ -7,15 +7,22 @@ const Index = () => {
 
   useEffect(() => {
     const checkAuth = async () => {
+      // getSession reads localStorage (offline-safe). The role query below is network —
+      // wrap so a failure (e.g. offline) routes to a sensible default instead of leaving
+      // the user stranded on the spinner forever.
       const { data: { session } } = await supabase.auth.getSession();
-      if (session) {
-        // Redirect based on user role
+      if (!session) {
+        navigate("/auth");
+        return;
+      }
+
+      try {
         const { data: roleData } = await supabase
           .from("user_roles")
           .select("role")
           .eq("user_id", session.user.id)
           .maybeSingle();
-        
+
         if (roleData?.role === "Client") {
           navigate("/client-portal");
         } else if (roleData?.role === "Contractor") {
@@ -23,11 +30,17 @@ const Index = () => {
         } else {
           navigate("/dashboard");
         }
-      } else {
-        navigate("/auth");
+      } catch (err) {
+        // Authenticated but role lookup failed (offline / network). Send them into the
+        // app rather than stranding the spinner; the destination guard re-checks the role.
+        console.error("Role lookup failed on entry:", err);
+        navigate("/dashboard");
       }
     };
-    checkAuth();
+    checkAuth().catch((err) => {
+      console.error("Auth check failed on entry:", err);
+      navigate("/auth");
+    });
   }, [navigate]);
 
   return (
