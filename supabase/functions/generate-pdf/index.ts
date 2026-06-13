@@ -2839,82 +2839,210 @@ async function generateCalendarHTML(data: ReportData): Promise<string> {
     return isNaN(dt.getTime()) ? esc(d) : dt.toLocaleDateString('en-ZA');
   };
 
-  let content = '';
+  // --- Status colour mapping (shared by chips and legend) ---
+  const statusColorFor = (status: string) => {
+    const s = status.toLowerCase();
+    return s === 'completed' ? COLORS.success :
+           s === 'in progress' ? COLORS.warning :
+           s === 'scheduled' ? COLORS.info : COLORS.muted;
+  };
+  const priorityColorFor = (priority: string) => {
+    const p = priority.toLowerCase();
+    return p === 'high' ? COLORS.error :
+           p === 'medium' ? COLORS.warning :
+           p === 'low' ? COLORS.success : COLORS.muted;
+  };
 
-  // Stats Summary
-  content += `
-    <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 10px;">
+  // --- Derive REAL status/priority counts from the events themselves (M10 fix) ---
+  // Do NOT trust cal.stats bucket names — recompute so the PDF reconciles with the app.
+  const events = Array.isArray(cal.events) ? cal.events : [];
+  const statusCounts = { scheduled: 0, inProgress: 0, completed: 0 };
+  const priorityCounts = { high: 0, medium: 0, low: 0 };
+  for (const e of events) {
+    const s = (e.status || '').toLowerCase();
+    if (s === 'completed') statusCounts.completed++;
+    else if (s === 'in progress') statusCounts.inProgress++;
+    else if (s === 'scheduled') statusCounts.scheduled++;
+    const p = (e.priority || '').toLowerCase();
+    if (p === 'high') priorityCounts.high++;
+    else if (p === 'medium') priorityCounts.medium++;
+    else if (p === 'low') priorityCounts.low++;
+  }
+  const totalEvents = events.length;
+
+  // --- KPI summary block (Total / Scheduled / In Progress / Completed + priority line) ---
+  const card = (value: number, label: string, color: string) => `
+    <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
+      <div style="font-size: 28pt; font-weight: 700; color: ${color};">${value}</div>
+      <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">${label}</div>
+    </td>`;
+  const statsBlock = `
+    <table style="width: 100%; margin-bottom: 12px; border-collapse: separate; border-spacing: 10px;">
       <tr>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${accentColor};">${cal.stats.totalEvents}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Total Events</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.info};">${cal.stats.upcomingCount}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Upcoming</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.success};">${cal.stats.completedCount}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Completed</div>
-        </td>
-        <td style="width: 25%; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 8px; padding: 20px; text-align: center;">
-          <div style="font-size: 28pt; font-weight: 700; color: ${COLORS.warning};">${cal.stats.pendingCount}</div>
-          <div style="font-size: 9pt; color: ${COLORS.textMuted}; text-transform: uppercase;">Pending</div>
-        </td>
+        ${card(totalEvents, 'Total Events', accentColor)}
+        ${card(statusCounts.scheduled, 'Scheduled', COLORS.info)}
+        ${card(statusCounts.inProgress, 'In Progress', COLORS.warning)}
+        ${card(statusCounts.completed, 'Completed', COLORS.success)}
       </tr>
     </table>
+    <div style="margin: 0 0 16px 0; font-size: 9pt; color: ${COLORS.textMuted};">
+      <span style="text-transform: uppercase; letter-spacing: 0.5px;">Priority breakdown:</span>
+      <span style="color: ${COLORS.error}; font-weight: 600; margin-left: 6px;">High ${priorityCounts.high}</span>
+      <span style="color: ${COLORS.textMuted};"> &middot; </span>
+      <span style="color: ${COLORS.warning}; font-weight: 600;">Medium ${priorityCounts.medium}</span>
+      <span style="color: ${COLORS.textMuted};"> &middot; </span>
+      <span style="color: ${COLORS.success}; font-weight: 600;">Low ${priorityCounts.low}</span>
+    </div>
   `;
-  
-  // Events Table
-  if (cal.events.length > 0) {
-    const th = 'padding: 12px 15px; color: white; font-size: 10pt;';
-    content += `
-      <table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden;">
-        <thead>
-          <tr style="background: ${COLORS.primary};">
-            <th style="${th} text-align: left;">Event</th>
-            <th style="${th} text-align: left;">Site</th>
-            <th style="${th} text-align: left;">Type</th>
-            <th style="${th} text-align: left;">Start</th>
-            <th style="${th} text-align: left;">End</th>
-            <th style="${th} text-align: center;">Status</th>
-            <th style="${th} text-align: center;">Priority</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${cal.events.map(event => {
-            const s = (event.status || '').toLowerCase();
-            const p = (event.priority || '').toLowerCase();
-            const statusColor = s === 'completed' ? COLORS.success :
-                               s === 'in progress' ? COLORS.warning :
-                               s === 'scheduled' ? COLORS.info : COLORS.muted;
-            const priorityColor = p === 'high' ? COLORS.error :
-                                 p === 'medium' ? COLORS.warning :
-                                 p === 'low' ? COLORS.success : COLORS.muted;
-            return `
-            <tr style="background: white; border-bottom: 1px solid ${COLORS.border}; page-break-inside: avoid;">
-              <td style="padding: 10px 15px; font-size: 10pt;">${esc(event.title)}</td>
-              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.siteName) || '-'}</td>
-              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.eventType) || '—'}</td>
-              <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.startDate)}</td>
-              <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.endDate)}</td>
-              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${statusColor}22; color: ${statusColor};">${esc(event.status) || '—'}</span></td>
-              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${priorityColor}22; color: ${priorityColor};">${esc(event.priority) || 'normal'}</span></td>
-            </tr>
-            `;
-          }).join('')}
-        </tbody>
-      </table>
-    `;
-  } else {
-    content += `
+
+  // --- Legend for status colour coding ---
+  const chip = (label: string, color: string) => `
+    <span style="display: inline-block; margin-right: 14px; font-size: 9pt; color: ${COLORS.text};">
+      <span style="display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: ${color}; vertical-align: middle; margin-right: 5px;"></span>${label}
+    </span>`;
+  const legendBlock = `
+    <div style="margin: 0 0 16px 0; padding: 8px 12px; background: ${COLORS.lightGray}; border: 1px solid ${COLORS.border}; border-radius: 6px;">
+      <span style="font-size: 8pt; color: ${COLORS.textMuted}; text-transform: uppercase; letter-spacing: 0.5px; margin-right: 10px;">Status</span>
+      ${chip('Scheduled', statusColorFor('Scheduled'))}
+      ${chip('In Progress', statusColorFor('In Progress'))}
+      ${chip('Completed', statusColorFor('Completed'))}
+    </div>
+  `;
+
+  // --- Group events by month of startDate, sorted chronologically ---
+  // Key by year-month so events spanning the calendar year sort correctly.
+  const monthKey = (d?: string) => {
+    if (!d) return '9999-99'; // undated events sort last
+    const dt = new Date(d);
+    if (isNaN(dt.getTime())) return '9999-99';
+    return `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}`;
+  };
+  const monthLabel = (key: string) => {
+    if (key === '9999-99') return 'Undated';
+    const [y, m] = key.split('-').map(Number);
+    const dt = new Date(y, m - 1, 1);
+    return dt.toLocaleDateString('en-ZA', { month: 'long', year: 'numeric' });
+  };
+  const startTime = (d?: string) => {
+    if (!d) return Number.MAX_SAFE_INTEGER;
+    const t = new Date(d).getTime();
+    return isNaN(t) ? Number.MAX_SAFE_INTEGER : t;
+  };
+
+  const grouped = new Map<string, typeof events>();
+  for (const e of events) {
+    const k = monthKey(e.startDate);
+    if (!grouped.has(k)) grouped.set(k, []);
+    grouped.get(k)!.push(e);
+  }
+  const sortedKeys = Array.from(grouped.keys()).sort();
+  for (const k of sortedKeys) {
+    grouped.get(k)!.sort((a, b) => startTime(a.startDate) - startTime(b.startDate));
+  }
+
+  // Renders a single event row.
+  const renderRow = (event: typeof events[number]) => {
+    const statusColor = statusColorFor(event.status || '');
+    const priorityColor = priorityColorFor(event.priority || '');
+    return `
+      <tr style="background: white; border-bottom: 1px solid ${COLORS.border}; page-break-inside: avoid;">
+        <td style="padding: 10px 15px; font-size: 10pt;">${esc(event.title)}</td>
+        <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.siteName) || '-'}</td>
+        <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.eventType) || '—'}</td>
+        <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.startDate)}</td>
+        <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.endDate)}</td>
+        <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${statusColor}22; color: ${statusColor};">${esc(event.status) || '—'}</span></td>
+        <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${priorityColor}22; color: ${priorityColor};">${esc(event.priority) || 'normal'}</span></td>
+      </tr>`;
+  };
+
+  const th = 'padding: 12px 15px; color: white; font-size: 10pt;';
+  const tableHead = `
+    <thead>
+      <tr style="background: ${COLORS.primary};">
+        <th style="${th} text-align: left;">Event</th>
+        <th style="${th} text-align: left;">Site</th>
+        <th style="${th} text-align: left;">Type</th>
+        <th style="${th} text-align: left;">Start</th>
+        <th style="${th} text-align: left;">End</th>
+        <th style="${th} text-align: center;">Status</th>
+        <th style="${th} text-align: center;">Priority</th>
+      </tr>
+    </thead>`;
+
+  // Renders one month group: subheading + its own table. Kept together where possible.
+  const renderMonthGroup = (key: string) => {
+    const monthEvents = grouped.get(key)!;
+    return `
+      <div style="page-break-inside: avoid; margin-bottom: 22px;">
+        ${generateSectionHeader(monthLabel(key), accentColor)}
+        <table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden;">
+          ${tableHead}
+          <tbody>
+            ${monthEvents.map(renderRow).join('')}
+          </tbody>
+        </table>
+      </div>`;
+  };
+
+  // --- Assemble pages ---
+  // Mirror site-summary pagination: one A4 <div> per page, each with its own
+  // header + footer using the {{TOTAL_PAGES}} placeholder (replaced before return).
+  // Pack month groups into pages by a row budget so multi-page calendars paginate
+  // cleanly with correct page numbers and repeating headers.
+  const ROWS_PER_PAGE = 22;        // approx rows that fit on an A4 page below the KPI block
+  const ROWS_PER_PAGE_CONT = 26;   // continuation pages have no KPI block, so fit more
+  const MONTH_OVERHEAD = 2;        // a subheading roughly costs ~2 rows of vertical space
+
+  const pageContents: string[] = []; // inner HTML for each page (between header and footer)
+  let current = '';
+  let currentRows = 0;
+  let isFirst = true;
+  let budget = ROWS_PER_PAGE;
+
+  const flushPage = () => {
+    pageContents.push(current);
+    current = '';
+    currentRows = 0;
+    isFirst = false;
+    budget = ROWS_PER_PAGE_CONT;
+  };
+
+  if (totalEvents === 0) {
+    pageContents.push(`
+      ${statsBlock}
+      ${legendBlock}
       <div style="padding: 40px; text-align: center; color: ${COLORS.textMuted}; font-size: 11pt; border: 1px dashed ${COLORS.border}; border-radius: 8px;">
         No events scheduled for ${esc(cal.year)}.
       </div>
-    `;
+    `);
+  } else {
+    // First page leads with KPI summary + legend.
+    current += statsBlock + legendBlock;
+    for (const key of sortedKeys) {
+      const groupRows = grouped.get(key)!.length + MONTH_OVERHEAD;
+      // If this group won't fit on the current page and the page already has content, flush.
+      if (currentRows > 0 && currentRows + groupRows > budget) {
+        flushPage();
+      }
+      current += renderMonthGroup(key);
+      currentRows += groupRows;
+    }
+    if (current.trim().length > 0 || pageContents.length === 0) {
+      flushPage();
+    }
   }
-  
-  return `
+
+  const totalPages = pageContents.length;
+  const pagesHtml = pageContents.map((inner, i) => `
+    <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;${i < pageContents.length - 1 ? ' page-break-after: always;' : ''}">
+      ${generatePageHeader(`Calendar Report - ${cal.year}`, accentColor)}
+      ${inner}
+      ${generatePageFooter(i + 1, '{{TOTAL_PAGES}}', generatedAt)}
+    </div>
+  `).join('');
+
+  const html = `
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -2936,14 +3064,12 @@ async function generateCalendarHTML(data: ReportData): Promise<string> {
   </style>
 </head>
 <body>
-  <div style="width: 210mm; min-height: 297mm; padding: 15mm 18mm 25mm 18mm; position: relative; background: white;">
-    ${generatePageHeader(`Calendar Report - ${cal.year}`, accentColor)}
-    ${content}
-    ${generatePageFooter(1, '1', generatedAt)}
-  </div>
+  ${pagesHtml}
 </body>
 </html>
   `;
+
+  return html.replace(/\{\{TOTAL_PAGES\}\}/g, totalPages.toString());
 }
 
 // ============================================================================
