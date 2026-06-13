@@ -48,7 +48,7 @@ buildActionHref(item: OutstandingItem, ctx: { clientId: string; siteId: string }
 | `asset_register` | `{base}?tab=asset-verification` | Asset tab; upload control visible |
 | `thermal` | `{base}?tab=documents&upload=thermal` | SiteDetail opens the document upload dialog, thermal category preset |
 | `summary_report` | `{base}?tab=reports&generate=1` | SiteReports opens the generate dialog |
-| `coc` | `{base}/subsections/{item.subsectionId}?tab=coc-metering&focus=coc` | Subsection COC tab; COC upload section highlighted |
+| `coc` | `{base}/subsections/{item.subsectionId}?tab=coc-metering` | Subsection COC tab — the COC section is already at the top of this tab, so landing here is act-ready (no extra scroll/focus param needed) |
 | `metering` | `{base}/subsections/{item.subsectionId}?tab=coc-metering&focus=meter` | Subsection COC/metering tab; meter-serial input focused |
 | `inspections` | `{base}/subsections/{item.subsectionId}?tab=inspections&create=1` | Subsection Inspections tab; create dialog open |
 | `snags` | `{base}/subsections/{item.subsectionId}?tab=overview&snag={item.id}` | Subsection overview; that snag highlighted (see note — snags are *rectified* in the inspection flow, so this lands-and-shows rather than resolves inline) |
@@ -87,7 +87,7 @@ Replaced on the Overview by the checklist; not used elsewhere → delete the fil
 - **SubsectionDetail.tsx** — on mount, read params:
   - `tab` → set active subsection tab (already supports `?tab=`).
   - `focus=meter` → focus the meter-serial input in `CocMeteringTab`.
-  - `focus=coc` → scroll the COC upload section into view / highlight it.
+  - (no `focus=coc` — COC sits at the top of the `coc-metering` tab, so landing on the tab is already act-ready; the param was dropped after review.)
   - `create=1` (on inspections tab) → open the create-inspection dialog.
   - `snag={id}` (on overview) → scroll to / highlight that snag.
 - Schematic and asset_register need **no** new wiring beyond tab navigation (upload controls are
