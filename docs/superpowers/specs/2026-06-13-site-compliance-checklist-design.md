@@ -51,7 +51,7 @@ buildActionHref(item: OutstandingItem, ctx: { clientId: string; siteId: string }
 | `coc` | `{base}/subsections/{item.subsectionId}?tab=coc-metering&focus=coc` | Subsection COC tab; COC upload section highlighted |
 | `metering` | `{base}/subsections/{item.subsectionId}?tab=coc-metering&focus=meter` | Subsection COC/metering tab; meter-serial input focused |
 | `inspections` | `{base}/subsections/{item.subsectionId}?tab=inspections&create=1` | Subsection Inspections tab; create dialog open |
-| `snags` | `{base}/subsections/{item.subsectionId}?tab=overview&snag={item.id}` | Subsection overview; that snag highlighted |
+| `snags` | `{base}/subsections/{item.subsectionId}?tab=overview&snag={item.id}` | Subsection overview; that snag highlighted (see note — snags are *rectified* in the inspection flow, so this lands-and-shows rather than resolves inline) |
 
 Fallback: if a subsection-scoped item is missing `subsectionId`, return `{base}?tab=subsections`.
 (`item.id` is the snag id for snag items — see `buildSnags` in Phase 1.)
@@ -70,7 +70,8 @@ Fallback: if a subsection-scoped item is missing `subsectionId`, return `{base}?
 - Each `outstandingItem` renders an action row whose button navigates to
   `buildActionHref(item, { clientId, siteId })` via the app's `useNavigate` (`@/lib/navigation`).
 - Action verb by category: schematic/asset/thermal → "Upload", summary_report → "Generate",
-  coc → "Set COC", metering → "Enter meter", inspections → "Create", snags → "Resolve".
+  coc → "Set COC", metering → "Enter meter", inspections → "Create", snags → "Open"
+  (honest verb: rectification happens in the inspection, so this opens the snag's location).
 
 **Removed — `src/components/site/SiteReadinessPanel.tsx`**
 Replaced on the Overview by the checklist; not used elsewhere → delete the file (verify no other importers).
@@ -128,3 +129,7 @@ Replaced on the Overview by the checklist; not used elsewhere → delete the fil
 - Tab-bar restructure (the 9 tabs stay as-is).
 - Any change to the Phase-1 read-model or the global dashboard widget.
 - Per-snag inline editing on the site page (we jump to the subsection instead).
+- **Snag rectification deep-link.** Snags are rectified inside the inspection flow
+  (`InspectionDetail.tsx`), and the read-model doesn't carry a snag's inspection id, so the snag
+  link lands-and-highlights on the subsection rather than opening the rectify UI. Carrying the
+  inspection id on snag outstanding items (to deep-link straight to rectification) is a follow-up.
