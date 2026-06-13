@@ -52,6 +52,13 @@ export function useOfflineSync() {
     toast.info('Action queued. Will sync when online.', { duration: 2000 });
   }, [getQueue, saveQueue]);
 
+  // Queue an upload mutation WITHOUT putting the File/Blob through JSON: store the blob in
+  // IndexedDB (queued_blobs) and carry only its id in the localStorage mutation.
+  const queueUpload = useCallback(async (type: string, data: Record<string, unknown>, file: Blob & { name?: string }) => {
+    const blobId = await offlineDB.putQueuedBlob(file, { fileName: file.name, fileType: file.type });
+    queueMutation(type, { ...data, blobId, fileName: file.name ?? null, fileSize: file.size });
+  }, [queueMutation]);
+
   // Execute mutation based on type
   const executeMutation = async (mutation: QueuedMutation) => {
     switch (mutation.type) {
@@ -89,20 +96,18 @@ export function useOfflineSync() {
       }
 
       case 'UPLOAD_IMAGE': {
-        const { bucket, path, file, inspectionId } = mutation.data;
-        const { error } = await supabase.storage
-          .from(bucket)
-          .upload(path, file);
+        const { bucket, path, blobId, inspectionId } = mutation.data;
+        const blob = await offlineDB.getQueuedBlob(blobId);
+        if (!blob) throw new Error(`UPLOAD_IMAGE: queued blob ${blobId} missing`);
+        const { error } = await supabase.storage.from(bucket).upload(path, blob, { upsert: true });
         if (error) throw error;
-        
-        // Mark as synced in IndexedDB
+
         if (inspectionId) {
           const images = await offlineDB.getUnsyncedImages();
           const image = images.find(img => img.inspection_id === inspectionId);
-          if (image) {
-            await offlineDB.markImageSynced(image.id);
-          }
+          if (image) await offlineDB.markImageSynced(image.id);
         }
+        await offlineDB.deleteQueuedBlob(blobId);
         break;
       }
 
@@ -121,44 +126,38 @@ export function useOfflineSync() {
       }
 
       case 'UPLOAD_DOCUMENT': {
-        const { documentId, subsectionId, categoryId, file, filePath } = mutation.data;
-        
-        // Upload to storage
-        const { error: uploadError } = await supabase.storage
-          .from('documents')
-          .upload(filePath, file);
+        const { documentId, subsectionId, categoryId, blobId, filePath, fileName, fileSize } = mutation.data;
+        const blob = await offlineDB.getQueuedBlob(blobId);
+        if (!blob) throw new Error(`UPLOAD_DOCUMENT: queued blob ${blobId} missing`);
+
+        const { error: uploadError } = await supabase.storage.from('documents').upload(filePath, blob, { upsert: true });
         if (uploadError) throw uploadError;
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('documents')
-          .getPublicUrl(filePath);
+        const { data: { publicUrl } } = supabase.storage.from('documents').getPublicUrl(filePath);
 
-        // Insert into database
-        const { error: dbError } = await supabase
-          .from('subsection_documents')
-          .insert({
-            subsection_id: subsectionId,
-            category_id: categoryId,
-            file_name: file.name,
-            file_url: publicUrl,
-            file_size: file.size,
-          });
+        const { error: dbError } = await supabase.from('subsection_documents').insert({
+          subsection_id: subsectionId,
+          category_id: categoryId,
+          file_name: fileName,
+          file_url: publicUrl,
+          file_size: fileSize,
+        });
         if (dbError) throw dbError;
 
-        // Mark as synced in IndexedDB
         const { markDocumentSynced } = await import('@/lib/offlineDBExtensions');
         await markDocumentSynced(documentId);
+        await offlineDB.deleteQueuedBlob(blobId);
         break;
       }
 
       case 'UPLOAD_FLOOR_PLAN': {
-        const { floorPlanId, subsectionId, file, filePath } = mutation.data;
-        
-        // Upload to storage
+        const { floorPlanId, subsectionId, blobId, filePath, fileName } = mutation.data;
+        const blob = await offlineDB.getQueuedBlob(blobId);
+        if (!blob) throw new Error(`UPLOAD_FLOOR_PLAN: queued blob ${blobId} missing`);
+
         const { error: uploadError } = await supabase.storage
           .from('documents')
-          .upload(filePath, file);
+          .upload(filePath, blob, { upsert: true });
         if (uploadError) throw uploadError;
 
         // Get public URL
@@ -171,7 +170,7 @@ export function useOfflineSync() {
           .from('subsection_floor_plans')
           .insert({
             subsection_id: subsectionId,
-            file_name: file.name,
+            file_name: fileName,
             file_url: publicUrl,
           });
         if (dbError) throw dbError;
@@ -179,6 +178,7 @@ export function useOfflineSync() {
         // Mark as synced in IndexedDB
         const { markFloorPlanSynced } = await import('@/lib/offlineDBExtensions');
         await markFloorPlanSynced(floorPlanId);
+        await offlineDB.deleteQueuedBlob(blobId);
         break;
       }
 
@@ -507,6 +507,7 @@ export function useOfflineSync() {
     queueSize,
     isSyncing,
     queueMutation,
+    queueUpload,
     processQueue,
   };
 }
