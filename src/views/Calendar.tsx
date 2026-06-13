@@ -2,7 +2,7 @@ import { useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2, Loader2, AlertCircle, CalendarDays } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2, Loader2, AlertCircle, CalendarDays, Check, ChevronsUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -31,6 +31,15 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -57,10 +66,13 @@ interface CalendarEvent {
   event_type: string | null;
 }
 
+const EVENT_TYPES = ["Inspection", "Maintenance", "Metering", "Audit", "Site Visit", "Other"];
+
 const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEventDay, setSelectedEventDay] = useState<Date | null>(null);
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+  const [sitePickerOpen, setSitePickerOpen] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [viewMode, setViewMode] = useState<"year" | "agenda">("year");
@@ -425,6 +437,11 @@ const Calendar = () => {
   };
 
   const weekDays = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
+  // Event-form validity: required fields present and a sane date range.
+  const endBeforeStart = !!formData.end_date && formData.end_date < formData.start_date;
+  const canSaveEvent =
+    !!formData.title.trim() && !!formData.site_id && !!formData.start_date && !endBeforeStart;
 
   return (
     <div className="space-y-6">
@@ -827,6 +844,7 @@ const Calendar = () => {
               <Label htmlFor="title">Title *</Label>
               <Input
                 id="title"
+                autoFocus
                 value={formData.title}
                 onChange={(e) =>
                   setFormData({ ...formData, title: e.target.value })
@@ -836,22 +854,45 @@ const Calendar = () => {
             </div>
             <div className="space-y-2">
               <Label htmlFor="site_id">Site *</Label>
-              <Select
-                value={formData.site_id}
-                onValueChange={(siteId) => {
-                  const site = sites?.find((s) => s.id === siteId);
-                  setFormData({ ...formData, site_id: siteId, site_name: site?.name ?? "" });
-                }}
-              >
-                <SelectTrigger id="site_id">
-                  <SelectValue placeholder="Select a site" />
-                </SelectTrigger>
-                <SelectContent>
-                  {sites?.map((s) => (
-                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Popover open={sitePickerOpen} onOpenChange={setSitePickerOpen}>
+                <PopoverTrigger asChild>
+                  <Button
+                    id="site_id"
+                    variant="outline"
+                    role="combobox"
+                    aria-expanded={sitePickerOpen}
+                    className="w-full justify-between font-normal"
+                  >
+                    <span className={cn("truncate", !formData.site_name && "text-muted-foreground")}>
+                      {formData.site_name || "Select a site"}
+                    </span>
+                    <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+                  <Command>
+                    <CommandInput placeholder="Search sites…" />
+                    <CommandList>
+                      <CommandEmpty>No site found.</CommandEmpty>
+                      <CommandGroup>
+                        {sites?.map((s) => (
+                          <CommandItem
+                            key={s.id}
+                            value={s.name}
+                            onSelect={() => {
+                              setFormData({ ...formData, site_id: s.id, site_name: s.name });
+                              setSitePickerOpen(false);
+                            }}
+                          >
+                            <Check className={cn("mr-2 h-4 w-4", formData.site_id === s.id ? "opacity-100" : "opacity-0")} />
+                            {s.name}
+                          </CommandItem>
+                        ))}
+                      </CommandGroup>
+                    </CommandList>
+                  </Command>
+                </PopoverContent>
+              </Popover>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -866,16 +907,20 @@ const Calendar = () => {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="end_date">End Date</Label>
+                <Label htmlFor="end_date">End Date <span className="text-muted-foreground font-normal">(optional)</span></Label>
                 <Input
                   id="end_date"
                   type="date"
                   value={formData.end_date}
                   min={formData.start_date || undefined}
+                  aria-invalid={endBeforeStart}
                   onChange={(e) =>
                     setFormData({ ...formData, end_date: e.target.value })
                   }
                 />
+                {endBeforeStart && (
+                  <p className="text-xs text-destructive">End date can't be before the start date.</p>
+                )}
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">
@@ -917,15 +962,25 @@ const Calendar = () => {
               </div>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="event_type">Event Type</Label>
-              <Input
-                id="event_type"
+              <Label htmlFor="event_type">Event Type <span className="text-muted-foreground font-normal">(optional)</span></Label>
+              <Select
                 value={formData.event_type}
-                onChange={(e) =>
-                  setFormData({ ...formData, event_type: e.target.value })
+                onValueChange={(value) =>
+                  setFormData({ ...formData, event_type: value })
                 }
-                placeholder="e.g., Inspection, Maintenance"
-              />
+              >
+                <SelectTrigger id="event_type">
+                  <SelectValue placeholder="Select a type" />
+                </SelectTrigger>
+                <SelectContent>
+                  {(formData.event_type && !EVENT_TYPES.includes(formData.event_type)
+                    ? [formData.event_type, ...EVENT_TYPES]
+                    : EVENT_TYPES
+                  ).map((t) => (
+                    <SelectItem key={t} value={t}>{t}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
           <div className="flex justify-end gap-2">
@@ -935,7 +990,7 @@ const Calendar = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveEvent} disabled={isSaving}>
+            <Button onClick={handleSaveEvent} disabled={isSaving || !canSaveEvent}>
               {isSaving ? "Saving…" : editingEvent ? "Update" : "Create"}
             </Button>
           </div>
