@@ -14,6 +14,15 @@ interface SaveResult {
   documentUrl?: string;
 }
 
+/** Best-effort delete of an uploaded blob after a later step fails, so a failed save leaves no orphan. */
+async function removeUploadedBlob(path: string): Promise<void> {
+  try {
+    await supabase.storage.from("documents").remove([path]);
+  } catch (e) {
+    console.warn("Failed to remove orphaned blob after save failure:", path, e);
+  }
+}
+
 /**
  * Save a PDF to either site_documents or subsection_documents based on context
  */
@@ -99,7 +108,10 @@ async function saveToSiteDocuments(
       category: categoryName,
     });
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    await removeUploadedBlob(uploadData.path);
+    throw insertError;
+  }
 
   return { success: true, documentUrl: urlData.publicUrl };
 }
@@ -165,7 +177,10 @@ async function saveToSubsectionDocuments(
       file_size: blob.size,
     });
 
-  if (insertError) throw insertError;
+  if (insertError) {
+    await removeUploadedBlob(uploadData.path);
+    throw insertError;
+  }
 
   return { success: true, documentUrl: urlData.publicUrl };
 }
