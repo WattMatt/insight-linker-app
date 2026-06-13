@@ -18,6 +18,7 @@ import {
 import { loadCompanyBranding, imageUrlToBase64 } from "@/lib/pdfBranding";
 import { ReportSection, ReportCustomization } from "@/components/pdf-editor/types";
 import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
+import { buildCocValidationRows, buildInspectionRows } from "@/lib/report/siteSummaryRows";
 
 // Import from SINGLE SOURCE OF TRUTH
 import {
@@ -461,12 +462,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
             }
             content.push(createSectionHeader(title, 'primary'));
 
-            const validationRows = cocSubsections.slice(0, 20).map(sub => ({
-              subsection: sub.name || 'Unknown',
-              cocNumber: sub.coc_number || '-',
-              status: sub.coc_status || 'Missing',
-              date: sub.coc_issue_date ? new Date(sub.coc_issue_date).toLocaleDateString() : '-',
-            }));
+            const validationRows = buildCocValidationRows(cocSubsections);
 
             // Use COC_VALIDATION_COLUMNS from spec
             content.push(createDataTable(
@@ -488,12 +484,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
             }
             content.push(createSectionHeader(title, 'primary'));
 
-            const inspectionRows = allInspections.slice(0, 20).map(insp => ({
-              title: insp.title || 'Untitled',
-              status: insp.status || 'Unknown',
-              inspector: insp.inspector_name || '-',
-              date: insp.inspection_date ? new Date(insp.inspection_date).toLocaleDateString() : '-',
-            }));
+            const inspectionRows = buildInspectionRows(allInspections);
 
             // Use INSPECTION_COLUMNS from spec
             content.push(createDataTable(
