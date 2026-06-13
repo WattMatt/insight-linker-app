@@ -188,16 +188,15 @@ export function useOfflineSync() {
         
         // Upload photo if exists
         let photoUrl = pin.photo_url;
-        if (pin.photo_blob) {
+        if (mutation.data.photoBlobId) {
+          const photo = await offlineDB.getQueuedBlob(mutation.data.photoBlobId);
+          if (!photo) throw new Error(`ADD_FLOOR_PLAN_PIN: queued blob ${mutation.data.photoBlobId} missing`);
           const fileName = `floor-plan-pins/${pin.floor_plan_id}/${Date.now()}_photo.jpg`;
-          await supabase.storage
-            .from('inspection-photos')
-            .upload(fileName, pin.photo_blob);
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('inspection-photos')
-            .getPublicUrl(fileName);
+          const { error } = await supabase.storage.from('inspection-photos').upload(fileName, photo, { upsert: true });
+          if (error) throw error;
+          const { data: { publicUrl } } = supabase.storage.from('inspection-photos').getPublicUrl(fileName);
           photoUrl = publicUrl;
+          await offlineDB.deleteQueuedBlob(mutation.data.photoBlobId);
         }
         
         await supabase
@@ -226,30 +225,22 @@ export function useOfflineSync() {
       }
 
       case 'UPDATE_FLOOR_PLAN_PIN': {
-        const { pinId, updates, photo } = mutation.data;
+        const { pinId, updates, photoBlobId, photoFileName } = mutation.data;
         const { markPinSynced } = await import('@/lib/offlineFloorPlanDB');
-        
+
         let photoUrl = updates.photo_url;
-        if (photo) {
-          const fileName = `floor-plan-pins/${pinId}/${Date.now()}_${photo.name}`;
-          await supabase.storage
-            .from('inspection-photos')
-            .upload(fileName, photo);
-          
-          const { data: { publicUrl } } = supabase.storage
-            .from('inspection-photos')
-            .getPublicUrl(fileName);
+        if (photoBlobId) {
+          const photo = await offlineDB.getQueuedBlob(photoBlobId);
+          if (!photo) throw new Error(`UPDATE_FLOOR_PLAN_PIN: queued blob ${photoBlobId} missing`);
+          const fileName = `floor-plan-pins/${pinId}/${Date.now()}_${photoFileName ?? 'photo.jpg'}`;
+          const { error } = await supabase.storage.from('inspection-photos').upload(fileName, photo, { upsert: true });
+          if (error) throw error;
+          const { data: { publicUrl } } = supabase.storage.from('inspection-photos').getPublicUrl(fileName);
           photoUrl = publicUrl;
+          await offlineDB.deleteQueuedBlob(photoBlobId);
         }
-        
-        await supabase
-          .from('floor_plan_pins')
-          .update({
-            ...updates,
-            photo_url: photoUrl,
-          })
-          .eq('id', pinId);
-        
+
+        await supabase.from('floor_plan_pins').update({ ...updates, photo_url: photoUrl }).eq('id', pinId);
         await markPinSynced(pinId);
         break;
       }
