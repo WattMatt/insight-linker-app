@@ -30,6 +30,7 @@ import {
 interface SiteReportsProps {
     site: Site;
     readOnly?: boolean;
+    autoOpenGenerate?: boolean;
 }
 
 interface SavedReport {
@@ -50,8 +51,13 @@ const REPORT_CATEGORIES = [
     'COC Validation Reports'
 ];
 
-export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
+export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false, autoOpenGenerate = false }) => {
     const [settingsOpen, setSettingsOpen] = useState(false);
+
+    // Deep-link: open the report dialog when arrived via ?generate=1 (buildActionHref → summary_report).
+    useEffect(() => {
+        if (autoOpenGenerate) setSettingsOpen(true);
+    }, [autoOpenGenerate]);
     const [reports, setReports] = useState<SavedReport[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");

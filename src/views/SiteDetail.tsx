@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -10,13 +10,12 @@ import { SiteCocHierarchy } from "@/components/coc/SiteCocHierarchy";
 import { DocumentPreviewDialog } from '@/components/DocumentPreviewDialog';
 import { downloadFile } from '@/lib/fileDownload';
 import { Site, Subsection, SiteStats } from "@/types/site";
-import { SiteOverview } from "@/components/site/SiteOverview";
+import { SiteComplianceChecklist } from "@/components/site/SiteComplianceChecklist";
 import { SubsectionList } from "@/components/site/SubsectionList";
 import { SiteDocuments as SiteDocumentsComponent } from "@/components/site/SiteDocuments";
 import { QRAnalytics } from "@/components/site/QRAnalytics";
 import { SiteReports } from "@/components/site/SiteReports";
 import { SiteEditDialog } from "@/components/site/SiteEditDialog";
-import { SiteLevelInspections } from "@/components/site/SiteLevelInspections";
 import { DocumentDialogs } from "@/components/site/DocumentDialogs";
 import { InspectionDialogs } from "@/components/site/InspectionDialogs";
 import { Card, CardTitle, CardHeader, CardDescription } from "@/components/ui/card";
@@ -29,8 +28,7 @@ import { AssetVerification } from "@/components/site/AssetVerification";
 
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
-import { SiteReadinessPanel } from "@/components/site/SiteReadinessPanel";
-import { computeSiteDeliverables, type OutstandingItem, type DeliverableKey } from "@/lib/siteDeliverables";
+import { computeSiteDeliverables, categoryMatches, THERMAL_CATEGORY_PATTERNS } from "@/lib/siteDeliverables";
 
 interface SiteDocument {
   category: string;
@@ -577,19 +575,28 @@ const SiteDetail = () => {
     documentCategories: siteDocuments.map((d: any) => d.category),
   });
 
-  const TAB_FOR_CATEGORY: Record<DeliverableKey, string> = {
-    snags: "subsections",
-    inspections: "subsections",
-    metering: "subsections",
-    coc: "compliance",
-    schematic: "schematic",
-    asset_register: "asset-verification",
-    thermal: "documents",
-    summary_report: "reports",
-  };
-  const handleSelectDeliverable = (item: OutstandingItem) => {
-    setActiveTab(TAB_FOR_CATEGORY[item.category]);
-  };
+  // Deep-link: follow the ?tab= param so same-page checklist actions switch tabs. Manual tab
+  // clicks don't write the URL, which is fine here (nothing mutates a secondary param in-place
+  // while staying on this route). FOLLOW-UP: if that changes, write the tab to the URL on click.
+  useEffect(() => {
+    const tab = searchParams.get('tab');
+    if (tab) setActiveTab(tab);
+  }, [searchParams]);
+
+  const thermalDeepLinkHandled = useRef(false);
+  useEffect(() => {
+    if (thermalDeepLinkHandled.current) return;
+    if (searchParams.get('upload') === 'thermal' && documentCategories.length > 0) {
+      thermalDeepLinkHandled.current = true; // handle once, even if no match (no unbounded retries)
+      const thermalCat = documentCategories.find((c: any) => categoryMatches([c?.name], THERMAL_CATEGORY_PATTERNS));
+      if (thermalCat) {
+        setUploadCategoryId(thermalCat.id);
+        setUploadDialogOpen(true);
+      } else {
+        toast.error("No infrared/thermal document category is configured for this site.");
+      }
+    }
+  }, [searchParams, documentCategories]);
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in space-y-8">
@@ -652,9 +659,7 @@ const SiteDetail = () => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
-          <SiteReadinessPanel summary={deliverablesSummary} onSelectItem={handleSelectDeliverable} />
-          <SiteOverview site={site} stats={stats} onTabChange={setActiveTab} />
-          <SiteLevelInspections inspections={inspections} siteId={siteId!} clientId={clientId} onCreateClick={() => setIsCreateInspectionOpen(true)} />
+          <SiteComplianceChecklist summary={deliverablesSummary} clientId={clientId!} siteId={siteId!} />
         </TabsContent>
 
         <TabsContent value="schematic" className="space-y-6 mt-6">
@@ -710,7 +715,7 @@ const SiteDetail = () => {
         </TabsContent>
 
         <TabsContent value="reports">
-          <SiteReports site={site} />
+          <SiteReports site={site} autoOpenGenerate={searchParams.get('generate') === '1'} />
         </TabsContent>
       </Tabs>
 

@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -8,6 +9,7 @@ import { FileText, Upload, Download, Trash2, Eye, Loader2, AlertCircle } from "l
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { CocCertificateList } from "@/components/coc/CocCertificateList";
+import { useSearchParams } from "@/lib/navigation";
 import type { SubsectionData, SupabaseDocument, DocumentCategory } from "./types";
 
 interface CocMeteringTabProps {
@@ -63,6 +65,15 @@ export function CocMeteringTab({
   fetchSupabaseDocuments,
   refetchSubsection,
 }: CocMeteringTabProps) {
+  const [searchParams] = useSearchParams();
+  const meterInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (searchParams.get("focus") === "meter") {
+      meterInputRef.current?.focus();
+      meterInputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }
+  }, [searchParams]);
+
   return (
     <div className="space-y-6">
       {/* Certificates of Compliance */}
@@ -211,6 +222,7 @@ export function CocMeteringTab({
             <div>
               <Label>Meter Serial Number</Label>
               <Input
+                ref={meterInputRef}
                 value={meterSerialNumber || subsection.meterSerialNumber || ''}
                 onChange={(e) => setMeterSerialNumber(e.target.value)}
                 placeholder="Enter meter serial number"
