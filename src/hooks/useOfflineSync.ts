@@ -33,6 +33,21 @@ function announceSyncing(syncing: boolean) {
   }
 }
 
+// Blob ids a queued mutation still references (uploads carry blobId; pin photos carry
+// photoBlobId). Anything in queued_blobs NOT in this set is an orphan candidate.
+function referencedBlobIds(queue: QueuedMutation[]): Set<string> {
+  const ids = new Set<string>();
+  for (const m of queue) {
+    const d = (m.data ?? {}) as { blobId?: string; photoBlobId?: string };
+    if (d.blobId) ids.add(d.blobId);
+    if (d.photoBlobId) ids.add(d.photoBlobId);
+  }
+  return ids;
+}
+
+// Run the orphan-blob sweep at most once per page session (multiple hook instances mount).
+let blobCleanupRan = false;
+
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(getOnline);
   const wasOnline = useRef(getOnline());
@@ -68,7 +83,7 @@ export function useOfflineSync() {
     };
     queue.push(mutation);
     saveQueue(queue);
-    toast.info('Action queued. Will sync when online.', { duration: 2000 });
+    toast.info('Action queued. Will sync when online.', { id: 'offline-action-queued', duration: 2000 });
     if (typeof window !== 'undefined') window.dispatchEvent(new Event('offline-queue-updated'));
   }, [getQueue, saveQueue]);
 
@@ -446,7 +461,7 @@ export function useOfflineSync() {
         saveQueue(reconciled);
 
         if (retried.size === 0 && discarded.size === 0 && succeeded.size > 0) {
-          toast.success(`Synced ${succeeded.size} offline action${succeeded.size > 1 ? 's' : ''}`);
+          toast.success(`Synced ${succeeded.size} offline action${succeeded.size > 1 ? 's' : ''}`, { id: 'offline-sync-success' });
           queryClient.invalidateQueries();
         }
 
@@ -528,6 +543,18 @@ export function useOfflineSync() {
   // Update queue size on mount
   useEffect(() => {
     setQueueSize(getQueue().length);
+  }, [getQueue]);
+
+  // Purge orphaned queued blobs (a put whose mutation never landed — crash or txn error)
+  // so IndexedDB doesn't grow unbounded. Once per session; only blobs >24h old that no
+  // queued mutation references (the age cutoff protects a blob just put but not yet queued).
+  useEffect(() => {
+    if (blobCleanupRan) return;
+    blobCleanupRan = true;
+    const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    offlineDB.cleanupOrphanedBlobs(referencedBlobIds(getQueue()), cutoff)
+      .then((n) => { if (n > 0) console.log(`[offline] purged ${n} orphaned queued blob(s)`); })
+      .catch((err) => console.error('Orphaned-blob cleanup failed:', err));
   }, [getQueue]);
 
   return {
