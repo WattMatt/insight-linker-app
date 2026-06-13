@@ -248,41 +248,58 @@ export type Database = {
       calendar_events: {
         Row: {
           created_at: string | null
+          created_by: string | null
           end_date: string | null
           event_type: string | null
           id: string
           priority: string | null
+          site_id: string | null
           site_name: string
           start_date: string
           status: string | null
           title: string
           updated_at: string | null
+          updated_by: string | null
         }
         Insert: {
           created_at?: string | null
+          created_by?: string | null
           end_date?: string | null
           event_type?: string | null
           id?: string
           priority?: string | null
+          site_id?: string | null
           site_name: string
           start_date: string
           status?: string | null
           title: string
           updated_at?: string | null
+          updated_by?: string | null
         }
         Update: {
           created_at?: string | null
+          created_by?: string | null
           end_date?: string | null
           event_type?: string | null
           id?: string
           priority?: string | null
+          site_id?: string | null
           site_name?: string
           start_date?: string
           status?: string | null
           title?: string
           updated_at?: string | null
+          updated_by?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "calendar_events_site_id_fkey"
+            columns: ["site_id"]
+            isOneToOne: false
+            referencedRelation: "sites"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       client_access_links: {
         Row: {

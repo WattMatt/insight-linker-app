@@ -37,6 +37,7 @@ import { useUnifiedPdfGeneration, CalendarReportData } from "@/hooks/useUnifiedP
 interface CalendarEvent {
   id: string;
   title: string;
+  site_id: string | null;
   site_name: string;
   start_date: string;
   end_date: string | null;
@@ -49,9 +50,11 @@ const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState({
     title: "",
+    site_id: "",
     site_name: "",
     start_date: "",
     end_date: "",
@@ -78,6 +81,19 @@ const Calendar = () => {
 
       if (error) throw error;
       return data as CalendarEvent[];
+    },
+  });
+
+  // Sites for the event form picker (replaces free-text site entry so events link to a real site).
+  const { data: sites } = useQuery({
+    queryKey: ["calendar-sites"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; name: string }[];
     },
   });
 
@@ -160,6 +176,7 @@ const Calendar = () => {
     setEditingEvent(null);
     setFormData({
       title: "",
+      site_id: "",
       site_name: "",
       start_date: "",
       end_date: "",
@@ -174,6 +191,7 @@ const Calendar = () => {
     setEditingEvent(event);
     setFormData({
       title: event.title,
+      site_id: event.site_id || "",
       site_name: event.site_name,
       start_date: event.start_date,
       end_date: event.end_date || "",
@@ -185,10 +203,10 @@ const Calendar = () => {
   };
 
   const handleSaveEvent = async () => {
-    if (!formData.title.trim() || !formData.site_name.trim() || !formData.start_date) {
+    if (!formData.title.trim() || !formData.site_id || !formData.start_date) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (title, site, start date)",
         variant: "destructive",
       });
       return;
@@ -203,18 +221,23 @@ const Calendar = () => {
       return;
     }
 
+    if (isSaving) return;
+    setIsSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       if (editingEvent) {
         const { error } = await supabase
           .from("calendar_events")
           .update({
             title: formData.title.trim(),
+            site_id: formData.site_id,
             site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
             priority: formData.priority,
             event_type: formData.event_type || null,
+            updated_by: user?.id ?? null,
           })
           .eq("id", editingEvent.id);
 
@@ -225,12 +248,14 @@ const Calendar = () => {
           .from("calendar_events")
           .insert({
             title: formData.title.trim(),
+            site_id: formData.site_id,
             site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
             priority: formData.priority,
             event_type: formData.event_type || null,
+            created_by: user?.id ?? null,
           });
 
         if (error) throw error;
@@ -242,9 +267,11 @@ const Calendar = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save event",
+        description: error instanceof Error ? error.message : "Failed to save event",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -602,15 +629,23 @@ const Calendar = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="site_name">Site Name *</Label>
-              <Input
-                id="site_name"
-                value={formData.site_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, site_name: e.target.value })
-                }
-                placeholder="Site name"
-              />
+              <Label htmlFor="site_id">Site *</Label>
+              <Select
+                value={formData.site_id}
+                onValueChange={(siteId) => {
+                  const site = sites?.find((s) => s.id === siteId);
+                  setFormData({ ...formData, site_id: siteId, site_name: site?.name ?? "" });
+                }}
+              >
+                <SelectTrigger id="site_id">
+                  <SelectValue placeholder="Select a site" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites?.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -694,8 +729,8 @@ const Calendar = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveEvent}>
-              {editingEvent ? "Update" : "Create"}
+            <Button onClick={handleSaveEvent} disabled={isSaving}>
+              {isSaving ? "Saving…" : editingEvent ? "Update" : "Create"}
             </Button>
           </div>
         </DialogContent>

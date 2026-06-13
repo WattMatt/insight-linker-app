@@ -5,7 +5,7 @@ import { Calendar as CalendarIcon, MapPin, Clock, Info } from "lucide-react";
 import { useClientInfo } from "@/hooks/useUserRole";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
-import { format } from "date-fns";
+import { format, parseISO, isValid } from "date-fns";
 import { useSearchParams } from "@/lib/navigation";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -58,13 +58,15 @@ const ClientPortalCalendar = () => {
       
       if (!sites || sites.length === 0) return [];
 
-      const siteNames = sites.map(s => s.name);
+      const siteIds = sites.map(s => s.id);
 
-      // Get calendar events for these sites (filtered by site names from client's sites only)
+      // Scope by site_id (identity-based), not the free-text site_name. Name-matching
+      // could leak events from another client's identically-named site or silently drop
+      // events after a site rename. RLS also enforces this scoping at the DB layer.
       const { data, error } = await supabase
         .from("calendar_events")
         .select("*")
-        .in("site_name", siteNames)
+        .in("site_id", siteIds)
         .order("start_date", { ascending: false });
 
       if (error) throw error;
@@ -115,9 +117,13 @@ const ClientPortalCalendar = () => {
       displaySiteName: e.site_name,
     })),
   ].sort((a, b) => {
-    const dateA = new Date(a.displayDate);
-    const dateB = new Date(b.displayDate);
-    return dateB.getTime() - dateA.getTime();
+    // parseISO keeps date-only strings at LOCAL midnight (new Date() parses them as UTC,
+    // shifting the day across timezones). Guard invalid/missing dates so they don't NaN-sort.
+    const da = a.displayDate ? parseISO(a.displayDate) : null;
+    const db = b.displayDate ? parseISO(b.displayDate) : null;
+    const va = da && isValid(da) ? da.getTime() : 0;
+    const vb = db && isValid(db) ? db.getTime() : 0;
+    return vb - va;
   });
 
   return (
@@ -194,8 +200,8 @@ const ClientPortalCalendar = () => {
                     <div className="flex items-center gap-2">
                       <CalendarIcon className="h-4 w-4 text-muted-foreground" />
                       <span>
-                        {date ? format(new Date(date), "PPP") : "No date"}
-                        {endDate && ` - ${format(new Date(endDate), "PPP")}`}
+                        {date && isValid(parseISO(date)) ? format(parseISO(date), "PPP") : "No date"}
+                        {endDate && isValid(parseISO(endDate)) && ` - ${format(parseISO(endDate), "PPP")}`}
                       </span>
                     </div>
                     {eventType && (
