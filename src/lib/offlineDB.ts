@@ -585,6 +585,37 @@ class OfflineDatabase {
       req.onerror = () => reject(req.error);
     });
   }
+
+  // Delete queued blobs that no mutation references AND that are older than the cutoff.
+  // Orphans accumulate when a putQueuedBlob succeeds but its enqueue/delete didn't (app
+  // crash, transaction error) — they'd otherwise grow IndexedDB unbounded. The age cutoff
+  // protects a blob just put but not-yet-enqueued (putQueuedBlob then queueMutation are two
+  // steps). Returns the number deleted.
+  async cleanupOrphanedBlobs(referencedIds: Set<string>, olderThanIso: string): Promise<number> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queued_blobs'], 'readwrite');
+      const store = tx.objectStore('queued_blobs');
+      const cursorReq = store.openCursor();
+      let deleted = 0;
+
+      cursorReq.onsuccess = () => {
+        const cursor = cursorReq.result;
+        if (!cursor) return; // iteration done; resolve on tx.oncomplete
+        const rec = cursor.value as { id: string; created_at?: string };
+        const isOrphan = !referencedIds.has(rec.id);
+        const isOld = !rec.created_at || rec.created_at < olderThanIso;
+        if (isOrphan && isOld) {
+          cursor.delete();
+          deleted++;
+        }
+        cursor.continue();
+      };
+      cursorReq.onerror = () => reject(cursorReq.error);
+      tx.oncomplete = () => resolve(deleted);
+      tx.onabort = () => reject(tx.error ?? new Error('cleanupOrphanedBlobs transaction aborted'));
+    });
+  }
 }
 
 export const offlineDB = new OfflineDatabase();
