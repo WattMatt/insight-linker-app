@@ -62,7 +62,7 @@ class OfflineInspectionDatabase {
     if (this.db) return;
     if (this.initPromise) return this.initPromise;
 
-    this.initPromise = new Promise((resolve, reject) => {
+    const promise = new Promise<void>((resolve, reject) => {
       const request = indexedDB.open(DB_NAME, DB_VERSION);
 
       request.onerror = () => {
@@ -188,7 +188,15 @@ class OfflineInspectionDatabase {
       };
     });
 
-    return this.initPromise;
+    this.initPromise = promise;
+    // C4: on failure, drop the cached promise so a later init() retries with a fresh
+    // open instead of permanently re-returning this rejection (a single transient
+    // open failure must not kill offline storage for the whole session). Guard the
+    // identity check so a concurrent retry's promise isn't clobbered.
+    promise.catch(() => {
+      if (this.initPromise === promise) this.initPromise = null;
+    });
+    return promise;
   }
 
   // ============ Inspection Cache Methods ============
