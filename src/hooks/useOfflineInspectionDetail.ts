@@ -8,6 +8,7 @@ import {
   CachedTemplate
 } from '@/lib/offlineInspectionDB';
 import { enqueueOfflineMutation } from '@/lib/offlineQueue';
+import { getOnline } from '@/lib/onlineStatus';
 
 interface UseOfflineInspectionDetailOptions {
   inspectionId: string;
@@ -18,7 +19,7 @@ export function useOfflineInspectionDetail({
   inspectionId, 
   autoCache = true 
 }: UseOfflineInspectionDetailOptions) {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(getOnline);
   const [isCached, setIsCached] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [cachedData, setCachedData] = useState<CachedInspection | null>(null);
@@ -26,17 +27,27 @@ export function useOfflineInspectionDetail({
   const [hasPendingChanges, setHasPendingChanges] = useState(false);
   const [lastSyncTime, setLastSyncTime] = useState<Date | null>(null);
 
-  // Monitor online/offline status
+  // Monitor online/offline AND self-heal a stuck value. navigator.onLine can read stale
+  // on mount (SSR/hydration, or a service-worker swap on a fresh deploy) and no 'online'
+  // event fires when we're already online — so listening only for transitions leaves the
+  // indicator stuck. Re-read on mount, on focus/visibility, and on a short interval.
+  // (Mirrors the useOfflineSync self-heal from PR #20, which this hook was missing.)
   useEffect(() => {
-    const handleOnline = () => setIsOnline(true);
-    const handleOffline = () => setIsOnline(false);
+    const sync = () => setIsOnline(getOnline());
+    sync(); // recover a bad initial value on mount
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', sync);
+    window.addEventListener('offline', sync);
+    window.addEventListener('focus', sync);
+    document.addEventListener('visibilitychange', sync);
+    const intervalId = window.setInterval(sync, 15000);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', sync);
+      window.removeEventListener('offline', sync);
+      window.removeEventListener('focus', sync);
+      document.removeEventListener('visibilitychange', sync);
+      window.clearInterval(intervalId);
     };
   }, []);
 
@@ -59,7 +70,7 @@ export function useOfflineInspectionDetail({
       setOfflineImages(images);
     };
 
-    checkCache();
+    checkCache().catch((err) => console.error('Failed to read offline inspection cache:', err));
   }, [inspectionId]);
 
   // Cache inspection data from Supabase

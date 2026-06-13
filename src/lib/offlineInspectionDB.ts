@@ -208,8 +208,12 @@ class OfflineInspectionDatabase {
       const transaction = this.db!.transaction(['inspection_cache'], 'readwrite');
       const store = transaction.objectStore('inspection_cache');
       const request = store.put(inspection);
-      
-      request.onsuccess = () => resolve();
+
+      // Resolve on COMMIT, not just the request: a transaction can still abort (e.g.
+      // quota) after the put succeeds, which would otherwise report a false success for
+      // a write that never persisted.
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error ?? new Error('cacheInspection transaction aborted'));
       request.onerror = () => reject(request.error);
     });
   }
@@ -336,8 +340,11 @@ class OfflineInspectionDatabase {
       const transaction = this.db!.transaction(['inspection_images'], 'readwrite');
       const store = transaction.objectStore('inspection_images');
       const request = store.put(image);
-      
-      request.onsuccess = () => resolve();
+
+      // Resolve on COMMIT so a post-put abort (quota) can't report a false success for
+      // a photo blob that never persisted.
+      transaction.oncomplete = () => resolve();
+      transaction.onabort = () => reject(transaction.error ?? new Error('saveInspectionImage transaction aborted'));
       request.onerror = () => reject(request.error);
     });
   }

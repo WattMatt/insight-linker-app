@@ -558,7 +558,10 @@ class OfflineDatabase {
         fileType: meta?.fileType ?? blob.type ?? null,
         created_at: new Date().toISOString(),
       });
-      req.onsuccess = () => resolve(id);
+      // Resolve on COMMIT so a post-put abort (quota) can't hand back a blob id whose
+      // data never persisted — the upload executor would then find nothing to send.
+      tx.oncomplete = () => resolve(id);
+      tx.onabort = () => reject(tx.error ?? new Error('putQueuedBlob transaction aborted'));
       req.onerror = () => reject(req.error);
     });
   }
