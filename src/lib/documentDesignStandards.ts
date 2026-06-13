@@ -6,6 +6,8 @@
  * must follow to ensure consistency, professionalism, and accessibility.
  */
 
+import { localDateStamp } from './report/reportKernel';
+
 export const DOCUMENT_DESIGN_STANDARDS = {
   // ============================================================================
   // 1. LOGO SIZING AND PLACEMENT
@@ -401,7 +403,7 @@ export function generateDocumentFilename(
   const { export: exportSettings } = DOCUMENT_DESIGN_STANDARDS;
   const sanitize = (str: string) => str.replace(/[^a-zA-Z0-9-_]/g, '_').substring(0, 50);
   
-  const dateStr = (date ?? new Date()).toISOString().split('T')[0];
+  const dateStr = localDateStamp(date);
   
   return exportSettings.namingPattern
     .replace('{document_type}', sanitize(documentType))
