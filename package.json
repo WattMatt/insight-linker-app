@@ -6,7 +6,7 @@
     "dev": "NODE_OPTIONS='--require ./server-polyfills.js' next dev",
     "build": "NODE_OPTIONS='--require ./server-polyfills.js' next build",
     "start": "NODE_OPTIONS='--require ./server-polyfills.js' next start",
-    "lint": "next lint",
+    "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest"
   },
@@ -85,6 +85,7 @@
     "zod": "^3.25.76"
   },
   "devDependencies": {
+    "@eslint/eslintrc": "^2.1.4",
     "@tailwindcss/typography": "^0.5.16",
     "@types/node": "^22.16.5",
     "@types/react": "^18.3.23",
