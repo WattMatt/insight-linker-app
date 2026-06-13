@@ -35,6 +35,8 @@ export interface OutstandingItem {
   label: string;
   severity: Severity;
   blocking: boolean;
+  // Populated for subsection-scoped items (snags/inspections/metering/COC). Phase 1 consumers
+  // route by `category` to the relevant tab; these are reserved for Phase 2 subsection deep-linking.
   subsectionId?: string;
   subsectionName?: string;
 }
