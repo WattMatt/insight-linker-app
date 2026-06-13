@@ -15,6 +15,14 @@ interface QueuedMutation {
 
 const MAX_RETRIES = 3;
 
+// Module-level drain coordination — shared across ALL useOfflineSync instances in this
+// tab so multiple mounts (e.g. OfflineIndicator + InspectionDetail) can't run concurrent
+// or duplicate drains. `isDraining` is a synchronous lock (the old isSyncing React-state
+// guard updated too late to prevent a race); `drainAgain` coalesces a request that lands
+// while the lock is held (e.g. an enqueue mid-drain) into one more pass.
+let isDraining = false;
+let drainAgain = false;
+
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const wasOnline = useRef(navigator.onLine);
@@ -415,46 +423,67 @@ export function useOfflineSync() {
 
   // Process queue when online
   const processQueue = useCallback(async () => {
-    if (!isOnline || isSyncing) return;
-
-    // Drain json_data overwrites (SYNC_INSPECTION) before appends (UPLOAD_INSPECTION_IMAGE)
-    // so a queued full-save can't clobber a photo URL an upload just appended.
-    const queue = orderQueueForSync(getQueue());
-    if (queue.length === 0) return;
-
+    if (!navigator.onLine) return;
+    // Synchronous lock. If a drain is already running, ask it to run once more after it
+    // finishes (covers an enqueue that lands mid-drain) and return — no concurrent drain.
+    if (isDraining) { drainAgain = true; return; }
+    isDraining = true;
     setIsSyncing(true);
-    const failedMutations: QueuedMutation[] = [];
 
-    for (const mutation of queue) {
-      try {
-        await executeMutation(mutation);
-        console.log('Successfully synced mutation:', mutation.type);
-      } catch (error) {
-        console.error('Failed to process mutation:', error);
-        
-        if (mutation.retries < MAX_RETRIES) {
-          failedMutations.push({
-            ...mutation,
-            retries: mutation.retries + 1,
-          });
-        } else {
-          // Permanent discard — delete any queued blob this mutation referenced so it doesn't leak in IndexedDB.
-          const d = (mutation.data ?? {}) as { blobId?: string; photoBlobId?: string };
-          if (d.blobId) await offlineDB.deleteQueuedBlob(d.blobId);
-          if (d.photoBlobId) await offlineDB.deleteQueuedBlob(d.photoBlobId);
-          toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+    try {
+      do {
+        drainAgain = false;
+
+        // Drain json_data overwrites (SYNC_INSPECTION) before appends
+        // (UPLOAD_INSPECTION_IMAGE) so a full-save can't clobber a just-appended photo.
+        const snapshot = orderQueueForSync(getQueue());
+        if (snapshot.length === 0) break;
+        const snapshotIds = new Set(snapshot.map(m => m.id));
+
+        const succeeded = new Set<string>();
+        const discarded = new Set<string>();
+        const retried = new Map<string, QueuedMutation>();
+
+        for (const mutation of snapshot) {
+          try {
+            await executeMutation(mutation);
+            succeeded.add(mutation.id);
+          } catch (error) {
+            console.error('Failed to process mutation:', error);
+            if (mutation.retries < MAX_RETRIES) {
+              retried.set(mutation.id, { ...mutation, retries: mutation.retries + 1 });
+            } else {
+              // Permanent discard — delete any queued blob this mutation referenced.
+              const d = (mutation.data ?? {}) as { blobId?: string; photoBlobId?: string };
+              if (d.blobId) await offlineDB.deleteQueuedBlob(d.blobId);
+              if (d.photoBlobId) await offlineDB.deleteQueuedBlob(d.photoBlobId);
+              discarded.add(mutation.id);
+              toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+            }
+          }
         }
-      }
-    }
 
-    saveQueue(failedMutations);
-    setIsSyncing(false);
+        // Reconcile against the CURRENT queue (not the snapshot) so anything enqueued
+        // DURING this pass is preserved instead of clobbered. Drop succeeded + discarded;
+        // apply retry increments to the rest.
+        const reconciled = getQueue()
+          .filter(m => !succeeded.has(m.id) && !discarded.has(m.id))
+          .map(m => retried.get(m.id) ?? m);
+        saveQueue(reconciled);
 
-    if (failedMutations.length === 0 && queue.length > 0) {
-      toast.success(`Synced ${queue.length} offline action${queue.length > 1 ? 's' : ''}`);
-      queryClient.invalidateQueries();
+        if (retried.size === 0 && discarded.size === 0 && succeeded.size > 0) {
+          toast.success(`Synced ${succeeded.size} offline action${succeeded.size > 1 ? 's' : ''}`);
+          queryClient.invalidateQueries();
+        }
+
+        // New items arrived during this pass (ids not in the snapshot) → loop to drain them.
+        if (getQueue().some(m => !snapshotIds.has(m.id))) drainAgain = true;
+      } while (drainAgain && navigator.onLine);
+    } finally {
+      isDraining = false;
+      setIsSyncing(false);
     }
-  }, [isOnline, isSyncing, getQueue, saveQueue, queryClient]);
+  }, [getQueue, saveQueue, queryClient]);
 
   // Monitor online/offline status AND self-heal a stuck value. navigator.onLine can read `false`
   // transiently at mount (e.g. during a service-worker swap on a fresh deploy); since no 'online'
@@ -505,10 +534,13 @@ export function useOfflineSync() {
   // Drain promptly when any code enqueues a mutation (same-tab event from enqueueOfflineMutation /
   // queueMutation) — so mid-session edits don't wait for the next connectivity change.
   useEffect(() => {
-    const onEnqueued = () => { if (navigator.onLine) processQueue(); };
+    const onEnqueued = () => {
+      setQueueSize(getQueue().length); // reflect the new item in the badge immediately, even offline
+      if (navigator.onLine) processQueue();
+    };
     window.addEventListener('offline-queue-updated', onEnqueued);
     return () => window.removeEventListener('offline-queue-updated', onEnqueued);
-  }, [processQueue]);
+  }, [processQueue, getQueue]);
 
   // Update queue size on mount
   useEffect(() => {
