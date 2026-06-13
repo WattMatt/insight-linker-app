@@ -29,7 +29,7 @@ interface SubsectionData {
 }
 
 export function useOfflineSubsections() {
-  const { isOnline, queueMutation } = useOfflineSync();
+  const { isOnline, queueMutation, queueUpload } = useOfflineSync();
 
   const updateSubsection = useCallback(async (id: string, updates: Partial<SubsectionData>) => {
     if (isOnline) {
@@ -133,16 +133,10 @@ export function useOfflineSubsections() {
       synced: false,
     });
 
-    queueMutation('UPLOAD_DOCUMENT', {
-      documentId,
-      subsectionId,
-      categoryId,
-      file,
-      filePath,
-    });
+    await queueUpload('UPLOAD_DOCUMENT', { documentId, subsectionId, categoryId, filePath }, file);
 
     toast.success('Document saved offline. Will upload when online.');
-  }, [isOnline, queueMutation]);
+  }, [isOnline, queueUpload]);
 
   const uploadFloorPlan = useCallback(async (
     subsectionId: string,
@@ -205,15 +199,10 @@ export function useOfflineSubsections() {
       synced: false,
     });
 
-    queueMutation('UPLOAD_FLOOR_PLAN', {
-      floorPlanId,
-      subsectionId,
-      file,
-      filePath,
-    });
+    await queueUpload('UPLOAD_FLOOR_PLAN', { floorPlanId, subsectionId, filePath }, file);
 
     toast.success('Floor plan saved offline. Will upload when online.');
-  }, [isOnline, queueMutation]);
+  }, [isOnline, queueUpload]);
 
   const getOfflineData = useCallback(async (subsectionId: string) => {
     try {

@@ -1,5 +1,6 @@
 import { useCallback } from 'react';
 import { useOfflineSync } from './useOfflineSync';
+import { offlineDB } from '@/lib/offlineDB';
 import { 
   saveOfflinePin,
   getOfflinePin,
@@ -90,7 +91,12 @@ export function useOfflineFloorPlanAnnotations() {
     };
 
     await saveOfflinePin(offlinePin);
-    queueMutation('ADD_FLOOR_PLAN_PIN', { pin: offlinePin, floorPlanId });
+    let photoBlobId: string | undefined;
+    if (offlinePin.photo_blob) {
+      photoBlobId = await offlineDB.putQueuedBlob(offlinePin.photo_blob, { fileType: offlinePin.photo_blob.type });
+    }
+    const { photo_blob: _photoBlob, ...pinForQueue } = offlinePin; // strip the non-serializable blob from the queued object
+    queueMutation('ADD_FLOOR_PLAN_PIN', { pin: pinForQueue, floorPlanId, photoBlobId });
     toast.success('Pin saved offline. Will sync when online.');
     return offlinePin;
   }, [isOnline, queueMutation]);
@@ -151,7 +157,12 @@ export function useOfflineFloorPlanAnnotations() {
     };
 
     await saveOfflinePin(updatedPin);
-    queueMutation('UPDATE_FLOOR_PLAN_PIN', { pinId, updates, photo });
+    if (photo) {
+      const photoBlobId = await offlineDB.putQueuedBlob(photo, { fileName: photo.name, fileType: photo.type });
+      queueMutation('UPDATE_FLOOR_PLAN_PIN', { pinId, updates, photoBlobId, photoFileName: photo.name });
+    } else {
+      queueMutation('UPDATE_FLOOR_PLAN_PIN', { pinId, updates });
+    }
     toast.success('Pin updated offline. Will sync when online.');
   }, [isOnline, queueMutation]);
 
