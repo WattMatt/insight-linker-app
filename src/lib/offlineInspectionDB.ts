@@ -1,9 +1,10 @@
 // Extended IndexedDB storage for offline inspection functionality
 const DB_NAME = 'wm_compliance_offline';
-// v4: must match offlineDB.ts DB_VERSION. Both modules share this db name and
-// now create the SAME complete store set, so neither clobbers the other's schema
-// and there is no version skew (which previously threw VersionError).
-const DB_VERSION = 4;
+// MUST match offlineDB.ts DB_VERSION. Both modules share this db name and create
+// the SAME complete store set, so neither clobbers the other's schema and there is
+// no version skew (a lower version here throws VersionError when offlineDB — which
+// mounts first via the app-root useOfflineSync — has already created the db at v5).
+const DB_VERSION = 5;
 
 export interface CachedInspection {
   id: string;
@@ -157,6 +158,14 @@ class OfflineInspectionDatabase {
           if (!db.objectStoreNames.contains('template_cache')) {
             const templateStore = db.createObjectStore('template_cache', { keyPath: 'id' });
             templateStore.createIndex('cached_at', 'cached_at', { unique: false });
+          }
+
+          // v5: Queued upload blobs — referenced by id from the localStorage mutation
+          // queue so File/Blob objects never go through JSON.stringify (which drops
+          // them to {}). Owned by offlineDB.ts; created here too so the complete schema
+          // exists regardless of which module opens the shared db first.
+          if (!db.objectStoreNames.contains('queued_blobs')) {
+            db.createObjectStore('queued_blobs', { keyPath: 'id' });
           }
         }
 
