@@ -120,21 +120,34 @@ async function resolveDownloadBlob(url: string): Promise<Blob> {
   return response.blob();
 }
 
-/**
- * Trigger a browser download from a Blob.
- * Uses a user-visible anchor element injected into the DOM with the download attribute.
- * Falls back to opening the blob in a new tab if the anchor approach is blocked.
- */
-function triggerBrowserDownload(blob: Blob, fileName: string): void {
+/** True when running inside an iframe (where the <a download> attribute is often ignored). */
+function isInIframe(): boolean {
+  try {
+    return window.self !== window.top;
+  } catch {
+    return true; // cross-origin frame access throws — we are definitely framed
+  }
+}
+
+/** Standard anchor-download. Reliable in a normal top-level page. */
+function triggerAnchorDownload(blob: Blob, fileName: string): void {
   const blobUrl = URL.createObjectURL(blob);
-
-  // Open in new tab — the anchor download attribute is silently ignored
-  // inside iframe sandboxes (like Lovable preview). window.open reliably
-  // opens the PDF where the user can then save it.
-  window.open(blobUrl, '_blank');
-
-  // Revoke after a long delay so the new tab can fully load the blob
+  const a = document.createElement('a');
+  a.href = blobUrl;
+  a.download = fileName;
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
   window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+}
+
+/** Open the blob in a new tab. Returns false if the popup was blocked. */
+function triggerWindowOpen(blob: Blob): boolean {
+  const blobUrl = URL.createObjectURL(blob);
+  const win = window.open(blobUrl, '_blank');
+  window.setTimeout(() => URL.revokeObjectURL(blobUrl), 60000);
+  return win != null;
 }
 
 export function getDirectDownloadUrl(url: string, fileName: string): string {
@@ -147,38 +160,57 @@ function isAbortError(error: unknown): boolean {
   return error instanceof DOMException && error.name === 'AbortError';
 }
 
-async function saveBlobWithPicker(fileName: string, blob: Blob): Promise<boolean> {
-  const downloadWindow = window as DownloadCapableWindow;
+type PickerOutcome = 'saved' | 'cancelled' | 'unavailable';
 
-  if (!downloadWindow.showSaveFilePicker) {
-    return false;
+/** File System Access API save. Real success/failure; falls through on anything but a confirmed save or user-cancel. */
+async function trySaveWithPicker(fileName: string, blob: Blob): Promise<PickerOutcome> {
+  const w = window as DownloadCapableWindow;
+  if (!w.showSaveFilePicker) return 'unavailable';
+  try {
+    const fileHandle = await w.showSaveFilePicker(buildSavePickerOptions(fileName));
+    const writable = await fileHandle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+    return 'saved';
+  } catch (error) {
+    if (isAbortError(error)) return 'cancelled';
+    console.warn('File System Access save failed, falling back:', error);
+    return 'unavailable';
   }
-
-  const fileHandle = await downloadWindow.showSaveFilePicker(buildSavePickerOptions(fileName));
-  const writable = await fileHandle.createWritable();
-
-  await writable.write(blob);
-  await writable.close();
-
-  return true;
 }
 
 /**
- * Download a Blob as a file. This is the primary download entry point for
- * generated PDFs and other in-memory files.
- *
- * Priority:
- *  1. File System Access API (showSaveFilePicker) – best UX, real save dialog
- *  2. Anchor download attribute – standard fallback
- *  3. window.open(blobUrl) – last resort for sandboxed environments
+ * Download a Blob as a file. Honest about success:
+ *  1. File System Access API (real save dialog) — when available.
+ *  2. Anchor download — reliable in a normal top-level page.
+ *  3. window.open — last resort inside sandboxed iframes; reports failure if the popup is blocked.
  */
 export async function downloadBlob(blob: Blob, fileName: string): Promise<void> {
   const toastId = toast.loading(`Preparing ${fileName}...`);
 
   try {
-    // Primary: use the anchor-download approach — works in most browsers
-    triggerBrowserDownload(blob, fileName);
-    toast.success(`Downloaded ${fileName}`, { id: toastId });
+    const picker = await trySaveWithPicker(fileName, blob);
+    if (picker === 'saved') {
+      toast.success(`Saved ${fileName}`, { id: toastId });
+      return;
+    }
+    if (picker === 'cancelled') {
+      toast.dismiss(toastId);
+      return;
+    }
+
+    if (!isInIframe()) {
+      triggerAnchorDownload(blob, fileName);
+      toast.success(`Downloaded ${fileName}`, { id: toastId });
+      return;
+    }
+
+    if (triggerWindowOpen(blob)) {
+      toast.success(`Opened ${fileName} in a new tab`, { id: toastId });
+      return;
+    }
+
+    toast.error(`Couldn't download ${fileName} — allow pop-ups for this site and try again`, { id: toastId });
   } catch (error) {
     if (isAbortError(error)) {
       toast.dismiss(toastId);
