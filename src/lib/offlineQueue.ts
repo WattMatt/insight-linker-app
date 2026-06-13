@@ -29,4 +29,7 @@ export function enqueueOfflineMutation(
   }
   queue.push({ id: crypto.randomUUID(), type, data, timestamp: Date.now(), retries: 0 });
   localStorage.setItem(OFFLINE_QUEUE_KEY, JSON.stringify(queue));
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event('offline-queue-updated'));
+  }
 }

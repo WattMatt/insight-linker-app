@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineDB } from '@/lib/offlineDB';
+import { OFFLINE_QUEUE_KEY as QUEUE_KEY } from '@/lib/offlineQueue';
 
 interface QueuedMutation {
   id: string;
@@ -12,7 +13,6 @@ interface QueuedMutation {
   retries: number;
 }
 
-const QUEUE_KEY = 'offline_mutation_queue';
 const MAX_RETRIES = 3;
 
 export function useOfflineSync() {
@@ -50,6 +50,7 @@ export function useOfflineSync() {
     queue.push(mutation);
     saveQueue(queue);
     toast.info('Action queued. Will sync when online.', { duration: 2000 });
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event('offline-queue-updated'));
   }, [getQueue, saveQueue]);
 
   // Queue an upload mutation WITHOUT putting the File/Blob through JSON: store the blob in
@@ -465,6 +466,14 @@ export function useOfflineSync() {
       processQueue();
     }
   }, [isOnline, processQueue]);
+
+  // Drain promptly when any code enqueues a mutation (same-tab event from enqueueOfflineMutation /
+  // queueMutation) — so mid-session edits don't wait for the next connectivity change.
+  useEffect(() => {
+    const onEnqueued = () => { if (navigator.onLine) processQueue(); };
+    window.addEventListener('offline-queue-updated', onEnqueued);
+    return () => window.removeEventListener('offline-queue-updated', onEnqueued);
+  }, [processQueue]);
 
   // Update queue size on mount
   useEffect(() => {
