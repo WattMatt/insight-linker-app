@@ -265,3 +265,23 @@ export function computeSiteDeliverables(input: SiteDeliverablesInput): SiteDeliv
     nextTasks,
   };
 }
+
+export function summarizeSitesForTriage(inputs: SiteDeliverablesInput[]): SiteTriageRow[] {
+  const rows: SiteTriageRow[] = inputs.map(input => {
+    const summary = computeSiteDeliverables(input);
+    const byCategory = {} as SiteTriageRow['byCategory'];
+    for (const d of summary.deliverables) {
+      byCategory[d.key] = { done: d.done, total: d.total, status: d.status };
+    }
+    return {
+      siteId: summary.siteId, siteName: summary.siteName, band: summary.band,
+      blockingCount: summary.blockingCount, outstandingCount: summary.outstandingCount,
+      completionPct: summary.completionPct, byCategory,
+    };
+  });
+  return rows.sort((a, b) =>
+    b.blockingCount - a.blockingCount ||
+    b.outstandingCount - a.outstandingCount ||
+    a.completionPct - b.completionPct,
+  );
+}

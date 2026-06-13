@@ -165,3 +165,67 @@ describe('computeSiteDeliverables — nextTasks ordering', () => {
     expect(s.nextTasks[lowIndex].blocking).toBe(false);
   });
 });
+
+import { summarizeSitesForTriage } from './siteDeliverables';
+
+describe('summarizeSitesForTriage', () => {
+  it('ranks blocking first, then outstanding count, then completion asc', () => {
+    const blocking = baseInput({
+      siteId: 'blk', siteName: 'Blocking',
+      subsections: [{ id: 'a', name: 'A', is_coc_required: true, coc_status: 'Failed' }],
+    });
+    const manyOutstanding = baseInput({
+      siteId: 'many', siteName: 'Many',
+      subsections: [
+        { id: 'a', name: 'A', metering_status: 'Pending' },
+        { id: 'b', name: 'B', metering_status: 'Pending' },
+      ],
+    });
+    const clean = baseInput({
+      siteId: 'clean', siteName: 'Clean',
+      hasSchematic: true, assetCount: 1,
+      documentCategories: ['Thermal', 'Site Summary Reports'],
+    });
+    const rows = summarizeSitesForTriage([clean, manyOutstanding, blocking]);
+    expect(rows.map(r => r.siteId)).toEqual(['blk', 'many', 'clean']);
+    expect(rows[0].blockingCount).toBeGreaterThan(0);
+    expect(rows[0].byCategory.coc.status).toBe('outstanding');
+  });
+});
+
+describe('summarizeSitesForTriage — tiebreaks', () => {
+  it('tier 2: equal blocking, more outstanding ranks first', () => {
+    const fewer = baseInput({
+      siteId: 'fewer', siteName: 'Fewer',
+      hasSchematic: false, assetCount: 1,
+      documentCategories: ['Thermal', 'Site Summary Reports'],
+    }); // 1 outstanding (schematic only), blocking 0
+    const more = baseInput({
+      siteId: 'more', siteName: 'More',
+      hasSchematic: false, assetCount: 0, documentCategories: [],
+    }); // 4 outstanding (all binary), blocking 0
+    const rows = summarizeSitesForTriage([fewer, more]);
+    expect(rows[0].blockingCount).toBe(0);
+    expect(rows[1].blockingCount).toBe(0);
+    expect(rows.map(r => r.siteId)).toEqual(['more', 'fewer']); // more outstanding first
+  });
+
+  it('tier 3: equal blocking and outstanding, lower completion ranks first', () => {
+    const lower = baseInput({
+      siteId: 'lower', siteName: 'Lower',
+      hasSchematic: false, assetCount: 1,
+      documentCategories: ['Thermal', 'Site Summary Reports'],
+    }); // outstanding 1 (schematic), applicable 6, complete 5 => 83%
+    const higher = baseInput({
+      siteId: 'higher', siteName: 'Higher',
+      subsections: [{ id: 's', name: 'S', metering_status: 'Installed', is_coc_required: true, coc_status: 'Pass' }],
+      inspections: [{ subsection_id: 's', status: 'Completed' }],
+      hasSchematic: false, assetCount: 1,
+      documentCategories: ['Thermal', 'Site Summary Reports'],
+    }); // outstanding 1 (schematic), applicable 8, complete 7 => 88%
+    const rows = summarizeSitesForTriage([higher, lower]);
+    expect(rows[0].blockingCount).toBe(0);
+    expect(rows[0].outstandingCount).toBe(rows[1].outstandingCount); // tie on outstanding
+    expect(rows.map(r => r.siteId)).toEqual(['lower', 'higher']); // lower completion first
+  });
+});
