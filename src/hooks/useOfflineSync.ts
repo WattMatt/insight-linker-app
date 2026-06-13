@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineDB } from '@/lib/offlineDB';
-import { OFFLINE_QUEUE_KEY as QUEUE_KEY } from '@/lib/offlineQueue';
+import { OFFLINE_QUEUE_KEY as QUEUE_KEY, orderQueueForSync, mergeServerPhotos } from '@/lib/offlineQueue';
 
 interface QueuedMutation {
   id: string;
@@ -303,9 +303,25 @@ export function useOfflineSync() {
       }
 
       case 'SYNC_INSPECTION': {
-        const { id, json_data } = mutation.data;
+        // `fields` carries the full record from an offline full-save (status,
+        // quality_rating, project_name, json_data, …). Fall back to the legacy
+        // json_data-only shape for any mutation queued before this change.
+        const { id, json_data, fields } = mutation.data;
+        const payload = { ...(fields ?? { json_data }) };
+
+        // This save's json_data snapshot does not include offline-captured photos
+        // (they upload separately). Merge back any photos already committed to the
+        // server — by an UPLOAD_INSPECTION_IMAGE that drained in an earlier reconnect —
+        // so this overwrite can't orphan them (cross-drain protection; orderQueueForSync
+        // only covers same-drain ordering).
+        if (payload.json_data) {
+          const { data: row } = await supabase
+            .from('inspections').select('json_data').eq('id', id).single();
+          payload.json_data = mergeServerPhotos(row?.json_data, payload.json_data);
+        }
+
         const { error } = await supabase.from('inspections')
-          .update({ json_data, updated_at: new Date().toISOString() }).eq('id', id);
+          .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id);
         if (error) throw error;
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
         await offlineInspectionDB.markInspectionSynced(id); // clears pending_changes in the cache
@@ -401,7 +417,9 @@ export function useOfflineSync() {
   const processQueue = useCallback(async () => {
     if (!isOnline || isSyncing) return;
 
-    const queue = getQueue();
+    // Drain json_data overwrites (SYNC_INSPECTION) before appends (UPLOAD_INSPECTION_IMAGE)
+    // so a queued full-save can't clobber a photo URL an upload just appended.
+    const queue = orderQueueForSync(getQueue());
     if (queue.length === 0) return;
 
     setIsSyncing(true);

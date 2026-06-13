@@ -116,6 +116,7 @@ const InspectionDetail = () => {
     lastSyncTime,
     cacheInspection,
     saveInspectionSection,
+    queueFullInspectionSave,
     addOfflineImage,
     getCachedInspection
   } = useOfflineInspectionDetail({ inspectionId: inspectionId || '' });
@@ -196,7 +197,7 @@ const InspectionDetail = () => {
         contractor: cached.json_data?.contractor || '',
         testingParty: cached.json_data?.testingParty || '',
         location: cached.json_data?.location || '',
-        quality_rating: cached.json_data?.quality_rating || undefined,
+        quality_rating: cached.quality_rating ?? cached.json_data?.quality_rating ?? undefined,
         tenants: cached.json_data?.tenants || [],
         jsonData: cached.json_data || {}
       };
@@ -1165,6 +1166,26 @@ const InspectionDetail = () => {
     setUploadingImages(prev => new Set(prev).add(uploadKey));
 
     try {
+      // Offline: store each photo's blob in IndexedDB and queue its upload (only the
+      // blob id goes through the localStorage queue, never the blob itself). It uploads
+      // when back online, and the executor appends its public URL to json_data then —
+      // after any queued full-save (see orderQueueForSync) so the save can't clobber it.
+      // The pending-photo badge reflects the count. (Per-item offline thumbnails are a
+      // follow-up; they need an offlineImages render path.)
+      if (!isOnline) {
+        let savedCount = 0;
+        for (let i = 0; i < files.length; i++) {
+          const previewUrl = await addOfflineImage(files[i], sectionKey, itemKey);
+          if (previewUrl) savedCount++;
+        }
+        if (savedCount === 0) {
+          toast.error("Couldn't save image(s) offline. Please try again.");
+        } else {
+          toast.success(`${savedCount} image(s) saved offline — will upload when you're back online`);
+        }
+        return;
+      }
+
       const uploadedUrls: string[] = [];
       const totalFiles = files.length;
       let processedFiles = 0;
@@ -1495,25 +1516,39 @@ const InspectionDetail = () => {
         tenants: tenants
       } as any;
 
+      // The full record we persist, identical for the online and offline paths.
+      const updatePayload = {
+        project_name: inspection.projectName,
+        shop_number: inspection.shopNumber,
+        shop_name: inspection.shopName,
+        inspection_date: inspection.date,
+        inspector_name: inspection.inspectorName,
+        client_rep: inspection.clientRep,
+        consultant: inspection.consultant,
+        contractor: inspection.contractor,
+        testing_party: inspection.testingParty,
+        location: inspection.location,
+        status: inspection.type,
+        quality_rating: inspection.quality_rating,
+        json_data: jsonDataWithTenants,
+      };
+
+      // Offline: queue the full record (synced as one update when back online) instead
+      // of failing the write. Same payload the online path sends — nothing is dropped.
+      if (!isOnline) {
+        const queued = await queueFullInspectionSave(updatePayload);
+        if (queued) {
+          toast.success("Saved offline — will sync when you're back online");
+        } else {
+          toast.error("Couldn't save offline. Please try again.");
+        }
+        return;
+      }
+
       // Update inspection
       const { error } = await supabase
         .from('inspections')
-        .update({
-          project_name: inspection.projectName,
-          shop_number: inspection.shopNumber,
-          shop_name: inspection.shopName,
-          inspection_date: inspection.date,
-          inspector_name: inspection.inspectorName,
-          client_rep: inspection.clientRep,
-          consultant: inspection.consultant,
-          contractor: inspection.contractor,
-          testing_party: inspection.testingParty,
-          location: inspection.location,
-          status: inspection.type,
-          quality_rating: inspection.quality_rating,
-          json_data: jsonDataWithTenants,
-          updated_at: new Date().toISOString()
-        })
+        .update({ ...updatePayload, updated_at: new Date().toISOString() })
         .eq('id', inspectionId);
 
       if (error) throw error;
