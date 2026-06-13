@@ -1,12 +1,13 @@
 import { useState, useCallback, useEffect } from 'react';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { 
-  offlineInspectionDB, 
-  CachedInspection, 
+import {
+  offlineInspectionDB,
+  CachedInspection,
   OfflineInspectionImage,
-  CachedTemplate 
+  CachedTemplate
 } from '@/lib/offlineInspectionDB';
+import { enqueueOfflineMutation } from '@/lib/offlineQueue';
 
 interface UseOfflineInspectionDetailOptions {
   inspectionId: string;
@@ -155,7 +156,10 @@ export function useOfflineInspectionDetail({
       };
 
       await offlineInspectionDB.updateCachedInspectionData(inspectionId, updatedJsonData);
-      
+
+      // Queue a server sync of the full json_data (deduped per inspection so a day of edits = one pending push).
+      enqueueOfflineMutation('SYNC_INSPECTION', { id: inspectionId, json_data: updatedJsonData }, { dedupeKey: inspectionId });
+
       const updated = await offlineInspectionDB.getCachedInspection(inspectionId);
       setCachedData(updated);
       setHasPendingChanges(true);
@@ -195,7 +199,13 @@ export function useOfflineInspectionDetail({
       };
 
       await offlineInspectionDB.saveInspectionImage(offlineImage);
-      
+
+      // Queue the upload. The blob stays in offlineInspectionDB (inspection_images), referenced by imageId —
+      // it is NEVER put into the localStorage queue.
+      enqueueOfflineMutation('UPLOAD_INSPECTION_IMAGE', {
+        imageId, inspectionId, sectionKey, itemKey: itemKey || null,
+      });
+
       // Update local state
       setOfflineImages(prev => [...prev, offlineImage]);
       setHasPendingChanges(true);
