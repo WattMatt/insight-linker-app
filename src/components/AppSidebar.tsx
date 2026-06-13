@@ -12,7 +12,6 @@ import {
   User as UserIcon,
   Eye,
   Briefcase,
-  AlertCircle,
   QrCode,
   Lightbulb,
   FileCode,
@@ -45,7 +44,6 @@ const menuItems = [
   { title: "Clients", url: "/clients", icon: Users, adminOnly: false },
   { title: "QR Codes", url: "/qr-codes", icon: QrCode, adminOnly: false },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
-  { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
 ];
 

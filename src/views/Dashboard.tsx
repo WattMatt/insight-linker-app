@@ -6,7 +6,6 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow, format, differenceInDays } from "date-fns";
 import { useNavigate } from "@/lib/navigation";
-import { VerificationDashboardWidget } from "@/components/VerificationDashboardWidget";
 import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
 import { Progress } from "@/components/ui/progress";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
@@ -472,9 +471,6 @@ const Dashboard = () => {
 
         {/* Recent Site Assignments */}
         <RecentAssignmentsWidget />
-
-        {/* Verification Feedback Widget */}
-        <VerificationDashboardWidget />
       </div>
     </div>
   );
