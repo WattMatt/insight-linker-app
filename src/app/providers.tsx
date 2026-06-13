@@ -7,6 +7,7 @@ import { Toaster as Sonner } from "@/components/ui/sonner";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OfflineIndicator } from "@/components/OfflineIndicator";
 import { SessionWatcher } from "@/components/SessionWatcher";
+import { ServiceWorkerUpdater } from "@/components/ServiceWorkerUpdater";
 
 const queryClient = new QueryClient();
 
@@ -17,6 +18,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <TooltipProvider>
           <Toaster />
           <Sonner />
+          <ServiceWorkerUpdater />
           <OfflineIndicator />
           <SessionWatcher />
           {children}
