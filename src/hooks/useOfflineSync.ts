@@ -63,13 +63,10 @@ export function useOfflineSync() {
   const executeMutation = async (mutation: QueuedMutation) => {
     switch (mutation.type) {
       case 'CREATE_INSPECTION': {
-        const { error } = await supabase.from('inspections').insert([mutation.data]);
+        // upsert on the row id so a retry after a partial success can't duplicate or PK-conflict.
+        const { error } = await supabase.from('inspections').upsert([mutation.data], { onConflict: 'id' });
         if (error) throw error;
-        
-        // Mark as synced in IndexedDB
-        if (mutation.data.id) {
-          await offlineDB.markInspectionSynced(mutation.data.id);
-        }
+        if (mutation.data.id) await offlineDB.markInspectionSynced(mutation.data.id);
         break;
       }
 

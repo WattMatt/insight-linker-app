@@ -22,7 +22,7 @@ export function useOfflineInspections() {
   const { isOnline, queueMutation, queueUpload } = useOfflineSync();
 
   const createInspection = useCallback(async (data: InspectionData) => {
-    const inspectionId = `offline_${Date.now()}_${Math.random()}`;
+    const inspectionId = crypto.randomUUID();
     const inspectionData = {
       id: inspectionId,
       ...data,
