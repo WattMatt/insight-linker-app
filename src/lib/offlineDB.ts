@@ -4,7 +4,7 @@ const DB_NAME = 'wm_compliance_offline';
 // the SAME version with the SAME complete store set (see onupgradeneeded). Before
 // this, offlineDB(v3) and offlineInspectionDB(v2) fought over one db name with
 // divergent schemas, causing VersionError / missing object stores.
-const DB_VERSION = 4;
+const DB_VERSION = 5; // v5: + queued_blobs store (blobs referenced by id, kept out of the localStorage queue)
 
 export interface OfflineInspection {
   id: string;
@@ -282,6 +282,12 @@ class OfflineDatabase {
           const templateStore = db.createObjectStore('template_cache', { keyPath: 'id' });
           templateStore.createIndex('cached_at', 'cached_at', { unique: false });
         }
+
+        // Queued upload blobs — referenced by id from the localStorage mutation queue
+        // so File/Blob objects never go through JSON.stringify (which drops them to {}).
+        if (!db.objectStoreNames.contains('queued_blobs')) {
+          db.createObjectStore('queued_blobs', { keyPath: 'id' });
+        }
       };
     });
   }
@@ -530,6 +536,48 @@ class OfflineDatabase {
     return new Promise((resolve, reject) => {
       const tx = this.db!.transaction(['offline_photos'], 'readwrite');
       const req = tx.objectStore('offline_photos').delete(id);
+      req.onsuccess = () => resolve();
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  // === Queued Blobs (v5) ===
+  // Keeps File/Blob objects out of the localStorage mutation queue so they are
+  // never silently dropped by JSON.stringify. Store the blob here and put only
+  // the returned id into the mutation payload.
+
+  async putQueuedBlob(blob: Blob, meta?: { fileName?: string; fileType?: string }): Promise<string> {
+    if (!this.db) await this.init();
+    const id = crypto.randomUUID();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queued_blobs'], 'readwrite');
+      const req = tx.objectStore('queued_blobs').put({
+        id,
+        blob,
+        fileName: meta?.fileName ?? null,
+        fileType: meta?.fileType ?? blob.type ?? null,
+        created_at: new Date().toISOString(),
+      });
+      req.onsuccess = () => resolve(id);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async getQueuedBlob(id: string): Promise<Blob | undefined> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queued_blobs'], 'readonly');
+      const req = tx.objectStore('queued_blobs').get(id);
+      req.onsuccess = () => resolve(req.result ? (req.result.blob as Blob) : undefined);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async deleteQueuedBlob(id: string): Promise<void> {
+    if (!this.db) await this.init();
+    return new Promise((resolve, reject) => {
+      const tx = this.db!.transaction(['queued_blobs'], 'readwrite');
+      const req = tx.objectStore('queued_blobs').delete(id);
       req.onsuccess = () => resolve();
       req.onerror = () => reject(req.error);
     });
