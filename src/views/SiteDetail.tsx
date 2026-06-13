@@ -561,23 +561,8 @@ const SiteDetail = () => {
     }
   };
 
-  if (loading) return <div className="flex h-[400px] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
-  if (!site) return <div className="text-center py-12"><h3>Site not found</h3><Button onClick={() => navigate(`/clients/${clientId}`)}>Back</Button></div>;
-
-  const deliverablesSummary = computeSiteDeliverables({
-    siteId: siteId!,
-    siteName: site?.name || "",
-    subsections,
-    snags,
-    inspections,
-    hasSchematic,
-    assetCount,
-    documentCategories: siteDocuments.map((d: any) => d.category),
-  });
-
-  // Deep-link: follow the ?tab= param so same-page checklist actions switch tabs. Manual tab
-  // clicks don't write the URL, which is fine here (nothing mutates a secondary param in-place
-  // while staying on this route). FOLLOW-UP: if that changes, write the tab to the URL on click.
+  // Deep-link params — MUST be unconditional (above the early returns) to satisfy the rules of hooks.
+  // Follow ?tab= so same-page checklist actions switch tabs; open the thermal upload dialog once.
   useEffect(() => {
     const tab = searchParams.get('tab');
     if (tab) setActiveTab(tab);
@@ -597,6 +582,20 @@ const SiteDetail = () => {
       }
     }
   }, [searchParams, documentCategories]);
+
+  if (loading) return <div className="flex h-[400px] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
+  if (!site) return <div className="text-center py-12"><h3>Site not found</h3><Button onClick={() => navigate(`/clients/${clientId}`)}>Back</Button></div>;
+
+  const deliverablesSummary = computeSiteDeliverables({
+    siteId: siteId!,
+    siteName: site?.name || "",
+    subsections,
+    snags,
+    inspections,
+    hasSchematic,
+    assetCount,
+    documentCategories: siteDocuments.map((d: any) => d.category),
+  });
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in space-y-8">
