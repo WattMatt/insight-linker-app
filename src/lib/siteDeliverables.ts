@@ -7,7 +7,7 @@
  * Pure functions, no I/O. See siteDeliverables.test.ts.
  */
 import {
-  isMetered, isSnagResolved, isInspectionCompleted, getHealthBand,
+  isMetered, isSnagResolved, isInspectionCompleted, getHealthBand, BLOCKING_RISK_LEVELS,
   type SubsectionForHealth, type SnagForHealth, type InspectionForHealth,
 } from './siteHealth';
 import { isSubsectionCocCompliant, type SubsectionForCompliance } from './complianceCalculations';
@@ -129,4 +129,139 @@ function severityFromRisk(risk?: string | null): Severity {
     case 'low': return 'low';
     default: return 'none';
   }
+}
+
+function buildSnags(input: SiteDeliverablesInput): DeliverableResult {
+  const total = input.snags.length;
+  const resolved = input.snags.filter(isSnagResolved).length;
+  const outstanding = input.snags.filter(s => !isSnagResolved(s));
+  const items: OutstandingItem[] = outstanding.map(s => {
+    const blocking = s.status === 'Open' && BLOCKING_RISK_LEVELS.includes(s.risk_level || '');
+    return {
+      id: s.id,
+      category: 'snags',
+      label: `${blocking ? 'Blocking snag' : 'Open snag'}: ${s.title || 'Untitled'}`,
+      severity: severityFromRisk(s.risk_level),
+      blocking,
+      subsectionId: s.subsection_id,
+    };
+  });
+  return {
+    key: 'snags', label: DELIVERABLE_LABELS.snags, kind: 'count',
+    done: resolved, total,
+    status: total === 0 || resolved === total ? 'complete' : 'outstanding',
+    blocking: items.some(i => i.blocking),
+    outstandingItems: items,
+  };
+}
+
+function buildCoc(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
+  const required = input.subsections.filter(s => s.is_coc_required === true);
+  const compliant = required.filter(isSubsectionCocCompliant).length;
+  const outstanding = required.filter(s => !isSubsectionCocCompliant(s));
+  const items: OutstandingItem[] = outstanding.map(s => ({
+    id: `coc-${s.id}`, category: 'coc',
+    label: `COC outstanding: ${subName.get(s.id) ?? 'Subsection'}`,
+    severity: 'high', blocking: true,
+    subsectionId: s.id, subsectionName: subName.get(s.id),
+  }));
+  const total = required.length;
+  return {
+    key: 'coc', label: DELIVERABLE_LABELS.coc, kind: 'count',
+    done: compliant, total,
+    status: total === 0 ? 'not_required' : compliant === total ? 'complete' : 'outstanding',
+    blocking: items.length > 0,
+    outstandingItems: items,
+  };
+}
+
+function buildInspections(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
+  const inspected = new Set(
+    input.inspections.filter(isInspectionCompleted).map(i => i.subsection_id).filter(Boolean) as string[],
+  );
+  const total = input.subsections.length;
+  const done = input.subsections.filter(s => inspected.has(s.id)).length;
+  const items: OutstandingItem[] = input.subsections
+    .filter(s => !inspected.has(s.id))
+    .map(s => ({
+      id: `insp-${s.id}`, category: 'inspections',
+      label: `Inspection outstanding: ${subName.get(s.id) ?? 'Subsection'}`,
+      severity: 'none', blocking: false,
+      subsectionId: s.id, subsectionName: subName.get(s.id),
+    }));
+  return {
+    key: 'inspections', label: DELIVERABLE_LABELS.inspections, kind: 'count',
+    done, total,
+    status: total === 0 || done === total ? 'complete' : 'outstanding',
+    blocking: false, outstandingItems: items,
+  };
+}
+
+function buildMetering(input: SiteDeliverablesInput, subName: Map<string, string>): DeliverableResult {
+  const applicable = input.subsections.filter(s => s.metering_status !== 'Not Required');
+  const done = applicable.filter(isMetered).length;
+  const items: OutstandingItem[] = applicable
+    .filter(s => !isMetered(s))
+    .map(s => ({
+      id: `meter-${s.id}`, category: 'metering',
+      label: `Metering outstanding: ${subName.get(s.id) ?? 'Subsection'}`,
+      severity: 'none', blocking: false,
+      subsectionId: s.id, subsectionName: subName.get(s.id),
+    }));
+  const total = applicable.length;
+  return {
+    key: 'metering', label: DELIVERABLE_LABELS.metering, kind: 'count',
+    done, total,
+    status: total === 0 ? 'not_required' : done === total ? 'complete' : 'outstanding',
+    blocking: false, outstandingItems: items,
+  };
+}
+
+function buildBinary(key: DeliverableKey, done: boolean): DeliverableResult {
+  return {
+    key, label: DELIVERABLE_LABELS[key], kind: 'binary',
+    done: done ? 1 : 0, total: 1,
+    status: done ? 'complete' : 'outstanding',
+    blocking: false,
+    outstandingItems: done ? [] : [{
+      id: `binary-${key}`, category: key, label: BINARY_ACTION_LABELS[key] ?? key,
+      severity: 'none', blocking: false,
+    }],
+  };
+}
+
+function compareItems(a: OutstandingItem, b: OutstandingItem): number {
+  if (a.blocking !== b.blocking) return a.blocking ? -1 : 1;
+  if (SEVERITY_RANK[a.severity] !== SEVERITY_RANK[b.severity]) {
+    return SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity];
+  }
+  return DELIVERABLE_ORDER.indexOf(a.category) - DELIVERABLE_ORDER.indexOf(b.category);
+}
+
+export function computeSiteDeliverables(input: SiteDeliverablesInput): SiteDeliverablesSummary {
+  const subName = new Map(input.subsections.map(s => [s.id, s.name || 'Subsection']));
+  const deliverables: DeliverableResult[] = [
+    buildSnags(input),
+    buildCoc(input, subName),
+    buildInspections(input, subName),
+    buildMetering(input, subName),
+    buildBinary('schematic', input.hasSchematic),
+    buildBinary('asset_register', input.assetCount > 0),
+    buildBinary('thermal', categoryMatches(input.documentCategories, THERMAL_CATEGORY_PATTERNS)),
+    buildBinary('summary_report', categoryMatches(input.documentCategories, SUMMARY_CATEGORY_PATTERNS)),
+  ];
+  const applicable = deliverables.filter(d => d.status !== 'not_required');
+  const completeCount = applicable.filter(d => d.status === 'complete').length;
+  const applicableCount = applicable.length;
+  const completionPct = applicableCount === 0 ? 100 : Math.round((completeCount / applicableCount) * 100);
+  const allItems = deliverables.flatMap(d => d.outstandingItems);
+  const nextTasks = [...allItems].sort(compareItems);
+  return {
+    siteId: input.siteId, siteName: input.siteName,
+    deliverables, completeCount, applicableCount, completionPct,
+    outstandingCount: allItems.length,
+    blockingCount: allItems.filter(i => i.blocking).length,
+    band: getHealthBand(completionPct),
+    nextTasks,
+  };
 }
