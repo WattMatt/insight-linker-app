@@ -9,6 +9,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { DOCUMENT_DESIGN_STANDARDS } from './documentDesignStandards';
 import { mmToPt } from './pdfMakeConfig';
+import { formatDate as kernelFormatDate, formatDateTime as kernelFormatDateTime } from './report/reportKernel';
 
 // ============================================================================
 // BRANDING CONSTANTS
@@ -335,26 +336,15 @@ export function createCoverLogo(logoDataUrl: string | null, orgName: string): Co
  * Format a date for display in PDFs
  */
 export function formatPdfDate(date?: Date | string): string {
-  const d = date ? new Date(date) : new Date();
-  return d.toLocaleDateString('en-GB', {
-    day: '2-digit',
-    month: 'long',
-    year: 'numeric',
-  });
+  return kernelFormatDate(date);
 }
 
 /**
- * Format a datetime for display in PDFs
+ * Format a datetime for display in PDFs. Delegates to the report kernel:
+ * day-first, locale-independent, "—" for missing/invalid.
  */
 export function formatPdfDateTime(date?: Date | string): string {
-  const d = date ? new Date(date) : new Date();
-  return d.toLocaleString('en-GB', {
-    day: '2-digit',
-    month: 'short',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  });
+  return kernelFormatDateTime(date);
 }
 
 /**
