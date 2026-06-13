@@ -16,7 +16,7 @@ describe('buildActionHref', () => {
   });
   it('subsection-level deliverables route into the subsection', () => {
     const sub = { subsectionId: 'sub9' };
-    expect(buildActionHref(item({ category: 'coc', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=coc-metering&focus=coc');
+    expect(buildActionHref(item({ category: 'coc', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=coc-metering');
     expect(buildActionHref(item({ category: 'metering', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=coc-metering&focus=meter');
     expect(buildActionHref(item({ category: 'inspections', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=inspections&create=1');
     expect(buildActionHref(item({ id: 'snag5', category: 'snags', ...sub }), ctx)).toBe('/clients/c1/sites/s1/subsections/sub9?tab=overview&snag=snag5');

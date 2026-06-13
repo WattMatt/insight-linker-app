@@ -19,7 +19,7 @@ export function buildActionHref(item: OutstandingItem, ctx: ActionHrefContext): 
     case 'asset_register':  return `${base}?tab=asset-verification`;
     case 'thermal':         return `${base}?tab=documents&upload=thermal`;
     case 'summary_report':  return `${base}?tab=reports&generate=1`;
-    case 'coc':             return sub ? `${sub}?tab=coc-metering&focus=coc` : `${base}?tab=subsections`;
+    case 'coc':             return sub ? `${sub}?tab=coc-metering` : `${base}?tab=subsections`;
     case 'metering':        return sub ? `${sub}?tab=coc-metering&focus=meter` : `${base}?tab=subsections`;
     case 'inspections':     return sub ? `${sub}?tab=inspections&create=1` : `${base}?tab=subsections`;
     case 'snags':           return sub ? `${sub}?tab=overview&snag=${item.id}` : `${base}?tab=subsections`;

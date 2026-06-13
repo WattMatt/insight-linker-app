@@ -63,7 +63,7 @@ export function OverviewTab({
     el?.classList.add("ring-2", "ring-primary");
     const t = setTimeout(() => el?.classList.remove("ring-2", "ring-primary"), 2500);
     return () => clearTimeout(t);
-  }, [highlightSnagId]);
+  }, [highlightSnagId, snags]);
 
   return (
     <div className="space-y-4">
@@ -351,7 +351,7 @@ export function OverviewTab({
             </Badge>
             {snags.length > 0 && (
               <div className="mt-3 space-y-2">
-                {snags.slice(0, 5).map((snag) => (
+                {(highlightSnagId ? snags : snags.slice(0, 5)).map((snag) => (
                   <div key={snag.id} data-snag-id={snag.id} className="flex items-center justify-between p-2 border rounded text-sm">
                     <span className="truncate flex-1 mr-2">{snag.title}</span>
                     <div className="flex items-center gap-2">
@@ -375,7 +375,7 @@ export function OverviewTab({
                     </div>
                   </div>
                 ))}
-                {snags.length > 5 && (
+                {!highlightSnagId && snags.length > 5 && (
                   <p className="text-xs text-muted-foreground text-center">+{snags.length - 5} more snags</p>
                 )}
               </div>
