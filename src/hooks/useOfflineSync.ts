@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineDB } from '@/lib/offlineDB';
-import { OFFLINE_QUEUE_KEY as QUEUE_KEY, orderQueueForSync } from '@/lib/offlineQueue';
+import { OFFLINE_QUEUE_KEY as QUEUE_KEY, orderQueueForSync, mergeServerPhotos } from '@/lib/offlineQueue';
 
 interface QueuedMutation {
   id: string;
@@ -307,7 +307,19 @@ export function useOfflineSync() {
         // quality_rating, project_name, json_data, …). Fall back to the legacy
         // json_data-only shape for any mutation queued before this change.
         const { id, json_data, fields } = mutation.data;
-        const payload = fields ?? { json_data };
+        const payload = { ...(fields ?? { json_data }) };
+
+        // This save's json_data snapshot does not include offline-captured photos
+        // (they upload separately). Merge back any photos already committed to the
+        // server — by an UPLOAD_INSPECTION_IMAGE that drained in an earlier reconnect —
+        // so this overwrite can't orphan them (cross-drain protection; orderQueueForSync
+        // only covers same-drain ordering).
+        if (payload.json_data) {
+          const { data: row } = await supabase
+            .from('inspections').select('json_data').eq('id', id).single();
+          payload.json_data = mergeServerPhotos(row?.json_data, payload.json_data);
+        }
+
         const { error } = await supabase.from('inspections')
           .update({ ...payload, updated_at: new Date().toISOString() }).eq('id', id);
         if (error) throw error;

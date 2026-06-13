@@ -197,7 +197,7 @@ const InspectionDetail = () => {
         contractor: cached.json_data?.contractor || '',
         testingParty: cached.json_data?.testingParty || '',
         location: cached.json_data?.location || '',
-        quality_rating: cached.json_data?.quality_rating || undefined,
+        quality_rating: cached.quality_rating ?? cached.json_data?.quality_rating ?? undefined,
         tenants: cached.json_data?.tenants || [],
         jsonData: cached.json_data || {}
       };

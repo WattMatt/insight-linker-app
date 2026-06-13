@@ -10,6 +10,7 @@ export interface CachedInspection {
   id: string;
   title: string;
   status: string;
+  quality_rating: number | null;
   inspection_date: string | null;
   site_id: string;
   subsection_id: string | null;

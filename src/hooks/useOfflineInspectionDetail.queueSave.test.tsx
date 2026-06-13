@@ -5,6 +5,7 @@ import 'fake-indexeddb/auto';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { renderHook, act } from '@testing-library/react';
 import { useOfflineInspectionDetail } from './useOfflineInspectionDetail';
+import { offlineInspectionDB, type CachedInspection } from '@/lib/offlineInspectionDB';
 import { setOnline } from '@/test/online';
 import { OFFLINE_QUEUE_KEY } from '@/lib/offlineQueue';
 
@@ -55,5 +56,35 @@ describe('useOfflineInspectionDetail.queueFullInspectionSave (C3/H10)', () => {
     expect(q).toHaveLength(1);
     expect(q[0].data.fields.json_data.v).toBe(2);
     expect(q[0].data.fields.status).toBe('Completed');
+  });
+
+  it('reflects the saved status + quality_rating in the cache so an offline reload sticks (I-1/I-2)', async () => {
+    // Inspection cached while online, Draft, no rating.
+    const base: CachedInspection = {
+      id: 'insp-cache', title: 't', status: 'Draft', quality_rating: null,
+      inspection_date: null, site_id: 's1', subsection_id: null, inspector_name: null,
+      json_data: {}, template: null, template_id: null, template_category: null,
+      site_data: null, subsection_data: null, cached_at: '2026-06-13T00:00:00Z',
+      last_modified: '2026-06-13T00:00:00Z', synced: true, pending_changes: false,
+    };
+    await offlineInspectionDB.cacheInspection(base);
+
+    const { result } = renderHook(() =>
+      useOfflineInspectionDetail({ inspectionId: 'insp-cache', autoCache: false })
+    );
+
+    await act(async () => {
+      await result.current.queueFullInspectionSave({
+        status: 'Completed',
+        quality_rating: 5,
+        json_data: { edited: true },
+      });
+    });
+
+    const cached = await offlineInspectionDB.getCachedInspection('insp-cache');
+    expect(cached?.status).toBe('Completed');
+    expect(cached?.quality_rating).toBe(5);
+    expect(cached?.pending_changes).toBe(true);
+    expect(cached?.json_data).toEqual({ edited: true });
   });
 });

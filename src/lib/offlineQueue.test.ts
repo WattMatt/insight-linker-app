@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { enqueueOfflineMutation, OFFLINE_QUEUE_KEY, orderQueueForSync } from './offlineQueue';
+import { enqueueOfflineMutation, OFFLINE_QUEUE_KEY, orderQueueForSync, mergeServerPhotos } from './offlineQueue';
 
 function mockLocalStorage() {
   const m = new Map<string, string>();
@@ -67,5 +67,42 @@ describe('orderQueueForSync', () => {
     ];
     orderQueueForSync(queue);
     expect(queue.map(m => m.id)).toEqual(['u1', 's1']);
+  });
+});
+
+describe('mergeServerPhotos', () => {
+  it('preserves a server photo the client snapshot is missing (cross-drain protection)', () => {
+    const server = { sectionA: { item1: { photos: ['https://srv/p1.jpg'], notes: 'old' } } };
+    const client = { sectionA: { item1: { photos: [], notes: 'edited offline' } } };
+    const merged = mergeServerPhotos(server, client);
+    expect(merged.sectionA.item1.photos).toEqual(['https://srv/p1.jpg']);
+    expect(merged.sectionA.item1.notes).toBe('edited offline'); // client edit wins
+  });
+
+  it('unions photos without duplicating shared URLs', () => {
+    const server = { s: { i: { photos: ['a', 'b'] } } };
+    const client = { s: { i: { photos: ['b', 'c'] } } };
+    expect(mergeServerPhotos(server, client).s.i.photos).toEqual(['b', 'c', 'a']);
+  });
+
+  it('adds an entire server section/item the client never touched', () => {
+    const server = { s2: { i2: { photos: ['x'] } } };
+    const client = { s1: { i1: { notes: 'n' } } };
+    const merged = mergeServerPhotos(server, client);
+    expect(merged.s1.i1.notes).toBe('n');
+    expect(merged.s2.i2.photos).toEqual(['x']);
+  });
+
+  it('passes through top-level arrays like tenants untouched', () => {
+    const server = { tenants: [{ name: 'A' }], s: { i: { photos: ['p'] } } };
+    const client = { tenants: [{ name: 'B' }], s: { i: { photos: [] } } };
+    const merged = mergeServerPhotos(server, client);
+    expect(merged.tenants).toEqual([{ name: 'B' }]); // client wins, not merged as a section
+    expect(merged.s.i.photos).toEqual(['p']);
+  });
+
+  it('returns the client snapshot when server json is empty/invalid', () => {
+    expect(mergeServerPhotos(null, { a: 1 })).toEqual({ a: 1 });
+    expect(mergeServerPhotos(undefined, { a: 1 })).toEqual({ a: 1 });
   });
 });

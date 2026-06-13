@@ -10,6 +10,7 @@ function makeCached(id: string, cachedAt: string, pending: boolean): CachedInspe
     id,
     title: id,
     status: 'Draft',
+    quality_rating: null,
     inspection_date: null,
     site_id: 's1',
     subsection_id: null,

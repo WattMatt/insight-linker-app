@@ -76,6 +76,7 @@ export function useOfflineInspectionDetail({
         id: inspectionId,
         title: inspectionData.title || '',
         status: inspectionData.status || '',
+        quality_rating: inspectionData.quality_rating ?? null,
         inspection_date: inspectionData.inspection_date,
         site_id: inspectionData.site_id,
         subsection_id: inspectionData.subsection_id,
@@ -184,10 +185,25 @@ export function useOfflineInspectionDetail({
     try {
       enqueueOfflineMutation('SYNC_INSPECTION', { id: inspectionId, fields }, { dedupeKey: inspectionId });
 
-      if (fields.json_data !== undefined) {
-        await offlineInspectionDB.updateCachedInspectionData(inspectionId, fields.json_data);
-        const updated = await offlineInspectionDB.getCachedInspection(inspectionId);
-        if (updated) setCachedData(updated);
+      // Reflect the save in the local cache so an offline RELOAD shows it (not a revert
+      // to the pre-save state). We update the scalar columns loadFromCachedData reads
+      // (status, quality_rating, inspection_date, inspector_name) plus json_data — a
+      // blank status/rating on reload would otherwise block re-saving a "Completed".
+      const cached = await offlineInspectionDB.getCachedInspection(inspectionId);
+      if (cached) {
+        const updated: CachedInspection = {
+          ...cached,
+          status: fields.status ?? cached.status,
+          quality_rating: fields.quality_rating ?? cached.quality_rating,
+          inspection_date: fields.inspection_date ?? cached.inspection_date,
+          inspector_name: fields.inspector_name ?? cached.inspector_name,
+          json_data: fields.json_data ?? cached.json_data,
+          last_modified: new Date().toISOString(),
+          pending_changes: true,
+          synced: false,
+        };
+        await offlineInspectionDB.cacheInspection(updated);
+        setCachedData(updated);
       }
       setHasPendingChanges(true);
       return true;
