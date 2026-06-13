@@ -300,75 +300,50 @@ export function useOfflineSync() {
         break;
       }
 
-      case 'UPLOAD_INSPECTION_IMAGE': {
-        const { imageId, inspectionId, sectionKey, itemKey, blob, fileName } = mutation.data;
+      case 'SYNC_INSPECTION': {
+        const { id, json_data } = mutation.data;
+        const { error } = await supabase.from('inspections')
+          .update({ json_data, updated_at: new Date().toISOString() }).eq('id', id);
+        if (error) throw error;
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
-        const { generateInspectionImagePath, sanitizeForFileName } = await import('@/lib/imageNaming');
+        await offlineInspectionDB.markInspectionSynced(id); // clears pending_changes in the cache
+        break;
+      }
 
-        // Get cached inspection for context (client/site/subsection names)
-        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
-        
-        // Generate descriptive file path using the naming utility
-        const fileExtension = fileName.split('.').pop() || 'jpg';
-        let filePath: string;
-        
-        if (cachedInspection?.site_data) {
-          // Use descriptive naming with client/site/subsection context
-          filePath = generateInspectionImagePath({
-            clientName: cachedInspection.site_data.clientName,
-            siteName: cachedInspection.site_data.siteName,
-            subsectionName: cachedInspection.subsection_data?.name,
-            inspectionId,
-            sectionKey,
-            itemKey: itemKey || 'general',
-            fileExtension
-          });
-        } else {
-          // Fallback to simple path if no context available
-          filePath = `${inspectionId}/${sectionKey}/${itemKey || 'general'}/${Date.now()}.${fileExtension}`;
-        }
+      case 'UPLOAD_INSPECTION_IMAGE': {
+        const { imageId, inspectionId, sectionKey, itemKey } = mutation.data;
+        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
 
-        console.log('[OfflineSync] Uploading image with path:', filePath);
+        // Read the blob from IndexedDB (NOT mutation.data.blob — that never survived the JSON queue).
+        const images = await offlineInspectionDB.getInspectionImages(inspectionId);
+        const image = images.find(i => i.id === imageId);
+        if (!image) throw new Error(`UPLOAD_INSPECTION_IMAGE: image ${imageId} missing in offlineInspectionDB`);
 
-        // Upload to storage
+        const fileExtension = (image.file_name?.split('.').pop()) || 'jpg';
+        const filePath = `${inspectionId}/${sectionKey}/${itemKey || 'general'}/${imageId}.${fileExtension}`;
+
         const { error: uploadError } = await supabase.storage
-          .from('inspection-photos')
-          .upload(filePath, blob);
+          .from('inspection-photos').upload(filePath, image.blob, { upsert: true });
         if (uploadError) throw uploadError;
+        const { data: { publicUrl } } = supabase.storage.from('inspection-photos').getPublicUrl(filePath);
 
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('inspection-photos')
-          .getPublicUrl(filePath);
-
-        // Update the inspection's json_data with the new image URL
-        if (cachedInspection) {
-          const updatedJsonData = { ...cachedInspection.json_data };
-          if (!updatedJsonData[sectionKey]) {
-            updatedJsonData[sectionKey] = {};
-          }
-          const targetKey = itemKey || 'images';
-          if (!updatedJsonData[sectionKey][targetKey]) {
-            updatedJsonData[sectionKey][targetKey] = { photos: [] };
-          }
-          if (!updatedJsonData[sectionKey][targetKey].photos) {
-            updatedJsonData[sectionKey][targetKey].photos = [];
-          }
-          updatedJsonData[sectionKey][targetKey].photos.push(publicUrl);
-
-          // Update inspection in Supabase
-          await supabase
-            .from('inspections')
-            .update({
-              json_data: updatedJsonData,
-              updated_at: new Date().toISOString()
-            })
-            .eq('id', inspectionId);
+        // Link into the inspection's json_data via a server read-modify-write so it's never orphaned.
+        const { data: row, error: readError } = await supabase
+          .from('inspections').select('json_data').eq('id', inspectionId).single();
+        if (readError) throw readError;
+        const jsonData = { ...(row?.json_data || {}) } as Record<string, any>;
+        const targetKey = itemKey || 'images';
+        jsonData[sectionKey] = jsonData[sectionKey] || {};
+        jsonData[sectionKey][targetKey] = jsonData[sectionKey][targetKey] || { photos: [] };
+        jsonData[sectionKey][targetKey].photos = jsonData[sectionKey][targetKey].photos || [];
+        if (!jsonData[sectionKey][targetKey].photos.includes(publicUrl)) {
+          jsonData[sectionKey][targetKey].photos.push(publicUrl); // idempotent: no dupe URL on retry
         }
+        const { error: updError } = await supabase.from('inspections')
+          .update({ json_data: jsonData, updated_at: new Date().toISOString() }).eq('id', inspectionId);
+        if (updError) throw updError;
 
-        // Mark image as synced
         await offlineInspectionDB.markImageSynced(imageId, publicUrl);
-        console.log('[OfflineSync] Image synced successfully:', publicUrl);
         break;
       }
 
