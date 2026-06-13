@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useParams, useNavigate } from "@/lib/navigation";
+import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
@@ -36,10 +36,11 @@ export const normalizeCocStatus = (status: string | null | undefined): string =>
 export function useSubsectionDetail() {
   const { clientId, siteId, subsectionId } = useParams();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [subsection, setSubsection] = useState<SubsectionData | null>(null);
   const [siteData, setSiteData] = useState<SiteData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState("overview");
+  const [activeTab, setActiveTab] = useState(searchParams.get("tab") || "overview");
   const [qrCodeUrl, setQrCodeUrl] = useState("");
   const [meterSerialNumber, setMeterSerialNumber] = useState<string>("");
   const [ctRatio, setCtRatio] = useState<string>("");
@@ -416,6 +417,10 @@ export function useSubsectionDetail() {
       generateQRCode();
     }
   }, [subsectionId, companyLogo]);
+
+  useEffect(() => {
+    if (searchParams.get("create") === "1") setIsCreateInspectionOpen(true);
+  }, [searchParams]);
 
   const generateQRCode = async () => {
     setQrCodeUrl('generated');
