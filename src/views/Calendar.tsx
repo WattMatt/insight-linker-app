@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2, Loader2, AlertCircle, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -66,7 +66,7 @@ const Calendar = () => {
   const monthsInYear = eachMonthOfInterval({ start: yearStart, end: yearEnd });
 
   // Fetch all events for the current year
-  const { data: events, refetch } = useQuery({
+  const { data: events, refetch, isLoading, isError } = useQuery({
     queryKey: ["calendar-events", currentYear],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -88,12 +88,16 @@ const Calendar = () => {
       // Check if it's the start date
       if (isSameDay(eventDate, day)) return true;
       
-      // Check if it's within the date range (start to end)
+      // Check if it's within the date range (start to end).
+      // Guard against malformed rows (end before start): isWithinInterval throws a
+      // RangeError on an inverted interval, which would crash every day cell.
       if (event.end_date) {
         const endDate = parseISO(event.end_date);
-        return isWithinInterval(day, { start: eventDate, end: endDate });
+        if (endDate >= eventDate) {
+          return isWithinInterval(day, { start: eventDate, end: endDate });
+        }
       }
-      
+
       return false;
     }) || [];
   };
@@ -181,10 +185,19 @@ const Calendar = () => {
   };
 
   const handleSaveEvent = async () => {
-    if (!formData.title || !formData.site_name || !formData.start_date) {
+    if (!formData.title.trim() || !formData.site_name.trim() || !formData.start_date) {
       toast({
         title: "Error",
         description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (formData.end_date && formData.end_date < formData.start_date) {
+      toast({
+        title: "Error",
+        description: "End date cannot be before the start date",
         variant: "destructive",
       });
       return;
@@ -195,8 +208,8 @@ const Calendar = () => {
         const { error } = await supabase
           .from("calendar_events")
           .update({
-            title: formData.title,
-            site_name: formData.site_name,
+            title: formData.title.trim(),
+            site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
@@ -211,8 +224,8 @@ const Calendar = () => {
         const { error } = await supabase
           .from("calendar_events")
           .insert({
-            title: formData.title,
-            site_name: formData.site_name,
+            title: formData.title.trim(),
+            site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
@@ -337,14 +350,30 @@ const Calendar = () => {
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h2 className="text-2xl font-bold">
-              {format(new Date(currentYear, 0, 1), "MMMM yyyy")}
+              {currentYear}
             </h2>
             <Button variant="ghost" size="icon" onClick={nextYear}>
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
 
-          {/* 12 Month Grid */}
+          {/* 12 Month Grid — with explicit loading / error / empty states */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading calendar…
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <p className="text-sm text-muted-foreground">Couldn't load the calendar. Please try again.</p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            </div>
+          ) : !events || events.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+              <CalendarDays className="h-8 w-8 mb-2 opacity-50" />
+              <p>No events scheduled for {currentYear}.</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {monthsInYear.map(month => {
               const monthStart = startOfMonth(month);
@@ -457,6 +486,7 @@ const Calendar = () => {
               );
             })}
           </div>
+          )}
           </TooltipProvider>
         </CardContent>
       </Card>
@@ -600,6 +630,7 @@ const Calendar = () => {
                   id="end_date"
                   type="date"
                   value={formData.end_date}
+                  min={formData.start_date || undefined}
                   onChange={(e) =>
                     setFormData({ ...formData, end_date: e.target.value })
                   }
