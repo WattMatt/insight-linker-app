@@ -34,6 +34,7 @@ import {
 import { DOCUMENT_DESIGN_STANDARDS, generateDocumentFilename } from './documentDesignStandards';
 // Import shared layout constants for WYSIWYG matching
 import { LAYOUT, ACCENT_PALETTES } from './siteSummaryRenderSpec';
+import { clampPageNumbers, formatDate } from './report/reportKernel';
 
 // Re-export for convenience
 export {
@@ -449,15 +450,14 @@ export function createPageHeader(title: string, skipFirstPage = true): (currentP
  * Footer is positioned at the very bottom of the page within the margin area
  */
 export function createPageFooter(skipFirstPage = true): (currentPage: number, pageCount: number) => Content {
-  const formattedDate = new Date().toLocaleDateString('en-GB');
+  const formattedDate = formatDate(new Date());
 
   return (currentPage: number, pageCount: number): Content => {
     if (skipFirstPage && currentPage === 1) {
       return { text: '' };
     }
 
-    const displayPage = skipFirstPage ? currentPage - 1 : currentPage;
-    const displayTotal = skipFirstPage ? pageCount - 1 : pageCount;
+    const { page: displayPage, total: displayTotal } = clampPageNumbers(currentPage, pageCount, skipFirstPage);
 
     // Footer positioned at absolute bottom - pdfmake footer area starts at pageMargins[3] from bottom
     // We use a small top margin to push content to the very bottom of the footer area

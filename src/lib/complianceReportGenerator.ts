@@ -32,6 +32,7 @@ import {
   formatPdfDate,
 } from "@/lib/pdfBranding";
 import { fetchPDFTemplate } from "@/hooks/usePDFTemplateGateway";
+import { buildComplianceSummaryRows } from "@/lib/report/complianceRows";
 
 export interface ComplianceItem {
   id: string;
@@ -146,14 +147,7 @@ export async function generateComplianceReport(
         { header: 'Count', field: 'count', width: 80, alignment: 'center' },
         { header: 'Percentage', field: 'percentage', width: 80, alignment: 'center' },
       ],
-      [
-        { metric: 'Total Items', count: stats.total, percentage: '100%' },
-        { metric: 'Compliant', count: stats.compliant, percentage: `${complianceRate}%` },
-        { metric: 'Non-Compliant', count: stats.nonCompliant, percentage: `${Math.round((stats.nonCompliant / stats.total) * 100)}%` },
-        { metric: 'Expiring Within 90 Days', count: stats.expiringSoon, percentage: `${Math.round((stats.expiringSoon / stats.total) * 100)}%` },
-        { metric: 'Expired', count: stats.expired, percentage: `${Math.round((stats.expired / stats.total) * 100)}%` },
-        { metric: 'Pending Review', count: stats.pendingReview, percentage: `${Math.round((stats.pendingReview / stats.total) * 100)}%` },
-      ]
+      buildComplianceSummaryRows(stats)
     ));
 
     content.push(createSpacer(10));
@@ -176,7 +170,7 @@ export async function generateComplianceReport(
       cocNumber: item.cocNumber || '-',
       type: item.cocType || '-',
       status: item.cocStatus || 'Unknown',
-      issueDate: item.cocIssueDate ? new Date(item.cocIssueDate).toLocaleDateString() : '-',
+      issueDate: formatPdfDate(item.cocIssueDate),
     }));
 
     content.push(createDataTable(

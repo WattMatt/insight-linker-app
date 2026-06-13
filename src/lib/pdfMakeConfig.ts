@@ -57,9 +57,9 @@ export const PAGE_CONFIG = {
   // [left, top, right, bottom] in points
   pageMargins: [
     mmToPt(margins.left),      // 15mm = ~42.5pt
-    mmToPt(50),                // 50pt top for header space
+    64,                        // 64pt top — header band (was mmToPt(50)≈141pt; unit bug)
     mmToPt(margins.right),     // 15mm = ~42.5pt
-    mmToPt(35),                // 35mm (~100pt) bottom for footer - positioned at page bottom
+    mmToPt(35),                // 35mm (~99pt) bottom for footer - positioned at page bottom
   ] as [number, number, number, number],
   pageOrientation: 'portrait' as const,
 };
