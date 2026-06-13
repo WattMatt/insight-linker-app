@@ -15,6 +15,23 @@ interface QueuedMutation {
 
 const MAX_RETRIES = 3;
 
+// Module-level drain coordination — shared across ALL useOfflineSync instances in this
+// tab so multiple mounts (e.g. OfflineIndicator + InspectionDetail) can't run concurrent
+// or duplicate drains. `isDraining` is a synchronous lock (the old isSyncing React-state
+// guard updated too late to prevent a race); `drainAgain` coalesces a request that lands
+// while the lock is held (e.g. an enqueue mid-drain) into one more pass.
+let isDraining = false;
+let drainAgain = false;
+
+// Broadcast drain state to ALL mounted instances. The lock is module-global, so the
+// "syncing" indicator must be too — otherwise a non-draining mount shows a stale spinner
+// and an enabled "Sync Now" button while another instance is mid-drain.
+function announceSyncing(syncing: boolean) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('offline-sync-state', { detail: { syncing } }));
+  }
+}
+
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const wasOnline = useRef(navigator.onLine);
@@ -415,46 +432,77 @@ export function useOfflineSync() {
 
   // Process queue when online
   const processQueue = useCallback(async () => {
-    if (!isOnline || isSyncing) return;
+    if (!navigator.onLine) return;
+    // Synchronous lock. If a drain is already running, ask it to run once more after it
+    // finishes (covers an enqueue that lands mid-drain) and return — no concurrent drain.
+    if (isDraining) { drainAgain = true; return; }
+    isDraining = true;
 
-    // Drain json_data overwrites (SYNC_INSPECTION) before appends (UPLOAD_INSPECTION_IMAGE)
-    // so a queued full-save can't clobber a photo URL an upload just appended.
-    const queue = orderQueueForSync(getQueue());
-    if (queue.length === 0) return;
+    try {
+      // Broadcast syncing state so EVERY mounted instance reflects it (the lock is
+      // module-global; the spinner must be too). Inside try so the lock can never wedge.
+      announceSyncing(true);
 
-    setIsSyncing(true);
-    const failedMutations: QueuedMutation[] = [];
+      // Ids attempted in THIS drain cycle. A coalesced re-pass (new items arrived) must
+      // NOT re-attempt a failed item — that would burn its retry budget in a tight burst
+      // and prematurely discard a mutation (deleting its blob) that a normally-spaced
+      // retry would have synced.
+      const attempted = new Set<string>();
 
-    for (const mutation of queue) {
-      try {
-        await executeMutation(mutation);
-        console.log('Successfully synced mutation:', mutation.type);
-      } catch (error) {
-        console.error('Failed to process mutation:', error);
-        
-        if (mutation.retries < MAX_RETRIES) {
-          failedMutations.push({
-            ...mutation,
-            retries: mutation.retries + 1,
-          });
-        } else {
-          // Permanent discard — delete any queued blob this mutation referenced so it doesn't leak in IndexedDB.
-          const d = (mutation.data ?? {}) as { blobId?: string; photoBlobId?: string };
-          if (d.blobId) await offlineDB.deleteQueuedBlob(d.blobId);
-          if (d.photoBlobId) await offlineDB.deleteQueuedBlob(d.photoBlobId);
-          toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+      do {
+        drainAgain = false;
+
+        // Drain json_data overwrites (SYNC_INSPECTION) before appends
+        // (UPLOAD_INSPECTION_IMAGE) so a full-save can't clobber a just-appended photo.
+        const snapshot = orderQueueForSync(getQueue()).filter(m => !attempted.has(m.id));
+        if (snapshot.length === 0) break;
+
+        const succeeded = new Set<string>();
+        const discarded = new Set<string>();
+        const retried = new Map<string, QueuedMutation>();
+
+        for (const mutation of snapshot) {
+          attempted.add(mutation.id);
+          try {
+            await executeMutation(mutation);
+            succeeded.add(mutation.id);
+          } catch (error) {
+            console.error('Failed to process mutation:', error);
+            if (mutation.retries < MAX_RETRIES) {
+              retried.set(mutation.id, { ...mutation, retries: mutation.retries + 1 });
+            } else {
+              // Permanent discard — delete any queued blob this mutation referenced.
+              const d = (mutation.data ?? {}) as { blobId?: string; photoBlobId?: string };
+              if (d.blobId) await offlineDB.deleteQueuedBlob(d.blobId);
+              if (d.photoBlobId) await offlineDB.deleteQueuedBlob(d.photoBlobId);
+              discarded.add(mutation.id);
+              toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
+            }
+          }
         }
-      }
-    }
 
-    saveQueue(failedMutations);
-    setIsSyncing(false);
+        // Reconcile against the CURRENT queue (not the snapshot) so anything enqueued
+        // DURING this pass is preserved instead of clobbered. Drop succeeded + discarded;
+        // apply retry increments to the rest (failed items stay, with bumped retries).
+        const reconciled = getQueue()
+          .filter(m => !succeeded.has(m.id) && !discarded.has(m.id))
+          .map(m => retried.get(m.id) ?? m);
+        saveQueue(reconciled);
 
-    if (failedMutations.length === 0 && queue.length > 0) {
-      toast.success(`Synced ${queue.length} offline action${queue.length > 1 ? 's' : ''}`);
-      queryClient.invalidateQueries();
+        if (retried.size === 0 && discarded.size === 0 && succeeded.size > 0) {
+          toast.success(`Synced ${succeeded.size} offline action${succeeded.size > 1 ? 's' : ''}`);
+          queryClient.invalidateQueries();
+        }
+
+        // Loop only for genuinely-new items (not yet attempted this cycle) — never to
+        // re-attempt a still-failed item (it waits for the next external drain trigger).
+        if (getQueue().some(m => !attempted.has(m.id))) drainAgain = true;
+      } while (drainAgain && navigator.onLine);
+    } finally {
+      isDraining = false;
+      announceSyncing(false);
     }
-  }, [isOnline, isSyncing, getQueue, saveQueue, queryClient]);
+  }, [getQueue, saveQueue, queryClient]);
 
   // Monitor online/offline status AND self-heal a stuck value. navigator.onLine can read `false`
   // transiently at mount (e.g. during a service-worker swap on a fresh deploy); since no 'online'
@@ -505,10 +553,21 @@ export function useOfflineSync() {
   // Drain promptly when any code enqueues a mutation (same-tab event from enqueueOfflineMutation /
   // queueMutation) — so mid-session edits don't wait for the next connectivity change.
   useEffect(() => {
-    const onEnqueued = () => { if (navigator.onLine) processQueue(); };
+    const onEnqueued = () => {
+      setQueueSize(getQueue().length); // reflect the new item in the badge immediately, even offline
+      if (navigator.onLine) processQueue();
+    };
     window.addEventListener('offline-queue-updated', onEnqueued);
     return () => window.removeEventListener('offline-queue-updated', onEnqueued);
-  }, [processQueue]);
+  }, [processQueue, getQueue]);
+
+  // Mirror the module-global drain state into this instance so every mounted instance —
+  // not just the one holding the lock — shows the correct syncing spinner/button state.
+  useEffect(() => {
+    const onState = (e: Event) => setIsSyncing(!!(e as CustomEvent).detail?.syncing);
+    window.addEventListener('offline-sync-state', onState);
+    return () => window.removeEventListener('offline-sync-state', onState);
+  }, []);
 
   // Update queue size on mount
   useEffect(() => {
