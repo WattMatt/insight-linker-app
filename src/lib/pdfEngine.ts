@@ -947,16 +947,15 @@ export async function generateReport(opts: ReportGeneratorOptions): Promise<Gene
     pageBreaks: true,
   });
 
-  // Create preview URL
-  const previewUrl = URL.createObjectURL(blob);
-
   console.log(`[PDF Engine] Report generated: ${generatedFilename} (${blob.size} bytes)`);
 
+  // NOTE: we intentionally do NOT create an object URL here. The previous
+  // implementation leaked one per call (callers never revoked it). Callers that
+  // need a preview create and revoke their own URL (see SiteSummaryReport).
   return {
     blob,
     filename: generatedFilename,
     complianceChecks,
-    previewUrl,
   };
 }
 
