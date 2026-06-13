@@ -29,6 +29,8 @@ import { AssetVerification } from "@/components/site/AssetVerification";
 
 import { SchematicDiagram } from "@/components/site/SchematicDiagram";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
+import { SiteReadinessPanel } from "@/components/site/SiteReadinessPanel";
+import { computeSiteDeliverables, type OutstandingItem, type DeliverableKey } from "@/lib/siteDeliverables";
 
 interface SiteDocument {
   category: string;
@@ -40,6 +42,7 @@ interface Inspection {
   subsection_id: string | null;
   inspection_date: string;
   json_data: any;
+  status?: string | null;
 }
 
 const SiteDetail = () => {
@@ -50,7 +53,7 @@ const SiteDetail = () => {
   // States
   const [site, setSite] = useState<Site | null>(null);
   const [subsections, setSubsections] = useState<Subsection[]>([]);
-  const [snags, setSnags] = useState<{ id: string; subsection_id: string; status: string; title: string }[]>([]);
+  const [snags, setSnags] = useState<{ id: string; subsection_id: string; status: string; title: string; risk_level: string | null }[]>([]);
   const [inspections, setInspections] = useState<Inspection[]>([]);
   const [stats, setStats] = useState<SiteStats | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,6 +64,8 @@ const SiteDetail = () => {
   const [companyLogo, setCompanyLogo] = useState<string>("");
   const [downloadingAll, setDownloadingAll] = useState(false);
   const [generatingAll, setGeneratingAll] = useState(false);
+  const [hasSchematic, setHasSchematic] = useState(false);
+  const [assetCount, setAssetCount] = useState(0);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [editFormData, setEditFormData] = useState({
     name: '', address: '', description: '', status: '', location_lat: '', location_lng: '',
@@ -403,7 +408,7 @@ const SiteDetail = () => {
 
       const { data: inspectionsRes, error: inspError } = await supabase
         .from("inspections")
-        .select("id, subsection_id, inspection_date, json_data")
+        .select("id, subsection_id, inspection_date, json_data, status")
         .eq("site_id", siteId)
         .order("inspection_date", { ascending: false });
 
@@ -413,7 +418,7 @@ const SiteDetail = () => {
       
       const { data: snagsRes, error: snagsError } = await supabase
         .from("snags")
-        .select("id, subsection_id, status, title")
+        .select("id, subsection_id, status, title, risk_level")
         .in("subsection_id", subsectionIds);
 
       if (snagsError) throw snagsError;
@@ -454,6 +459,15 @@ const SiteDetail = () => {
       setSubsections(sortedSubs);
       setSnags(snagsRes || []);
       setInspections(inspectionsRes || []);
+
+      const [schematicRes, assetCountRes] = await Promise.all([
+        supabase.from("site_schematics").select("id").eq("site_id", siteId).maybeSingle(),
+        supabase.from("site_assets").select("id", { count: "exact", head: true }).eq("site_id", siteId),
+      ]);
+      if (schematicRes.error) throw schematicRes.error;
+      if (assetCountRes.error) throw assetCountRes.error;
+      setHasSchematic(!!schematicRes.data);
+      setAssetCount(assetCountRes.count || 0);
 
       // Calculate Stats using shared compliance utility for consistency
       const totalSubsections = subs.length;
@@ -552,6 +566,31 @@ const SiteDetail = () => {
   if (loading) return <div className="flex h-[400px] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
   if (!site) return <div className="text-center py-12"><h3>Site not found</h3><Button onClick={() => navigate(`/clients/${clientId}`)}>Back</Button></div>;
 
+  const deliverablesSummary = computeSiteDeliverables({
+    siteId: siteId!,
+    siteName: site?.name || "",
+    subsections,
+    snags,
+    inspections,
+    hasSchematic,
+    assetCount,
+    documentCategories: siteDocuments.map((d: any) => d.category),
+  });
+
+  const TAB_FOR_CATEGORY: Record<DeliverableKey, string> = {
+    snags: "subsections",
+    inspections: "subsections",
+    metering: "subsections",
+    coc: "compliance",
+    schematic: "schematic",
+    asset_register: "asset-verification",
+    thermal: "documents",
+    summary_report: "reports",
+  };
+  const handleSelectDeliverable = (item: OutstandingItem) => {
+    setActiveTab(TAB_FOR_CATEGORY[item.category]);
+  };
+
   return (
     <div className="container mx-auto px-4 py-8 max-w-7xl animate-fade-in space-y-8">
       <Breadcrumbs items={[{ label: "Clients", href: "/clients", icon: "client" }, { label: site.clients?.name || "Client", href: `/clients/${clientId}`, icon: "client" }, { label: site.name, icon: "site" }]} />
@@ -613,6 +652,7 @@ const SiteDetail = () => {
         </TabsList>
 
         <TabsContent value="overview" className="space-y-6 mt-6">
+          <SiteReadinessPanel summary={deliverablesSummary} onSelectItem={handleSelectDeliverable} />
           <SiteOverview site={site} stats={stats} onTabChange={setActiveTab} />
           <SiteLevelInspections inspections={inspections} siteId={siteId!} clientId={clientId} onCreateClick={() => setIsCreateInspectionOpen(true)} />
         </TabsContent>

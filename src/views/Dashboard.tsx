@@ -9,6 +9,8 @@ import { useNavigate } from "@/lib/navigation";
 import { RecentAssignmentsWidget } from "@/components/RecentAssignmentsWidget";
 import { Progress } from "@/components/ui/progress";
 import { calculateCocComplianceStats } from "@/lib/complianceCalculations";
+import { SitesNeedingAttention } from "@/components/dashboard/SitesNeedingAttention";
+import { summarizeSitesForTriage, type SiteDeliverablesInput, type SiteTriageRow } from "@/lib/siteDeliverables";
 
 interface DashboardStats {
   totalClients: number;
@@ -76,10 +78,13 @@ const Dashboard = () => {
   const [upcomingEvents, setUpcomingEvents] = useState<UpcomingEvent[]>([]);
   const [highRiskSnags, setHighRiskSnags] = useState<HighRiskSnag[]>([]);
   const [loading, setLoading] = useState(true);
+  const [triageRows, setTriageRows] = useState<SiteTriageRow[]>([]);
+  const [siteClientMap, setSiteClientMap] = useState<Record<string, string>>({});
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchDashboardData();
+    fetchTriageData();
   }, []);
 
   const fetchDashboardData = async () => {
@@ -169,6 +174,61 @@ const Dashboard = () => {
       console.error("Error fetching dashboard data:", error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchTriageData = async () => {
+    try {
+      const [sitesRes, subsRes, snagsRes, inspRes, schematicsRes, assetsRes, docsRes] = await Promise.all([
+        supabase.from("sites").select("id, name, client_id"),
+        supabase.from("subsections").select("id, site_id, name, coc_status, is_coc_required, metering_status, meter_serial_number"),
+        supabase.from("snags").select("id, subsection_id, status, risk_level, title"),
+        supabase.from("inspections").select("subsection_id, status, site_id"),
+        supabase.from("site_schematics").select("site_id"),
+        supabase.from("site_assets").select("site_id"),
+        supabase.from("site_documents").select("site_id, category"),
+      ]);
+
+      const sites = sitesRes.data || [];
+      const subs = subsRes.data || [];
+      const snags = snagsRes.data || [];
+      const insps = inspRes.data || [];
+
+      // Map subsection -> site for snags (snags are subsection-scoped)
+      const subToSite = new Map<string, string>(subs.map((s: any) => [s.id, s.site_id]));
+      const schematicSites = new Set((schematicsRes.data || []).map((r: any) => r.site_id));
+      const assetSites = new Set((assetsRes.data || []).map((r: any) => r.site_id));
+
+      const group = <T,>(rows: T[], key: (r: T) => string | undefined) => {
+        const m = new Map<string, T[]>();
+        for (const r of rows) {
+          const k = key(r);
+          if (!k) continue;
+          (m.get(k) ?? m.set(k, []).get(k)!).push(r);
+        }
+        return m;
+      };
+
+      const subsBySite = group(subs, (s: any) => s.site_id);
+      const snagsBySite = group(snags, (n: any) => subToSite.get(n.subsection_id));
+      const inspBySite = group(insps, (i: any) => i.site_id);
+      const docsBySite = group(docsRes.data || [], (d: any) => d.site_id);
+
+      const inputs: SiteDeliverablesInput[] = sites.map((site: any) => ({
+        siteId: site.id,
+        siteName: site.name,
+        subsections: subsBySite.get(site.id) || [],
+        snags: snagsBySite.get(site.id) || [],
+        inspections: inspBySite.get(site.id) || [],
+        hasSchematic: schematicSites.has(site.id),
+        assetCount: (assetSites.has(site.id) ? 1 : 0),
+        documentCategories: (docsBySite.get(site.id) || []).map((d: any) => d.category),
+      }));
+
+      setSiteClientMap(Object.fromEntries(sites.map((s: any) => [s.id, s.client_id])));
+      setTriageRows(summarizeSitesForTriage(inputs));
+    } catch (error) {
+      if (process.env.NODE_ENV === "development") console.error("Error loading triage data:", error);
     }
   };
 
@@ -325,6 +385,14 @@ const Dashboard = () => {
           </CardContent>
         </Card>
       </div>
+
+      <SitesNeedingAttention
+        rows={triageRows}
+        onSelectSite={(siteId) => {
+          const clientId = siteClientMap[siteId];
+          navigate(clientId ? `/clients/${clientId}/sites/${siteId}` : `/sites/${siteId}`);
+        }}
+      />
 
       <div className="grid gap-6 md:grid-cols-2">
         {/* High-Risk Snags Tracker */}
