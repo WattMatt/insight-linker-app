@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -17,6 +17,7 @@ const MAX_RETRIES = 3;
 
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const wasOnline = useRef(navigator.onLine);
   const [queueSize, setQueueSize] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const queryClient = useQueryClient();
@@ -437,26 +438,42 @@ export function useOfflineSync() {
     }
   }, [isOnline, isSyncing, getQueue, saveQueue, queryClient]);
 
-  // Monitor online/offline status
+  // Monitor online/offline status AND self-heal a stuck value. navigator.onLine can read `false`
+  // transiently at mount (e.g. during a service-worker swap on a fresh deploy); since no 'online'
+  // event fires when we're already online, listening only for transitions would leave the badge
+  // stuck on "Offline". So we re-read navigator.onLine on mount, on focus/visibility, and on a
+  // short interval — not only on the transition events. Toasts fire only on a genuine change.
   useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      toast.success('Back online! Syncing...', { duration: 2000 });
+    const sync = (announce: boolean) => {
+      const next = navigator.onLine;
+      setIsOnline(next); // React bails if unchanged — safe to call repeatedly
+      if (announce && next !== wasOnline.current) {
+        if (next) {
+          toast.success('Back online! Syncing...', { duration: 2000 });
+        } else {
+          toast.warning('You are offline. Changes will be synced when connection is restored.', { duration: 4000 });
+        }
+      }
+      wasOnline.current = next;
     };
 
-    const handleOffline = () => {
-      setIsOnline(false);
-      toast.warning('You are offline. Changes will be synced when connection is restored.', {
-        duration: 4000,
-      });
-    };
+    sync(false); // re-sync on mount — recovers a bad initial value
+    const onOnline = () => sync(true);
+    const onOffline = () => sync(true);
+    const onWake = () => sync(false); // tab refocus / becomes visible → re-check quietly
 
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    window.addEventListener('focus', onWake);
+    document.addEventListener('visibilitychange', onWake);
+    const intervalId = window.setInterval(() => sync(false), 15000);
 
     return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+      window.removeEventListener('focus', onWake);
+      document.removeEventListener('visibilitychange', onWake);
+      window.clearInterval(intervalId);
     };
   }, []);
 
