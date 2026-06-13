@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { format, startOfYear, endOfYear, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isSameDay, parseISO, isWithinInterval, eachMonthOfInterval } from "date-fns";
-import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2 } from "lucide-react";
+import { ChevronLeft, ChevronRight, Plus, Download, Pencil, Trash2, Loader2, AlertCircle, CalendarDays } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -37,6 +37,7 @@ import { useUnifiedPdfGeneration, CalendarReportData } from "@/hooks/useUnifiedP
 interface CalendarEvent {
   id: string;
   title: string;
+  site_id: string | null;
   site_name: string;
   start_date: string;
   end_date: string | null;
@@ -49,9 +50,11 @@ const Calendar = () => {
   const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEventDialogOpen, setIsEventDialogOpen] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
   const [formData, setFormData] = useState({
     title: "",
+    site_id: "",
     site_name: "",
     start_date: "",
     end_date: "",
@@ -66,7 +69,7 @@ const Calendar = () => {
   const monthsInYear = eachMonthOfInterval({ start: yearStart, end: yearEnd });
 
   // Fetch all events for the current year
-  const { data: events, refetch } = useQuery({
+  const { data: events, refetch, isLoading, isError } = useQuery({
     queryKey: ["calendar-events", currentYear],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -81,6 +84,19 @@ const Calendar = () => {
     },
   });
 
+  // Sites for the event form picker (replaces free-text site entry so events link to a real site).
+  const { data: sites } = useQuery({
+    queryKey: ["calendar-sites"],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("sites")
+        .select("id, name")
+        .order("name", { ascending: true });
+      if (error) throw error;
+      return data as { id: string; name: string }[];
+    },
+  });
+
   const getEventsForDay = (day: Date) => {
     return events?.filter(event => {
       const eventDate = parseISO(event.start_date);
@@ -88,12 +104,16 @@ const Calendar = () => {
       // Check if it's the start date
       if (isSameDay(eventDate, day)) return true;
       
-      // Check if it's within the date range (start to end)
+      // Check if it's within the date range (start to end).
+      // Guard against malformed rows (end before start): isWithinInterval throws a
+      // RangeError on an inverted interval, which would crash every day cell.
       if (event.end_date) {
         const endDate = parseISO(event.end_date);
-        return isWithinInterval(day, { start: eventDate, end: endDate });
+        if (endDate >= eventDate) {
+          return isWithinInterval(day, { start: eventDate, end: endDate });
+        }
       }
-      
+
       return false;
     }) || [];
   };
@@ -156,6 +176,7 @@ const Calendar = () => {
     setEditingEvent(null);
     setFormData({
       title: "",
+      site_id: "",
       site_name: "",
       start_date: "",
       end_date: "",
@@ -170,6 +191,7 @@ const Calendar = () => {
     setEditingEvent(event);
     setFormData({
       title: event.title,
+      site_id: event.site_id || "",
       site_name: event.site_name,
       start_date: event.start_date,
       end_date: event.end_date || "",
@@ -181,27 +203,41 @@ const Calendar = () => {
   };
 
   const handleSaveEvent = async () => {
-    if (!formData.title || !formData.site_name || !formData.start_date) {
+    if (!formData.title.trim() || !formData.site_id || !formData.start_date) {
       toast({
         title: "Error",
-        description: "Please fill in all required fields",
+        description: "Please fill in all required fields (title, site, start date)",
         variant: "destructive",
       });
       return;
     }
 
+    if (formData.end_date && formData.end_date < formData.start_date) {
+      toast({
+        title: "Error",
+        description: "End date cannot be before the start date",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (isSaving) return;
+    setIsSaving(true);
     try {
+      const { data: { user } } = await supabase.auth.getUser();
       if (editingEvent) {
         const { error } = await supabase
           .from("calendar_events")
           .update({
-            title: formData.title,
-            site_name: formData.site_name,
+            title: formData.title.trim(),
+            site_id: formData.site_id,
+            site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
             priority: formData.priority,
             event_type: formData.event_type || null,
+            updated_by: user?.id ?? null,
           })
           .eq("id", editingEvent.id);
 
@@ -211,13 +247,15 @@ const Calendar = () => {
         const { error } = await supabase
           .from("calendar_events")
           .insert({
-            title: formData.title,
-            site_name: formData.site_name,
+            title: formData.title.trim(),
+            site_id: formData.site_id,
+            site_name: formData.site_name.trim(),
             start_date: formData.start_date,
             end_date: formData.end_date || null,
             status: formData.status,
             priority: formData.priority,
             event_type: formData.event_type || null,
+            created_by: user?.id ?? null,
           });
 
         if (error) throw error;
@@ -229,9 +267,11 @@ const Calendar = () => {
     } catch (error) {
       toast({
         title: "Error",
-        description: "Failed to save event",
+        description: error instanceof Error ? error.message : "Failed to save event",
         variant: "destructive",
       });
+    } finally {
+      setIsSaving(false);
     }
   };
 
@@ -337,14 +377,30 @@ const Calendar = () => {
               <ChevronLeft className="h-5 w-5" />
             </Button>
             <h2 className="text-2xl font-bold">
-              {format(new Date(currentYear, 0, 1), "MMMM yyyy")}
+              {currentYear}
             </h2>
             <Button variant="ghost" size="icon" onClick={nextYear}>
               <ChevronRight className="h-5 w-5" />
             </Button>
           </div>
 
-          {/* 12 Month Grid */}
+          {/* 12 Month Grid — with explicit loading / error / empty states */}
+          {isLoading ? (
+            <div className="flex items-center justify-center py-16 text-muted-foreground">
+              <Loader2 className="h-6 w-6 animate-spin mr-2" /> Loading calendar…
+            </div>
+          ) : isError ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-16 text-center">
+              <AlertCircle className="h-8 w-8 text-destructive" />
+              <p className="text-sm text-muted-foreground">Couldn't load the calendar. Please try again.</p>
+              <Button variant="outline" size="sm" onClick={() => refetch()}>Retry</Button>
+            </div>
+          ) : !events || events.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-16 text-center text-muted-foreground">
+              <CalendarDays className="h-8 w-8 mb-2 opacity-50" />
+              <p>No events scheduled for {currentYear}.</p>
+            </div>
+          ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
             {monthsInYear.map(month => {
               const monthStart = startOfMonth(month);
@@ -457,6 +513,7 @@ const Calendar = () => {
               );
             })}
           </div>
+          )}
           </TooltipProvider>
         </CardContent>
       </Card>
@@ -572,15 +629,23 @@ const Calendar = () => {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="site_name">Site Name *</Label>
-              <Input
-                id="site_name"
-                value={formData.site_name}
-                onChange={(e) =>
-                  setFormData({ ...formData, site_name: e.target.value })
-                }
-                placeholder="Site name"
-              />
+              <Label htmlFor="site_id">Site *</Label>
+              <Select
+                value={formData.site_id}
+                onValueChange={(siteId) => {
+                  const site = sites?.find((s) => s.id === siteId);
+                  setFormData({ ...formData, site_id: siteId, site_name: site?.name ?? "" });
+                }}
+              >
+                <SelectTrigger id="site_id">
+                  <SelectValue placeholder="Select a site" />
+                </SelectTrigger>
+                <SelectContent>
+                  {sites?.map((s) => (
+                    <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
@@ -600,6 +665,7 @@ const Calendar = () => {
                   id="end_date"
                   type="date"
                   value={formData.end_date}
+                  min={formData.start_date || undefined}
                   onChange={(e) =>
                     setFormData({ ...formData, end_date: e.target.value })
                   }
@@ -663,8 +729,8 @@ const Calendar = () => {
             >
               Cancel
             </Button>
-            <Button onClick={handleSaveEvent}>
-              {editingEvent ? "Update" : "Create"}
+            <Button onClick={handleSaveEvent} disabled={isSaving}>
+              {isSaving ? "Saving…" : editingEvent ? "Update" : "Create"}
             </Button>
           </div>
         </DialogContent>

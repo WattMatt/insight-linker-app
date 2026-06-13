@@ -2828,9 +2828,19 @@ async function generateCalendarHTML(data: ReportData): Promise<string> {
   const cal = data.calendar!;
   const accentColor = data.accentColor || '#2563eb';
   const generatedAt = data.generatedAt || new Date().toLocaleDateString('en-ZA');
-  
+
+  // Escape user-supplied text before interpolating into the HTML template.
+  const esc = (s: unknown) => String(s ?? '').replace(/[&<>"']/g, (c) => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ));
+  const fmtDate = (d?: string) => {
+    if (!d) return '—';
+    const dt = new Date(d);
+    return isNaN(dt.getTime()) ? esc(d) : dt.toLocaleDateString('en-ZA');
+  };
+
   let content = '';
-  
+
   // Stats Summary
   content += `
     <table style="width: 100%; margin-bottom: 20px; border-collapse: separate; border-spacing: 10px;">
@@ -2857,35 +2867,50 @@ async function generateCalendarHTML(data: ReportData): Promise<string> {
   
   // Events Table
   if (cal.events.length > 0) {
+    const th = 'padding: 12px 15px; color: white; font-size: 10pt;';
     content += `
       <table style="width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden;">
         <thead>
           <tr style="background: ${COLORS.primary};">
-            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Event</th>
-            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Site</th>
-            <th style="padding: 12px 15px; text-align: left; color: white; font-size: 10pt;">Date</th>
-            <th style="padding: 12px 15px; text-align: center; color: white; font-size: 10pt;">Status</th>
-            <th style="padding: 12px 15px; text-align: center; color: white; font-size: 10pt;">Priority</th>
+            <th style="${th} text-align: left;">Event</th>
+            <th style="${th} text-align: left;">Site</th>
+            <th style="${th} text-align: left;">Type</th>
+            <th style="${th} text-align: left;">Start</th>
+            <th style="${th} text-align: left;">End</th>
+            <th style="${th} text-align: center;">Status</th>
+            <th style="${th} text-align: center;">Priority</th>
           </tr>
         </thead>
         <tbody>
           ${cal.events.map(event => {
-            const statusColor = event.status === 'completed' ? COLORS.success :
-                               event.status === 'upcoming' ? COLORS.info : COLORS.warning;
-            const priorityColor = event.priority === 'high' ? COLORS.error :
-                                 event.priority === 'medium' ? COLORS.warning : COLORS.muted;
+            const s = (event.status || '').toLowerCase();
+            const p = (event.priority || '').toLowerCase();
+            const statusColor = s === 'completed' ? COLORS.success :
+                               s === 'in progress' ? COLORS.warning :
+                               s === 'scheduled' ? COLORS.info : COLORS.muted;
+            const priorityColor = p === 'high' ? COLORS.error :
+                                 p === 'medium' ? COLORS.warning :
+                                 p === 'low' ? COLORS.success : COLORS.muted;
             return `
-            <tr style="background: white; border-bottom: 1px solid ${COLORS.border};">
-              <td style="padding: 10px 15px; font-size: 10pt;">${event.title}</td>
-              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${event.siteName || '-'}</td>
-              <td style="padding: 10px 15px; font-size: 10pt;">${new Date(event.startDate).toLocaleDateString()}</td>
-              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${statusColor}22; color: ${statusColor};">${event.status}</span></td>
-              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${priorityColor}22; color: ${priorityColor};">${event.priority || 'normal'}</span></td>
+            <tr style="background: white; border-bottom: 1px solid ${COLORS.border}; page-break-inside: avoid;">
+              <td style="padding: 10px 15px; font-size: 10pt;">${esc(event.title)}</td>
+              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.siteName) || '-'}</td>
+              <td style="padding: 10px 15px; font-size: 10pt; color: ${COLORS.textMuted};">${esc(event.eventType) || '—'}</td>
+              <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.startDate)}</td>
+              <td style="padding: 10px 15px; font-size: 10pt;">${fmtDate(event.endDate)}</td>
+              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${statusColor}22; color: ${statusColor};">${esc(event.status) || '—'}</span></td>
+              <td style="padding: 10px 15px; font-size: 9pt; text-align: center;"><span style="padding: 2px 8px; border-radius: 4px; background: ${priorityColor}22; color: ${priorityColor};">${esc(event.priority) || 'normal'}</span></td>
             </tr>
             `;
           }).join('')}
         </tbody>
       </table>
+    `;
+  } else {
+    content += `
+      <div style="padding: 40px; text-align: center; color: ${COLORS.textMuted}; font-size: 11pt; border: 1px dashed ${COLORS.border}; border-radius: 8px;">
+        No events scheduled for ${esc(cal.year)}.
+      </div>
     `;
   }
   
@@ -3031,8 +3056,14 @@ Deno.serve(async (req) => {
         }
         html = await generateFortressChecklistHTML(body);
         break;
-      case 'calendar':
-        if (!body.calendar) {
+      case 'calendar': {
+        // The frontend (CalendarReportData) sends year/events/stats at the TOP LEVEL;
+        // generateCalendarHTML expects them nested under `calendar`. Adapt if needed.
+        const cb = body as any;
+        if (!cb.calendar && cb.events && cb.stats) {
+          cb.calendar = { year: cb.year, events: cb.events, stats: cb.stats };
+        }
+        if (!cb.calendar) {
           return new Response(
             JSON.stringify({ error: 'Missing calendar data for calendar report type' }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
@@ -3040,6 +3071,7 @@ Deno.serve(async (req) => {
         }
         html = await generateCalendarHTML(body);
         break;
+      }
       default:
         html = await generateSiteSummaryHTML(body);
     }
