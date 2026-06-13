@@ -19,7 +19,7 @@ export interface InspectionData {
 }
 
 export function useOfflineInspections() {
-  const { isOnline, queueMutation } = useOfflineSync();
+  const { isOnline, queueMutation, queueUpload } = useOfflineSync();
 
   const createInspection = useCallback(async (data: InspectionData) => {
     const inspectionId = `offline_${Date.now()}_${Math.random()}`;
@@ -149,9 +149,9 @@ export function useOfflineInspections() {
       synced: false,
     });
 
-    queueMutation('UPLOAD_IMAGE', { bucket, path, file, inspectionId });
+    await queueUpload('UPLOAD_IMAGE', { bucket, path, inspectionId }, file);
     toast.success('Image saved offline. Will upload when online.');
-  }, [isOnline, queueMutation]);
+  }, [isOnline, queueUpload]);
 
   return {
     createInspection,
