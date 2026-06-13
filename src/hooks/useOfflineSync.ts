@@ -193,10 +193,9 @@ export function useOfflineSync() {
           if (error) throw error;
           const { data: { publicUrl } } = supabase.storage.from('inspection-photos').getPublicUrl(fileName);
           photoUrl = publicUrl;
-          await offlineDB.deleteQueuedBlob(mutation.data.photoBlobId);
         }
-        
-        await supabase
+
+        const { error: pinInsertError } = await supabase
           .from('floor_plan_pins')
           .insert({
             floor_plan_id: pin.floor_plan_id,
@@ -216,8 +215,10 @@ export function useOfflineSync() {
             photo_url: photoUrl,
             created_by: pin.created_by,
           });
-        
+        if (pinInsertError) throw pinInsertError;
+
         await markPinSynced(pin.id);
+        if (mutation.data.photoBlobId) await offlineDB.deleteQueuedBlob(mutation.data.photoBlobId);
         break;
       }
 
@@ -234,11 +235,12 @@ export function useOfflineSync() {
           if (error) throw error;
           const { data: { publicUrl } } = supabase.storage.from('inspection-photos').getPublicUrl(fileName);
           photoUrl = publicUrl;
-          await offlineDB.deleteQueuedBlob(photoBlobId);
         }
 
-        await supabase.from('floor_plan_pins').update({ ...updates, photo_url: photoUrl }).eq('id', pinId);
+        const { error: pinUpdateError } = await supabase.from('floor_plan_pins').update({ ...updates, photo_url: photoUrl }).eq('id', pinId);
+        if (pinUpdateError) throw pinUpdateError;
         await markPinSynced(pinId);
+        if (photoBlobId) await offlineDB.deleteQueuedBlob(photoBlobId);
         break;
       }
 
@@ -441,6 +443,10 @@ export function useOfflineSync() {
             retries: mutation.retries + 1,
           });
         } else {
+          // Permanent discard — delete any queued blob this mutation referenced so it doesn't leak in IndexedDB.
+          const d = (mutation.data ?? {}) as { blobId?: string; photoBlobId?: string };
+          if (d.blobId) await offlineDB.deleteQueuedBlob(d.blobId);
+          if (d.photoBlobId) await offlineDB.deleteQueuedBlob(d.photoBlobId);
           toast.error(`Failed to sync ${mutation.type} after ${MAX_RETRIES} attempts`);
         }
       }
