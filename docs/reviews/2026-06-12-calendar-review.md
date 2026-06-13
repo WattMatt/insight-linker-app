@@ -5,6 +5,11 @@
 
 **Method:** every finding cites `file:line` or a DB object. The two headline criticals (PDF 400, grid crash) and the RLS hole were re-verified against code by the controller, not just relayed.
 
+## Remediation status (updated 2026-06-12, deployed `main @ c61b35f`)
+**Fixed:** C1 (PDF payload + H5 casing + M5 columns/escaping/empty/locale, edge fn redeployed), C2 (site_id FK + created_by/updated_by + role-aware RLS replacing the permissive policy; admin site picker H3, client view scoped by site_id; migrations `20260612250000` applied), C3 (UI + defensive grid guard + DB CHECK `20260612240000`), C4 (loading/error/empty states), C7 (client `parseISO` off-by-one), and folded-in H6 (double-submit), H9 (trim), H10 (attribution), L1 (header), M1 (status/priority CHECKs), M4 (error messages).
+**⚠ Needs in-app verification:** that staff can still create/edit events under the new RLS (mirrors the working inspections policy, but RLS can't be tested with the service-role key) — and a visual check of the now-working PDF export.
+**Still open (next tiers):** C5/C6 (a11y + wire the dead day-detail click), H1/H2 (overflow + year-boundary fetch), H4 (client field over-share), H7/H8 (concurrency, overlap), H11 (memoization), H12 (color cues), and the MEDIUM/LOW backlog.
+
 ## Verified data model
 `calendar_events` (41 rows, range 2025-07 → 2026-04): `id, title (NOT NULL), site_name (text — NOT a FK to sites), start_date (date NOT NULL), end_date (date null), status (default 'Scheduled'), priority (default 'High'), event_type (text), created_at, updated_at`. No `created_by`/owner. No CHECK constraints. RLS enabled with a **single** policy `"All authenticated users full access"` = `cmd=ALL, USING/CHECK (auth.uid() IS NOT NULL)`.
 
