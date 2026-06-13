@@ -4,6 +4,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineDB } from '@/lib/offlineDB';
 import { OFFLINE_QUEUE_KEY as QUEUE_KEY, orderQueueForSync, mergeServerPhotos } from '@/lib/offlineQueue';
+import { getOnline } from '@/lib/onlineStatus';
 
 interface QueuedMutation {
   id: string;
@@ -33,8 +34,8 @@ function announceSyncing(syncing: boolean) {
 }
 
 export function useOfflineSync() {
-  const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const wasOnline = useRef(navigator.onLine);
+  const [isOnline, setIsOnline] = useState(getOnline);
+  const wasOnline = useRef(getOnline());
   const [queueSize, setQueueSize] = useState(0);
   const [isSyncing, setIsSyncing] = useState(false);
   const queryClient = useQueryClient();
@@ -302,18 +303,16 @@ export function useOfflineSync() {
 
       // ============ Inspection Offline Mutations ============
 
+      // LEGACY: a past version enqueued SAVE_INSPECTION_JSON. No longer produced, but
+      // kept so a mutation still sitting in an old client's queue can drain (removing it
+      // would strand and eventually discard that user's unsynced edit).
       case 'SAVE_INSPECTION_JSON': {
         const { inspectionId, jsonData } = mutation.data;
         const { error } = await supabase
           .from('inspections')
-          .update({
-            json_data: jsonData,
-            updated_at: new Date().toISOString()
-          })
+          .update({ json_data: jsonData, updated_at: new Date().toISOString() })
           .eq('id', inspectionId);
         if (error) throw error;
-
-        // Mark as synced in IndexedDB
         const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
         await offlineInspectionDB.markInspectionSynced(inspectionId);
         break;
@@ -379,49 +378,6 @@ export function useOfflineSync() {
         if (updError) throw updError;
 
         await offlineInspectionDB.markImageSynced(imageId, publicUrl);
-        break;
-      }
-
-      case 'BATCH_UPLOAD_INSPECTION_IMAGES': {
-        const { inspectionId, images } = mutation.data;
-        const { offlineInspectionDB } = await import('@/lib/offlineInspectionDB');
-        const { generateInspectionImagePath } = await import('@/lib/imageNaming');
-        
-        // Get cached inspection for naming context
-        const cachedInspection = await offlineInspectionDB.getCachedInspection(inspectionId);
-
-        for (let index = 0; index < images.length; index++) {
-          const image = images[index];
-          const fileExtension = image.fileName.split('.').pop() || 'jpg';
-          
-          let filePath: string;
-          if (cachedInspection?.site_data) {
-            filePath = generateInspectionImagePath({
-              clientName: cachedInspection.site_data.clientName,
-              siteName: cachedInspection.site_data.siteName,
-              subsectionName: cachedInspection.subsection_data?.name,
-              inspectionId,
-              sectionKey: image.sectionKey,
-              itemKey: image.itemKey || 'general',
-              index,
-              fileExtension
-            });
-          } else {
-            filePath = `${inspectionId}/${image.sectionKey}/${image.itemKey || 'general'}/${Date.now()}_${index}.${fileExtension}`;
-          }
-          
-          const { error: uploadError } = await supabase.storage
-            .from('inspection-photos')
-            .upload(filePath, image.blob);
-          
-          if (!uploadError) {
-            const { data: { publicUrl } } = supabase.storage
-              .from('inspection-photos')
-              .getPublicUrl(filePath);
-            await offlineInspectionDB.markImageSynced(image.id, publicUrl);
-            console.log('[OfflineSync] Batch image synced:', filePath);
-          }
-        }
         break;
       }
 

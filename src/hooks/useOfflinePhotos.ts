@@ -3,6 +3,7 @@ import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
 import { offlineDB, type OfflinePhoto, type OfflinePhotoType, type OfflinePhotoContextType } from '@/lib/offlineDB';
 import { useCamera } from '@/hooks/useCamera';
+import { getOnline } from '@/lib/onlineStatus';
 
 const MAX_RETRIES = 3;
 const PHOTOS_BUCKET = 'coc-photos';
@@ -107,7 +108,7 @@ export function useOfflinePhotos(
   const [isSyncing, setIsSyncing] = useState(false);
   const [isCapturing, setIsCapturing] = useState(false);
   const [syncPaused, setSyncPaused] = useState(false);
-  const isOnline = navigator.onLine;
+  const isOnline = getOnline();
   const { takePicture } = useCamera();
   const syncingRef = useRef(false);
 
