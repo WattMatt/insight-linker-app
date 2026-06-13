@@ -25,7 +25,15 @@ vi.mock('@/integrations/supabase/client', () => ({
     from: () => ({
       update: (payload: unknown) => {
         state.updateSpy(payload);
-        return { eq: async () => { await state.gate.promise; return { error: null }; } };
+        return {
+          eq: async () => {
+            await state.gate.promise;
+            // status:'fail' simulates a server rejection → the executor throws → retry.
+            return (payload as { status?: string })?.status === 'fail'
+              ? { error: { message: 'boom' } }
+              : { error: null };
+          },
+        };
       },
       select: () => ({ eq: () => ({ single: () => Promise.resolve({ data: { json_data: {} }, error: null }) }) }),
     }),
@@ -108,5 +116,51 @@ describe('useOfflineSync — queue race safety (Phase 2)', () => {
     });
 
     expect(result.current.queueSize).toBe(1);
+  });
+
+  it('does not burn a failed mutation\'s retry budget when new items keep the drain looping (I1)', async () => {
+    const { result } = renderHook(() => useOfflineSync(), { wrapper });
+    seed({ id: 'M', status: 'fail' }); // M will be rejected by the server
+
+    await act(async () => {
+      const draining = result.current.processQueue(); // M fails; awaits the gate
+      // A new item arrives mid-drain → triggers a coalesced re-pass.
+      enqueueOfflineMutation('SYNC_INSPECTION', { id: 'N', fields: { status: 'ok' } }, { dedupeKey: 'N' });
+      state.gate.release();
+      await draining;
+    });
+
+    // M must be attempted EXACTLY ONCE this cycle — not re-attempted in the re-pass.
+    const failCalls = state.updateSpy.mock.calls.filter((c) => (c[0] as { status?: string }).status === 'fail');
+    expect(failCalls).toHaveLength(1);
+    // M survives with retries bumped to 1 (NOT discarded after a burst).
+    const queue = JSON.parse(localStorage.getItem(OFFLINE_QUEUE_KEY)!) as Array<{ data: { id: string }; retries: number }>;
+    const m = queue.find((x) => x.data.id === 'M');
+    expect(m?.retries).toBe(1);
+    // N was synced.
+    expect(state.updateSpy.mock.calls.some((c) => (c[0] as { status?: string }).status === 'ok')).toBe(true);
+  });
+
+  it('shows syncing state on ALL mounted instances during a drain (I2)', async () => {
+    const a = renderHook(() => useOfflineSync(), { wrapper });
+    const b = renderHook(() => useOfflineSync(), { wrapper });
+    seed({ id: 'A', status: 'a' });
+
+    let draining!: Promise<void>;
+    await act(async () => {
+      draining = a.result.current.processQueue(); // A holds the lock, suspended at the gate
+    });
+
+    // Both instances reflect the in-flight drain, not just the lock holder.
+    expect(a.result.current.isSyncing).toBe(true);
+    expect(b.result.current.isSyncing).toBe(true);
+
+    await act(async () => {
+      state.gate.release();
+      await draining;
+    });
+
+    expect(a.result.current.isSyncing).toBe(false);
+    expect(b.result.current.isSyncing).toBe(false);
   });
 });

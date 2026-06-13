@@ -23,6 +23,15 @@ const MAX_RETRIES = 3;
 let isDraining = false;
 let drainAgain = false;
 
+// Broadcast drain state to ALL mounted instances. The lock is module-global, so the
+// "syncing" indicator must be too — otherwise a non-draining mount shows a stale spinner
+// and an enabled "Sync Now" button while another instance is mid-drain.
+function announceSyncing(syncing: boolean) {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('offline-sync-state', { detail: { syncing } }));
+  }
+}
+
 export function useOfflineSync() {
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const wasOnline = useRef(navigator.onLine);
@@ -428,23 +437,32 @@ export function useOfflineSync() {
     // finishes (covers an enqueue that lands mid-drain) and return — no concurrent drain.
     if (isDraining) { drainAgain = true; return; }
     isDraining = true;
-    setIsSyncing(true);
 
     try {
+      // Broadcast syncing state so EVERY mounted instance reflects it (the lock is
+      // module-global; the spinner must be too). Inside try so the lock can never wedge.
+      announceSyncing(true);
+
+      // Ids attempted in THIS drain cycle. A coalesced re-pass (new items arrived) must
+      // NOT re-attempt a failed item — that would burn its retry budget in a tight burst
+      // and prematurely discard a mutation (deleting its blob) that a normally-spaced
+      // retry would have synced.
+      const attempted = new Set<string>();
+
       do {
         drainAgain = false;
 
         // Drain json_data overwrites (SYNC_INSPECTION) before appends
         // (UPLOAD_INSPECTION_IMAGE) so a full-save can't clobber a just-appended photo.
-        const snapshot = orderQueueForSync(getQueue());
+        const snapshot = orderQueueForSync(getQueue()).filter(m => !attempted.has(m.id));
         if (snapshot.length === 0) break;
-        const snapshotIds = new Set(snapshot.map(m => m.id));
 
         const succeeded = new Set<string>();
         const discarded = new Set<string>();
         const retried = new Map<string, QueuedMutation>();
 
         for (const mutation of snapshot) {
+          attempted.add(mutation.id);
           try {
             await executeMutation(mutation);
             succeeded.add(mutation.id);
@@ -465,7 +483,7 @@ export function useOfflineSync() {
 
         // Reconcile against the CURRENT queue (not the snapshot) so anything enqueued
         // DURING this pass is preserved instead of clobbered. Drop succeeded + discarded;
-        // apply retry increments to the rest.
+        // apply retry increments to the rest (failed items stay, with bumped retries).
         const reconciled = getQueue()
           .filter(m => !succeeded.has(m.id) && !discarded.has(m.id))
           .map(m => retried.get(m.id) ?? m);
@@ -476,12 +494,13 @@ export function useOfflineSync() {
           queryClient.invalidateQueries();
         }
 
-        // New items arrived during this pass (ids not in the snapshot) → loop to drain them.
-        if (getQueue().some(m => !snapshotIds.has(m.id))) drainAgain = true;
+        // Loop only for genuinely-new items (not yet attempted this cycle) — never to
+        // re-attempt a still-failed item (it waits for the next external drain trigger).
+        if (getQueue().some(m => !attempted.has(m.id))) drainAgain = true;
       } while (drainAgain && navigator.onLine);
     } finally {
       isDraining = false;
-      setIsSyncing(false);
+      announceSyncing(false);
     }
   }, [getQueue, saveQueue, queryClient]);
 
@@ -541,6 +560,14 @@ export function useOfflineSync() {
     window.addEventListener('offline-queue-updated', onEnqueued);
     return () => window.removeEventListener('offline-queue-updated', onEnqueued);
   }, [processQueue, getQueue]);
+
+  // Mirror the module-global drain state into this instance so every mounted instance —
+  // not just the one holding the lock — shows the correct syncing spinner/button state.
+  useEffect(() => {
+    const onState = (e: Event) => setIsSyncing(!!(e as CustomEvent).detail?.syncing);
+    window.addEventListener('offline-sync-state', onState);
+    return () => window.removeEventListener('offline-sync-state', onState);
+  }, []);
 
   // Update queue size on mount
   useEffect(() => {
