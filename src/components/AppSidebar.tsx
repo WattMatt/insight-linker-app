@@ -17,7 +17,6 @@ import {
   Lightbulb,
   FileCode,
   Sparkles,
-  BookOpen,
   Smartphone,
 } from "lucide-react";
 import { NavLink, useNavigate } from "@/lib/navigation";
@@ -47,7 +46,6 @@ const menuItems = [
   { title: "Clients", url: "/clients", icon: Users, adminOnly: false },
   { title: "QR Codes", url: "/qr-codes", icon: QrCode, adminOnly: false },
   { title: "Inspection Templates", url: "/inspection-templates", icon: FileText, adminOnly: false },
-  { title: "Development Skills", url: "/development-skills", icon: BookOpen, adminOnly: false },
   { title: "Platform Testing", url: "/offline-sync-test", icon: Smartphone, adminOnly: true },
   { title: "Feedback Management", url: "/feedback-management", icon: AlertCircle, adminOnly: true },
   { title: "Settings", url: "/settings", icon: SettingsIcon, adminOnly: true },
