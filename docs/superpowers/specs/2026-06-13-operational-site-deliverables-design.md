@@ -134,7 +134,10 @@ outstanding. (Phase 2 adds explicit not-required.)
 
 **Document-category matching (centralised, the fragile part):**
 ```ts
-const THERMAL_CATEGORY_PATTERNS  = [/thermal/i, /infrared/i, /thermograph/i, /\bir\b/i];
+// "IR" alone is intentionally NOT matched: in SANS 10142 electrical-compliance, "IR" means
+// Insulation Resistance, not infrared — a bare /\bir\b/ would false-positive and wrongly mark
+// the thermal deliverable complete (hiding outstanding work). Caught in Task 1 code review.
+const THERMAL_CATEGORY_PATTERNS  = [/thermal/i, /infrared/i, /thermograph/i];
 const SUMMARY_CATEGORY_PATTERNS  = [/site summary/i, /summary report/i];
 ```
 Matched against `site_documents.category` (freeform text; legacy values include
