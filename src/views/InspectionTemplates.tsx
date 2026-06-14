@@ -16,7 +16,8 @@ import { toast } from "sonner";
 import { TemplatePreviewRenderer } from "@/components/templates/TemplatePreviewRenderer";
 import PDFTemplateUploader from "@/components/PDFTemplateUploader";
 import PDFTemplateExportDialog from "@/components/PDFTemplateExportDialog";
-import { useUnifiedPdfGeneration, InspectionTemplateReportData } from "@/hooks/useUnifiedPdfGeneration";
+import { generateInspectionTemplatePdf, type InspectionTemplateData } from "@/lib/inspectionTemplateReportGenerator";
+import { downloadBlob } from "@/lib/fileDownload";
 
 interface TemplateSection {
   id: string;
@@ -301,7 +302,7 @@ const InspectionTemplates = () => {
   const [exportTemplate, setExportTemplate] = useState<InspectionTemplate | null>(null);
   const [expandedTemplateId, setExpandedTemplateId] = useState<string | null>(null);
   
-  const { generatePdf, isGenerating } = useUnifiedPdfGeneration();
+  const [isGenerating, setIsGenerating] = useState(false);
 
   useEffect(() => {
     fetchTemplates();
@@ -366,8 +367,7 @@ const InspectionTemplates = () => {
   };
 
   const generatePDF = async (template: InspectionTemplate) => {
-    const reportData: InspectionTemplateReportData = {
-      reportType: 'inspection-template',
+    const reportData: InspectionTemplateData = {
       title: template.name,
       subtitle: template.category,
       templateName: template.name,
@@ -385,16 +385,17 @@ const InspectionTemplates = () => {
       })),
     };
 
-    const result = await generatePdf(reportData);
-    
-    if (result.success && result.url) {
-      const a = document.createElement('a');
-      a.href = result.url;
-      a.download = result.filename || `${template.name.replace(/\s+/g, '_')}_Preview.pdf`;
-      a.click();
-      toast.success("PDF exported successfully");
-    } else {
-      toast.error(result.error || "Failed to generate PDF");
+    setIsGenerating(true);
+    try {
+      const result = await generateInspectionTemplatePdf(reportData);
+
+      if (result.success && result.blob) {
+        await downloadBlob(result.blob, result.filename || `${template.name.replace(/\s+/g, '_')}_Template.pdf`);
+      } else {
+        toast.error(result.error || "Failed to generate PDF");
+      }
+    } finally {
+      setIsGenerating(false);
     }
   };
 

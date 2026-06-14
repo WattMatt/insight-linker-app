@@ -52,7 +52,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { useUnifiedPdfGeneration, CalendarReportData } from "@/hooks/useUnifiedPdfGeneration";
+import { generateCalendarPdf, type CalendarReportData } from "@/lib/calendarReportGenerator";
+import { downloadBlob } from "@/lib/fileDownload";
 
 interface CalendarEvent {
   id: string;
@@ -388,7 +389,7 @@ const Calendar = () => {
     }
   };
 
-  const { generatePdf, isGenerating: isExporting } = useUnifiedPdfGeneration();
+  const [isExporting, setIsExporting] = useState(false);
 
   const exportToPDF = async () => {
     const now = new Date();
@@ -399,7 +400,6 @@ const Calendar = () => {
     const pendingCount = totalEvents - completedCount - upcomingCount;
 
     const reportData: CalendarReportData = {
-      reportType: 'calendar',
       title: 'Calendar Report',
       subtitle: `Year: ${currentYear}`,
       year: currentYear,
@@ -422,17 +422,17 @@ const Calendar = () => {
       },
     };
 
-    const result = await generatePdf(reportData);
-    
-    if (result.success && result.url) {
-      // Download the generated PDF
-      const a = document.createElement('a');
-      a.href = result.url;
-      a.download = result.filename || `calendar-${currentYear}.pdf`;
-      a.click();
-      toast({ title: "PDF exported successfully" });
-    } else {
-      toast({ title: "Export failed", description: result.error, variant: "destructive" });
+    setIsExporting(true);
+    try {
+      const result = await generateCalendarPdf(reportData);
+
+      if (result.success && result.blob) {
+        await downloadBlob(result.blob, result.filename || `Calendar_Report_${currentYear}.pdf`);
+      } else {
+        toast({ title: "Export failed", description: result.error, variant: "destructive" });
+      }
+    } finally {
+      setIsExporting(false);
     }
   };
 

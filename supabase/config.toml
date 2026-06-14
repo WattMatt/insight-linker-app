@@ -40,15 +40,6 @@ verify_jwt = false
 verify_jwt = false
 
 
-[functions.generate-pdf]
-verify_jwt = false
-
-[functions.generate-pdf-browserless]
-verify_jwt = false
-
-[functions.generate-pdf-pdfmake]
-verify_jwt = false
-
 [functions.detect-schematic-regions]
 verify_jwt = false
 
@@ -61,16 +52,7 @@ verify_jwt = true
 [functions.batch-compress-images]
 verify_jwt = true
 
-[functions.generate-docx-report]
-verify_jwt = false
-
-[functions.generate-pdf-google]
-verify_jwt = false
-
 [functions.oauth-token]
-verify_jwt = false
-
-[functions.generate-inspection-pdf]
 verify_jwt = false
 
 # log-auth-event is anon-callable so events like password_reset_requested,

@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { FileText } from "lucide-react";
 import { toast } from "sonner";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { useUnifiedPdfGeneration, SiteDrawingReportData } from "@/hooks/useUnifiedPdfGeneration";
+import { generateSiteDrawingPdf, type SiteDrawingData } from "@/lib/siteDrawingReportGenerator";
+import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
 
 interface Pin {
   id: string;
@@ -38,14 +39,13 @@ export const SiteDrawingReport = ({
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
-  
-  const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const handlePreviewReport = async () => {
     const generalInfo = inspectionData?.jsonData?.generalInfo || {};
-    
-    const reportData: SiteDrawingReportData = {
-      reportType: 'site-drawing',
+
+    const reportData: SiteDrawingData = {
       title: 'Site Drawing Inspection',
       subtitle: subsectionName,
       siteName,
@@ -53,6 +53,11 @@ export const SiteDrawingReport = ({
       subsectionName,
       generatedAt: new Date().toISOString(),
       pdfUrl,
+      // NOTE: `canvasData` is the Fabric toJSON() state (for restoring the canvas),
+      // not a raster image, so it is not embedded. Rendering the drawing requires
+      // compositing the react-pdf page with the Fabric overlay via toDataURL — a
+      // follow-up. The generator only embeds drawingImageBase64 when it is a real
+      // data:image URL.
       pins: pins.map(pin => ({
         id: pin.id,
         number: pin.number,
@@ -71,15 +76,44 @@ export const SiteDrawingReport = ({
       },
     };
 
-    const result = await generatePdfForPreview(reportData);
-    
-    if (result.success && result.url) {
-      setPreviewUrl(result.url);
-      setPreviewFileName(result.filename || `${subsectionName}_Site_Drawing_Inspection.pdf`);
-      setPreviewBlob(result.blob);
-      setPreviewOpen(true);
-    } else {
-      toast.error(result.error || 'Failed to generate report');
+    setIsGenerating(true);
+    try {
+      const result = await generateSiteDrawingPdf(reportData);
+
+      if (result.success && result.blob) {
+        const url = URL.createObjectURL(result.blob);
+        setPreviewUrl(url);
+        setPreviewFileName(result.filename || `${subsectionName}_Site_Drawing_Inspection.pdf`);
+        setPreviewBlob(result.blob);
+        setPreviewOpen(true);
+      } else {
+        toast.error(result.error || 'Failed to generate report');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!previewBlob || !subsectionId) {
+      toast.error('Cannot save report');
+      return;
+    }
+    try {
+      setSaving(true);
+      const res = await savePDFToDocuments({
+        blob: previewBlob,
+        fileName: previewFileName,
+        subsectionId,
+        categoryName: 'Site Drawing Reports',
+      });
+      if (res.success) {
+        toast.success('Report saved to documents!');
+      } else {
+        toast.error(res.error || 'Failed to save report');
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -95,6 +129,7 @@ export const SiteDrawingReport = ({
         onOpenChange={(open) => {
           setPreviewOpen(open);
           if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
             setPreviewUrl("");
             setPreviewBlob(undefined);
           }
@@ -102,8 +137,10 @@ export const SiteDrawingReport = ({
         fileUrl={previewUrl}
         fileName={previewFileName}
         downloadBlobData={previewBlob}
+        onSaveToDocuments={handleSaveToDocuments}
         saveLocation="subsection"
         contextName={subsectionName}
+        isSaving={saving}
       />
     </>
   );
