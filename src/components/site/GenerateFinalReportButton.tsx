@@ -8,7 +8,7 @@ import { completeDownloadHandoff, createPendingDownloadHandoff } from '@/lib/dow
 import { downloadFile } from '@/lib/fileDownload';
 import { getCategoryAbbreviation } from '@/lib/subsectionCategories';
 import { hasValidCocStatus } from '@/lib/complianceCalculations';
-import { factorScores, siteHealthScore } from '@/lib/siteHealth';
+import { siteGrade } from '@/lib/siteHealth';
 import { toCocDoc, groupCocDocuments, cocDocFails } from '@/lib/cocHierarchy';
 import {
   Dialog,
@@ -362,13 +362,14 @@ export function GenerateFinalReportButton({
 
       // Calculate health metrics. overallHealth is the unified siteHealth number
       // (siteHealth.ts) so the report matches on-screen Site Health.
-      const healthFactors = factorScores(
-        subs.map(s => ({ id: s.id, metering_status: s.metering_status, meter_serial_number: s.meter_serial_number })),
-        allSnags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level })),
-        inspections.map(i => ({ subsection_id: i.subsection_id, status: i.status })),
-      );
+      const healthSubs = subs.map(s => ({ id: s.id, metering_status: s.metering_status, meter_serial_number: s.meter_serial_number }));
+      const healthSnagInputs = allSnags.map(s => ({ subsection_id: s.subsection_id, status: s.status, risk_level: s.risk_level }));
+      const healthInspectionInputs = inspections.map(i => ({ subsection_id: i.subsection_id, status: i.status }));
+      // Gate the overall grade: an un-worked site reports "Not graded" (-1 sentinel, honoured by the
+      // generate-pdf edge function) rather than an inflated score.
+      const grade = siteGrade(healthSubs, healthSnagInputs, healthInspectionInputs);
       const healthMetrics = {
-        overallHealth: siteHealthScore(healthFactors),
+        overallHealth: grade.score ?? -1,
         cocCompliance: Math.round((cocValidCount / Math.max(cocRequired || subs.length, 1)) * 100),
         meteringData: Math.round((meteringInstalled / Math.max(subs.length, 1)) * 100),
         snagFree: Math.round(((subs.length - Math.min(openSnagsTotal, subs.length)) / Math.max(subs.length, 1)) * 100),
@@ -551,9 +552,9 @@ export function GenerateFinalReportButton({
                     <span className="font-medium">{previewStats.subsectionCount}</span>
                   </div>
                   <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Compliance Rate:</span>
-                    <span className="font-medium text-emerald-600 dark:text-emerald-400">
-                      {previewStats.complianceRate}%
+                    <span className="text-muted-foreground">Overall Health:</span>
+                    <span className={`font-medium ${previewStats.complianceRate < 0 ? 'text-muted-foreground' : 'text-emerald-600 dark:text-emerald-400'}`}>
+                      {previewStats.complianceRate < 0 ? 'Not graded' : `${previewStats.complianceRate}%`}
                     </span>
                   </div>
                 </>

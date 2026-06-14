@@ -60,12 +60,14 @@ export interface KpiCardSpec {
 }
 
 export const HEALTH_METRICS_CARDS: KpiCardSpec[] = [
-  { 
-    id: 'overall-health', 
-    label: 'Overall Health', 
+  {
+    id: 'overall-health',
+    label: 'Overall Health',
     color: STATUS_COLORS.success,
     getValue: (m) => m.overallHealth,
-    format: (v) => `${v}%`,
+    // overallHealth === -1 is the "not graded" sentinel (set when a site lacks the data for a
+    // meaningful grade). Never render it as a 0% or a green number — say so plainly.
+    format: (v) => (v < 0 ? 'Not graded' : `${v}%`),
   },
   { 
     id: 'coc-compliance', 
@@ -196,7 +198,7 @@ export const SUMMARY_STAT_ROWS: StatRowSpec[] = [
   { id: 'coc-compliant', label: 'COC Compliant', getValue: (m) => m.cocCompliant.toString() },
   { id: 'metering-installed', label: 'Metering Installed', getValue: (m) => m.meteringInstalled.toString() },
   { id: 'open-snags', label: 'Open Snags', getValue: (m) => m.openSnags.toString() },
-  { id: 'health-rate', label: 'Overall Health Rate', getValue: (m) => `${m.overallHealth}%` },
+  { id: 'health-rate', label: 'Overall Health Rate', getValue: (m) => (m.overallHealth < 0 ? 'Not graded' : `${m.overallHealth}%`) },
 ];
 
 // ============================================================================
@@ -328,6 +330,8 @@ export interface SiteSummaryMetrics {
   cocCompliance: number;
   meteringData: number;
   snagFree: number;
+  /** False when the site lacks enough data for a meaningful overall grade; overallHealth is then -1. */
+  gradable: boolean;
 }
 
 // Asset verification metrics for site summary
@@ -512,7 +516,8 @@ export function calculateMetrics(
   subsections: SubsectionData[],
   cocRequiredCount?: number,
   openSnagCount?: number,
-  overallHealthOverride?: number
+  overallHealthOverride?: number,
+  gradable: boolean = true
 ): SiteSummaryMetrics {
   const subsectionCount = subsections.length;
   const safeDenominator = Math.max(subsections.length, 1);
@@ -526,9 +531,13 @@ export function calculateMetrics(
   const openSnags = openSnagCount ?? subsections.reduce((sum, s) => sum + s.snagCount, 0);
   const compliantCount = subsections.filter(s => s.isCompliant).length;
 
-  // Prefer the unified siteHealth number (siteHealth.ts) when the caller has it,
-  // so the report matches on-screen Site Health. Fall back to the legacy COC calc.
-  const overallHealth = overallHealthOverride ?? Math.round((compliantCount / safeDenominator) * 100);
+  // Prefer the unified siteHealth number (siteHealth.ts) when the caller has it, so the report
+  // matches on-screen Site Health. When the caller flags the site as not gradable (no real
+  // metering/inspection activity), emit the -1 sentinel so the overall grade renders "Not graded"
+  // instead of an inflated number. Fall back to the legacy COC calc only as a last resort.
+  const overallHealth = !gradable
+    ? -1
+    : overallHealthOverride ?? Math.round((compliantCount / safeDenominator) * 100);
   const cocCompliance = cocRequired > 0 ? Math.round((cocCompliant / cocRequired) * 100) : 0;
   const meteringData = Math.round((meteringInstalled / safeDenominator) * 100);
   const snagFree = 100 - Math.round((openSnags / safeDenominator) * 100);
@@ -543,6 +552,7 @@ export function calculateMetrics(
     cocCompliance,
     meteringData,
     snagFree: Math.max(0, Math.min(100, snagFree)),
+    gradable,
   };
 }
 

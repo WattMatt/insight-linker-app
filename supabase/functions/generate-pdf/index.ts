@@ -1079,11 +1079,17 @@ function generateHealthMetrics(metrics: HealthMetrics, accentColor: string): str
   ];
   
   const cards = metricCards.map(m => {
-    const color = getColor(m.value);
+    // Overall Health carries the -1 "not graded" sentinel for sites without enough data for a
+    // meaningful grade (see siteHealth.ts isGradable). Render an honest label, never a -1% gauge.
+    const notGraded = m.label === 'Overall Health' && m.value < 0;
+    const color = notGraded ? COLORS.textMuted : getColor(m.value);
+    const visual = notGraded
+      ? `<div style="width: 85px; height: 85px; margin: 0 auto; display: flex; align-items: center; justify-content: center; border: 2px dashed ${COLORS.border}; border-radius: 50%; font-size: 9pt; font-weight: 700; color: ${COLORS.textMuted}; text-align: center; line-height: 1.2;">Not graded</div>`
+      : generateCircularProgress(m.value, color, 85, true);
     return `
       <td style="width: 25%; background: white; border: 2px solid ${COLORS.border}; border-radius: 12px; padding: 18px 12px; text-align: center; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
         <div style="display: inline-block; margin-bottom: 8px;">
-          ${generateCircularProgress(m.value, color, 85, true)}
+          ${visual}
         </div>
         <div style="display: flex; align-items: center; justify-content: center; gap: 6px; margin-top: 6px;">
           ${getMetricIcon(m.icon, COLORS.textMuted)}

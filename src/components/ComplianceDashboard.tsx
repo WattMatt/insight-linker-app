@@ -32,7 +32,7 @@ import { format, subDays } from "date-fns";
 import {
   calculateCocComplianceStats
 } from "@/lib/complianceCalculations";
-import { factorScores, siteHealthScore } from "@/lib/siteHealth";
+import { siteGrade } from "@/lib/siteHealth";
 
 // Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
 // (written by InspectionDetail.handleItemChange, read by ComprehensiveInspectionReport).
@@ -104,12 +104,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
   const [healthSnags, setHealthSnags] = useState<Array<{ subsection_id: string; status: string | null; risk_level: string | null }>>([]);
   const [healthInspections, setHealthInspections] = useState<Array<{ subsection_id: string | null; status: string | null }>>([]);
   const [loading, setLoading] = useState(true);
-
-  // Calculate overall Site Health score from the single source of truth (siteHealth.ts).
-  // COC is tracked separately and is intentionally NOT folded into this score.
-  const calculateOverallScore = () => {
-    return siteHealthScore(factorScores(subsections, healthSnags, healthInspections));
-  };
 
   // Calculate category-specific scores using shared utility
   const calculateCategoryScores = (): CategoryScore[] => {
@@ -223,29 +217,11 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           }
         }
         
-        // Generate trend data for last 30 days (simulated based on current state).
-        // Use the freshly-fetched health inputs so the baseline isn't a render behind.
-        const categoryScores = calculateCategoryScores();
-        const currentScore = siteHealthScore(factorScores(subsections, fetchedHealthSnags, fetchedHealthInspections));
-        
-        const trend: TrendDataPoint[] = [];
-        for (let i = 29; i >= 0; i--) {
-          const date = subDays(new Date(), i);
-          // Simulate gradual improvement trend with some variance
-          const variance = Math.random() * 10 - 5;
-          const dayScore = Math.max(0, Math.min(100, 
-            currentScore - (i * 0.5) + variance
-          ));
-          
-          trend.push({
-            date: format(date, 'MMM dd'),
-            score: Math.round(dayScore),
-            metering: Math.round(Math.max(0, categoryScores[1].score - (i * 0.2) + variance)),
-            snags: Math.round(Math.max(0, categoryScores[2].score - (i * 0.4) + variance)),
-          });
-        }
-        
-        setTrendData(trend);
+        // Historical trend is intentionally NOT fabricated. There is no per-day snapshot store
+        // yet, so we cannot honestly plot 30 days of history. (The previous implementation
+        // simulated a Math.random() upward ramp, which changed on every reload and always
+        // implied improvement.) Leave trendData empty until real snapshots are persisted.
+        setTrendData([]);
       } catch (error) {
         console.error('Error fetching compliance data:', error);
       } finally {
@@ -256,20 +232,12 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     fetchData();
   }, [siteId, subsections, inspections]);
 
-  const overallScore = calculateOverallScore();
+  // Gated overall grade: siteGrade returns gradable=false (score null) for sites with no
+  // subsections or no real metering/inspection activity, so we render an honest "not graded"
+  // state instead of an inflated green score on an un-worked site.
+  const grade = siteGrade(subsections, healthSnags, healthInspections);
+  const overallScore = grade.score ?? 0;
   const categoryScores = calculateCategoryScores();
-  
-  // Determine trend direction
-  const getTrendDirection = () => {
-    if (trendData.length < 7) return 'stable';
-    const recent = trendData.slice(-7).reduce((sum, d) => sum + d.score, 0) / 7;
-    const previous = trendData.slice(-14, -7).reduce((sum, d) => sum + d.score, 0) / 7;
-    if (recent > previous + 2) return 'up';
-    if (recent < previous - 2) return 'down';
-    return 'stable';
-  };
-  
-  const trend = getTrendDirection();
   
   const pieData = [
     { name: 'Open', value: snagCounts.open, color: 'hsl(var(--destructive))' },
@@ -321,40 +289,37 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
             <CardDescription>Site-wide compliance health</CardDescription>
           </CardHeader>
           <CardContent>
-            <div className="flex items-center justify-between">
-              <div className="flex items-baseline gap-2">
-                <span className={`text-5xl font-bold ${getScoreColor(overallScore)}`}>
-                  {overallScore}%
-                </span>
-                {trend === 'up' && (
-                  <div className="flex items-center text-green-600 text-sm">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    Improving
-                  </div>
-                )}
-                {trend === 'down' && (
-                  <div className="flex items-center text-red-600 text-sm">
-                    <TrendingDown className="h-4 w-4 mr-1" />
-                    Declining
-                  </div>
-                )}
-                {trend === 'stable' && (
-                  <div className="flex items-center text-muted-foreground text-sm">
-                    <Minus className="h-4 w-4 mr-1" />
-                    Stable
-                  </div>
-                )}
+            {grade.gradable ? (
+              <>
+                <div className="flex items-center justify-between">
+                  <span className={`text-5xl font-bold ${getScoreColor(overallScore)}`}>
+                    {overallScore}%
+                  </span>
+                  {getScoreBadge(overallScore)}
+                </div>
+                <Progress value={overallScore} className="mt-4 h-3" />
+                <p className="text-sm text-muted-foreground mt-2">
+                  {subsections.filter(s => {
+                    if (s.is_coc_required && s.coc_status !== 'Approved' && s.coc_status !== 'Valid' && s.coc_status !== 'Pass') return false;
+                    if (s.is_coc_required && s.metering_status === 'Missing') return false;
+                    return true;
+                  }).length} of {subsections.length} subsections fully compliant
+                </p>
+              </>
+            ) : (
+              <div className="py-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-3xl font-semibold text-muted-foreground">Not graded</span>
+                  <Badge className="bg-muted text-muted-foreground border-border">Onboarding</Badge>
+                </div>
+                <p className="text-sm text-muted-foreground mt-3">
+                  {subsections.length === 0
+                    ? 'No subsections captured yet.'
+                    : 'No metering or completed inspections recorded yet.'}{' '}
+                  A site-wide grade appears once compliance work begins — an un-worked site is never shown as compliant.
+                </p>
               </div>
-              {getScoreBadge(overallScore)}
-            </div>
-            <Progress value={overallScore} className="mt-4 h-3" />
-            <p className="text-sm text-muted-foreground mt-2">
-              {subsections.filter(s => {
-                if (s.is_coc_required && s.coc_status !== 'Approved' && s.coc_status !== 'Valid' && s.coc_status !== 'Pass') return false;
-                if (s.is_coc_required && s.metering_status === 'Missing') return false;
-                return true;
-              }).length} of {subsections.length} subsections fully compliant
-            </p>
+            )}
           </CardContent>
         </Card>
 
@@ -382,72 +347,23 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
         ))}
       </div>
 
-      {/* Trend Chart */}
+      {/* Trend Chart — historical snapshots are not yet captured, so no fabricated trend is shown. */}
       <Card>
         <CardHeader>
           <CardTitle className="flex items-center gap-2">
             <TrendingUp className="h-5 w-5 text-muted-foreground" />
-            Compliance Trend (30 Days)
+            Compliance Trend
           </CardTitle>
-          <CardDescription>Track compliance score changes over time</CardDescription>
+          <CardDescription>Day-by-day history will appear once snapshots are recorded</CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  domain={[0, 100]} 
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--popover))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="score" 
-                  name="Overall"
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="metering"
-                  name="Metering"
-                  stroke="hsl(var(--chart-2))" 
-                  strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="snags" 
-                  name="Snags"
-                  stroke="hsl(var(--chart-3))" 
-                  strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
-                />
-                <Legend />
-              </LineChart>
-            </ResponsiveContainer>
+          <div className="flex h-[180px] flex-col items-center justify-center text-center text-muted-foreground">
+            <Clock className="h-8 w-8 mb-3 opacity-40" />
+            <p className="text-sm font-medium">Historical tracking not enabled yet</p>
+            <p className="text-xs mt-1 max-w-md">
+              Trend lines will populate as daily compliance snapshots are stored. We deliberately
+              don&apos;t synthesise a history, so this chart only ever reflects real recorded data.
+            </p>
           </div>
         </CardContent>
       </Card>
