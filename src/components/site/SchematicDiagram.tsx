@@ -200,28 +200,32 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [selectedSizePreset, setSelectedSizePreset] = useState<string>("medium");
   const [customSize, setCustomSize] = useState({ width: 8, height: 6 });
 
-  // Measure container width on mount and resize
-  useEffect(() => {
-    const updateContainerWidth = () => {
-      if (containerRef.current) {
-        setContainerWidth(containerRef.current.clientWidth);
-      }
-      // Bound the viewer to a fraction of the screen so the whole drawing fits in a
-      // fixed window (fit-to-extents) instead of the card growing to the full page height.
-      setViewportHeight(Math.max(MIN_CONTAINER_HEIGHT, Math.round(window.innerHeight * 0.72)));
-    };
+  // Measure the viewer's width and the height REMAINING below it in the viewport, so the
+  // drawing is fit into the space actually on screen — not a blind fraction of the whole
+  // window (which overflowed below the fold once the header/tabs above it were accounted for).
+  const measureViewport = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    setContainerWidth(el.clientWidth);
+    const offsetTop = el.getBoundingClientRect().top + window.scrollY;
+    const available = window.innerHeight - offsetTop - 16;
+    setViewportHeight(Math.max(MIN_CONTAINER_HEIGHT, Math.round(available)));
+  }, []);
 
-    // Initial measurement with delay
-    const timeoutId = setTimeout(updateContainerWidth, 50);
-    
-    // Update on resize
-    window.addEventListener('resize', updateContainerWidth);
-    
+  useEffect(() => {
+    const timeoutId = setTimeout(measureViewport, 50);
+    window.addEventListener('resize', measureViewport);
     return () => {
       clearTimeout(timeoutId);
-      window.removeEventListener('resize', updateContainerWidth);
+      window.removeEventListener('resize', measureViewport);
     };
-  }, []);
+  }, [measureViewport]);
+
+  // Re-measure once the page content above the viewer (header, tabs, stat cards) and the
+  // PDF have settled, so the offset used above is the final one.
+  useEffect(() => {
+    measureViewport();
+  }, [measureViewport, loading, schematic?.id, dimensionsLoaded]);
 
   // Shift key tracking for pan mode (like FloorPlanViewer)
   useEffect(() => {
