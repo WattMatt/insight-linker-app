@@ -571,43 +571,43 @@ function createSectionBreakdownPage(
 ): Content[] {
   const content: Content[] = [];
 
-  // Compliance score color
-  const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
-    : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
+  // Compliance score color + light tint
+  const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success
+    : stats.passPercentage >= 60 ? REPORT_COLORS.warning
     : REPORT_COLORS.error;
+  const scoreTint = stats.passPercentage >= 80 ? '#f0fdf4'
+    : stats.passPercentage >= 60 ? '#fffbeb'
+    : '#fef2f2';
 
-  // Two-column layout: Circle on left, Section Breakdown on right
+  // Two-column layout: overall-score card on left, Section Breakdown on right
   content.push({
     columns: [
-      // Left column: Large circular compliance indicator
+      // Left column: compact overall-score card (flat + bordered, replaces the clipped ring
+      // that floated over the table)
       {
-        width: 160,
+        width: 130,
         stack: [
           {
-            canvas: [
-              // Outer ring circle
-              { type: 'ellipse', x: 65, y: 65, r1: 55, r2: 55, lineWidth: 10, lineColor: scoreColor },
-            ],
-          },
-          // Percentage inside the ring
-          {
-            text: `${stats.passPercentage}%`,
-            fontSize: 32,
-            bold: true,
-            color: scoreColor,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -85 },
-          },
-          // OVERALL label
-          {
-            text: 'OVERALL',
-            fontSize: 9,
-            color: REPORT_COLORS.textMuted,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -50 },
+            table: {
+              widths: ['*'],
+              body: [[{
+                stack: [
+                  { text: `${stats.passPercentage}%`, fontSize: 30, bold: true, color: scoreColor, alignment: 'center' },
+                  { text: 'OVERALL', fontSize: 8, bold: true, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 4, 0, 0] },
+                ],
+                margin: [0, 16, 0, 16],
+              }]],
+            },
+            layout: {
+              fillColor: () => scoreTint,
+              hLineWidth: () => 1.5,
+              vLineWidth: () => 1.5,
+              hLineColor: () => scoreColor,
+              vLineColor: () => scoreColor,
+            },
           },
         ],
-        margin: [0, 0, 15, 0],
+        margin: [0, 5, 15, 0],
       },
       // Right column: Section Breakdown table
       {
