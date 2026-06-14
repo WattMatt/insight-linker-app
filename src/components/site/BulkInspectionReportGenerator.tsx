@@ -20,7 +20,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from "lucide-react";
-import { generateAndSavePdfShiftInspectionReport, InspectionReportData } from "@/lib/pdfshiftInspectionReport";
+import { generateAndSaveInspectionReportPdfmake, type InspectionReportData } from "@/lib/pdfmakeInspectionReport";
 
 interface GenerationResult {
   subsectionId: string;
@@ -320,7 +320,7 @@ export function BulkInspectionReportGenerator({
         inspectorName: generalInfo.inspectorName || inspection.inspector_name,
         inspectionDate: generalInfo.date || inspection.inspection_date,
         status: inspection.status,
-        qualityRating: inspection.quality_rating,
+        qualityRating: inspection.quality_rating ?? undefined,
         generalInfo,
         sections: sectionsForPdf,
         tenants: tenantsForPdf,
@@ -340,10 +340,10 @@ export function BulkInspectionReportGenerator({
         subsectionName: sub.subsectionName,
       };
 
-      // Generate DOCX via Edge Function
-      console.log(`[BulkInspection] Generating DOCX report for ${sub.subsectionName}`);
-      
-      const result = await generateAndSavePdfShiftInspectionReport({
+      // Generate PDF client-side via pdfmake (no cloud engine / no data egress)
+      console.log(`[BulkInspection] Generating PDF report for ${sub.subsectionName}`);
+
+      const result = await generateAndSaveInspectionReportPdfmake({
         inspection: inspectionData,
         siteName,
         clientName,
