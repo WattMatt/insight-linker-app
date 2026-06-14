@@ -5,21 +5,13 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Download, FileText, Eye, AlertTriangle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { hasValidCocStatus } from "@/lib/complianceCalculations";
 
+// get_public_subsection returns only these subsection fields (deliberate
+// data-minimization — no COC/metering on the public landing).
 interface SubsectionData {
   id: string;
   name: string;
   tenant_name?: string;
-  description?: string;
-  category?: string;
-  coc_number?: string;
-  coc_type?: string;
-  coc_issue_date?: string;
-  is_coc_required: boolean;
-  coc_status?: string;
-  metering_status?: string;
-  meter_serial_number?: string;
 }
 
 interface SiteData {

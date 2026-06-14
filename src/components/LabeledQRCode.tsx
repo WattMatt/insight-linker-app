@@ -37,8 +37,6 @@ export const LabeledQRCode = ({
     if (!ctx) return;
 
     try {
-      console.log('Generating QR code with labels:', { siteName, subsectionName });
-      
       // Canvas dimensions - increased text area
       const qrSize = 500;
       const padding = 40;
@@ -49,8 +47,6 @@ export const LabeledQRCode = ({
 
       canvas.width = totalWidth;
       canvas.height = totalHeight;
-      
-      console.log('Canvas dimensions:', { width: canvas.width, height: canvas.height });
 
       // Fill white background
       ctx.fillStyle = 'white';
@@ -112,8 +108,6 @@ export const LabeledQRCode = ({
 
             // Draw logo maintaining aspect ratio
             ctx.drawImage(img, logoX, logoY, logoWidth, logoHeight);
-            
-            console.log('Logo drawn with dimensions:', { logoWidth, logoHeight });
             resolve();
           };
 
@@ -128,9 +122,7 @@ export const LabeledQRCode = ({
 
       // Draw text labels below QR code
       const textStartY = padding + qrSize + 40;
-      
-      console.log('Drawing text at Y position:', textStartY);
-      
+
       // Helper to fit text within available width
       const maxTextWidth = totalWidth - (padding * 2);
       
@@ -158,8 +150,6 @@ export const LabeledQRCode = ({
       const subFontSize = fitText(subsectionName, 32, false);
       ctx.font = `${subFontSize}px Arial, sans-serif`;
       ctx.fillText(subsectionName, totalWidth / 2, textStartY + siteFontSize + 14);
-      
-      console.log('Drew subsection name:', subsectionName);
 
       const dataUrl = canvas.toDataURL('image/png');
       setGeneratedUrl(dataUrl);
