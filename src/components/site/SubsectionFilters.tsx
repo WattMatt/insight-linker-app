@@ -60,6 +60,7 @@ const COC_STATUS_OPTIONS = [
 const COMPLIANCE_OPTIONS = [
   { value: "compliant", label: "Compliant", color: "bg-green-500" },
   { value: "non-compliant", label: "Non-Compliant", color: "bg-red-500" },
+  { value: "pending", label: "Pending", color: "bg-gray-400" },
 ];
 
 const METERING_OPTIONS = [
@@ -416,7 +417,7 @@ export function SubsectionFilters({
           ))}
           {filters.compliance.map((value) => (
             <Badge key={value} variant="secondary" className="gap-1">
-              {value === "compliant" ? "Compliant" : "Non-Compliant"}
+              {COMPLIANCE_OPTIONS.find((o) => o.value === value)?.label ?? value}
               <button onClick={() => handleComplianceToggle(value)}>
                 <X className="h-3 w-3" />
               </button>

@@ -24,7 +24,7 @@ export interface Subsection {
     category: string | null;
     coc_status: string;
     metering_status: string;
-    is_compliant: boolean;
+    is_compliant: boolean | null;
     is_coc_required: boolean;
     tenant_name: string | null;
     coc_number: string | null;
