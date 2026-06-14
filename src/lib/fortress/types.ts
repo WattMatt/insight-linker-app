@@ -32,3 +32,21 @@ export interface BuildingAsset {
   updated_at: string;
   deleted_at: string | null; // soft-delete (210000) — reads MUST filter deleted_at IS NULL
 }
+
+export type OhsAnswer = "Y" | "N" | "N/A";
+
+/** ohs_compliance_items — OHS Act compliance checklist; weighted rollup → building compliance %. */
+export interface OhsComplianceItem {
+  id: string;
+  site_id: string;
+  period: string | null; // reporting month
+  section: string | null; // '1 Building Compliance', '2 Critical Equipment' …
+  item_code: string | null; // '1.1.1', '2.1.4' …
+  question: string;
+  answer: OhsAnswer | null;
+  weight: number | null; // numeric, default 1
+  evidence_url: string | null;
+  comment: string | null;
+  created_at: string;
+  updated_at: string;
+}
