@@ -172,12 +172,6 @@ class OfflineInspectionDatabase {
 
         // v4: stores owned by offlineDB.ts — created here too so the complete
         // schema exists regardless of which module opens the db first.
-        if (!db.objectStoreNames.contains('coc_compliance_photos')) {
-          const cocPhotosStore = db.createObjectStore('coc_compliance_photos', { keyPath: 'id' });
-          cocPhotosStore.createIndex('subsection_id', 'subsection_id', { unique: false });
-          cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
-          cocPhotosStore.createIndex('synced', 'synced', { unique: false });
-        }
         if (!db.objectStoreNames.contains('offline_photos')) {
           const photosStore = db.createObjectStore('offline_photos', { keyPath: 'id' });
           photosStore.createIndex('context_type', 'context_type', { unique: false });

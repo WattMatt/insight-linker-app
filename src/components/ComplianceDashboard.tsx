@@ -3,13 +3,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Progress } from "@/components/ui/progress";
 import { Badge } from "@/components/ui/badge";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  LineChart, 
-  Line, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
+import {
+  Tooltip,
   ResponsiveContainer,
   PieChart,
   Pie,
@@ -17,9 +12,6 @@ import {
   Legend
 } from "recharts";
 import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
   Shield,
   FileCheck,
   Gauge,
@@ -28,11 +20,10 @@ import {
   XCircle,
   Clock
 } from "lucide-react";
-import { format, subDays } from "date-fns";
 import {
   calculateCocComplianceStats
 } from "@/lib/complianceCalculations";
-import { factorScores, siteHealthScore } from "@/lib/siteHealth";
+import { factorScores, siteHealthScore, isMetered } from "@/lib/siteHealth";
 
 // Inspection findings are stored as a nested map: jsonData[sectionKey][itemKey] = { status, notes, photos }
 // (written by InspectionDetail.handleItemChange, read by ComprehensiveInspectionReport).
@@ -71,7 +62,8 @@ interface ComplianceDashboardProps {
     category: string | null;
     coc_status: string;
     metering_status: string;
-    is_compliant: boolean;
+    meter_serial_number?: string | null;
+    is_compliant: boolean | null;
     is_coc_required: boolean;
   }>;
   inspections: Array<{
@@ -90,15 +82,7 @@ interface CategoryScore {
   color: string;
 }
 
-interface TrendDataPoint {
-  date: string;
-  score: number;
-  metering: number;
-  snags: number;
-}
-
 export const ComplianceDashboard = ({ siteId, subsections, inspections }: ComplianceDashboardProps) => {
-  const [trendData, setTrendData] = useState<TrendDataPoint[]>([]);
   const [snagCounts, setSnagCounts] = useState({ open: 0, inProgress: 0, closed: 0 });
   // Health-model inputs (siteHealth.ts is the single source of truth for the overall score)
   const [healthSnags, setHealthSnags] = useState<Array<{ subsection_id: string; status: string | null; risk_level: string | null }>>([]);
@@ -127,9 +111,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
     
     // Metering Status
     const meteringRequired = subsections.filter(s => s.is_coc_required);
-    const meteringInstalled = meteringRequired.filter(s => 
-      s.metering_status === 'Installed' || s.metering_status === 'Verified'
-    );
+    const meteringInstalled = meteringRequired.filter(isMetered);
     categories[1].total = meteringRequired.length;
     categories[1].compliant = meteringInstalled.length;
     categories[1].score = meteringRequired.length > 0 
@@ -222,30 +204,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
             }
           }
         }
-        
-        // Generate trend data for last 30 days (simulated based on current state).
-        // Use the freshly-fetched health inputs so the baseline isn't a render behind.
-        const categoryScores = calculateCategoryScores();
-        const currentScore = siteHealthScore(factorScores(subsections, fetchedHealthSnags, fetchedHealthInspections));
-        
-        const trend: TrendDataPoint[] = [];
-        for (let i = 29; i >= 0; i--) {
-          const date = subDays(new Date(), i);
-          // Simulate gradual improvement trend with some variance
-          const variance = Math.random() * 10 - 5;
-          const dayScore = Math.max(0, Math.min(100, 
-            currentScore - (i * 0.5) + variance
-          ));
-          
-          trend.push({
-            date: format(date, 'MMM dd'),
-            score: Math.round(dayScore),
-            metering: Math.round(Math.max(0, categoryScores[1].score - (i * 0.2) + variance)),
-            snags: Math.round(Math.max(0, categoryScores[2].score - (i * 0.4) + variance)),
-          });
-        }
-        
-        setTrendData(trend);
       } catch (error) {
         console.error('Error fetching compliance data:', error);
       } finally {
@@ -258,19 +216,7 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
 
   const overallScore = calculateOverallScore();
   const categoryScores = calculateCategoryScores();
-  
-  // Determine trend direction
-  const getTrendDirection = () => {
-    if (trendData.length < 7) return 'stable';
-    const recent = trendData.slice(-7).reduce((sum, d) => sum + d.score, 0) / 7;
-    const previous = trendData.slice(-14, -7).reduce((sum, d) => sum + d.score, 0) / 7;
-    if (recent > previous + 2) return 'up';
-    if (recent < previous - 2) return 'down';
-    return 'stable';
-  };
-  
-  const trend = getTrendDirection();
-  
+
   const pieData = [
     { name: 'Open', value: snagCounts.open, color: 'hsl(var(--destructive))' },
     { name: 'In Progress', value: snagCounts.inProgress, color: 'hsl(var(--warning, 45 93% 47%))' },
@@ -316,44 +262,20 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           <CardHeader className="pb-2">
             <CardTitle className="flex items-center gap-2 text-lg">
               <Shield className="h-5 w-5 text-primary" />
-              Overall Compliance Score
+              Overall Site Health
             </CardTitle>
-            <CardDescription>Site-wide compliance health</CardDescription>
+            <CardDescription>Operational health — metering, snags &amp; inspections (COC tracked separately)</CardDescription>
           </CardHeader>
           <CardContent>
             <div className="flex items-center justify-between">
-              <div className="flex items-baseline gap-2">
-                <span className={`text-5xl font-bold ${getScoreColor(overallScore)}`}>
-                  {overallScore}%
-                </span>
-                {trend === 'up' && (
-                  <div className="flex items-center text-green-600 text-sm">
-                    <TrendingUp className="h-4 w-4 mr-1" />
-                    Improving
-                  </div>
-                )}
-                {trend === 'down' && (
-                  <div className="flex items-center text-red-600 text-sm">
-                    <TrendingDown className="h-4 w-4 mr-1" />
-                    Declining
-                  </div>
-                )}
-                {trend === 'stable' && (
-                  <div className="flex items-center text-muted-foreground text-sm">
-                    <Minus className="h-4 w-4 mr-1" />
-                    Stable
-                  </div>
-                )}
-              </div>
+              <span className={`text-5xl font-bold ${getScoreColor(overallScore)}`}>
+                {overallScore}%
+              </span>
               {getScoreBadge(overallScore)}
             </div>
             <Progress value={overallScore} className="mt-4 h-3" />
             <p className="text-sm text-muted-foreground mt-2">
-              {subsections.filter(s => {
-                if (s.is_coc_required && s.coc_status !== 'Approved' && s.coc_status !== 'Valid' && s.coc_status !== 'Pass') return false;
-                if (s.is_coc_required && s.metering_status === 'Missing') return false;
-                return true;
-              }).length} of {subsections.length} subsections fully compliant
+              {subsections.filter(s => s.is_compliant === true).length} of {subsections.length} subsections compliant
             </p>
           </CardContent>
         </Card>
@@ -381,76 +303,6 @@ export const ComplianceDashboard = ({ siteId, subsections, inspections }: Compli
           </Card>
         ))}
       </div>
-
-      {/* Trend Chart */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <TrendingUp className="h-5 w-5 text-muted-foreground" />
-            Compliance Trend (30 Days)
-          </CardTitle>
-          <CardDescription>Track compliance score changes over time</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="h-[300px]">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={trendData}>
-                <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                <XAxis 
-                  dataKey="date" 
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                  interval="preserveStartEnd"
-                />
-                <YAxis 
-                  domain={[0, 100]} 
-                  tick={{ fontSize: 12 }}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(value) => `${value}%`}
-                />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--popover))',
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px',
-                  }}
-                  labelStyle={{ color: 'hsl(var(--popover-foreground))' }}
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="score" 
-                  name="Overall"
-                  stroke="hsl(var(--primary))" 
-                  strokeWidth={3}
-                  dot={false}
-                  activeDot={{ r: 6 }}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="metering"
-                  name="Metering"
-                  stroke="hsl(var(--chart-2))" 
-                  strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
-                />
-                <Line 
-                  type="monotone" 
-                  dataKey="snags" 
-                  name="Snags"
-                  stroke="hsl(var(--chart-3))" 
-                  strokeWidth={2}
-                  dot={false}
-                  strokeDasharray="5 5"
-                />
-                <Legend />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
-        </CardContent>
-      </Card>
 
       {/* Snag Distribution */}
       <div className="grid gap-4 md:grid-cols-2">
