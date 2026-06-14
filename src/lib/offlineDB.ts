@@ -93,27 +93,6 @@ export type OfflinePhotoType = COCPhotoType | 'inspection_finding' | 'inspection
 
 export type OfflinePhotoContextType = 'coc' | 'inspection' | 'floor_plan' | 'site' | 'document';
 
-export interface OfflineCOCPhoto {
-  id: string;
-  subsection_id: string;
-  coc_validation_id: string | null;
-  photo_type: COCPhotoType;
-  file_blob: Blob;
-  file_name: string;
-  file_size: number;
-  thumbnail_blob: Blob | null;
-  mime_type: string;
-  captured_at: string;
-  captured_by: string;
-  latitude: number | null;
-  longitude: number | null;
-  notes: string | null;
-  synced: boolean;
-  sync_error: string | null;
-  retry_count: number;
-  remote_url: string | null;
-}
-
 export interface OfflinePhoto {
   id: string;
   context_type: OfflinePhotoContextType;
@@ -243,14 +222,6 @@ class OfflineDatabase {
           const measurementsStore = db.createObjectStore('measurements', { keyPath: 'id' });
           measurementsStore.createIndex('floor_plan_id', 'floor_plan_id', { unique: false });
           measurementsStore.createIndex('synced', 'synced', { unique: false });
-        }
-
-        // COC Compliance Photos store
-        if (!db.objectStoreNames.contains('coc_compliance_photos')) {
-          const cocPhotosStore = db.createObjectStore('coc_compliance_photos', { keyPath: 'id' });
-          cocPhotosStore.createIndex('subsection_id', 'subsection_id', { unique: false });
-          cocPhotosStore.createIndex('coc_validation_id', 'coc_validation_id', { unique: false });
-          cocPhotosStore.createIndex('synced', 'synced', { unique: false });
         }
 
         // Unified Offline Photos store (v3)
@@ -408,76 +379,6 @@ class OfflineDatabase {
       const request = store.delete(id);
       
       request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  // COC Compliance Photos
-  async saveCOCPhoto(photo: OfflineCOCPhoto): Promise<void> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readwrite');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const request = store.put(photo);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getCOCPhotosForSubsection(subsectionId: string): Promise<OfflineCOCPhoto[]> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const index = store.index('subsection_id');
-      const request = index.getAll(IDBKeyRange.only(subsectionId));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getCOCPhotosForValidation(cocValidationId: string): Promise<OfflineCOCPhoto[]> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const index = store.index('coc_validation_id');
-      const request = index.getAll(IDBKeyRange.only(cocValidationId));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getUnsyncedCOCPhotos(): Promise<OfflineCOCPhoto[]> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const index = store.index('synced');
-      const request = index.getAll(IDBKeyRange.only(false));
-      request.onsuccess = () => resolve(request.result);
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async deleteCOCPhoto(id: string): Promise<void> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readwrite');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const request = store.delete(id);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
-    });
-  }
-
-  async getCOCPhoto(id: string): Promise<OfflineCOCPhoto | undefined> {
-    if (!this.db) await this.init();
-    return new Promise((resolve, reject) => {
-      const transaction = this.db!.transaction(['coc_compliance_photos'], 'readonly');
-      const store = transaction.objectStore('coc_compliance_photos');
-      const request = store.get(id);
-      request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error);
     });
   }
