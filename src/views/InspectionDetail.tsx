@@ -13,7 +13,6 @@ import { format } from "date-fns";
 import QRCode from "qrcode";
 import { supabase } from "@/integrations/supabase/client";
 import { ComprehensiveInspectionReport } from "@/components/ComprehensiveInspectionReport";
-import { SiteDrawingReport } from "@/components/SiteDrawingReport";
 import { InteractiveFloorPlan } from "@/components/InteractiveFloorPlan";
 import { DynamicFieldManager } from "@/components/DynamicFieldManager";
 import { Badge } from "@/components/ui/badge";
@@ -2006,17 +2005,11 @@ const InspectionDetail = () => {
           </p>
         </div>
         <div className="flex flex-wrap gap-2 shrink-0">
-          {templateCategory === "Site Drawing" ? (
-            <SiteDrawingReport
-              inspectionData={inspection}
-              siteName={siteData?.siteName || 'Unknown Site'}
-              subsectionName={subsectionData?.name || 'Unknown Subsection'}
-              subsectionId={subsectionId || ''}
-              pdfUrl={(inspection?.jsonData as any)?.siteDrawingPdf || ''}
-              pins={(inspection?.jsonData as any)?.siteDrawingPins || []}
-              canvasData={(inspection?.jsonData as any)?.siteDrawingCanvas}
-            />
-          ) : (
+          {/* Site Drawing inspections generate their report from the InteractiveFloorPlan
+              editor in the body below (live data in subsection_floor_plans / floor_plan_pins).
+              The old header SiteDrawingReport button read jsonData keys nothing ever wrote, so
+              it produced an empty report — removed. */}
+          {templateCategory !== "Site Drawing" && (
             <ComprehensiveInspectionReport
               inspectionData={inspection}
               siteName={siteData?.siteName || 'Unknown Site'}
