@@ -583,6 +583,19 @@ const SiteDetail = () => {
     }
   }, [searchParams, documentCategories]);
 
+  // The overview + compliance tabs render derived "completed / outstanding" markers from
+  // subsections + site_documents. Deletions land in other tabs (Reports, Documents) and via the
+  // server-side COC roll-up trigger (deleting a certificate flips subsections.coc_status to
+  // 'Missing'), so re-read those inputs on entry to reflect changes without a full page reload.
+  // fetchSiteData/fetchSiteDocuments do not toggle the page `loading` flag, so this is silent.
+  const handleTabChange = (value: string) => {
+    setActiveTab(value);
+    if (value === 'overview' || value === 'compliance') {
+      fetchSiteData();
+      fetchSiteDocuments();
+    }
+  };
+
   if (loading) return <div className="flex h-[400px] items-center justify-center"><div className="h-8 w-8 animate-spin rounded-full border-4 border-primary border-t-transparent" /></div>;
   if (!site) return <div className="text-center py-12"><h3>Site not found</h3><Button onClick={() => navigate(`/clients/${clientId}`)}>Back</Button></div>;
 
@@ -617,7 +630,7 @@ const SiteDetail = () => {
         }} variant="outline" className="gap-2"><ClipboardCheck className="h-4 w-4" />Edit Site</Button>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
+      <Tabs value={activeTab} onValueChange={handleTabChange}>
         <TabsList className="flex flex-wrap w-full h-auto gap-1 p-1 overflow-visible">
           <TabsTrigger value="overview" className="gap-2 shrink-0">
             <LayoutGrid className="h-4 w-4 shrink-0" />
