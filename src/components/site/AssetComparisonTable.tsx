@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -12,13 +12,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
@@ -30,44 +23,16 @@ import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSave
 import { RobustImage } from "@/components/RobustImage";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { generateInspectionBasedReport } from "@/lib/assetVerificationReportGenerator";
-import { testPdfGeneration } from "@/lib/pdfMakeConfig";
 import { PDFComplianceCheck } from "@/lib/pdfTemplates";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-
-interface Asset {
-  id: string;
-  premises_id: string;
-  trade_as: string | null;
-  meter_serial_number: string | null;
-  ct_ratio: string | null;
-  breaker_size: string | null;
-  asset_category: string;
-}
-
-export interface InspectionTenantMatch {
-  inspectionId: string;
-  inspectionTitle: string;
-  subsectionId: string | null;
-  subsectionName?: string;
-  shopName?: string;
-  shopNumber?: string;
-  meterSerialNumber: string;
-  ctSizeAndRatio?: string;
-  breakerSize?: string;
-  meterImage?: string;
-  ctRatioImage?: string;
-  breakerImage?: string;
-}
-
-export interface ComparisonResult {
-  asset: Asset;
-  inspectionMatch: InspectionTenantMatch | null;
-  verified: boolean;
-  ctMatch: "match" | "mismatch" | "na";
-  breakerMatch: "match" | "mismatch" | "na";
-  hasDiscrepancy: boolean;
-}
+import {
+  normalizeMeterSerial,
+  buildComparisonResults,
+  type AssetForComparison as Asset,
+  type InspectionTenantMatch,
+  type ComparisonResult,
+} from "@/lib/assetVerification";
 
 interface AssetComparisonTableProps {
   assets: Asset[];
@@ -84,30 +49,6 @@ type EditingCell = {
   source: "asset" | "inspection";
   value: string;
 } | null;
-
-// Normalize meter serial for matching
-const normalizeMeterSerial = (serial: string | null | undefined): string => {
-  return (serial || "").toUpperCase().replace(/[^A-Z0-9]/g, "").trim();
-};
-
-// Compare two values
-const compareValues = (
-  assetValue: string | null | undefined,
-  inspectionValue: string | null | undefined
-): "match" | "mismatch" | "na" => {
-  const normAsset = (assetValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
-  const normInspection = (inspectionValue || "").toUpperCase().replace(/[^A-Z0-9/]/g, "").trim();
-
-  if ((!normAsset || normAsset === "NA" || normAsset === "TBC") && 
-      (!normInspection || normInspection === "NA" || normInspection === "TBC")) {
-    return "na";
-  }
-
-  if (!normAsset || normAsset === "NA" || normAsset === "TBC") return "na";
-  if (!normInspection || normInspection === "NA" || normInspection === "TBC") return "na";
-
-  return normAsset === normInspection ? "match" : "mismatch";
-};
 
 export const AssetComparisonTable = ({
   assets,
@@ -131,32 +72,18 @@ export const AssetComparisonTable = ({
   const [editingCell, setEditingCell] = useState<EditingCell>(null);
   const [saving, setSaving] = useState(false);
 
-  // Build comparison results - match assets to inspections only
-  const comparisonResults = useMemo((): ComparisonResult[] => {
-    return assets.map(asset => {
-      const normalizedSerial = normalizeMeterSerial(asset.meter_serial_number);
-      const inspectionMatch = normalizedSerial && normalizedSerial !== "NA" && normalizedSerial !== "TBC"
-        ? inspectionMeterMatches.get(normalizedSerial) || null
-        : null;
+  // Build comparison results - status is computed from inspections, never persisted.
+  const comparisonResults = useMemo(
+    () => buildComparisonResults(assets, inspectionMeterMatches),
+    [assets, inspectionMeterMatches],
+  );
 
-      const ctMatch = inspectionMatch 
-        ? compareValues(asset.ct_ratio, inspectionMatch.ctSizeAndRatio)
-        : "na";
-      
-      const breakerMatch = inspectionMatch
-        ? compareValues(asset.breaker_size, inspectionMatch.breakerSize)
-        : "na";
-
-      return {
-        asset,
-        inspectionMatch,
-        verified: !!inspectionMatch,
-        ctMatch,
-        breakerMatch,
-        hasDiscrepancy: ctMatch === "mismatch" || breakerMatch === "mismatch",
-      };
-    });
-  }, [assets, inspectionMeterMatches]);
+  // Release the preview blob URL when it changes or the table unmounts.
+  useEffect(() => {
+    return () => {
+      if (pdfPreview?.url) URL.revokeObjectURL(pdfPreview.url);
+    };
+  }, [pdfPreview?.url]);
 
   // Filter results
   const filteredResults = useMemo(() => {
@@ -404,6 +331,15 @@ export const AssetComparisonTable = ({
         <Input
           value={editingCell?.value || ""}
           onChange={(e) => setEditingCell(prev => prev ? { ...prev, value: e.target.value } : null)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              handleSaveEdit(result, field, editingCell?.value || "", source);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setEditingCell(null);
+            }
+          }}
           className="h-7 text-xs w-24"
           autoFocus
         />
@@ -558,15 +494,6 @@ export const AssetComparisonTable = ({
                 className="pl-9"
               />
             </div>
-            {!readOnly && (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => testPdfGeneration()}
-              >
-                Test PDF
-              </Button>
-            )}
             <Button
               variant="default"
               size="sm"
