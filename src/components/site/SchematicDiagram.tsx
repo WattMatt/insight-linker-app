@@ -754,6 +754,27 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setScale(1);
     setPanOffset({ x: 0, y: 0 });
     try {
+      // Public (anonymous) review: read through the token-scoped RPC, never the tables
+      // directly. Admin and authenticated client-portal modes keep their direct reads.
+      if (readOnly && accessToken) {
+        const { data: review, error: reviewError } = await supabase
+          .rpc("get_public_site_review", { p_token: accessToken, p_site_id: siteId });
+        if (reviewError) throw reviewError;
+        const payload = (review ?? {}) as any;
+        const sch = payload.schematic;
+        setSchematic(sch
+          ? {
+              id: sch.id, site_id: sch.site_id, file_name: sch.file_name, file_url: sch.file_url,
+              calibrated_width: sch.calibrated_width, calibrated_height: sch.calibrated_height,
+              is_calibrated: sch.is_calibrated,
+            }
+          : null);
+        setBlocks((payload.schematic_blocks ?? []) as SchematicBlock[]);
+        setSubsections((payload.subsections ?? []) as Subsection[]);
+        setInspections((payload.inspections ?? []) as any[]);
+        return;
+      }
+
       const { data: schematicData, error: schematicError } = await supabase
         .from("site_schematics")
         .select("*")

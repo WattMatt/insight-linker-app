@@ -26,6 +26,7 @@ interface AssetVerificationProps {
   siteId: string;
   siteName: string;
   readOnly?: boolean;
+  accessToken?: string; // public review: read via token-scoped RPC, not tables
 }
 
 interface ParsedAsset {
@@ -44,14 +45,30 @@ interface ParsedAsset {
   comments?: string;
 }
 
-export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetVerificationProps) => {
+export const AssetVerification = ({ siteId, siteName, readOnly = false, accessToken }: AssetVerificationProps) => {
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const queryClient = useQueryClient();
 
-  const { data: assets = [], isLoading, refetch } = useQuery({
+  // Public (anonymous) review reads through the token-scoped RPC; admin and authenticated
+  // client-portal modes keep direct table reads.
+  const isPublic = readOnly && !!accessToken;
+
+  const { data: review, isLoading: reviewLoading } = useQuery({
+    queryKey: ["public-site-review-assets", siteId, accessToken],
+    enabled: isPublic,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .rpc("get_public_site_review", { p_token: accessToken!, p_site_id: siteId });
+      if (error) throw error;
+      return (data ?? {}) as any;
+    },
+  });
+
+  const { data: assetsDirect = [], isLoading: assetsLoading, refetch } = useQuery({
     queryKey: ["site-assets", siteId],
+    enabled: !isPublic,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("site_assets")
@@ -65,8 +82,9 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetV
   });
 
   // Fetch inspections with tenant data (meter serial, CT ratio, breaker, images)
-  const { data: inspectionsWithTenants = [] } = useQuery({
+  const { data: inspectionsDirect = [] } = useQuery({
     queryKey: ["site-inspections-tenants", siteId],
+    enabled: !isPublic,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("inspections")
@@ -80,8 +98,9 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetV
   });
 
   // Fetch subsection names for display purposes
-  const { data: subsections = [] } = useQuery({
+  const { data: subsectionsDirect = [] } = useQuery({
     queryKey: ["site-subsections-names", siteId],
+    enabled: !isPublic,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("subsections")
@@ -92,6 +111,14 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false }: AssetV
       return data || [];
     },
   });
+
+  // Resolve from the RPC payload in public mode, otherwise from the direct queries.
+  const assets = isPublic ? ((review?.site_assets ?? []) as any[]) : assetsDirect;
+  const inspectionsWithTenants = isPublic
+    ? ((review?.inspections ?? []) as any[]).filter((i: any) => i.json_data != null)
+    : inspectionsDirect;
+  const subsections = isPublic ? ((review?.subsections ?? []) as any[]) : subsectionsDirect;
+  const isLoading = isPublic ? reviewLoading : assetsLoading;
 
   // Build a map of meter serial number -> inspection tenant data for matching to assets
   interface InspectionTenantMatch {

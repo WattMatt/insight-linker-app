@@ -475,7 +475,7 @@ const PublicSiteReview = () => {
 
           {/* Asset Verification Tab */}
           <TabsContent value="assets" className="space-y-6">
-            <AssetVerification siteId={site.id} siteName={site.name} readOnly />
+            <AssetVerification siteId={site.id} siteName={site.name} readOnly accessToken={token} />
           </TabsContent>
 
           {/* Documents Tab */}
