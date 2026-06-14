@@ -8,7 +8,8 @@ import { toast } from "sonner";
 import { CheckCircle2, Eye, Save } from "lucide-react";
 import { generateFortressTemplate } from "@/lib/fortressTemplate";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
-import { useUnifiedPdfGeneration, FortressChecklistReportData } from "@/hooks/useUnifiedPdfGeneration";
+import { generateFortressChecklistPdf, type FortressChecklistData } from "@/lib/fortressChecklistReportGenerator";
+import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
 
 interface ChecklistItem {
   id: string;
@@ -34,8 +35,8 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
   const [previewUrl, setPreviewUrl] = useState<string>("");
   const [previewFileName, setPreviewFileName] = useState<string>("");
   const [previewBlob, setPreviewBlob] = useState<Blob | undefined>(undefined);
-  
-  const { generatePdfForPreview, isGenerating } = useUnifiedPdfGeneration();
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     initializeChecklist();
@@ -237,8 +238,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
       };
     });
 
-    const reportData: FortressChecklistReportData = {
-      reportType: 'fortress-checklist',
+    const reportData: FortressChecklistData = {
       title: 'Fortress Site Close-Out Checklist',
       siteName: siteName || 'Site',
       siteId,
@@ -253,15 +253,44 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
       generatedAt: new Date().toISOString(),
     };
 
-    const result = await generatePdfForPreview(reportData);
-    
-    if (result.success && result.url) {
-      setPreviewUrl(result.url);
-      setPreviewFileName(result.filename || `fortress-checklist-${Date.now()}.pdf`);
-      setPreviewBlob(result.blob);
-      setPreviewOpen(true);
-    } else {
-      toast.error(result.error || 'Failed to generate report');
+    setIsGenerating(true);
+    try {
+      const result = await generateFortressChecklistPdf(reportData);
+
+      if (result.success && result.blob) {
+        const url = URL.createObjectURL(result.blob);
+        setPreviewUrl(url);
+        setPreviewFileName(result.filename || `Fortress_Checklist_${Date.now()}.pdf`);
+        setPreviewBlob(result.blob);
+        setPreviewOpen(true);
+      } else {
+        toast.error(result.error || 'Failed to generate report');
+      }
+    } finally {
+      setIsGenerating(false);
+    }
+  };
+
+  const handleSaveToDocuments = async () => {
+    if (!previewBlob) {
+      toast.error('Cannot save report');
+      return;
+    }
+    try {
+      setSaving(true);
+      const res = await savePDFToDocuments({
+        blob: previewBlob,
+        fileName: previewFileName,
+        siteId,
+        categoryName: 'Marking Checklists',
+      });
+      if (res.success) {
+        toast.success('Report saved to documents!');
+      } else {
+        toast.error(res.error || 'Failed to save report');
+      }
+    } finally {
+      setSaving(false);
     }
   };
 
@@ -384,6 +413,7 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
         onOpenChange={(open) => {
           setPreviewOpen(open);
           if (!open && previewUrl) {
+            URL.revokeObjectURL(previewUrl);
             setPreviewUrl("");
             setPreviewBlob(undefined);
           }
@@ -391,8 +421,10 @@ export const FortressMarkingChecklist = ({ siteId, siteName }: FortressMarkingCh
         fileUrl={previewUrl}
         fileName={previewFileName}
         downloadBlobData={previewBlob}
+        onSaveToDocuments={handleSaveToDocuments}
         saveLocation="site"
         contextName={siteName || 'Site'}
+        isSaving={saving}
       />
     </div>
   );
