@@ -1,6 +1,8 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useNavigate } from "@/lib/navigation";
 import { supabase } from "@/integrations/supabase/client";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { ListPagination } from "@/components/ListPagination";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -30,8 +32,6 @@ interface Client {
 
 const Clients = () => {
   const navigate = useNavigate();
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -49,49 +49,36 @@ const Clients = () => {
   });
   const [formErrors, setFormErrors] = useState<Record<string, string>>({});
 
-  useEffect(() => {
-    fetchAllClients();
-  }, []);
+  // Server-side paginated clients. Sort moves to the DB so pages are stable;
+  // the sites(id) join still rides along per row for the site count.
+  const {
+    rows: clients,
+    page,
+    pageCount,
+    setPage,
+    isLoading: loading,
+    isFetching,
+    refetch,
+  } = usePaginatedList<Client>({
+    queryKey: ["clients-list"],
+    pageSize: 24,
+    fetchPage: async ({ from, to }) => {
+      const { data, error, count } = await supabase
+        .from("clients")
+        .select("*, sites(id)", { count: "exact" })
+        .order("name", { ascending: true })
+        .range(from, to);
+      if (error) throw error;
+      const rows = (data || []).map((client) => ({
+        ...client,
+        sitesCount: (client.sites as any[])?.length || 0,
+        sites: undefined, // keep row data clean
+      })) as Client[];
+      return { rows, total: count ?? 0 };
+    },
+  });
 
-  const fetchAllClients = async () => {
-    try {
-      setLoading(true);
-
-      // Fetch only from Supabase
-      const supabaseData = await fetchSupabaseClients();
-      setClients(supabaseData.map(c => ({ ...c, source: 'supabase' as const })));
-    } catch (error) {
-      console.error("Error fetching clients:", error);
-      toast.error("Failed to fetch clients");
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const fetchSupabaseClients = async (): Promise<Client[]> => {
-    const { data, error } = await supabase
-      .from("clients")
-      .select("*, sites(id)");
-
-    if (error) {
-      console.error("Error fetching Supabase clients:", error);
-      return [];
-    }
-
-    // Client-side case-insensitive alphabetical sorting
-    const sortedData = (data || []).sort((a, b) => {
-      const nameA = (a.name || '').toLowerCase().trim();
-      const nameB = (b.name || '').toLowerCase().trim();
-      return nameA.localeCompare(nameB);
-    });
-
-    // Map and count sites for each client
-    return sortedData.map(client => ({
-      ...client,
-      sitesCount: (client.sites as any[])?.length || 0,
-      sites: undefined, // Remove sites array to keep data clean
-    }));
-  };
+  const fetchAllClients = () => refetch();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -388,6 +375,7 @@ const Clients = () => {
           onAction={() => setDialogOpen(true)}
         />
       ) : (
+        <>
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
           {clients.map((client) => (
             <Card
@@ -749,6 +737,8 @@ const Clients = () => {
             </AlertDialogContent>
           </AlertDialog>
         </div>
+        <ListPagination page={page} pageCount={pageCount} onPageChange={setPage} disabled={isFetching} />
+        </>
       )}
     </div>
   );
