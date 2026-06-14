@@ -31,6 +31,10 @@ public/workbox-*.js.map
 public/worker-*.js
 public/worker-*.js.map
 public/swe-worker-*.js
+public/fallback-*.js
+
+# Local working notes (not part of the app)
+/tasks/
 
 # Editor directories and files
 .vscode/*
