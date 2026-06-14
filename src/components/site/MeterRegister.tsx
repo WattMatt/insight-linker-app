@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Search, AlertTriangle, CheckCircle2, Database, Layers, FileText, RefreshCw, Download, Image, ClipboardList } from "lucide-react";
 import { toast } from "sonner";
 import { RobustImage } from "@/components/RobustImage";
+import { normalizeMeterSerial } from "@/lib/assetVerification";
 
 interface MeterRegisterProps {
   siteId: string;
@@ -51,7 +52,7 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
   const [selectedImages, setSelectedImages] = useState<{ meterImage?: string; ctRatioImage?: string; title: string } | null>(null);
 
   // Fetch subsections with meter numbers
-  const { data: subsections, refetch: refetchSubsections } = useQuery({
+  const { data: subsections, refetch: refetchSubsections, isError: subsError } = useQuery({
     queryKey: ['meter-register-subsections', siteId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -66,7 +67,7 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
   });
 
   // Fetch site assets with meter numbers
-  const { data: assets, refetch: refetchAssets } = useQuery({
+  const { data: assets, refetch: refetchAssets, isError: assetsErr } = useQuery({
     queryKey: ['meter-register-assets', siteId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -81,7 +82,7 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
   });
 
   // Fetch inspections with tenant meter data
-  const { data: inspections, refetch: refetchInspections } = useQuery({
+  const { data: inspections, refetch: refetchInspections, isError: inspErr } = useQuery({
     queryKey: ['meter-register-inspections', siteId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -106,20 +107,25 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
   const consolidatedMeters = useMemo(() => {
     const meterMap = new Map<string, MeterEntry>();
 
+    // Group by normalized serial so this register agrees with the verification tab on
+    // meter identity (e.g. "ABC-123" and "ABC123" are the same meter). Display keeps the
+    // first-seen raw serial.
+    const getEntry = (rawSerial: string): MeterEntry | null => {
+      const key = normalizeMeterSerial(rawSerial);
+      if (!key || key === "NA" || key === "TBC") return null;
+      let entry = meterMap.get(key);
+      if (!entry) {
+        entry = { meter_serial_number: rawSerial.trim(), sources: {}, hasDiscrepancy: false };
+        meterMap.set(key, entry);
+      }
+      return entry;
+    };
+
     // Add subsection meters
     subsections?.forEach(sub => {
       if (!sub.meter_serial_number) return;
-      const serial = sub.meter_serial_number.trim();
-      
-      if (!meterMap.has(serial)) {
-        meterMap.set(serial, {
-          meter_serial_number: serial,
-          sources: {},
-          hasDiscrepancy: false
-        });
-      }
-      
-      const entry = meterMap.get(serial)!;
+      const entry = getEntry(sub.meter_serial_number);
+      if (!entry) return;
       entry.sources.subsection = {
         id: sub.id,
         name: sub.name,
@@ -130,17 +136,8 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
     // Add asset meters (only electrical meters for comparison)
     assets?.filter(a => a.asset_category === 'electrical_meter').forEach(asset => {
       if (!asset.meter_serial_number) return;
-      const serial = asset.meter_serial_number.trim();
-      
-      if (!meterMap.has(serial)) {
-        meterMap.set(serial, {
-          meter_serial_number: serial,
-          sources: {},
-          hasDiscrepancy: false
-        });
-      }
-      
-      const entry = meterMap.get(serial)!;
+      const entry = getEntry(asset.meter_serial_number);
+      if (!entry) return;
       entry.sources.asset = {
         id: asset.id,
         premises_id: asset.premises_id,
@@ -154,21 +151,12 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
     inspections?.forEach(inspection => {
       const jsonData = inspection.json_data as Record<string, unknown> | null;
       if (!jsonData) return;
-      
+
       const tenants = (jsonData.tenants as InspectionTenant[]) || [];
       tenants.forEach(tenant => {
         if (!tenant.meterSerialNumber) return;
-        const serial = tenant.meterSerialNumber.trim();
-        
-        if (!meterMap.has(serial)) {
-          meterMap.set(serial, {
-            meter_serial_number: serial,
-            sources: {},
-            hasDiscrepancy: false
-          });
-        }
-        
-        const entry = meterMap.get(serial)!;
+        const entry = getEntry(tenant.meterSerialNumber);
+        if (!entry) return;
         // Only add if this inspection has images (prefer inspections with images)
         if (!entry.sources.inspection || (tenant.meterImage || tenant.ctRatioImage)) {
           entry.sources.inspection = {
@@ -286,6 +274,26 @@ export function MeterRegister({ siteId, siteName, readOnly = false }: MeterRegis
     URL.revokeObjectURL(url);
     toast.success("Meter register exported");
   };
+
+  if (subsError || assetsErr || inspErr) {
+    return (
+      <Card className="border-destructive/30">
+        <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+          <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+            <AlertTriangle className="h-8 w-8 text-destructive" />
+          </div>
+          <h3 className="font-semibold text-lg mb-2">Unable to load the meter register</h3>
+          <p className="text-muted-foreground max-w-md mb-4">
+            Something went wrong loading meter data. Please try again.
+          </p>
+          <Button variant="outline" onClick={handleRefresh}>
+            <RefreshCw className="h-4 w-4 mr-2" />
+            Retry
+          </Button>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="space-y-6">

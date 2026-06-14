@@ -3,7 +3,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge } from "lucide-react";
+import { Upload, Zap, Trash2, RefreshCw, ShieldCheck, Gauge, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -11,6 +11,14 @@ import * as XLSX from "xlsx";
 import { AssetTable } from "./AssetTable";
 import { AssetComparisonTable } from "./AssetComparisonTable";
 import { MeterRegister } from "./MeterRegister";
+import {
+  parseAssetRows,
+  buildInspectionMeterMatches,
+  buildComparisonResults,
+  type ParsedAsset,
+  type InspectionRecord,
+  type SubsectionNameRecord,
+} from "@/lib/assetVerification";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,44 +37,60 @@ interface AssetVerificationProps {
   accessToken?: string; // public review: read via token-scoped RPC, not tables
 }
 
-interface ParsedAsset {
+// Shape shared by the child tables (superset of what AssetComparisonTable + AssetTable consume).
+interface SiteAssetRow {
+  id: string;
   premises_id: string;
-  trade_as: string;
-  asset_category: "electrical_meter" | "water_meter";
-  meter_serial_number: string;
-  meter_type?: string;
-  ct_ratio?: string;
-  breaker_size?: string;
-  reading_at_commissioning?: string;
-  old_meter_serial_number?: string;
-  last_meter_read_old?: string;
-  tag?: string;
-  mbus_gateway_index?: string;
-  comments?: string;
+  trade_as: string | null;
+  asset_category: string;
+  meter_serial_number: string | null;
+  meter_type: string | null;
+  ct_ratio: string | null;
+  breaker_size: string | null;
+  reading_at_commissioning: string | null;
+  old_meter_serial_number: string | null;
+  last_meter_read_old: string | null;
+  tag: string | null;
+  mbus_gateway_index: string | null;
+  comments: string | null;
 }
+
+const MAX_IMPORT_BYTES = 10 * 1024 * 1024; // 10MB
 
 export const AssetVerification = ({ siteId, siteName, readOnly = false, accessToken }: AssetVerificationProps) => {
   const [uploading, setUploading] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Re-import replaces the existing register; hold the parsed rows until the user confirms.
+  const [pendingImport, setPendingImport] = useState<ParsedAsset[] | null>(null);
   const queryClient = useQueryClient();
 
   // Public (anonymous) review reads through the token-scoped RPC; admin and authenticated
   // client-portal modes keep direct table reads.
   const isPublic = readOnly && !!accessToken;
 
-  const { data: review, isLoading: reviewLoading } = useQuery({
+  const {
+    data: review,
+    isLoading: reviewLoading,
+    isError: reviewError,
+    refetch: refetchReview,
+  } = useQuery({
     queryKey: ["public-site-review-assets", siteId, accessToken],
     enabled: isPublic,
     queryFn: async () => {
       const { data, error } = await supabase
         .rpc("get_public_site_review", { p_token: accessToken!, p_site_id: siteId });
       if (error) throw error;
-      return (data ?? {}) as any;
+      return (data ?? {}) as Record<string, unknown>;
     },
   });
 
-  const { data: assetsDirect = [], isLoading: assetsLoading, refetch } = useQuery({
+  const {
+    data: assetsDirect = [],
+    isLoading: assetsLoading,
+    isError: assetsError,
+    refetch,
+  } = useQuery({
     queryKey: ["site-assets", siteId],
     enabled: !isPublic,
     queryFn: async () => {
@@ -113,252 +137,50 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
   });
 
   // Resolve from the RPC payload in public mode, otherwise from the direct queries.
-  const assets = isPublic ? ((review?.site_assets ?? []) as any[]) : assetsDirect;
-  const inspectionsWithTenants = isPublic
-    ? ((review?.inspections ?? []) as any[]).filter((i: any) => i.json_data != null)
-    : inspectionsDirect;
-  const subsections = isPublic ? ((review?.subsections ?? []) as any[]) : subsectionsDirect;
+  const assets = ((isPublic ? review?.site_assets ?? [] : assetsDirect) as unknown) as SiteAssetRow[];
+  const inspectionsWithTenants = (
+    isPublic ? ((review?.inspections ?? []) as InspectionRecord[]).filter((i) => i.json_data != null) : inspectionsDirect
+  ) as InspectionRecord[];
+  const subsections = (isPublic ? ((review?.subsections ?? []) as SubsectionNameRecord[]) : subsectionsDirect) as SubsectionNameRecord[];
   const isLoading = isPublic ? reviewLoading : assetsLoading;
+  const isError = isPublic ? reviewError : assetsError;
+  const retry = () => (isPublic ? refetchReview() : refetch());
 
-  // Build a map of meter serial number -> inspection tenant data for matching to assets
-  interface InspectionTenantMatch {
-    inspectionId: string;
-    inspectionTitle: string;
-    subsectionId: string | null;
-    subsectionName?: string;
-    shopName?: string;
-    shopNumber?: string;
-    meterSerialNumber: string;
-    ctSizeAndRatio?: string;
-    breakerSize?: string;
-    meterImage?: string;
-    ctRatioImage?: string;
-    breakerImage?: string;
-  }
-
-  const inspectionMeterMatches = useMemo(() => {
-    const matches = new Map<string, InspectionTenantMatch>();
-    
-    inspectionsWithTenants.forEach(inspection => {
-      const jsonData = inspection.json_data as { 
-        tenants?: Array<{ 
-          id: string;
-          shopName?: string;
-          shopNumber?: string;
-          meterSerialNumber?: string;
-          ctSizeAndRatio?: string;
-          breakerSize?: string;
-          meterImage?: string;
-          ctRatioImage?: string;
-          breakerImage?: string;
-        }> 
-      };
-      
-      const tenants = jsonData?.tenants || [];
-      tenants.forEach(tenant => {
-        if (!tenant.meterSerialNumber) return;
-        
-        const normalizedSerial = tenant.meterSerialNumber.toUpperCase().replace(/[^A-Z0-9]/g, '').trim();
-        if (!normalizedSerial || normalizedSerial === 'NA' || normalizedSerial === 'TBC') return;
-        
-        // Find subsection name if available
-        const subsection = subsections.find(s => s.id === inspection.subsection_id);
-        
-        // Only keep the first match (or one with more images)
-        const existing = matches.get(normalizedSerial);
-        const hasMoreImages = (tenant.meterImage || tenant.ctRatioImage || tenant.breakerImage) && 
-                              !(existing?.meterImage || existing?.ctRatioImage || existing?.breakerImage);
-        
-        if (!existing || hasMoreImages) {
-          matches.set(normalizedSerial, {
-            inspectionId: inspection.id,
-            inspectionTitle: inspection.title,
-            subsectionId: inspection.subsection_id,
-            subsectionName: subsection?.name,
-            shopName: tenant.shopName,
-            shopNumber: tenant.shopNumber,
-            meterSerialNumber: tenant.meterSerialNumber,
-            ctSizeAndRatio: tenant.ctSizeAndRatio,
-            breakerSize: tenant.breakerSize,
-            meterImage: tenant.meterImage,
-            ctRatioImage: tenant.ctRatioImage,
-            breakerImage: tenant.breakerImage,
-          });
-        }
-      });
-    });
-    
-    return matches;
-  }, [inspectionsWithTenants, subsections]);
+  // Electrical-only: water meters are out of scope for this feature.
   const electricalAssets = assets.filter((a) => a.asset_category === "electrical_meter");
 
+  const inspectionMeterMatches = useMemo(
+    () => buildInspectionMeterMatches(inspectionsWithTenants, subsections),
+    [inspectionsWithTenants, subsections],
+  );
+
+  // Same definition as the verification table's green "Verified" card: matched AND no discrepancy.
+  const verifiedCount = useMemo(
+    () =>
+      buildComparisonResults(electricalAssets, inspectionMeterMatches).filter((r) => r.verified && !r.hasDiscrepancy)
+        .length,
+    [electricalAssets, inspectionMeterMatches],
+  );
+
   const parseExcelFile = async (file: File): Promise<ParsedAsset[]> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        try {
-          const data = new Uint8Array(e.target?.result as ArrayBuffer);
-          const workbook = XLSX.read(data, { type: "array" });
-          const sheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[sheetName];
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as (string | number)[][];
-
-          console.log("Sheet names:", workbook.SheetNames);
-          console.log("Total rows:", jsonData.length);
-
-          const parsedAssets: ParsedAsset[] = [];
-          let currentSection: "electrical" | "water" | null = null;
-          let headerRow: (string | number)[] | null = null;
-          let columnMap: Record<string, number> = {};
-
-          const normalizeHeader = (header: string) => {
-            return header.toLowerCase().replace(/[^a-z0-9]/g, "");
-          };
-
-          for (let i = 0; i < jsonData.length; i++) {
-            const row = jsonData[i];
-            if (!row || row.length === 0) continue;
-
-            const firstCell = String(row[0] || "").trim().toUpperCase();
-            const secondCell = String(row[1] || "").trim().toUpperCase();
-
-            // Detect section type by looking for "ELECTRICAL" or "WATER" labels
-            if (firstCell === "ELECTRICAL" || secondCell === "ELECTRICAL") {
-              currentSection = "electrical";
-              console.log("Found ELECTRICAL section marker at row", i);
-              continue;
-            }
-            if (firstCell === "WATER" || secondCell === "WATER") {
-              currentSection = "water";
-              console.log("Found WATER section marker at row", i);
-              continue;
-            }
-
-            // Detect header rows (contains "Premises ID")
-            const rowStrings = row.map((cell) => String(cell || "").toLowerCase());
-            const hasPremisesId = rowStrings.some((cell) => cell.includes("premises id"));
-            
-            if (hasPremisesId) {
-              headerRow = row;
-              columnMap = {};
-              row.forEach((cell, idx) => {
-                const normalized = normalizeHeader(String(cell || ""));
-                if (normalized) columnMap[normalized] = idx;
-              });
-              console.log("Found header row at", i, "for section:", currentSection);
-              console.log("Column map:", columnMap);
-              continue;
-            }
-
-            // Skip if we don't have a section or headers yet
-            if (!currentSection || !headerRow || Object.keys(columnMap).length === 0) continue;
-
-            // Get premises ID - could be in different columns
-            const premisesIdIdx = columnMap["premisesid"] ?? columnMap["premiseid"] ?? 1;
-            const premisesId = String(row[premisesIdIdx] || "").trim();
-
-            // Skip empty rows or header-like rows
-            if (!premisesId || premisesId.toLowerCase().includes("premises")) continue;
-
-            // Helper to get column value
-            const getCol = (keys: string[]): string => {
-              for (const key of keys) {
-                if (columnMap[key] !== undefined) {
-                  return String(row[columnMap[key]] || "").trim();
-                }
-              }
-              return "";
-            };
-
-            if (currentSection === "electrical") {
-              const meterSerial = getCol(["meterserialnumber", "meterserno", "serialnumber", "serial"]);
-              
-              const asset: ParsedAsset = {
-                premises_id: premisesId,
-                trade_as: getCol(["tradeas", "trade", "tenant"]) || getCol(["tenant"]),
-                asset_category: "electrical_meter",
-                meter_type: getCol(["directdcurrenttransformerct", "directcurrenttransformer", "type", "metertype"]),
-                ct_ratio: getCol(["ctratio", "ratio"]),
-                meter_serial_number: meterSerial,
-                breaker_size: getCol(["breakersize", "breaker"]),
-                reading_at_commissioning: getCol(["readingatcomissioningofnewmeter", "readingatcommissioning", "reading"]),
-                old_meter_serial_number: getCol(["oldmeterserialnumber", "oldmeterserial", "oldserial"]),
-                last_meter_read_old: getCol(["lastmeterreadofoldmeter", "lastmeterread"]),
-                comments: getCol(["comments", "comment", "notes"]),
-              };
-
-              if (meterSerial && meterSerial.length > 0) {
-                parsedAssets.push(asset);
-              }
-            } else if (currentSection === "water") {
-              const meterSerial = getCol(["meterserialnumber", "meterserno", "serialnumber", "serial"]);
-              
-              // Skip invalid meter serials
-              if (!meterSerial || meterSerial === "TBC" || meterSerial.toLowerCase().includes("no water")) {
-                continue;
-              }
-
-              const asset: ParsedAsset = {
-                premises_id: premisesId,
-                trade_as: getCol(["tradeas", "trade", "tenant"]) || getCol(["tenant"]),
-                asset_category: "water_meter",
-                meter_serial_number: meterSerial,
-                tag: getCol(["tag"]),
-                mbus_gateway_index: getCol(["mbusgatewayindex", "mbusindex", "gatewayindex"]),
-                reading_at_commissioning: getCol(["readingatcomissioningofnewmeter", "readingatcommissioning", "reading"]),
-                last_meter_read_old: getCol(["lastmeterreadofoldmeter", "lastmeterread"]),
-                comments: getCol(["comments", "comment", "notes"]),
-              };
-
-              parsedAssets.push(asset);
-            }
-          }
-
-          console.log("Total parsed assets:", parsedAssets.length);
-          if (parsedAssets.length > 0) {
-            console.log("Sample assets:", parsedAssets.slice(0, 3));
-          }
-
-          resolve(parsedAssets);
-        } catch (error) {
-          console.error("Excel parsing error:", error);
-          reject(error);
-        }
-      };
-      reader.onerror = reject;
-      reader.readAsArrayBuffer(file);
-    });
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(buffer), { type: "array" });
+    const worksheet = workbook.Sheets[workbook.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" }) as (string | number)[][];
+    return parseAssetRows(rows);
   };
 
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
-      toast.error("Please upload an Excel file (.xlsx or .xls)");
-      return;
-    }
-
+  const insertAssets = async (parsedAssets: ParsedAsset[], replaceExisting: boolean) => {
     setUploading(true);
     try {
-      toast.info("Parsing Excel file...");
-      const parsedAssets = await parseExcelFile(file);
-
-      if (parsedAssets.length === 0) {
-        toast.error("No valid assets found in the file");
-        return;
-      }
-
-      toast.info(`Found ${parsedAssets.length} assets. Importing...`);
-
-      const importBatchId = crypto.randomUUID();
       const { data: user } = await supabase.auth.getUser();
+      const importBatchId = crypto.randomUUID();
 
       const assetsToInsert = parsedAssets.map((asset) => ({
         site_id: siteId,
         premises_id: asset.premises_id,
         trade_as: asset.trade_as || null,
-        asset_category: asset.asset_category,
+        asset_category: "electrical_meter" as const,
         meter_serial_number: asset.meter_serial_number || null,
         meter_type: asset.meter_type || null,
         ct_ratio: asset.ct_ratio || null,
@@ -366,31 +188,83 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
         reading_at_commissioning: asset.reading_at_commissioning || null,
         old_meter_serial_number: asset.old_meter_serial_number || null,
         last_meter_read_old: asset.last_meter_read_old || null,
-        tag: asset.tag || null,
-        mbus_gateway_index: asset.mbus_gateway_index || null,
         comments: asset.comments || null,
         created_by: user?.user?.id || null,
         import_batch_id: importBatchId,
       }));
 
-      const { error } = await supabase.from("site_assets").insert(assetsToInsert);
+      // Insert the new batch first so a failure here never destroys the existing register.
+      const { error: insertError } = await supabase.from("site_assets").insert(assetsToInsert);
+      if (insertError) throw insertError;
 
-      if (error) throw error;
-
-      const electricalCount = parsedAssets.filter((a) => a.asset_category === "electrical_meter").length;
-      const waterCount = parsedAssets.filter((a) => a.asset_category === "water_meter").length;
+      // Replace semantics: a register import represents the full electrical asset list for the
+      // site. With the new rows safely in, drop the previous electrical rows (anything not in
+      // this batch). If cleanup fails the user only sees duplicates, not data loss.
+      if (replaceExisting) {
+        const { error: cleanupError } = await supabase
+          .from("site_assets")
+          .delete()
+          .eq("site_id", siteId)
+          .eq("asset_category", "electrical_meter")
+          .or(`import_batch_id.is.null,import_batch_id.neq.${importBatchId}`);
+        if (cleanupError) {
+          console.error("Failed to clear previous register:", cleanupError);
+          toast.warning("Imported new meters, but couldn't remove the old ones — you may see duplicates.");
+        }
+      }
 
       toast.success(
-        `Imported ${parsedAssets.length} assets (${electricalCount} electrical, ${waterCount} water meters)`
+        `${replaceExisting ? "Replaced register with" : "Imported"} ${parsedAssets.length} electrical meter${parsedAssets.length === 1 ? "" : "s"}`,
       );
+      setPendingImport(null);
       refetch();
     } catch (error) {
       console.error("Error importing assets:", error);
       toast.error("Failed to import assets");
+      if (replaceExisting) setPendingImport(parsedAssets); // preserve parsed rows for one-click retry
     } finally {
       setUploading(false);
-      e.target.value = "";
     }
+  };
+
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-selecting the same file later
+    if (!file) return;
+
+    if (!file.name.endsWith(".xlsx") && !file.name.endsWith(".xls")) {
+      toast.error("Please upload an Excel file (.xlsx or .xls)");
+      return;
+    }
+    if (file.size > MAX_IMPORT_BYTES) {
+      toast.error("File is too large (max 10MB)");
+      return;
+    }
+
+    setUploading(true);
+    let parsedAssets: ParsedAsset[];
+    try {
+      toast.info("Parsing Excel file...");
+      parsedAssets = await parseExcelFile(file);
+    } catch (error) {
+      console.error("Excel parsing error:", error);
+      toast.error("Could not read that Excel file");
+      setUploading(false);
+      return;
+    }
+    setUploading(false);
+
+    if (parsedAssets.length === 0) {
+      toast.error("No electrical meters found in the file");
+      return;
+    }
+
+    // If a register already exists, confirm replacement before writing.
+    if (electricalAssets.length > 0) {
+      setPendingImport(parsedAssets);
+      return;
+    }
+    await insertAssets(parsedAssets, false);
   };
 
   const handleDeleteAllAssets = async () => {
@@ -418,16 +292,16 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
         <div>
           <h2 className="text-2xl font-bold tracking-tight">Asset Verification</h2>
           <p className="text-muted-foreground">
-            Manage and verify assets for {siteName}
+            Manage and verify electrical meters for {siteName}
           </p>
         </div>
         {!readOnly && (
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => refetch()} disabled={isLoading}>
+            <Button variant="outline" size="sm" onClick={() => retry()} disabled={isLoading}>
               <RefreshCw className={`h-4 w-4 mr-2 ${isLoading ? "animate-spin" : ""}`} />
               Refresh
             </Button>
-            {assets.length > 0 && (
+            {electricalAssets.length > 0 && (
               <Button
                 variant="outline"
                 size="sm"
@@ -462,12 +336,6 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
       <div className="grid gap-4 md:grid-cols-2">
         <Card>
           <CardHeader className="pb-2">
-            <CardDescription>Total Assets</CardDescription>
-            <CardTitle className="text-3xl">{electricalAssets.length}</CardTitle>
-          </CardHeader>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
             <div className="flex items-center gap-2">
               <Zap className="h-4 w-4 text-amber-500" />
               <CardDescription>Electrical Meters</CardDescription>
@@ -475,10 +343,35 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
             <CardTitle className="text-3xl">{electricalAssets.length}</CardTitle>
           </CardHeader>
         </Card>
+        <Card>
+          <CardHeader className="pb-2">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-green-600" />
+              <CardDescription>Verified via inspections</CardDescription>
+            </div>
+            <CardTitle className="text-3xl">{verifiedCount}</CardTitle>
+          </CardHeader>
+        </Card>
       </div>
 
       {/* Asset Tables */}
-      {assets.length === 0 ? (
+      {isError ? (
+        <Card className="border-destructive/30">
+          <CardContent className="flex flex-col items-center justify-center py-12 text-center">
+            <div className="h-16 w-16 rounded-full bg-destructive/10 flex items-center justify-center mb-4">
+              <AlertTriangle className="h-8 w-8 text-destructive" />
+            </div>
+            <h3 className="font-semibold text-lg mb-2">Unable to load assets</h3>
+            <p className="text-muted-foreground max-w-md mb-4">
+              Something went wrong loading the asset data. Please try again.
+            </p>
+            <Button variant="outline" onClick={() => retry()}>
+              <RefreshCw className="h-4 w-4 mr-2" />
+              Retry
+            </Button>
+          </CardContent>
+        </Card>
+      ) : electricalAssets.length === 0 ? (
         <Card className="border-dashed">
           <CardContent className="flex flex-col items-center justify-center py-12 text-center">
             <div className="h-16 w-16 rounded-full bg-muted flex items-center justify-center mb-4">
@@ -486,10 +379,9 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
             </div>
             <h3 className="font-semibold text-lg mb-2">No Assets Available</h3>
             <p className="text-muted-foreground max-w-md mb-4">
-              {readOnly 
+              {readOnly
                 ? "No asset data has been imported for this site yet."
-                : "Upload an Excel asset register to import electrical and water meter data for this site."
-              }
+                : "Upload an Excel asset register to import electrical meter data for this site."}
             </p>
             {!readOnly && (
               <>
@@ -534,8 +426,8 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
           </TabsList>
 
           <TabsContent value="verification">
-            <AssetComparisonTable 
-              assets={electricalAssets} 
+            <AssetComparisonTable
+              assets={electricalAssets}
               inspectionMeterMatches={inspectionMeterMatches}
               siteName={siteName}
               readOnly={readOnly}
@@ -562,7 +454,8 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
           <AlertDialogHeader>
             <AlertDialogTitle>Delete All Assets?</AlertDialogTitle>
             <AlertDialogDescription>
-              This will permanently delete all {assets.length} assets from this site. This action cannot be undone.
+              This will permanently delete all {electricalAssets.length} electrical meters from this site. This action
+              cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -573,6 +466,33 @@ export const AssetVerification = ({ siteId, siteName, readOnly = false, accessTo
               disabled={deleting}
             >
               {deleting ? "Deleting..." : "Delete All"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Replace-on-import Confirmation Dialog */}
+      <AlertDialog open={!!pendingImport} onOpenChange={(open) => !open && setPendingImport(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Replace existing register?</AlertDialogTitle>
+            <AlertDialogDescription>
+              This site already has {electricalAssets.length} electrical meter{electricalAssets.length === 1 ? "" : "s"}.
+              Importing will replace them with the {pendingImport?.length ?? 0} meter
+              {(pendingImport?.length ?? 0) === 1 ? "" : "s"} from this file. This cannot be undone.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={uploading}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={async () => {
+                const toImport = pendingImport;
+                setPendingImport(null);
+                if (toImport) await insertAssets(toImport, true);
+              }}
+              disabled={uploading}
+            >
+              {uploading ? "Replacing..." : "Replace"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
