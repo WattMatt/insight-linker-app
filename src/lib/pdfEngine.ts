@@ -87,6 +87,9 @@ export interface ReportGeneratorOptions {
   options?: {
     includeCoverPage?: boolean;
     skipCoverPageInHeaderFooter?: boolean;
+    // For reports that supply their OWN first-page cover as content (includeCoverPage:false):
+    // skip the running header/footer on page 1 so the cover isn't stamped with a banner + page number.
+    skipFirstPageHeaderFooter?: boolean;
     logoDataUrl?: string | null;
     organizationName?: string;
     filename?: string;
@@ -886,6 +889,7 @@ export async function generateReport(opts: ReportGeneratorOptions): Promise<Gene
   const {
     includeCoverPage = !!coverPage,
     skipCoverPageInHeaderFooter = true,
+    skipFirstPageHeaderFooter = false,
     logoDataUrl,
     organizationName,
     filename,
@@ -912,11 +916,14 @@ export async function generateReport(opts: ReportGeneratorOptions): Promise<Gene
 
   // Create document definition
   const hasCoverPage = includeCoverPage && !!coverPage;
+  // Skip the running header/footer on page 1 when the engine drew the cover, OR when the
+  // report supplied its own first-page cover as content.
+  const skipFirst = (skipCoverPageInHeaderFooter && hasCoverPage) || skipFirstPageHeaderFooter;
   const docDefinition: TDocumentDefinitions = createBaseDocDefinition(allContent, {
     title,
     author: organizationName || 'Asset Management System',
-    header: createPageHeader(title, skipCoverPageInHeaderFooter && hasCoverPage),
-    footer: createPageFooter(skipCoverPageInHeaderFooter && hasCoverPage),
+    header: createPageHeader(title, skipFirst),
+    footer: createPageFooter(skipFirst),
     pageMargins,
   });
 
