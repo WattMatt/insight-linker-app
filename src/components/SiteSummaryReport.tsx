@@ -46,11 +46,7 @@ import {
 import { factorScores, siteHealthScore } from "@/lib/siteHealth";
 import { renderSubsectionGrid } from "@/lib/pdfSubsectionRenderer";
 import type { SubsectionCardData } from "@/lib/subsectionCardSpec";
-
-// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
-const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
-const isSnagOpen = (status: string | null | undefined): boolean =>
-  !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+import { isSnagOpen } from "@/lib/subsectionStatus";
 
 interface SiteSummaryReportProps {
   siteId: string;

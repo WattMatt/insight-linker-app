@@ -20,11 +20,7 @@ import {
 } from '@/components/ui/dialog';
 import { Progress } from '@/components/ui/progress';
 import { ReportSection } from './ReportSettingsDialog';
-
-// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
-const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
-const isSnagOpen = (status: string | null | undefined): boolean =>
-  !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+import { isSnagOpen } from '@/lib/subsectionStatus';
 
 interface SiteData {
   id: string;
