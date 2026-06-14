@@ -56,6 +56,7 @@ interface SiteSummaryReportProps {
   siteId: string;
   siteName: string;
   clientName: string;
+  onSaved?: () => void;
 }
 
 interface TemplateConfig {
@@ -82,7 +83,7 @@ const DEFAULT_CUSTOMIZATION: Partial<ReportCustomization> = {
   includeTableOfContents: false,
 };
 
-export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryReportProps) => {
+export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: SiteSummaryReportProps) => {
   const [generating, setGenerating] = useState(false);
   const [saving, setSaving] = useState(false);
   const [previewData, setPreviewData] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
@@ -751,6 +752,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName }: SiteSummaryR
 
       if (result.success) {
         toast.success("Report saved to site documents!");
+        onSaved?.();
       } else {
         toast.error(result.error || "Failed to save report");
       }
