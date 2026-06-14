@@ -7,6 +7,7 @@ import { Subsection, Site } from "@/types/site";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
+import { resolveQrBaseUrl, publicSubsectionUrl } from "@/lib/qrBaseUrl";
 import JSZip from 'jszip';
 import { generatePdfBlob, DEFAULT_STYLES } from "@/lib/pdfMakeUtils";
 
@@ -98,7 +99,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                 .select('qr_base_url')
                 .single();
 
-            const baseUrl = (qrSettings?.qr_base_url || window.location.origin).replace(/\/$/, '');
+            const baseUrl = resolveQrBaseUrl(qrSettings?.qr_base_url);
             const qrCodeDataUrls: { dataUrl: string; name: string }[] = [];
 
             for (const subsection of subsections) {
@@ -298,7 +299,7 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                                 <CardContent className="p-4">
                                     <div className="bg-muted rounded-lg mb-3 flex items-center justify-center relative">
                                         <LabeledQRCode
-                                            url={`${(qrBaseUrl || window.location.origin).replace(/\/$/, '')}/public/subsections/${subsection.id}`}
+                                            url={publicSubsectionUrl(subsection.id, qrBaseUrl)}
                                             siteName={site.name}
                                             subsectionName={subsection.name}
                                             logoUrl={companyLogo || undefined}
@@ -306,28 +307,8 @@ export const QRAnalytics: React.FC<QRAnalyticsProps> = ({
                                     </div>
                                     <h3 className="font-semibold text-sm mb-1">{subsection.name}</h3>
                                     {subsection.tenant_name && (
-                                        <p className="text-xs text-muted-foreground mb-2">{subsection.tenant_name}</p>
+                                        <p className="text-xs text-muted-foreground">{subsection.tenant_name}</p>
                                     )}
-                                    <div className="flex justify-between items-center">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            className="w-full"
-                                            onClick={() => {
-                                                if (subsection.qr_code_url) {
-                                                    const link = document.createElement('a');
-                                                    link.href = subsection.qr_code_url;
-                                                    link.download = `${site.name}-${subsection.name}-QR.png`;
-                                                    link.click();
-                                                } else {
-                                                    toast.error("QR Code image not available yet. Please generate all QR codes first.");
-                                                }
-                                            }}
-                                        >
-                                            <Download className="h-4 w-4 mr-2" />
-                                            Download
-                                        </Button>
-                                    </div>
                                 </CardContent>
                             </Card>
                         ))}

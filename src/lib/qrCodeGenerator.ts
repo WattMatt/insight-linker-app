@@ -1,5 +1,6 @@
 import QRCode from 'qrcode';
 import { supabase } from '@/integrations/supabase/client';
+import { publicSubsectionUrl } from '@/lib/qrBaseUrl';
 
 interface GenerateQRCodeOptions {
   subsectionId: string;
@@ -20,16 +21,13 @@ export async function generateAndUploadQRCode({
       .from('settings')
       .select('qr_base_url')
       .single();
-    
-    console.log('Settings query result:', { settings, settingsError });
-    
-    // Use settings qr_base_url, or default to production domain (not window.location.origin for dev/preview)
-    const baseUrl = (settings?.qr_base_url || (typeof window !== 'undefined' ? window.location.origin : 'https://insight-linker-app.vercel.app')).replace(/\/$/, '');
-    console.log('Using base URL for QR code:', baseUrl);
-    
-    // Construct the public subsection URL
-    const qrTargetUrl = `${baseUrl}/public/subsections/${subsectionId}`;
-    console.log('QR code will point to:', qrTargetUrl);
+
+    if (settingsError) console.error('Failed to read qr_base_url from settings:', settingsError);
+
+    // Resolve the canonical public origin (settings.qr_base_url, else the prod
+    // default). Never window.location.origin — a preview/staging origin would be
+    // baked permanently into the QR PNG. See src/lib/qrBaseUrl.ts.
+    const qrTargetUrl = publicSubsectionUrl(subsectionId, settings?.qr_base_url);
     
     // Create canvas
     const canvas = document.createElement('canvas');
@@ -175,7 +173,6 @@ export async function generateAndUploadQRCode({
 
     if (updateError) throw updateError;
 
-    console.log('QR code generated and uploaded:', urlData.publicUrl);
     return urlData.publicUrl;
   } catch (error) {
     console.error('Error generating QR code:', error);

@@ -22,14 +22,31 @@ serve(async (req) => {
     // Define UUID regex at the top for reuse
     const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
+    // Initialize Supabase client with the service role. The tier-2 lockdown
+    // removed anon SELECT on subsections; these reads are safe to privilege —
+    // the function never returns row data, only resolves an id and 302-redirects.
+    // Also resolve the public origin from settings.qr_base_url (fallback: prod
+    // domain) — the SAME canonical origin QR generation uses (src/lib/qrBaseUrl.ts),
+    // so legacy redirects always land on the live app.
+    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
+    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
+    const supabase = createClient(supabaseUrl, supabaseKey);
+
+    const { data: settingsRow } = await supabase
+      .from('settings')
+      .select('qr_base_url')
+      .limit(1)
+      .maybeSingle();
+    const appOrigin = (settingsRow?.qr_base_url?.trim() || 'https://watsonmattheus.com').replace(/\/$/, '');
+    console.log('App origin:', appOrigin);
+
     // Handle malformed URLs with double slashes (from old QR codes)
     // e.g., //public/subsections/xxx should redirect to /public/subsections/xxx
     if (path.startsWith('//public/subsections/') || path.startsWith('/public/subsections/')) {
       const cleanPath = path.replace(/^\/+/, ''); // Remove leading slashes
       const subsectionId = cleanPath.replace('public/subsections/', '');
-      
+
       if (subsectionId && uuidRegex.test(subsectionId)) {
-        const appOrigin = 'https://watsonmattheus.com';
         const redirectUrl = `${appOrigin}/public/subsections/${subsectionId}`;
         console.log('Redirecting malformed URL to:', redirectUrl);
         return new Response(null, {
@@ -48,18 +65,6 @@ serve(async (req) => {
         headers: corsHeaders 
       });
     }
-
-    // Initialize Supabase client.
-    // Service role (not anon): the tier-2 lockdown removed anon SELECT on
-    // subsections, and this function's reads are safe to privilege — it never
-    // returns row data, only resolves an id and 302-redirects to the public page.
-    const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
-    const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-    const supabase = createClient(supabaseUrl, supabaseKey);
-
-    // Use the custom domain
-    const appOrigin = 'https://watsonmattheus.com';
-    console.log('App origin:', appOrigin);
 
     // Check if it's a UUID (new Supabase format)
     if (uuidRegex.test(path.replace(/^\//, ''))) {

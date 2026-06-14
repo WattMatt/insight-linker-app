@@ -9,6 +9,7 @@ import { QrCode, Search, ExternalLink, Building2, MapPin, Layers, Download } fro
 import { useNavigate } from "@/lib/navigation";
 import { useToast } from "@/hooks/use-toast";
 import { LabeledQRCode } from "@/components/LabeledQRCode";
+import { publicSubsectionUrl } from "@/lib/qrBaseUrl";
 
 interface QRCodeEntry {
   id: string;
@@ -272,7 +273,7 @@ const QRCodes = () => {
           {selectedQR && selectedQR.sites && (
             <div className="py-4">
               <LabeledQRCode
-                url={`${(qrBaseUrl || window.location.origin).replace(/\/$/, '')}/public/subsections/${selectedQR.id}`}
+                url={publicSubsectionUrl(selectedQR.id, qrBaseUrl)}
                 siteName={selectedQR.sites.name}
                 subsectionName={selectedQR.name}
                 logoUrl={companyLogo || undefined}

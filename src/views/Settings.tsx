@@ -285,7 +285,7 @@ const Settings = () => {
                   id="qr-base-url"
                   value={qrBaseUrl}
                   onChange={(e) => setQrBaseUrl(e.target.value)}
-                  placeholder="https://insight-linker-app.vercel.app"
+                  placeholder="https://watsonmattheus.com"
                 />
                 <Button onClick={handleQrBaseUrlUpdate}>
                   Update

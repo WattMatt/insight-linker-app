@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { getCategoryAbbreviation } from "@/lib/subsectionCategories";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { savePDFToDocuments, getReportCategoryName } from "@/lib/pdfDocumentSaver";
+import { resolveQrBaseUrl, publicSubsectionUrl } from "@/lib/qrBaseUrl";
 import QRCode from "qrcode";
 import {
   generateReport,
@@ -134,9 +135,8 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
   // Helper function to generate QR code as base64 data URL
   const generateQRCodeBase64 = async (subsectionId: string, qrBaseUrl: string): Promise<string | null> => {
     try {
-      const baseUrl = (qrBaseUrl || 'https://watsonmattheus.com').replace(/\/$/, '');
-      const qrTargetUrl = `${baseUrl}/public/subsections/${subsectionId}`;
-      
+      const qrTargetUrl = publicSubsectionUrl(subsectionId, qrBaseUrl);
+
       const dataUrl = await QRCode.toDataURL(qrTargetUrl, {
         width: 150,
         margin: 1,
@@ -271,7 +271,7 @@ export const SiteSummaryReport = ({ siteId, siteName, clientName, onSaved }: Sit
 
     const allInspections = inspectionsRes.data || [];
     const siteAssets = assetsRes.data || [];
-    const qrBaseUrl = settingsRes.data?.qr_base_url || (typeof window !== 'undefined' ? window.location.origin : 'https://insight-linker-app.vercel.app');
+    const qrBaseUrl = resolveQrBaseUrl(settingsRes.data?.qr_base_url);
 
     // Fetch snags with full details for card rendering
     const snagsRes = subsectionIds.length > 0 
