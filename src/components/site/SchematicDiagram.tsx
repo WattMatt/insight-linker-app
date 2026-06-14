@@ -50,9 +50,17 @@ import {
   RefreshCw,
   Replace,
   ScanSearch,
+  ZoomIn,
+  ZoomOut,
   Loader2
 } from "lucide-react";
 import { FullscreenImageViewer } from "@/components/FullscreenImageViewer";
+import {
+  parseStorageUrl,
+  nextBlockIdentifier,
+  computeAutoMatches,
+  matchSubsectionId,
+} from "@/lib/schematicMatching";
 
 // Initialize PDF.js worker for rendering PDF documents
 pdfjs.GlobalWorkerOptions.workerSrc = `//unpkg.com/pdfjs-dist@${pdfjs.version}/build/pdf.worker.min.mjs`;
@@ -83,6 +91,7 @@ interface SchematicBlock {
   width: number;
   height: number;
   is_auto_matched: boolean;
+  page_number?: number;
 }
 
 interface Schematic {
@@ -90,22 +99,10 @@ interface Schematic {
   site_id: string;
   file_name: string;
   file_url: string;
-  detected_regions?: DetectedRegion[];
-  detection_status?: string;
-  regions_detected_at?: string;
   // Calibration fields
   calibrated_width?: number | null;
   calibrated_height?: number | null;
   is_calibrated?: boolean;
-}
-
-interface DetectedRegion {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-  label?: string;
-  confidence?: number;
 }
 
 interface InspectionTenantMatch {
@@ -240,11 +237,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     };
   }, []);
 
-  // Wheel zoom (zoom-to-cursor) for both View and Edit modes
+  // Wheel zoom (zoom-to-cursor) for both View and Edit modes.
+  // Only zoom on a pinch gesture (trackpads send wheel events with ctrlKey) or Ctrl/Cmd+wheel;
+  // a plain wheel scrolls the page normally instead of being hijacked by the diagram.
   // PDF is re-rendered at zoom resolution so no CSS scale needed - only pan offset
   const handleWheelZoom = useCallback((e: WheelEvent) => {
     if (!schematic) return;
-    if (e.ctrlKey || e.metaKey) return;
+    if (!e.ctrlKey && !e.metaKey) return;
 
     e.preventDefault();
     e.stopPropagation();
@@ -391,13 +390,54 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   }, [schematic?.id]);
 
-  // Pan handlers: Shift+drag / right-click drag / middle-click in all modes, plus left-drag when zoomed
-  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  // Active touch pointers (for one-finger pan vs two-finger pinch) and the in-progress pinch.
+  const activePointers = useRef<Map<number, { x: number; y: number }>>(new Map());
+  const pinchState = useRef<{ dist: number; scale: number; midX: number; midY: number } | null>(null);
+
+  // Programmatic zoom (on-screen +/- buttons) — zooms toward the container centre.
+  const adjustZoom = (factor: number) => {
+    const container = containerRef.current;
+    setScale((prev) => {
+      const next = Math.max(0.5, Math.min(5, prev * factor));
+      if (container && next !== prev) {
+        const rect = container.getBoundingClientRect();
+        const cx = rect.width / 2;
+        const cy = rect.height / 2;
+        const ratio = next / prev;
+        const cur = panOffsetRef.current;
+        setPanOffset({ x: cx - ratio * (cx - cur.x), y: cy - ratio * (cy - cur.y) });
+      }
+      return next;
+    });
+  };
+
+  // Pan/zoom via pointer events (mouse, touch and pen unified).
+  // Mouse path is unchanged: Shift+drag / right- or middle-drag in all modes, left-drag when zoomed.
+  // Touch path: one finger pans (in edit mode or when zoomed), two fingers pinch-zoom.
+  const handleMouseDown = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+      if (activePointers.current.size === 2) {
+        const pts = [...activePointers.current.values()];
+        pinchState.current = {
+          dist: Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y),
+          scale,
+          midX: (pts[0].x + pts[1].x) / 2,
+          midY: (pts[0].y + pts[1].y) / 2,
+        };
+        setIsPanning(false);
+        return;
+      }
+    }
+
     const canModifierPan = isShiftPressed || e.button === 2 || e.button === 1;
     // In both view and edit mode, allow left-click pan when zoomed (on empty area)
     const canZoomPan = scale > 1 && e.button === 0 && !isAddingBlock && !isCalibrating;
+    // Touch: one finger pans when there's something to explore (zoomed) or while editing.
+    const canTouchPan =
+      e.pointerType === 'touch' && !isAddingBlock && !isCalibrating && (isEditMode || scale > 1);
 
-    if (canModifierPan || canZoomPan) {
+    if (canModifierPan || canZoomPan || canTouchPan) {
       e.preventDefault();
       setIsPanning(true);
       setPanStart({ x: e.clientX - panOffset.x, y: e.clientY - panOffset.y });
@@ -412,7 +452,29 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseMove = (e: React.PointerEvent<HTMLDivElement>) => {
+    // Two-finger pinch-zoom toward the gesture midpoint.
+    if (e.pointerType === 'touch' && activePointers.current.has(e.pointerId)) {
+      activePointers.current.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    }
+    if (pinchState.current && activePointers.current.size >= 2) {
+      const pts = [...activePointers.current.values()];
+      const dist = Math.hypot(pts[0].x - pts[1].x, pts[0].y - pts[1].y);
+      const container = containerRef.current;
+      if (!container || pinchState.current.dist === 0) return;
+      const newScale = Math.max(0.5, Math.min(5, pinchState.current.scale * (dist / pinchState.current.dist)));
+      const rect = container.getBoundingClientRect();
+      const midX = pinchState.current.midX - rect.left;
+      const midY = pinchState.current.midY - rect.top;
+      setScale((prev) => {
+        const ratio = newScale / prev;
+        const cur = panOffsetRef.current;
+        setPanOffset({ x: midX - ratio * (midX - cur.x), y: midY - ratio * (midY - cur.y) });
+        return newScale;
+      });
+      return;
+    }
+
     // Handle panning (works in all modes)
     if (isPanning) {
       setPanOffset({
@@ -421,12 +483,16 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       });
       return;
     }
-    
+
     // Block dragging/resizing only in edit mode
     if (!isEditMode) return;
   };
 
-  const handleMouseUp = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleMouseUp = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      activePointers.current.delete(e.pointerId);
+      if (activePointers.current.size < 2) pinchState.current = null;
+    }
     if (isPanning) {
       e.preventDefault();
       setIsPanning(false);
@@ -440,8 +506,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
+  // Clear pointer/pinch tracking if a touch is cancelled (e.g. palm rejection).
+  const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
+    if (e.pointerType === 'touch') {
+      activePointers.current.delete(e.pointerId);
+      if (activePointers.current.size < 2) pinchState.current = null;
+    }
+    setIsPanning(false);
+  };
+
   // Block resize handlers
-  const handleBlockResizeStart = (e: React.MouseEvent, blockId: string, corner: string) => {
+  const handleBlockResizeStart = (e: React.PointerEvent, blockId: string, corner: string) => {
     if (!isEditMode) return;
     e.stopPropagation();
     e.preventDefault();
@@ -453,7 +528,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     setOriginalBlock({ x: block.x_position, y: block.y_position, width: block.width, height: block.height });
   };
 
-  const handleBlockDragStart = (e: React.MouseEvent, blockId: string) => {
+  const handleBlockDragStart = (e: React.PointerEvent, blockId: string) => {
     if (!isEditMode || e.button !== 0) return;
     e.stopPropagation();
     e.preventDefault();
@@ -468,7 +543,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   // Helper to find snap points from other blocks
   // Find snap points - coordinates are TOP-LEFT based
   const findSnapPoints = (currentBlockId: string, newX: number, newY: number, width: number, height: number) => {
-    const otherBlocks = blocks.filter(b => b.id !== currentBlockId);
+    // Only snap against blocks on the current page.
+    const otherBlocks = blocks.filter(
+      b => b.id !== currentBlockId && (b.page_number ?? 1) === pageNumber
+    );
     let snapX: number | null = null;
     let snapY: number | null = null;
     let snappedX = newX;
@@ -550,7 +628,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   };
 
   // Handle resize and drag - coordinates are PERCENTAGES (0-100)
-  const handleBlockResizeMove = (e: React.MouseEvent) => {
+  const handleBlockResizeMove = (e: React.PointerEvent) => {
     if (!originalBlock || !isEditMode || !contentRef.current) return;
     
     // Get container dimensions to convert pixels to percentages
@@ -685,10 +763,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (schematicError) throw schematicError;
       if (schematicData) {
         setSchematic({
-          ...schematicData,
-          detected_regions: Array.isArray(schematicData.detected_regions) 
-            ? (schematicData.detected_regions as unknown as DetectedRegion[]) 
-            : [],
+          id: schematicData.id,
+          site_id: schematicData.site_id,
+          file_name: schematicData.file_name,
+          file_url: schematicData.file_url,
           calibrated_width: schematicData.calibrated_width,
           calibrated_height: schematicData.calibrated_height,
           is_calibrated: schematicData.is_calibrated,
@@ -797,9 +875,13 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return inspectionMeterMatches.get(normalizedSerial) || null;
   };
 
-  // Handle file upload
+  // Handle file upload — creates the first schematic OR replaces the existing PDF.
+  // site_schematics is UNIQUE(site_id), so a replace MUST update the existing row; the old
+  // insert-only path always hit the unique constraint when a schematic already existed.
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
+    // Reset the input so re-selecting the same file still fires onChange.
+    event.target.value = "";
     if (!file) return;
 
     if (!file.name.toLowerCase().endsWith('.pdf')) {
@@ -808,6 +890,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
 
     setUploading(true);
+    const previous = schematic;
     try {
       const fileName = `${siteId}/schematic-${Date.now()}.pdf`;
       const { data: uploadData, error: uploadError } = await supabase.storage
@@ -820,28 +903,57 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         .from("documents")
         .getPublicUrl(uploadData.path);
 
-      const { data: schematicData, error: schematicError } = await supabase
-        .from("site_schematics")
-        .insert({
-          site_id: siteId,
-          file_name: file.name,
-          file_url: urlData.publicUrl,
-        })
-        .select()
-        .single();
+      if (previous) {
+        // REPLACE: point the existing row at the new file. Blocks/calibration are kept
+        // (positions are percentage-based, so a re-exported drawing stays aligned).
+        const { data: updated, error: updateError } = await supabase
+          .from("site_schematics")
+          .update({ file_name: file.name, file_url: urlData.publicUrl })
+          .eq("id", previous.id)
+          .select()
+          .single();
 
-      if (schematicError) throw schematicError;
+        if (updateError) throw updateError;
 
-      const newSchematic: Schematic = {
-        id: schematicData.id,
-        site_id: schematicData.site_id,
-        file_name: schematicData.file_name,
-        file_url: schematicData.file_url,
-        detected_regions: [],
-        detection_status: schematicData.detection_status || 'pending',
-      };
-      setSchematic(newSchematic);
-      toast.success("Schematic uploaded successfully");
+        setSchematic({ ...previous, file_name: updated.file_name, file_url: updated.file_url });
+
+        // New PDF → re-measure dimensions and reset paging.
+        setDimensionsLoaded(false);
+        setOriginalPdfDimensions({ width: 0, height: 0 });
+        setNumPages(null);
+        setPageNumber(1);
+
+        // Best-effort: drop the now-orphaned previous PDF (remove() reports errors in-band,
+        // never throws, so a storage hiccup can't fail the replace).
+        const oldPath = parseStorageUrl(previous.file_url);
+        if (oldPath) await supabase.storage.from(oldPath.bucket).remove([oldPath.path]);
+
+        toast.success("Schematic replaced");
+      } else {
+        // CREATE: first schematic for this site.
+        const { data: created, error: insertError } = await supabase
+          .from("site_schematics")
+          .insert({
+            site_id: siteId,
+            file_name: file.name,
+            file_url: urlData.publicUrl,
+          })
+          .select()
+          .single();
+
+        if (insertError) throw insertError;
+
+        setSchematic({
+          id: created.id,
+          site_id: created.site_id,
+          file_name: created.file_name,
+          file_url: created.file_url,
+          calibrated_width: null,
+          calibrated_height: null,
+          is_calibrated: false,
+        });
+        toast.success("Schematic uploaded successfully");
+      }
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') console.error("Error uploading schematic:", error);
       toast.error(error.message || "Failed to upload schematic");
@@ -865,6 +977,10 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
       if (error) throw error;
 
+      // Best-effort: remove the underlying PDF so the bucket doesn't accumulate orphans.
+      const path = parseStorageUrl(schematic.file_url);
+      if (path) await supabase.storage.from(path.bucket).remove([path.path]);
+
       setSchematic(null);
       setBlocks([]);
       toast.success("Schematic deleted");
@@ -884,25 +1000,22 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     const clickXPercent = ((e.clientX - rect.left) / rect.width) * 100;
     const clickYPercent = ((e.clientY - rect.top) / rect.height) * 100;
 
-    // Use calibrated size if available, otherwise use defaults
-    const defaultWidthPercent = schematic.calibrated_width ?? 8;
-    const defaultHeightPercent = schematic.calibrated_height ?? 12;
-
-    // Skip AI detection entirely - just use calibrated or default size
-    let finalWidth = defaultWidthPercent;
-    let finalHeight = defaultHeightPercent;
+    // Block size: calibrated value if set, otherwise a sensible default.
+    const finalWidth = schematic.calibrated_width ?? 8;
+    const finalHeight = schematic.calibrated_height ?? 12;
 
     // Position is ALWAYS centered on click - this is deterministic and reliable
     let finalX = clickXPercent - (finalWidth / 2);
     let finalY = clickYPercent - (finalHeight / 2);
-    
+
     // Clamp to page bounds
     finalX = Math.max(0, Math.min(100 - finalWidth, finalX));
     finalY = Math.max(0, Math.min(100 - finalHeight, finalY));
 
-    const blockNumber = blocks.length + 1;
-    const blockIdentifier = `DB-${String(blockNumber).padStart(3, '0')}`;
-    
+    // Derive the next identifier from the max existing DB-number, not the block count,
+    // so deleting a middle block can't produce a duplicate identifier.
+    const blockIdentifier = nextBlockIdentifier(blocks);
+
     try {
       const { data, error } = await supabase
         .from("schematic_blocks")
@@ -914,6 +1027,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
           y_position: finalY,
           width: finalWidth,
           height: finalHeight,
+          page_number: pageNumber,
         })
         .select()
         .single();
@@ -988,13 +1102,15 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       let isAutoMatched = false;
 
       if (!matchedSubsectionId && editForm.block_identifier) {
-        const identifier = editForm.block_identifier.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        const matchedSub = subsections.find(s => {
-          const subName = s.name.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-          return subName.includes(identifier) || identifier.includes(subName);
-        });
-        if (matchedSub) {
-          matchedSubsectionId = matchedSub.id;
+        // Don't reuse a subsection already linked to a different block.
+        const used = new Set(
+          blocks
+            .filter(b => b.id !== selectedBlock.id && b.subsection_id)
+            .map(b => b.subsection_id as string)
+        );
+        const matchId = matchSubsectionId(editForm.block_identifier, subsections, used);
+        if (matchId) {
+          matchedSubsectionId = matchId;
           isAutoMatched = true;
         }
       }
@@ -1106,47 +1222,31 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  // Auto-match all blocks
+  // Auto-match all blocks (exact identifier↔subsection-name match, no subsection reused)
   const handleAutoMatch = async () => {
     if (!schematic) return;
 
-    let matchedCount = 0;
-    const updates: { id: string; subsection_id: string }[] = [];
+    const matches = computeAutoMatches(blocks, subsections);
 
-    blocks.forEach(block => {
-      if (block.subsection_id) return;
-
-      const identifier = block.block_identifier.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-      const matchedSub = subsections.find(s => {
-        const subName = s.name.toUpperCase().replace(/[^A-Z0-9-]/g, '');
-        return subName.includes(identifier) || identifier.includes(subName);
-      });
-
-      if (matchedSub) {
-        updates.push({ id: block.id, subsection_id: matchedSub.id });
-        matchedCount++;
-      }
-    });
-
-    if (updates.length === 0) {
+    if (matches.length === 0) {
       toast.info("No new matches found");
       return;
     }
 
     try {
-      for (const update of updates) {
+      for (const m of matches) {
         await supabase
           .from("schematic_blocks")
-          .update({ subsection_id: update.subsection_id, is_auto_matched: true })
-          .eq("id", update.id);
+          .update({ subsection_id: m.subsectionId, is_auto_matched: true })
+          .eq("id", m.blockId);
       }
 
       setBlocks(blocks.map(b => {
-        const update = updates.find(u => u.id === b.id);
-        return update ? { ...b, subsection_id: update.subsection_id, is_auto_matched: true } : b;
+        const m = matches.find(u => u.blockId === b.id);
+        return m ? { ...b, subsection_id: m.subsectionId, is_auto_matched: true } : b;
       }));
 
-      toast.success(`Auto-matched ${matchedCount} blocks`);
+      toast.success(`Auto-matched ${matches.length} block${matches.length === 1 ? '' : 's'}`);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error auto-matching:", error);
       toast.error("Failed to auto-match blocks");
@@ -1162,6 +1262,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setCalibrationStart(null);
       setCalibrationRect(null);
       setScale(1);
+      setPanOffset({ x: 0, y: 0 });
     } else {
       setIsEditMode(true);
     }
@@ -1184,7 +1285,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return wrapper?.getBoundingClientRect();
   };
 
-  const handleCalibrationMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleCalibrationMouseDown = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isCalibrating) return;
     
     const rect = getPdfWrapperRect();
@@ -1201,7 +1302,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     }
   };
 
-  const handleCalibrationMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+  const handleCalibrationMouseMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!isCalibrating || !calibrationStart) return;
     
     const rect = getPdfWrapperRect();
@@ -1467,14 +1568,34 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               <Button
                 variant="outline"
                 size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => adjustZoom(1 / 1.2)}
+                disabled={scale <= 0.5}
+                aria-label="Zoom out"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                className="h-6 w-6 p-0"
+                onClick={() => adjustZoom(1.2)}
+                disabled={scale >= 5}
+                aria-label="Zoom in"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
                 className="h-6 px-2"
-                onClick={() => setScale(1)}
+                onClick={() => { setScale(1); setPanOffset({ x: 0, y: 0 }); }}
                 disabled={scale === 1}
               >
                 Reset
               </Button>
               <span className="hidden md:inline text-muted-foreground/70">
-                Scroll to zoom • Shift+drag or right-click to pan
+                Pinch or Ctrl+scroll to zoom • drag to pan
               </span>
             </div>
 
@@ -1495,9 +1616,29 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         {/* Controls Overlay - Visible when not editing */}
         {!isEditMode && (
           <div className="absolute top-3 right-3 z-10 flex items-center gap-2">
-            {/* Zoom indicator and reset */}
+            {/* Zoom indicator and controls */}
             <div className="flex items-center gap-1 bg-background/90 backdrop-blur-sm rounded-md px-2 py-1 shadow-md text-xs">
-              <span className="text-muted-foreground">{Math.round(scale * 100)}%</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0"
+                onClick={() => adjustZoom(1 / 1.2)}
+                disabled={scale <= 0.5}
+                aria-label="Zoom out"
+              >
+                <ZoomOut className="h-3.5 w-3.5" />
+              </Button>
+              <span className="text-muted-foreground w-9 text-center">{Math.round(scale * 100)}%</span>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-5 w-5 p-0"
+                onClick={() => adjustZoom(1.2)}
+                disabled={scale >= 5}
+                aria-label="Zoom in"
+              >
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
               {scale !== 1 && (
                 <Button
                   variant="ghost"
@@ -1565,7 +1706,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
         {/* Pan/Zoom hint - visible when viewing */}
         {!isEditMode && scale === 1 && (
           <div className="absolute bottom-3 left-3 z-10 text-xs text-muted-foreground/70 bg-background/80 backdrop-blur-sm rounded px-2 py-1">
-            Scroll to zoom • Shift+drag to pan
+            Pinch or Ctrl+scroll to zoom • drag to pan
           </div>
         )}
         
@@ -1576,8 +1717,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               ? `${isCalibrating ? 'cursor-crosshair' : isAddingBlock ? 'cursor-crosshair' : isPanning ? 'cursor-grabbing' : isShiftPressed || scale > 1 ? 'cursor-grab' : 'cursor-default'}`
               : `${isPanning ? 'cursor-grabbing' : scale > 1 ? 'cursor-grab' : 'cursor-default'}`
           }`}
-          style={{ height: containerHeight, overscrollBehavior: 'none' }}
-          onMouseDown={(e) => {
+          style={{
+            height: containerHeight,
+            overscrollBehavior: 'none',
+            // Let the page scroll over the diagram at rest; capture touch only when there's
+            // something to manipulate (edit mode or zoomed in), so the user is never trapped.
+            touchAction: isEditMode || isCalibrating || scale > 1 ? 'none' : 'pan-y',
+          }}
+          onPointerDown={(e) => {
             if (isCalibrating) {
               handleCalibrationMouseDown(e);
             } else {
@@ -1585,7 +1732,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
             }
           }}
           onAuxClick={handleAuxClick}
-          onMouseMove={(e) => {
+          onPointerMove={(e) => {
             if (isCalibrating && calibrationStart) {
               handleCalibrationMouseMove(e);
             } else {
@@ -1593,7 +1740,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               if (isEditMode && (resizing || dragging)) handleBlockResizeMove(e);
             }
           }}
-          onMouseUp={(e) => {
+          onPointerUp={(e) => {
             if (isCalibrating && calibrationStart) {
               handleCalibrationMouseUp();
             } else {
@@ -1601,8 +1748,8 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
               if (isEditMode && (resizing || dragging)) handleBlockResizeEnd();
             }
           }}
-          onMouseLeave={handleMouseLeave}
-          
+          onPointerLeave={handleMouseLeave}
+          onPointerCancel={handlePointerCancel}
           onContextMenu={(e) => e.preventDefault()}
         >
           <div 
@@ -1643,8 +1790,9 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 />
               </Document>
 
-              {/* Render blocks - using percentage-based positioning for consistent alignment */}
-              {blocks.map(block => {
+              {/* Render blocks - using percentage-based positioning for consistent alignment.
+                  Only blocks belonging to the current page are shown (multi-page schematics). */}
+              {blocks.filter(block => (block.page_number ?? 1) === pageNumber).map(block => {
                 const isLinked = !!block.subsection_id;
                 const photos = getAssetPhotos(block.subsection_id);
                 const hasPhotos = photos && (photos.meterImage || photos.ctRatioImage || photos.breakerImage);
@@ -1671,7 +1819,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                         ? (dragging?.blockId === block.id ? 'grabbing' : 'grab')
                         : (isLinked ? 'pointer' : 'default'),
                     }}
-                    onMouseDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
+                    onPointerDown={(e) => isEditMode && handleBlockDragStart(e, block.id)}
                     onClick={(e) => {
                       if (!dragging && !resizing) handleBlockClick(block, e);
                     }}
@@ -1686,14 +1834,14 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   {/* Resize handles - only in edit mode */}
                   {isEditMode && (
                     <>
-                      <div className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'nw')} />
-                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'ne')} />
-                      <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'sw')} />
-                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'se')} />
-                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'n')} />
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 's')} />
-                      <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'w')} />
-                      <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity" onMouseDown={(e) => handleBlockResizeStart(e, block.id, 'e')} />
+                      <div className="absolute -top-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-nw-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'nw')} />
+                      <div className="absolute -top-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-ne-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'ne')} />
+                      <div className="absolute -bottom-1 -left-1 w-3 h-3 bg-primary rounded-sm cursor-sw-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'sw')} />
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-primary rounded-sm cursor-se-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'se')} />
+                      <div className="absolute -top-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-n-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'n')} />
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-4 h-2 bg-primary/70 rounded-sm cursor-s-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 's')} />
+                      <div className="absolute top-1/2 -left-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-w-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'w')} />
+                      <div className="absolute top-1/2 -right-1 -translate-y-1/2 w-2 h-4 bg-primary/70 rounded-sm cursor-e-resize opacity-0 group-hover:opacity-100 transition-opacity" onPointerDown={(e) => handleBlockResizeStart(e, block.id, 'e')} />
                     </>
                   )}
 

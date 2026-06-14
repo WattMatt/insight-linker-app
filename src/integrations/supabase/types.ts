@@ -1680,6 +1680,7 @@ export type Database = {
           height: number | null
           id: string
           is_auto_matched: boolean | null
+          page_number: number
           schematic_id: string
           subsection_id: string | null
           updated_at: string
@@ -1694,6 +1695,7 @@ export type Database = {
           height?: number | null
           id?: string
           is_auto_matched?: boolean | null
+          page_number?: number
           schematic_id: string
           subsection_id?: string | null
           updated_at?: string
@@ -1708,6 +1710,7 @@ export type Database = {
           height?: number | null
           id?: string
           is_auto_matched?: boolean | null
+          page_number?: number
           schematic_id?: string
           subsection_id?: string | null
           updated_at?: string
