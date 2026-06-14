@@ -1516,6 +1516,7 @@ export async function generateInspectionReportPdf(
       content,
       options: {
         includeCoverPage: false, // We're using our custom cover page
+        skipFirstPageHeaderFooter: true, // keep the running banner + page number off our cover
         logoDataUrl,
         filename: `${siteName}_${inspection.subsectionName || 'Inspection'}_Report.pdf`.replace(/[^a-zA-Z0-9_.-]/g, '_'),
       },
