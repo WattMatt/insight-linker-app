@@ -444,41 +444,38 @@ function createQualityDashboard(stats: InspectionStats, qualityRating?: number):
   });
 
   // Large centered compliance score with ring indicator
-  const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success 
-    : stats.passPercentage >= 60 ? REPORT_COLORS.warning 
+  const scoreColor = stats.passPercentage >= 80 ? REPORT_COLORS.success
+    : stats.passPercentage >= 60 ? REPORT_COLORS.warning
     : REPORT_COLORS.error;
+  const scoreTint = stats.passPercentage >= 80 ? '#f0fdf4'
+    : stats.passPercentage >= 60 ? '#fffbeb'
+    : '#fef2f2';
 
-  // Centered large compliance percentage with circular ring
+  // Centered compliance-score card. A flat, tinted table cell with the score and label
+  // stacked + centered — robust at any value, unlike the old canvas ring whose number was
+  // hand-offset with relativePosition and rarely sat centred.
   content.push({
     columns: [
       { width: '*', text: '' },
       {
-        width: 'auto',
-        stack: [
-          {
-            canvas: [
-              // Outer ring
-              { type: 'ellipse', x: 70, y: 70, r1: 60, r2: 60, lineWidth: 10, lineColor: scoreColor },
+        width: 220,
+        table: {
+          widths: ['*'],
+          body: [[{
+            stack: [
+              { text: `${stats.passPercentage}%`, fontSize: 52, bold: true, color: scoreColor, alignment: 'center' },
+              { text: 'COMPLIANCE SCORE', fontSize: 10, bold: true, color: REPORT_COLORS.textMuted, alignment: 'center', margin: [0, 6, 0, 0] },
             ],
-          },
-          // Percentage inside the ring
-          {
-            text: `${stats.passPercentage}%`,
-            fontSize: 36,
-            bold: true,
-            color: scoreColor,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -95 },
-          },
-          // COMPLIANCE label below number
-          {
-            text: 'COMPLIANCE',
-            fontSize: 9,
-            color: REPORT_COLORS.textMuted,
-            alignment: 'center',
-            relativePosition: { x: 0, y: -55 },
-          },
-        ],
+            margin: [0, 22, 0, 22],
+          }]],
+        },
+        layout: {
+          fillColor: () => scoreTint,
+          hLineWidth: () => 1.5,
+          vLineWidth: () => 1.5,
+          hLineColor: () => scoreColor,
+          vLineColor: () => scoreColor,
+        },
       },
       { width: '*', text: '' },
     ],
