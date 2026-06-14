@@ -4,8 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ReportSettingsDialog, getDefaultReportSections, ReportSection } from "@/components/site/ReportSettingsDialog";
-import { GenerateFinalReportButton } from "@/components/site/GenerateFinalReportButton";
+import { SiteSummaryReport } from "@/components/SiteSummaryReport";
 import { BulkInspectionReportGenerator } from "@/components/site/BulkInspectionReportGenerator";
 import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import { Site } from "@/types/site";
@@ -14,9 +13,8 @@ import { downloadFile } from "@/lib/fileDownload";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { 
-    FileText, 
-    Settings, 
-    Download, 
+    FileText,
+    Download,
     Eye, 
     Trash2, 
     Search, 
@@ -51,20 +49,12 @@ const REPORT_CATEGORIES = [
     'COC Validation Reports'
 ];
 
-export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false, autoOpenGenerate = false }) => {
-    const [settingsOpen, setSettingsOpen] = useState(false);
-
-    // Deep-link: open the report dialog when arrived via ?generate=1 (buildActionHref → summary_report).
-    useEffect(() => {
-        if (autoOpenGenerate) setSettingsOpen(true);
-    }, [autoOpenGenerate]);
+export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false }) => {
     const [reports, setReports] = useState<SavedReport[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState("");
     const [previewDocument, setPreviewDocument] = useState<{ url: string; name: string } | null>(null);
     const [deleting, setDeleting] = useState<string | null>(null);
-    const [reportSections, setReportSections] = useState<ReportSection[]>(getDefaultReportSections);
-    const [subsections, setSubsections] = useState<any[]>([]);
 
     const fetchReports = async () => {
         try {
@@ -90,50 +80,7 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
 
     useEffect(() => {
         fetchReports();
-        fetchSubsections();
     }, [site.id]);
-
-    const fetchSubsections = async () => {
-        try {
-            const { data, error } = await supabase
-                .from('subsections')
-                .select(`
-                    id,
-                    name,
-                    tenant_name,
-                    category,
-                    coc_status,
-                    coc_number,
-                    coc_type,
-                    coc_issue_date,
-                    meter_serial_number,
-                    ct_ratio,
-                    is_compliant,
-                    qr_code_url,
-                    snags (
-                        id,
-                        title,
-                        status,
-                        risk_level,
-                        description
-                    )
-                `)
-                .eq('site_id', site.id);
-
-            if (error) throw error;
-            setSubsections(data || []);
-        } catch (error) {
-            console.error("Error fetching subsections:", error);
-        }
-    };
-
-    const handleSectionToggle = (sectionId: string, enabled: boolean) => {
-        setReportSections(prev => 
-            prev.map(section => 
-                section.id === sectionId ? { ...section, enabled } : section
-            )
-        );
-    };
 
     const handleDeleteReport = async (id: string, name: string) => {
         if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
@@ -214,33 +161,11 @@ export const SiteReports: React.FC<SiteReportsProps> = ({ site, readOnly = false
                               </CardDescription>
                           </CardHeader>
                           <CardContent>
-                              <div className="flex flex-col sm:flex-row gap-3">
-                                  <GenerateFinalReportButton
-                                      site={{
-                                          id: site.id,
-                                          name: site.name,
-                                          address: site.address,
-                                          client: { name: site.clients.name, logo_url: site.client_logo_url }
-                                      }}
-                                      reportSections={reportSections}
-                                      onReportSaved={fetchReports}
-                                  />
-                                  
-                                  <Button
-                                      variant="outline"
-                                      className="flex items-center gap-2"
-                                      onClick={() => setSettingsOpen(true)}
-                                  >
-                                      <Settings className="h-4 w-4" />
-                                      Report Settings
-                                  </Button>
-                              </div>
-                              
-                              <ReportSettingsDialog
-                                  open={settingsOpen}
-                                  onOpenChange={setSettingsOpen}
-                                  sections={reportSections}
-                                  onSectionToggle={handleSectionToggle}
+                              <SiteSummaryReport
+                                  siteId={site.id}
+                                  siteName={site.name}
+                                  clientName={site.clients?.name || ''}
+                                  onSaved={fetchReports}
                               />
                           </CardContent>
                       </Card>
