@@ -1,8 +1,23 @@
 # Public-read RLS hardening — finishing the token-scoped migration
 
-**Status:** proposal — needs sign-off before any production RLS change
-**Owner decision required:** yes (prod RLS = outward-facing, hard to reverse)
+**Status:** ✅ RESOLVED 2026-06-14. The IDOR did **not** exist in prod — prod RLS was already
+hardened (no anon SELECT on these tables; only `authenticated` + role-scoped). The migration
+files in this repo are STALE vs prod (the documented schema drift). The real bug was that the
+public-review SchematicDiagram/AssetVerification did direct anon reads and silently got nothing;
+**Phase 1 (route them through the token-scoped `get_public_site_review` RPC) is the actual fix and
+is deployed** (PR #32). **Phase 3 (dropping anon policies) is moot** — there are none to drop.
+
+Verified as the `anon` role on prod: direct `select from site_schematics` → 0 rows; RPC with the
+real URL token → full scoped payload (schematic/blocks/assets/subsections); RPC for an out-of-scope
+site → NULL (cross-tenant guard holds). Below is the original proposal, kept for context.
+
+---
+
+**Original status (superseded):** proposal — needs sign-off before any production RLS change
 **Discovered during:** Schematic Overview deep dive (2026-06-14)
+
+> ⚠️ The "blanket anon `USING(true)`" finding below was read from the migration files. Prod's
+> actual policies differ (drift) — always check `pg_policies` on prod, not the migration files.
 
 ## The finding
 
