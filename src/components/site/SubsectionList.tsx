@@ -11,11 +11,15 @@ import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, 
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import { hasFailedCocStatus } from "@/lib/complianceCalculations";
+import { complianceState, isSnagOpen, type ComplianceState } from "@/lib/subsectionStatus";
 
-// A snag is closed/terminal if its status (case-insensitive) is rectified or closed.
-const TERMINAL_SNAG_STATUSES = ['rectified', 'closed'];
-const isSnagOpen = (status: string | null | undefined): boolean =>
-    !TERMINAL_SNAG_STATUSES.includes((status || '').toLowerCase());
+// Display config per compliance state. "pending" = is_compliant not yet computed (null) —
+// shown as a neutral badge, never as a failure.
+const COMPLIANCE_BADGE: Record<ComplianceState, { variant: "default" | "destructive" | "secondary"; short: string; long: string }> = {
+    compliant: { variant: "default", short: "Pass", long: "Compliant" },
+    "non-compliant": { variant: "destructive", short: "Fail", long: "Non-Compliant" },
+    pending: { variant: "secondary", short: "Pending", long: "Pending" },
+};
 
 interface Snag {
     id: string;
@@ -82,15 +86,9 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                 if (!filters.cocStatus.includes(status)) return false;
             }
 
-            // Compliance filter
+            // Compliance filter (multi-select OR across compliant / non-compliant / pending)
             if (filters.compliance.length > 0) {
-                const isCompliant = sub.is_compliant;
-                if (filters.compliance.includes("compliant") && !isCompliant) return false;
-                if (filters.compliance.includes("non-compliant") && isCompliant) return false;
-                if (filters.compliance.length === 1) {
-                    if (filters.compliance[0] === "compliant" && !isCompliant) return false;
-                    if (filters.compliance[0] === "non-compliant" && isCompliant) return false;
-                }
+                if (!filters.compliance.includes(complianceState(sub.is_compliant))) return false;
             }
 
             // Metering filter
@@ -143,7 +141,7 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                     groupKey = sub.coc_status || "Missing";
                     break;
                 case "compliance":
-                    groupKey = sub.is_compliant ? "Compliant" : "Non-Compliant";
+                    groupKey = COMPLIANCE_BADGE[complianceState(sub.is_compliant)].long;
                     break;
                 case "snags":
                     const snagCount = snagCountBySubsection[sub.id] || 0;
@@ -266,8 +264,8 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                 </div>
                             </TableCell>
                             <TableCell>
-                                <Badge variant={sub.is_compliant ? "default" : "destructive"}>
-                                    {sub.is_compliant ? "Pass" : "Fail"}
+                                <Badge variant={COMPLIANCE_BADGE[complianceState(sub.is_compliant)].variant}>
+                                    {COMPLIANCE_BADGE[complianceState(sub.is_compliant)].short}
                                 </Badge>
                             </TableCell>
                             <TableCell className="text-right">
@@ -370,8 +368,8 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                         </Badge>
                                     );
                                 })()}
-                                <Badge variant={sub.is_compliant ? "default" : "destructive"} className="text-xs">
-                                    {sub.is_compliant ? "Compliant" : "Non-Compliant"}
+                                <Badge variant={COMPLIANCE_BADGE[complianceState(sub.is_compliant)].variant} className="text-xs">
+                                    {COMPLIANCE_BADGE[complianceState(sub.is_compliant)].long}
                                 </Badge>
                             </div>
 
@@ -391,7 +389,9 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
 
     const getGroupIcon = (groupName: string) => {
         if (filters.groupBy === "compliance") {
-            return groupName === "Compliant" ? Shield : AlertCircle;
+            if (groupName === "Compliant") return Shield;
+            if (groupName === "Pending") return Layers;
+            return AlertCircle;
         }
         if (filters.groupBy === "cocStatus") {
             return ClipboardCheck;
@@ -404,9 +404,9 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
 
     const getGroupColor = (groupName: string) => {
         if (filters.groupBy === "compliance") {
-            return groupName === "Compliant" 
-                ? "bg-green-500/10 text-green-600" 
-                : "bg-red-500/10 text-red-600";
+            if (groupName === "Compliant") return "bg-green-500/10 text-green-600";
+            if (groupName === "Pending") return "bg-gray-500/10 text-gray-600";
+            return "bg-red-500/10 text-red-600";
         }
         if (filters.groupBy === "cocStatus") {
             if (["Approved", "Valid", "Pass"].includes(groupName)) {

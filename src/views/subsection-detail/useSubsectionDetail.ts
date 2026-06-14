@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
+import { isSnagOpen } from "@/lib/subsectionStatus";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
   SubsectionData,
@@ -169,7 +170,8 @@ export function useSubsectionDetail() {
       if (error) throw error;
       const allSnags = data || [];
       setSnags(allSnags);
-      setOpenSnagsCount(allSnags.filter(s => s.status === 'Open').length);
+      // Match SubsectionList's definition: open = any non-terminal status (not rectified/closed).
+      setOpenSnagsCount(allSnags.filter(s => isSnagOpen(s.status)).length);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching snags:", error);
     }
@@ -727,6 +729,8 @@ export function useSubsectionDetail() {
 
       if (insertError) {
         if (process.env.NODE_ENV === 'development') console.error("Database insert error:", insertError);
+        // Avoid orphaning the uploaded blob: remove it from storage since its DB row failed.
+        await supabase.storage.from('documents').remove([uploadData.path]);
         throw new Error(`Failed to save document record: ${insertError.message}`);
       }
 
