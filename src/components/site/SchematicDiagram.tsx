@@ -152,6 +152,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
   const [scale, setScale] = useState(1);
   const [originalPdfDimensions, setOriginalPdfDimensions] = useState({ width: 0, height: 0 });
   const [containerWidth, setContainerWidth] = useState(0);
+  const [viewportHeight, setViewportHeight] = useState(MIN_CONTAINER_HEIGHT);
   const [isEditMode, setIsEditMode] = useState(false);
   const [dimensionsLoaded, setDimensionsLoaded] = useState(false);
   const [isAddingBlock, setIsAddingBlock] = useState(false);
@@ -205,8 +206,11 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       if (containerRef.current) {
         setContainerWidth(containerRef.current.clientWidth);
       }
+      // Bound the viewer to a fraction of the screen so the whole drawing fits in a
+      // fixed window (fit-to-extents) instead of the card growing to the full page height.
+      setViewportHeight(Math.max(MIN_CONTAINER_HEIGHT, Math.round(window.innerHeight * 0.72)));
     };
-    
+
     // Initial measurement with delay
     const timeoutId = setTimeout(updateContainerWidth, 50);
     
@@ -292,16 +296,17 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
 
   // Calculate the display scale to fit the PDF into the container
   const displayScale = useMemo(() => {
-    if (!containerWidth || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
+    if (!containerWidth || !viewportHeight || originalPdfDimensions.width === 0 || originalPdfDimensions.height === 0) {
       return 1;
     }
-    
+
     const padding = 48;
     const availableWidth = containerWidth - padding;
-    
-    // Fit to width only - let height be natural
-    return availableWidth / originalPdfDimensions.width;
-  }, [containerWidth, originalPdfDimensions]);
+    const availableHeight = viewportHeight - padding;
+
+    // Fit to extents: scale so the WHOLE drawing fits inside the window (both axes).
+    return Math.min(availableWidth / originalPdfDimensions.width, availableHeight / originalPdfDimensions.height);
+  }, [containerWidth, viewportHeight, originalPdfDimensions]);
 
   // Calculate the page width at current zoom - PDF is re-rendered at zoom resolution for sharpness
   const calculatedPageWidth = useMemo(() => {
@@ -339,14 +344,26 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
     return MIN_CONTAINER_HEIGHT - 32;
   }, [originalPdfDimensions.height, displayScale, dimensionsLoaded]);
 
-  // Dynamic container height based on base PDF size (not zoomed)
-  const containerHeight = useMemo(() => {
-    if (dimensionsLoaded && basePageHeight > 0) {
-      const needed = basePageHeight + 48;
-      return Math.max(MIN_CONTAINER_HEIGHT, needed);
-    }
-    return MIN_CONTAINER_HEIGHT;
-  }, [dimensionsLoaded, basePageHeight]);
+  // Fixed window height — the drawing is fit-to-extents inside it, not the other way around.
+  const containerHeight = viewportHeight;
+
+  // Pan offset that centres the fitted drawing within the window (at scale 1).
+  const fitPanOffset = useMemo(() => ({
+    x: Math.max(0, (containerWidth - basePageWidth) / 2),
+    y: Math.max(0, (containerHeight - basePageHeight) / 2),
+  }), [containerWidth, containerHeight, basePageWidth, basePageHeight]);
+
+  // Reset to the fit-to-extents view (whole drawing centred in the window).
+  const fitToExtents = useCallback(() => {
+    setScale(1);
+    setPanOffset(fitPanOffset);
+  }, [fitPanOffset]);
+
+  // Centre the drawing on first render and on resize, while it's at the fit scale.
+  useEffect(() => {
+    if (!dimensionsLoaded || scale !== 1) return;
+    setPanOffset(fitPanOffset);
+  }, [dimensionsLoaded, scale, fitPanOffset]);
 
   // Handle PDF page render to get original dimensions and capture canvas reference
   const handlePageRenderSuccess = useCallback((page: any) => {
@@ -1282,8 +1299,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
       setIsCalibrating(false);
       setCalibrationStart(null);
       setCalibrationRect(null);
-      setScale(1);
-      setPanOffset({ x: 0, y: 0 });
+      fitToExtents();
     } else {
       setIsEditMode(true);
     }
@@ -1610,7 +1626,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                 variant="outline"
                 size="sm"
                 className="h-6 px-2"
-                onClick={() => { setScale(1); setPanOffset({ x: 0, y: 0 }); }}
+                onClick={fitToExtents}
                 disabled={scale === 1}
               >
                 Reset
@@ -1665,7 +1681,7 @@ export const SchematicDiagram: React.FC<SchematicDiagramProps> = ({ siteId, site
                   variant="ghost"
                   size="sm"
                   className="h-5 px-1.5 text-xs"
-                  onClick={() => { setScale(1); setPanOffset({ x: 0, y: 0 }); }}
+                  onClick={fitToExtents}
                 >
                   Reset
                 </Button>
