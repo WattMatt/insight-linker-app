@@ -8,6 +8,9 @@ import path from 'path';
 // structured-clone round-trip (jsdom's Blob does not). jsdom gets a real origin so
 // window.localStorage is available (about:blank is an opaque origin and has none).
 export default defineConfig({
+  // Match the Next build's automatic JSX runtime so .test.tsx files can render real
+  // components without importing React (components in this repo never import React).
+  esbuild: { jsx: 'automatic' },
   test: {
     // Default node (Node's Blob survives fake-indexeddb's structured clone; jsdom's
     // does not). DOM tests opt into jsdom per-file with a `// @vitest-environment
