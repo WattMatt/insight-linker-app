@@ -3,36 +3,12 @@ import { Button } from "@/components/ui/button";
 import { Eye, Loader2 } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { 
-  InspectionReportPreview,
-  InspectionReportData,
-} from "@/components/inspection-report";
-import { downloadBlob } from "@/lib/fileDownload";
-
-// Standalone interface for external use
-export interface GenerateReportOptions {
-  inspectionId: string;
-  subsectionId: string;
-  siteName: string;
-  subsectionName: string;
-  clientName?: string;
-  templateId?: string | null;
-  siteLogoUrl?: string | null;
-}
-
-export interface GenerateReportResult {
-  success: boolean;
-  documentId?: string;
-  fileName?: string;
-  fileUrl?: string;
-  error?: string;
-}
+import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
+import {
+  generateInspectionReportPdf,
+  type InspectionReportData,
+} from "@/lib/pdfmakeInspectionReport";
+import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
 
 interface Snag {
   id: string;
@@ -68,13 +44,12 @@ export const ComprehensiveInspectionReport = ({
   clientName,
   snags = [],
 }: ComprehensiveInspectionReportProps) => {
-  const [previewOpen, setPreviewOpen] = useState(false);
-  const [reportData, setReportData] = useState<InspectionReportData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [previewData, setPreviewData] = useState<{ url: string; blob: Blob; filename: string } | null>(null);
 
-  const handlePreviewReport = async () => {
+  const handleGenerateReport = async () => {
     setIsLoading(true);
-    
     try {
       // Fetch template
       let template: any = null;
@@ -84,21 +59,18 @@ export const ComprehensiveInspectionReport = ({
           .select('*')
           .eq('id', templateId)
           .maybeSingle();
-        
-        if (templateError) {
-          if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] Template fetch error:', templateError);
+        if (templateError && process.env.NODE_ENV === 'development') {
+          console.error('[Inspection Report] Template fetch error:', templateError);
         }
         template = templateData;
       }
 
       if (!template) {
-        if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] No template found');
         toast.error("Cannot generate report without a template");
         return;
       }
 
-
-      // Fetch signatures if we have an inspection ID
+      // Fetch signatures
       let signatures: any[] = [];
       const inspId = inspectionId || inspectionData?.id;
       if (inspId) {
@@ -109,62 +81,43 @@ export const ComprehensiveInspectionReport = ({
         signatures = sigData || [];
       }
 
-      // Get jsonData from inspection - check multiple possible locations
+      // Resolve jsonData (props, then a fresh fetch if empty)
       let jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
-      const generalInfo = jsonData.generalInfo || {};
-
-      
-      // If jsonData is empty but we have an inspection ID, fetch it directly
       if (Object.keys(jsonData).length === 0 && inspId) {
         const { data: freshInspection } = await supabase
           .from('inspections')
           .select('json_data')
           .eq('id', inspId)
           .single();
-        
-        if (freshInspection?.json_data) {
-          jsonData = freshInspection.json_data as Record<string, any>;
-        }
+        if (freshInspection?.json_data) jsonData = freshInspection.json_data as Record<string, any>;
       }
+      const generalInfo = jsonData.generalInfo || {};
 
-      // Build sections data from template
+      // Build sections from template + recorded values/photos
       const templateSections = Array.isArray(template.sections) ? template.sections : Object.values(template.sections || {});
-      
-      let totalPhotosFound = 0;
-      
       const sectionsForReport = templateSections.map((section: any) => {
         const sectionId = String(section.id ?? '');
         const items = Array.isArray(section.items) ? section.items : Object.values(section.items || {});
-        
         return {
           title: section.name || sectionId,
           items: items.map((item: any, idx: number) => {
             const itemId = String(item.id ?? idx);
             const itemData = jsonData[sectionId]?.[itemId] || {};
-            
-            // Extract photos array for photographic documentation
             const photos = Array.isArray(itemData.photos) ? itemData.photos : [];
-            
-            if (photos.length > 0) {
-              totalPhotosFound += photos.length;
-            }
-            
             return {
               label: item.name || itemId,
               value: itemData.status || itemData.value || 'N/A',
               type: item.type || 'text',
               notes: itemData.notes || '',
-              photos: photos,
+              photos,
             };
           }),
         };
       });
-      
 
-      // Extract tenant data - jsonData.tenants is stored as an ARRAY, not an object map
+      // Extract tenants (array, or legacy object map keyed by template tenant id)
       const rawTenants = jsonData.tenants;
       let tenantsForReport: any[] = [];
-      
       if (Array.isArray(rawTenants) && rawTenants.length > 0) {
         tenantsForReport = rawTenants.map((tenant: any, idx: number) => ({
           shopName: tenant.shopName || `Tenant ${idx + 1}`,
@@ -172,12 +125,11 @@ export const ComprehensiveInspectionReport = ({
           meterSerialNumber: tenant.meterSerialNumber || '',
           breakerSize: tenant.breakerSize || '',
           ctSizeAndRatio: tenant.ctSizeAndRatio || '',
-          meterImage: tenant.meterImage || undefined,
-          breakerImage: tenant.breakerImage || undefined,
-          ctRatioImage: tenant.ctRatioImage || undefined,
+          meterImage: tenant.meterImage || null,
+          breakerImage: tenant.breakerImage || null,
+          ctRatioImage: tenant.ctRatioImage || null,
         }));
       } else if (rawTenants && typeof rawTenants === 'object') {
-        // Legacy: tenants stored as object map
         const templateTenants = Array.isArray(template.tenants) ? template.tenants : [];
         tenantsForReport = templateTenants.map((tenant: any, idx: number) => {
           const tenantId = String(tenant.id ?? idx);
@@ -188,25 +140,23 @@ export const ComprehensiveInspectionReport = ({
             meterSerialNumber: tenantData.meterSerialNumber || tenant.meterSerialNumber || '',
             breakerSize: tenantData.breakerSize || tenant.breakerSize || '',
             ctSizeAndRatio: tenantData.ctSizeAndRatio || tenant.ctSizeAndRatio || '',
-            meterImage: tenantData.meterImage,
-            breakerImage: tenantData.breakerImage,
-            ctRatioImage: tenantData.ctRatioImage,
+            meterImage: tenantData.meterImage || null,
+            breakerImage: tenantData.breakerImage || null,
+            ctRatioImage: tenantData.ctRatioImage || null,
           };
         });
       }
-      
 
-      // Build WYSIWYG report data
+      // Build the pdfmake inspection payload (same shape as the bulk generator)
       const data: InspectionReportData = {
+        inspectionId: inspId || '',
         templateName: template.name,
         subsectionName,
-        siteName,
-        clientName,
-        logoUrl: siteLogoUrl,
         inspectorName: generalInfo.inspectorName || inspectionData?.inspector_name,
         inspectionDate: generalInfo.date || inspectionData?.inspection_date,
         status: inspectionData?.status,
-        qualityRating: inspectionData?.quality_rating,
+        qualityRating: inspectionData?.quality_rating ?? undefined,
+        generalInfo,
         sections: sectionsForReport,
         tenants: tenantsForReport,
         snags: snags.map(snag => ({
@@ -224,103 +174,67 @@ export const ComprehensiveInspectionReport = ({
         })),
       };
 
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[WYSIWYG Report] Building report data', {
-          sectionsCount: sectionsForReport.length,
-          snagsCount: snags.length,
-          signaturesCount: signatures.length,
-          tenantsCount: tenantsForReport.length,
-        });
+      const result = await generateInspectionReportPdf({
+        inspection: data,
+        siteName,
+        clientName,
+        siteLogoUrl,
+      });
+
+      if (!result.success || !result.blob) {
+        toast.error(result.error || "Failed to generate report");
+        return;
       }
 
-      setReportData(data);
-      setPreviewOpen(true);
+      const url = URL.createObjectURL(result.blob);
+      setPreviewData({
+        url,
+        blob: result.blob,
+        filename: result.filename || `${subsectionName}_Inspection_Report.pdf`,
+      });
     } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error('[WYSIWYG Report] Preview error:', error);
-      toast.error("Failed to generate preview");
+      if (process.env.NODE_ENV === 'development') console.error('[Inspection Report] Generate error:', error);
+      toast.error("Failed to generate report");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handlePdfGenerated = async (result: {
-    success: boolean;
-    url?: string;
-    blob?: Blob;
-    error?: string;
-  }) => {
-    if (result.success && result.blob) {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
-      const fileName = `${subsectionName}_Inspection_Report_${timestamp}.pdf`;
-      
-      // Optionally save to Supabase storage
-      if (subsectionId) {
-        try {
-          const storagePath = `inspection-reports/${subsectionId}/${fileName}`;
-          const { error: uploadError } = await supabase.storage
-            .from('documents')
-            .upload(storagePath, result.blob, {
-              contentType: 'application/pdf',
-              upsert: true,
-            });
-          
-          if (!uploadError) {
-            // Get public URL
-            const { data: urlData } = supabase.storage
-              .from('documents')
-              .getPublicUrl(storagePath);
-            
-            // First ensure the category exists
-            let categoryId: string | null = null;
-            const { data: existingCategory } = await supabase
-              .from('document_categories')
-              .select('id')
-              .eq('subsection_id', subsectionId)
-              .eq('name', 'Inspection Reports')
-              .maybeSingle();
-            
-            if (existingCategory) {
-              categoryId = existingCategory.id;
-            } else {
-              const { data: newCategory } = await supabase
-                .from('document_categories')
-                .insert({
-                  subsection_id: subsectionId,
-                  name: 'Inspection Reports',
-                  order_index: 999,
-                })
-                .select('id')
-                .single();
-              categoryId = newCategory?.id || null;
-            }
-            
-            // Save document record with category_id
-            if (categoryId) {
-              await supabase.from('subsection_documents').insert({
-                subsection_id: subsectionId,
-                category_id: categoryId,
-                file_name: fileName,
-                file_url: urlData.publicUrl,
-              });
-            }
-          }
-        } catch (saveError) {
-          if (process.env.NODE_ENV === 'development') console.warn('[WYSIWYG Report] Failed to save to storage:', saveError);
-          // Don't show error to user - the PDF was still downloaded
-        }
-      }
-    } else {
-      toast.error(result.error || "Failed to generate PDF");
+  const handleSaveToDocuments = async () => {
+    if (!previewData?.blob || !subsectionId) {
+      toast.error("Cannot save report");
+      return;
     }
+    try {
+      setSaving(true);
+      const res = await savePDFToDocuments({
+        blob: previewData.blob,
+        fileName: previewData.filename,
+        subsectionId,
+        categoryName: 'Inspection Reports',
+      });
+      if (res.success) {
+        toast.success("Report saved to documents!");
+      } else {
+        toast.error(res.error || "Failed to save report");
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleClosePreview = () => {
+    if (previewData?.url) URL.revokeObjectURL(previewData.url);
+    setPreviewData(null);
   };
 
   return (
     <>
-      <Button onClick={handlePreviewReport} disabled={isLoading} variant="default">
+      <Button onClick={handleGenerateReport} disabled={isLoading} variant="default">
         {isLoading ? (
           <>
             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            Loading...
+            Generating...
           </>
         ) : (
           <>
@@ -330,35 +244,16 @@ export const ComprehensiveInspectionReport = ({
         )}
       </Button>
 
-      <Dialog open={previewOpen} onOpenChange={setPreviewOpen}>
-        <DialogContent className="max-w-[95vw] w-[1200px] h-[90vh] p-0 overflow-hidden">
-          <DialogHeader className="px-6 py-4 border-b">
-            <DialogTitle>Inspection Report Preview</DialogTitle>
-          </DialogHeader>
-          {reportData && (
-            <InspectionReportPreview 
-              data={reportData} 
-              onPdfGenerated={handlePdfGenerated}
-            />
-          )}
-        </DialogContent>
-      </Dialog>
+      <DocumentPreviewDialog
+        open={!!previewData}
+        onOpenChange={(open) => !open && handleClosePreview()}
+        fileUrl={previewData?.url || ""}
+        fileName={previewData?.filename || ""}
+        onSaveToDocuments={subsectionId ? handleSaveToDocuments : undefined}
+        saveLocation="subsection"
+        contextName={subsectionName}
+        isSaving={saving}
+      />
     </>
   );
 };
-
-/**
- * Standalone function to generate and save inspection report
- * Uses the WYSIWYG approach - requires browser context
- */
-export async function generateAndSaveComprehensiveReport(
-  options: GenerateReportOptions
-): Promise<GenerateReportResult> {
-  // This function now requires browser rendering context
-  // Return error for non-interactive use
-  if (process.env.NODE_ENV === 'development') console.warn('[WYSIWYG Report] generateAndSaveComprehensiveReport called outside UI context');
-  return { 
-    success: false, 
-    error: "WYSIWYG reports require UI context. Use ComprehensiveInspectionReport component instead." 
-  };
-}
