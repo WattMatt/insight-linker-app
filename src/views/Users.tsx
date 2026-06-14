@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { usePaginatedList } from "@/hooks/usePaginatedList";
+import { ListPagination } from "@/components/ListPagination";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -194,20 +196,31 @@ const Users = () => {
     },
   });
 
-  // Fetch all users with their roles and client mappings
-  const { data: users, isLoading } = useQuery({
+  // Server-side paginated users. Base queryKey stays ["users"] so existing
+  // invalidateQueries(["users"]) calls keep matching by prefix; the N+1 role /
+  // client / site lookups now run only for the current page's profiles.
+  const {
+    rows: users,
+    page: usersPage,
+    pageCount: usersPageCount,
+    setPage: setUsersPage,
+    isLoading,
+    isFetching: usersFetching,
+  } = usePaginatedList<UserProfile>({
     queryKey: ["users"],
-    queryFn: async () => {
-      const { data: profiles, error: profilesError } = await supabase
+    pageSize: 20,
+    fetchPage: async ({ from, to }) => {
+      const { data: profiles, error, count } = await supabase
         .from("profiles")
-        .select("*")
-        .order("created_at", { ascending: false });
+        .select("*", { count: "exact" })
+        .order("created_at", { ascending: false })
+        .range(from, to);
 
-      if (profilesError) throw profilesError;
+      if (error) throw error;
 
-      // Fetch roles, client mappings, and site assignments for each user
-      const usersWithRoles = await Promise.all(
-        profiles.map(async (profile) => {
+      // Fetch roles, client mappings, and site assignments for each user on the page
+      const rows = await Promise.all(
+        (profiles || []).map(async (profile) => {
           const { data: roleData } = await supabase
             .from("user_roles")
             .select("role")
@@ -234,7 +247,7 @@ const Users = () => {
         })
       );
 
-      return usersWithRoles as UserProfile[];
+      return { rows: rows as UserProfile[], total: count ?? 0 };
     },
   });
 
@@ -1013,6 +1026,7 @@ const Users = () => {
             )}
           </TableBody>
         </Table>
+        <ListPagination page={usersPage} pageCount={usersPageCount} onPageChange={setUsersPage} disabled={usersFetching} />
       </div>
       </div>
 
