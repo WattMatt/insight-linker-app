@@ -20,6 +20,7 @@ import {
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
 import { loadImageSimple, loadImagesSimple } from './simpleImageLoader';
+import { savePDFToDocuments } from './pdfDocumentSaver';
 
 // Type definitions
 type Content = any;
@@ -1570,75 +1571,24 @@ export async function generateAndSaveInspectionReportPdfmake(
       return { success: false, error: result.error || 'Failed to generate PDF' };
     }
 
-    // Upload to storage
+    // Save fail-closed: savePDFToDocuments uploads + records the doc and, on a DB-insert
+    // failure, deletes the orphan blob and reports failure (no false "saved" — fixes #5).
     const fileName = result.filename || 'Inspection_Report.pdf';
-    const storagePath = `inspection-reports/${subsectionId}/${Date.now()}_${fileName}`;
+    const saveResult = await savePDFToDocuments({
+      blob: result.blob,
+      fileName,
+      subsectionId,
+      categoryName: 'Inspection Reports',
+    });
 
-    const { error: uploadError } = await supabase.storage
-      .from('documents')
-      .upload(storagePath, result.blob, {
-        contentType: 'application/pdf',
-        upsert: true,
-      });
-
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
-      return { success: false, error: 'Failed to upload PDF to storage' };
-    }
-
-    // Get public URL
-    const { data: urlData } = supabase.storage
-      .from('documents')
-      .getPublicUrl(storagePath);
-
-    const fileUrl = urlData.publicUrl;
-
-    // Find or create category
-    const { data: categories } = await supabase
-      .from('document_categories')
-      .select('id, name')
-      .eq('subsection_id', subsectionId);
-
-    let categoryId = categories?.find(c => c.name === 'Inspection Reports')?.id;
-
-    if (!categoryId) {
-      const { data: newCategory } = await supabase
-        .from('document_categories')
-        .insert({
-          name: 'Inspection Reports',
-          subsection_id: subsectionId,
-          order_index: (categories?.length || 0) + 1,
-        })
-        .select()
-        .single();
-
-      if (newCategory) {
-        categoryId = newCategory.id;
-      }
-    }
-
-    // Create document record
-    const { data: docData, error: docError } = await supabase
-      .from('subsection_documents')
-      .insert({
-        subsection_id: subsectionId,
-        category_id: categoryId,
-        file_name: fileName,
-        file_url: fileUrl,
-        uploaded_by: user.id,
-      })
-      .select()
-      .single();
-
-    if (docError) {
-      console.warn('Could not create document record:', docError);
+    if (!saveResult.success) {
+      return { success: false, error: saveResult.error || 'Failed to save report' };
     }
 
     return {
       success: true,
-      documentId: docData?.id,
       fileName,
-      fileUrl,
+      fileUrl: saveResult.documentUrl,
     };
   } catch (error) {
     console.error('Error saving inspection report:', error);
