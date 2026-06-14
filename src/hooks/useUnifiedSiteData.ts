@@ -26,7 +26,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { factorScores, siteHealthScore, type SnagForHealth } from "@/lib/siteHealth";
+import { factorScores, siteHealthScore, isSnagResolved, type SnagForHealth } from "@/lib/siteHealth";
 import { hasValidCocStatus, hasFailedCocStatus } from "@/lib/complianceCalculations";
 
 // ============================================================================
@@ -252,8 +252,10 @@ function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[],
   const cocMissing = subsections.filter(s => !s.cocStatus || s.cocStatus === 'Missing').length;
   const cocPending = subsections.filter(s => s.cocStatus === 'Pending').length;
   const cocNA = subsections.filter(s => s.cocStatus === 'N/A').length;
-  const totalSnags = subsections.reduce((sum, s) => sum + s.snagCount, 0);
-  const openSnags = Math.floor(totalSnags * 0.3);
+  // Snag counts come from the real snag records (status-driven), not a fabricated 30% ratio.
+  const totalSnags = snags.length;
+  const resolvedSnags = snags.filter(isSnagResolved).length;
+  const openSnags = totalSnags - resolvedSnags;
   const totalPins = floorPlans.reduce((sum, fp) => sum + fp.pinCount, 0);
   const openPins = floorPlans.reduce((sum, fp) => sum + fp.openPinCount, 0);
 
@@ -275,15 +277,17 @@ function calculateKPIs(subsections: UnifiedSubsection[], assets: UnifiedAsset[],
     compliantCount: subsections.filter(s => s.isCompliant).length,
     complianceRate: subsections.length > 0 ? Math.round((cocPass / subsections.length) * 100 * 10) / 10 : 0,
     totalAssets: assets.length,
-    verifiedAssets: Math.floor(assets.length * 0.8),
-    pendingAssets: Math.floor(assets.length * 0.2),
+    // Asset verification is produced by the asset-verification report (inspection comparison),
+    // not this preview hook — don't fabricate a verified ratio.
+    verifiedAssets: 0,
+    pendingAssets: assets.length,
     totalInspections: inspections.length,
     completedInspections: inspections.filter(i => i.status === 'Completed').length,
     inProgressInspections: inspections.filter(i => i.status === 'In Progress').length,
     scheduledInspections: inspections.filter(i => i.status === 'Scheduled').length,
     totalSnags,
     openSnags,
-    resolvedSnags: totalSnags - openSnags,
+    resolvedSnags,
     totalFloorPlans: floorPlans.length,
     totalPins,
     openPins,
@@ -394,7 +398,7 @@ export function useUnifiedSiteData(siteId: string | null): UnifiedSiteData {
         (subsectionsData || []).map(async (sub) => {
           const [docResult, snagResult] = await Promise.all([
             supabase.from("subsection_documents").select("*", { count: "exact", head: true }).eq("subsection_id", sub.id),
-            supabase.from("snags").select("*", { count: "exact", head: true }).eq("subsection_id", sub.id).not("status", "in", '("rectified","Rectified")'),
+            supabase.from("snags").select("*", { count: "exact", head: true }).eq("subsection_id", sub.id).not("status", "in", '("rectified","Rectified","closed","Closed")'),
           ]);
 
           return {
