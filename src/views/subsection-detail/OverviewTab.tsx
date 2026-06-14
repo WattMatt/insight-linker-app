@@ -4,11 +4,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { AlertCircle, FileText, ExternalLink } from "lucide-react";
+import { AlertCircle, FileText } from "lucide-react";
 import { format } from "date-fns";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSearchParams } from "@/lib/navigation";
+import { hasValidCocStatus } from "@/lib/complianceCalculations";
 import type { SubsectionData, SiteData, EditFormData } from "./types";
 
 interface OverviewTabProps {
@@ -21,7 +22,6 @@ interface OverviewTabProps {
   isNotCompliant: boolean;
   openSnagsCount: number;
   snags: any[];
-  cocValidations?: Record<string, any>;
   supabaseDocuments: any[];
   subsectionId: string | undefined;
   siteId: string | undefined;
@@ -43,7 +43,6 @@ export function OverviewTab({
   isNotCompliant,
   openSnagsCount,
   snags,
-  cocValidations = {},
   supabaseDocuments,
   subsectionId,
   siteId,
@@ -149,11 +148,7 @@ export function OverviewTab({
                       variant="outline"
                       className={
                         (() => {
-                          const hasFailedValidation = Object.values(cocValidations).some(
-                            (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
-                          );
-                          if (subsection.isCocRequired && hasFailedValidation) return "bg-red-500/10 text-red-500";
-                          if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "bg-red-500/10 text-red-500";
+                          if (subsection.isCocRequired && !hasValidCocStatus(subsection.cocStatus)) return "bg-red-500/10 text-red-500";
                           if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "bg-red-500/10 text-red-500";
                           if (openSnagsCount > 0) return "bg-red-500/10 text-red-500";
                           if (hasIncompleteInspections) return "bg-red-500/10 text-red-500";
@@ -162,11 +157,7 @@ export function OverviewTab({
                       }
                     >
                       {(() => {
-                        const hasFailedValidation = Object.values(cocValidations).some(
-                          (v: any) => v?.status === 'Fail' || v?.status === 'Failed'
-                        );
-                        if (subsection.isCocRequired && hasFailedValidation) return "Fail";
-                        if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') return "Fail";
+                        if (subsection.isCocRequired && !hasValidCocStatus(subsection.cocStatus)) return "Fail";
                         if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) return "Fail";
                         if (openSnagsCount > 0) return "Fail";
                         if (hasIncompleteInspections) return "Fail";
@@ -178,14 +169,8 @@ export function OverviewTab({
                 <TooltipContent className="max-w-xs">
                   {(() => {
                     const reasons: string[] = [];
-                    const failedValidations = Object.entries(cocValidations).filter(
-                      ([_, v]: [string, any]) => v?.status === 'Fail' || v?.status === 'Failed'
-                    );
-                    if (subsection.isCocRequired && failedValidations.length > 0) {
-                      reasons.push(`${failedValidations.length} COC validation${failedValidations.length > 1 ? 's' : ''} failed (supplementary work invalidates installation)`);
-                    }
-                    if (subsection.isCocRequired && subsection.cocStatus !== 'Approved') {
-                      reasons.push(`CoC status is "${subsection.cocStatus || 'Missing'}" (needs "Approved")`);
+                    if (subsection.isCocRequired && !hasValidCocStatus(subsection.cocStatus)) {
+                      reasons.push(`CoC status is "${subsection.cocStatus || 'Missing'}" (needs a passing COC)`);
                     }
                     if (subsection.isCocRequired && subsection.meteringStatus === 'Missing' && !subsection.meterSerialNumber) {
                       reasons.push('Metering data is missing');
@@ -220,46 +205,6 @@ export function OverviewTab({
           <div>
             <p className="text-sm text-muted-foreground mb-1">CoC Status</p>
             {(() => {
-              const getDocumentInfo = (docId: string) => {
-                const doc = supabaseDocuments.find(d => d.id === docId);
-                return {
-                  fileUrl: doc?.file_url || null,
-                  cocType: doc?.coc_type || null,
-                  cocNumber: doc?.coc_number || null
-                };
-              };
-
-              const validationsList = Object.entries(cocValidations)
-                .map(([docId, validation]: [string, any]) => {
-                  const docInfo = getDocumentInfo(docId);
-                  const storedType = docInfo.cocType;
-                  const extractedType = validation?.report_data?.cocType || validation?.report_data?.coc_type;
-                  const displayType = storedType || extractedType || 'Unknown';
-                  const hasMismatch = storedType && extractedType && storedType !== extractedType;
-
-                  return {
-                    docId,
-                    status: validation?.status,
-                    cocType: displayType,
-                    storedType,
-                    extractedType,
-                    hasMismatch,
-                    cocNumber: docInfo.cocNumber || validation?.report_data?.cocNumber || validation?.report_data?.coc_number || 'N/A',
-                    fileUrl: docInfo.fileUrl
-                  };
-                })
-                .sort((a, b) => {
-                  const typeOrder = (type: string) => {
-                    if (type?.toLowerCase() === 'initial') return 0;
-                    if (type?.toLowerCase() === 'supplementary') return 1;
-                    return 2;
-                  };
-                  return typeOrder(a.cocType) - typeOrder(b.cocType);
-                });
-
-              const hasMultiple = validationsList.length > 1;
-              const hasAnyFailed = validationsList.some(v => v.status === 'Fail' || v.status === 'Failed');
-
               if (!subsection.isCocRequired) {
                 return (
                   <Badge variant="outline" className="bg-muted/50 text-muted-foreground">
@@ -267,57 +212,11 @@ export function OverviewTab({
                   </Badge>
                 );
               }
-
-              if (hasMultiple) {
-                return (
-                  <div className="space-y-1.5">
-                    {validationsList.map((v, idx) => (
-                      <div key={v.docId} className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs text-muted-foreground w-4">{idx + 1}.</span>
-                        <Badge
-                          variant="outline"
-                          className={`text-xs px-1.5 py-0 ${v.hasMismatch ? 'border-yellow-500' : ''}`}
-                        >
-                          {v.cocType}
-                        </Badge>
-                        <span className="text-xs text-muted-foreground font-mono">
-                          {v.cocNumber}
-                        </span>
-                        <Badge
-                          variant="outline"
-                          className={
-                            v.status === 'Pass'
-                              ? "bg-green-500/10 text-green-500 text-xs px-1.5 py-0"
-                              : "bg-red-500/10 text-red-500 text-xs px-1.5 py-0"
-                          }
-                        >
-                          {v.status || 'Pending'}
-                        </Badge>
-                        {v.fileUrl && (
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-5 w-5"
-                            onClick={() => window.open(v.fileUrl!, '_blank')}
-                            title="View document"
-                          >
-                            <ExternalLink className="h-3 w-3" />
-                          </Button>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                );
-              }
-
+              const isPass = hasValidCocStatus(subsection.cocStatus);
               return (
                 <Badge
                   variant="outline"
-                  className={
-                    subsection.cocStatus === "Approved" && !hasAnyFailed
-                      ? "bg-green-500/10 text-green-500"
-                      : "bg-red-500/10 text-red-500"
-                  }
+                  className={isPass ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}
                 >
                   {subsection.cocStatus || "Missing"}
                 </Badge>
@@ -482,7 +381,12 @@ export function OverviewTab({
                   )}
                 </div>
               </div>
-              <Badge>Pass</Badge>
+              <Badge
+                variant="outline"
+                className={hasValidCocStatus(subsection.cocStatus) ? "bg-green-500/10 text-green-500" : "bg-red-500/10 text-red-500"}
+              >
+                {subsection.cocStatus || "Missing"}
+              </Badge>
             </div>
           </CardContent>
         </Card>

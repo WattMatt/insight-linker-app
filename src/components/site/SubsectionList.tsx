@@ -10,7 +10,7 @@ import { getCategoryIcon, getCategoryColor } from "@/lib/subsectionCategories";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 import { SubsectionFilters, SubsectionFiltersState } from "./SubsectionFilters";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import { hasFailedCocStatus } from "@/lib/complianceCalculations";
+import { hasFailedCocStatus, hasValidCocStatus } from "@/lib/complianceCalculations";
 import { complianceState, isSnagOpen, type ComplianceState } from "@/lib/subsectionStatus";
 
 // Display config per compliance state. "pending" = is_compliant not yet computed (null) —
@@ -225,29 +225,11 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                             <TableCell>
                                 {(() => {
                                     const primaryStatus = sub.coc_status;
-                                    const hasFailedValidation = hasFailedCocStatus(primaryStatus);
-                                    const isPrimaryApproved = primaryStatus === "Approved" || primaryStatus === "Valid" || primaryStatus === "Pass";
-
-                                    // If the COC verdict is a failure, show prominent warning
-                                    if (hasFailedValidation) {
-                                        return (
-                                            <div className="flex items-center gap-1.5">
-                                                <AlertTriangle className="h-4 w-4 text-destructive animate-pulse" />
-                                                <Badge variant="destructive" className="font-medium" title="COC validation failed - requires attention">
-                                                    Validation Failed
-                                                </Badge>
-                                            </div>
-                                        );
-                                    }
-                                    
+                                    const isApproved = hasValidCocStatus(primaryStatus);
+                                    const isFailed = hasFailedCocStatus(primaryStatus);
                                     return (
-                                        <Badge
-                                            variant={
-                                                isPrimaryApproved ? "default" :
-                                                    primaryStatus === "Rejected" || primaryStatus === "Fail" ? "destructive" : "secondary"
-                                            }
-                                        >
-                                            {primaryStatus || "Missing"}
+                                        <Badge variant={isApproved ? "default" : isFailed ? "destructive" : "secondary"}>
+                                            {isFailed ? "Failed" : (primaryStatus || "Missing")}
                                         </Badge>
                                     );
                                 })()}
@@ -344,27 +326,14 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                                 </Badge>
                                 {(() => {
                                     const primaryStatus = sub.coc_status;
-                                    const hasFailedValidation = hasFailedCocStatus(primaryStatus);
-                                    const isPrimaryApproved = primaryStatus === "Approved" || primaryStatus === "Valid" || primaryStatus === "Pass";
-
-                                    if (hasFailedValidation) {
-                                        return (
-                                            <Badge variant="destructive" className="text-xs flex items-center gap-1 font-medium" title="COC validation failed - requires attention">
-                                                <AlertTriangle className="h-3 w-3 animate-pulse" />
-                                                Validation Failed
-                                            </Badge>
-                                        );
-                                    }
-                                    
+                                    const isApproved = hasValidCocStatus(primaryStatus);
+                                    const isFailed = hasFailedCocStatus(primaryStatus);
                                     return (
                                         <Badge
-                                            variant={
-                                                isPrimaryApproved ? "default" :
-                                                    primaryStatus === "Rejected" || primaryStatus === "Fail" ? "destructive" : "secondary"
-                                            }
+                                            variant={isApproved ? "default" : isFailed ? "destructive" : "secondary"}
                                             className="text-xs"
                                         >
-                                            COC: {primaryStatus || "Missing"}
+                                            COC: {isFailed ? "Failed" : (primaryStatus || "Missing")}
                                         </Badge>
                                     );
                                 })()}
