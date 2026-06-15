@@ -70,6 +70,12 @@ export interface InspectionTenant {
   ctRatioImage?: string;
 }
 
+export interface ReportDocument {
+  url: string;
+  name: string;
+  path?: string;
+}
+
 export interface InspectionReportData {
   inspectionId: string;
   templateName?: string;
@@ -81,6 +87,7 @@ export interface InspectionReportData {
   sections?: InspectionSection[];
   tenants?: InspectionTenant[];
   snags?: InspectionSnag[];
+  documents?: ReportDocument[];
   subsectionName?: string;
 }
 
@@ -1349,6 +1356,86 @@ function createTenantCardContent(
 }
 
 // ============================================================================
+// DOCUMENT APPENDIX (②) — merge collected document-field uploads into one PDF
+// ============================================================================
+
+async function fetchDocumentBytes(doc: ReportDocument): Promise<Uint8Array | null> {
+  try {
+    if (doc.path) {
+      const { data, error } = await supabase.storage.from('documents').download(doc.path);
+      if (!error && data) return new Uint8Array(await data.arrayBuffer());
+    }
+    const res = await fetch(doc.url);
+    if (res.ok) return new Uint8Array(await res.arrayBuffer());
+  } catch (e) {
+    console.error('[pdfmake] Failed to load appendix document', doc.name, e);
+  }
+  return null;
+}
+
+/**
+ * Appends collected documents to the generated report body as a single merged PDF.
+ * PDFs are concatenated page-for-page; image documents (jpg/png) are placed one per page.
+ * On any failure the original body blob is returned unchanged (appendix is best-effort).
+ */
+async function appendDocumentsToPdf(bodyBlob: Blob, docs: ReportDocument[]): Promise<Blob> {
+  if (!docs.length) return bodyBlob;
+  try {
+    const { PDFDocument, StandardFonts, rgb } = await import('pdf-lib');
+    const out = await PDFDocument.load(await bodyBlob.arrayBuffer());
+    const font = await out.embedFont(StandardFonts.Helvetica);
+    const bold = await out.embedFont(StandardFonts.HelveticaBold);
+
+    const A4_W = 595.28, A4_H = 841.89, MARGIN = 40;
+
+    // Appendix index page
+    const cover = out.addPage([A4_W, A4_H]);
+    cover.drawText('APPENDIX', { x: MARGIN, y: A4_H - 80, size: 24, font: bold, color: rgb(0.1, 0.1, 0.1) });
+    cover.drawText('Supporting Documents', { x: MARGIN, y: A4_H - 108, size: 14, font, color: rgb(0.35, 0.35, 0.35) });
+    let y = A4_H - 148;
+    docs.forEach((d, i) => {
+      if (y < MARGIN) return;
+      cover.drawText(`${i + 1}. ${d.name}`.slice(0, 95), { x: MARGIN, y, size: 11, font, color: rgb(0.2, 0.2, 0.2) });
+      y -= 18;
+    });
+
+    for (const doc of docs) {
+      const bytes = await fetchDocumentBytes(doc);
+      if (!bytes) continue;
+      const lower = doc.name.toLowerCase();
+      if (lower.endsWith('.pdf')) {
+        try {
+          const src = await PDFDocument.load(bytes);
+          const pages = await out.copyPages(src, src.getPageIndices());
+          pages.forEach((p) => out.addPage(p));
+        } catch (e) {
+          console.error('[pdfmake] Could not merge PDF document', doc.name, e);
+        }
+      } else {
+        try {
+          const img = lower.endsWith('.png') ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          const page = out.addPage([A4_W, A4_H]);
+          page.drawText(doc.name.slice(0, 95), { x: MARGIN, y: A4_H - MARGIN, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
+          const maxW = A4_W - MARGIN * 2;
+          const maxH = A4_H - MARGIN * 2 - 20;
+          const scale = Math.min(maxW / img.width, maxH / img.height, 1);
+          const w = img.width * scale, h = img.height * scale;
+          page.drawImage(img, { x: (A4_W - w) / 2, y: (A4_H - h) / 2 - 10, width: w, height: h });
+        } catch (e) {
+          console.error('[pdfmake] Could not embed image document', doc.name, e);
+        }
+      }
+    }
+
+    const merged = await out.save();
+    return new Blob([new Uint8Array(merged)], { type: 'application/pdf' });
+  } catch (e) {
+    console.error('[pdfmake] Appendix merge failed; returning report without appendix', e);
+    return bodyBlob;
+  }
+}
+
+// ============================================================================
 // MAIN GENERATOR
 // ============================================================================
 
@@ -1420,10 +1507,19 @@ export async function generateInspectionReportPdf(
 
     console.log('[pdfmake] Professional report generated successfully');
 
+    // ② Merge collected document-field uploads into a single appended appendix.
+    let finalBlob = result.blob;
+    let finalPreviewUrl = result.previewUrl;
+    if (finalBlob && inspection.documents?.length) {
+      console.log(`[pdfmake] Merging ${inspection.documents.length} document(s) into the appendix...`);
+      finalBlob = await appendDocumentsToPdf(finalBlob, inspection.documents);
+      finalPreviewUrl = URL.createObjectURL(finalBlob);
+    }
+
     return {
       success: true,
-      blob: result.blob,
-      previewUrl: result.previewUrl,
+      blob: finalBlob,
+      previewUrl: finalPreviewUrl,
       filename: result.filename,
     };
   } catch (error) {

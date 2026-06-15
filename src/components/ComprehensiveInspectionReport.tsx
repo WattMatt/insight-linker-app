@@ -7,6 +7,7 @@ import { DocumentPreviewDialog } from "@/components/DocumentPreviewDialog";
 import {
   generateInspectionReportPdf,
   type InspectionReportData,
+  type ReportDocument,
 } from "@/lib/pdfmakeInspectionReport";
 import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
 
@@ -106,6 +107,19 @@ export const ComprehensiveInspectionReport = ({
         };
       });
 
+      // Gather all document-field uploads for the report appendix (②) — same
+      // section/item key resolution the photos above use.
+      const collectedDocuments: ReportDocument[] = [];
+      templateSections.forEach((section: any) => {
+        const sectionId = String(section.id ?? '');
+        const items = Array.isArray(section.items) ? section.items : Object.values(section.items || {});
+        items.forEach((item: any, idx: number) => {
+          const itemId = String(item.id ?? idx);
+          const docs = jsonData[sectionId]?.[itemId]?.documents;
+          if (Array.isArray(docs)) collectedDocuments.push(...docs);
+        });
+      });
+
       // Extract tenants (array, or legacy object map keyed by template tenant id)
       const rawTenants = jsonData.tenants;
       let tenantsForReport: any[] = [];
@@ -150,6 +164,7 @@ export const ComprehensiveInspectionReport = ({
         generalInfo,
         sections: sectionsForReport,
         tenants: tenantsForReport,
+        documents: collectedDocuments,
         snags: snags.map(snag => ({
           title: snag.title,
           description: snag.description,

@@ -20,7 +20,7 @@ import {
   RefreshCw,
   Image as ImageIcon
 } from "lucide-react";
-import { generateAndSaveInspectionReportPdfmake, type InspectionReportData } from "@/lib/pdfmakeInspectionReport";
+import { generateAndSaveInspectionReportPdfmake, type InspectionReportData, type ReportDocument } from "@/lib/pdfmakeInspectionReport";
 
 interface GenerationResult {
   subsectionId: string;
@@ -279,6 +279,18 @@ export function BulkInspectionReportGenerator({
         };
       });
 
+      // Gather document-field uploads for the appendix (②)
+      const collectedDocuments: ReportDocument[] = [];
+      templateSections.forEach((section: any) => {
+        const sectionId = String(section.id ?? '');
+        const items = Array.isArray(section.items) ? section.items : Object.values(section.items || {});
+        items.forEach((item: any, idx: number) => {
+          const itemId = String(item.id ?? idx);
+          const docs = jsonData[sectionId]?.[itemId]?.documents;
+          if (Array.isArray(docs)) collectedDocuments.push(...docs);
+        });
+      });
+
       // Count snag photos
       snags.forEach(snag => {
         if (Array.isArray(snag.photos)) {
@@ -317,6 +329,7 @@ export function BulkInspectionReportGenerator({
         generalInfo,
         sections: sectionsForPdf,
         tenants: tenantsForPdf,
+        documents: collectedDocuments,
         snags: snags.map(snag => ({
           title: snag.title,
           description: snag.description || undefined,
