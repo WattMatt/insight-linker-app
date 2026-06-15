@@ -81,6 +81,7 @@ interface InspectionData {
         status?: string;
         notes?: string;
         photos?: string[];
+        documents?: Array<{ url: string; name: string; path?: string }>;
         images?: {
           [imageId: string]: {
             id?: string;
@@ -1416,6 +1417,116 @@ const InspectionDetail = () => {
     }
   };
 
+  const handleDocumentUpload = async (sectionKey: string, itemKey: string, files: FileList | null) => {
+    if (!files || files.length === 0) return;
+
+    if (!isOnline) {
+      toast.error("Document upload requires an internet connection.");
+      return;
+    }
+
+    const uploadKey = `${sectionKey}-${itemKey}`;
+    setUploadingImages(prev => new Set(prev).add(uploadKey));
+
+    try {
+      const uploaded: Array<{ url: string; name: string; path: string }> = [];
+
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+        const path = `inspections/${inspectionId}/${sectionKey}/${itemKey}/${Date.now()}-${i}-${safeName}`;
+
+        const { data, error } = await supabase.storage
+          .from('documents')
+          .upload(path, file, { contentType: file.type || undefined });
+
+        if (error) throw error;
+
+        const { data: urlData } = supabase.storage
+          .from('documents')
+          .getPublicUrl(data.path);
+
+        uploaded.push({ url: urlData.publicUrl, name: file.name, path: data.path });
+      }
+
+      if (uploaded.length === 0) {
+        toast.error("No documents were uploaded");
+        return;
+      }
+
+      setInspection(prev => {
+        if (!prev) return null;
+        const jsonData = prev.jsonData || {};
+        const sectionData = jsonData[sectionKey] || {};
+        const itemData = sectionData[itemKey] || {};
+        const existing = itemData.documents || [];
+        return {
+          ...prev,
+          jsonData: {
+            ...jsonData,
+            [sectionKey]: {
+              ...sectionData,
+              [itemKey]: {
+                ...itemData,
+                documents: [...existing, ...uploaded]
+              }
+            }
+          }
+        };
+      });
+
+      toast.success(`${uploaded.length} document(s) uploaded`);
+    } catch (error: any) {
+      if (process.env.NODE_ENV === 'development') console.error("Error uploading documents:", error);
+      toast.error("Failed to upload document: " + (error?.message || "Unknown error"));
+    } finally {
+      setUploadingImages(prev => {
+        const next = new Set(prev);
+        next.delete(uploadKey);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteDocument = async (sectionKey: string, itemKey: string, index: number) => {
+    if (!confirm('Remove this document?')) return;
+
+    const itemData = inspection?.jsonData?.[sectionKey]?.[itemKey] || {};
+    const docs = (itemData.documents || []) as Array<{ url: string; name: string; path?: string }>;
+    const target = docs[index];
+    if (!target) return;
+
+    try {
+      if (target.path) {
+        await supabase.storage.from('documents').remove([target.path]);
+      }
+    } catch (e) {
+      if (process.env.NODE_ENV === 'development') console.error("Storage delete failed (continuing):", e);
+    }
+
+    setInspection(prev => {
+      if (!prev) return null;
+      const jsonData = prev.jsonData || {};
+      const sectionData = jsonData[sectionKey] || {};
+      const id = sectionData[itemKey] || {};
+      return {
+        ...prev,
+        jsonData: {
+          ...jsonData,
+          [sectionKey]: {
+            ...sectionData,
+            [itemKey]: {
+              ...id,
+              documents: docs.filter((_, i) => i !== index)
+            }
+          }
+        }
+      };
+    });
+
+    toast.success("Document removed");
+  };
+
   const handleDeleteImage = async (sectionKey: string, itemKey: string, photoUrl: string, index: number) => {
 
     try {
@@ -1768,6 +1879,9 @@ const InspectionDetail = () => {
     // Get photos array
     const photos: string[] = itemData.photos || [];
 
+    // Get documents array (for `document` field type)
+    const documents: Array<{ url: string; name: string }> = itemData.documents || [];
+
     const uploadKey = `${sectionKey}-${itemKey}`;
     const isUploading = uploadingImages.has(uploadKey);
 
@@ -1808,6 +1922,64 @@ const InspectionDetail = () => {
             </div>
           </div>
 
+          {item.type === 'document' ? (
+            <div>
+              <Label>Documents</Label>
+              <div className="mt-2 space-y-3">
+                {documents.length > 0 && (
+                  <div className="space-y-2">
+                    {documents.map((doc: { url: string; name: string }, index: number) => (
+                      <div key={index} className="flex items-center justify-between gap-2 rounded border p-2">
+                        <a
+                          href={doc.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm truncate text-primary underline"
+                        >
+                          {doc.name}
+                        </a>
+                        <Button
+                          size="icon"
+                          variant="destructive"
+                          className="h-6 w-6 shrink-0"
+                          onClick={() => handleDeleteDocument(sectionKey, itemKey, index)}
+                        >
+                          <X className="h-3 w-3" />
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                <input
+                  type="file"
+                  accept=".pdf,image/jpeg,image/png"
+                  multiple
+                  className="hidden"
+                  id={`document-upload-${uploadKey}`}
+                  onChange={(e) => {
+                    handleDocumentUpload(sectionKey, itemKey, e.target.files);
+                    e.target.value = '';
+                  }}
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full sm:w-auto"
+                  onClick={() => document.getElementById(`document-upload-${uploadKey}`)?.click()}
+                  disabled={isUploading}
+                >
+                  {isUploading ? (
+                    <>Uploading...</>
+                  ) : (
+                    <>
+                      <Upload className="mr-2 h-4 w-4" />
+                      Add Document
+                    </>
+                  )}
+                </Button>
+              </div>
+            </div>
+          ) : (
           <div>
             <Label>Photos</Label>
             <div className="mt-2 space-y-3">
@@ -1906,6 +2078,7 @@ const InspectionDetail = () => {
               </div>
             </div>
           </div>
+          )}
         </div>
       </div>
     );

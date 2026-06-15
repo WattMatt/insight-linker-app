@@ -41,7 +41,7 @@ export interface TemplateSection {
 export interface TemplateItem {
   id: string;
   name: string;
-  type: 'text' | 'checkbox' | 'select' | 'textarea' | 'image' | 'number' | 'checklist';
+  type: 'text' | 'checkbox' | 'select' | 'textarea' | 'image' | 'document' | 'number' | 'checklist';
   value?: string;
   options?: string[];
   required?: boolean;

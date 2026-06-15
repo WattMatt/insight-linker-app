@@ -14,7 +14,7 @@ import { supabase } from "@/integrations/supabase/client";
 interface TemplateItem {
   id: string;
   name: string;
-  type: "text" | "textarea" | "number" | "image" | "checkbox" | "select";
+  type: "text" | "textarea" | "number" | "image" | "document" | "checkbox" | "select";
   required: boolean;
   options?: string[];
 }
@@ -63,6 +63,7 @@ const FIELD_TYPES = [
   { value: "textarea", label: "Text Area" },
   { value: "number", label: "Number" },
   { value: "image", label: "Image Upload" },
+  { value: "document", label: "Document Upload" },
   { value: "checkbox", label: "Checkbox (Pass/Fail)" },
   { value: "select", label: "Dropdown Select" },
 ];

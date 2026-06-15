@@ -250,6 +250,19 @@ const renderField = (item: { id: string; name: string; type: string; options?: s
         </div>
       );
 
+    case 'document':
+      return (
+        <div className="space-y-2">
+          <span className="text-xs font-semibold text-gray-700">Document:</span>
+          <div className="border-2 border-dashed border-gray-300 bg-gray-50 h-16 flex flex-col items-center justify-center rounded">
+            <div className="text-gray-400 text-center text-[10px]">
+              <div className="font-semibold">DOCUMENT</div>
+              <div>PDF / image attachment</div>
+            </div>
+          </div>
+        </div>
+      );
+
     case 'select':
       return (
         <div className="text-xs">
