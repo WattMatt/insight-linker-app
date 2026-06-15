@@ -572,64 +572,6 @@ export const TemplatePreviewRenderer: React.FC<TemplatePreviewRendererProps> = (
         </div>
       )}
 
-      {/* Signature Page */}
-      <div className="bg-white aspect-[210/297] p-6 border shadow-lg relative">
-        <div className="bg-gray-100 -mx-6 px-6 py-2 mb-6">
-          <h2 className="text-base font-bold text-center">Sign-Off & Declarations</h2>
-        </div>
-        
-        <div className="space-y-6">
-          <div className="border border-gray-300 p-4">
-            <h3 className="font-bold text-sm mb-3">Inspector Declaration</h3>
-            <p className="text-xs text-gray-700 mb-4">
-              I hereby declare that this inspection was conducted in accordance with SANS 10142-1 and all relevant 
-              regulations. The findings recorded herein represent an accurate assessment of the installation at 
-              the time of inspection.
-            </p>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <div className="border-b-2 border-gray-400 h-12 mb-1"></div>
-                <p className="text-xs text-gray-600">Inspector Signature</p>
-              </div>
-              <div>
-                <div className="border-b-2 border-gray-400 h-12 mb-1"></div>
-                <p className="text-xs text-gray-600">Date</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="border border-gray-300 p-4">
-            <h3 className="font-bold text-sm mb-3">Client Acknowledgement</h3>
-            <p className="text-xs text-gray-700 mb-4">
-              I acknowledge receipt of this report and understand the findings documented herein.
-            </p>
-            <div className="grid grid-cols-2 gap-6">
-              <div>
-                <div className="border-b-2 border-gray-400 h-12 mb-1"></div>
-                <p className="text-xs text-gray-600">Client Representative</p>
-              </div>
-              <div>
-                <div className="border-b-2 border-gray-400 h-12 mb-1"></div>
-                <p className="text-xs text-gray-600">Date</p>
-              </div>
-            </div>
-          </div>
-
-          {template.category === 'Medium Voltage' && (
-            <div className="border border-red-200 bg-red-50 p-4">
-              <h3 className="font-bold text-sm mb-2 text-red-800">⚠ Safety Warning</h3>
-              <p className="text-xs text-red-700">
-                This installation operates at voltages exceeding 1000V AC. Only qualified persons with 
-                appropriate authorization should perform switching operations or maintenance activities.
-              </p>
-            </div>
-          )}
-        </div>
-        
-        <div className="absolute bottom-3 left-0 right-0 text-center text-[10px] text-gray-500">
-          {template.name} - Sign-Off Page
-        </div>
-      </div>
     </div>
   );
 };

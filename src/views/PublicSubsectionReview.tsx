@@ -97,7 +97,6 @@ interface InspectionData {
   description?: string;
   json_data?: any;
   template_sections?: any;
-  signatures?: any[];
 }
 
 interface FloorPlanData {
@@ -212,8 +211,7 @@ const PublicSubsectionReview = () => {
         // second (now blocked) direct table read.
         description: insp.description,
         json_data: insp.json_data,
-        template_sections: insp.template_sections,
-        signatures: insp.signatures
+        template_sections: insp.template_sections
       })));
 
       setFloorPlans((payload.floor_plans || []).map((fp: any) => ({
@@ -273,7 +271,7 @@ const PublicSubsectionReview = () => {
   const totalFloorPlanPins = floorPlans.reduce((sum, fp) => sum + fp.pins_count, 0);
 
   // Build full inspection details from the already-loaded payload (no extra
-  // table read — the scoped RPC carries json_data, template + signatures).
+  // table read — the scoped RPC carries json_data + template).
   const buildInspectionDetails = (insp: any) => {
     return {
       id: insp.id,
@@ -286,8 +284,7 @@ const PublicSubsectionReview = () => {
       json_data: insp.json_data,
       inspection_templates: insp.template_name || insp.template_sections
         ? { name: insp.template_name, sections: insp.template_sections }
-        : null,
-      inspection_signatures: insp.signatures || []
+        : null
     };
   };
 
@@ -1063,32 +1060,6 @@ const PublicSubsectionReview = () => {
                         </CardContent>
                       </Card>
                     ))}
-                  </div>
-                )}
-
-                {/* Signatures */}
-                {inspectionDetails.inspection_signatures?.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                      Digital Signatures
-                    </h3>
-                    <div className="space-y-2">
-                      {inspectionDetails.inspection_signatures.map((sig: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
-                          <div>
-                            <p className="font-medium text-sm">{sig.signer_name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{sig.signer_type}</p>
-                          </div>
-                          <div className="flex items-center gap-2 text-emerald-600">
-                            <CheckCircle2 className="h-4 w-4" />
-                            <span className="text-xs">
-                              {sig.signed_at ? new Date(sig.signed_at).toLocaleDateString() : 'Signed'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
               </div>

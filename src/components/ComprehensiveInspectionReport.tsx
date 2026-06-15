@@ -70,16 +70,7 @@ export const ComprehensiveInspectionReport = ({
         return;
       }
 
-      // Fetch signatures
-      let signatures: any[] = [];
       const inspId = inspectionId || inspectionData?.id;
-      if (inspId) {
-        const { data: sigData } = await supabase
-          .from('inspection_signatures')
-          .select('*')
-          .eq('inspection_id', inspId);
-        signatures = sigData || [];
-      }
 
       // Resolve jsonData (props, then a fresh fetch if empty)
       let jsonData: Record<string, any> = inspectionData?.jsonData || inspectionData?.json_data || {};
@@ -165,12 +156,6 @@ export const ComprehensiveInspectionReport = ({
           status: snag.status,
           riskLevel: snag.risk_level,
           photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
-        })),
-        signatures: signatures.map(sig => ({
-          name: sig.signer_name,
-          role: sig.signer_type,
-          signatureUrl: sig.signature_data,
-          signedAt: sig.signed_at,
         })),
       };
 

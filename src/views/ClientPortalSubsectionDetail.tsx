@@ -125,8 +125,7 @@ const ClientPortalSubsectionDetail = () => {
         .from('inspections')
         .select(`
           *,
-          inspection_templates (name, sections),
-          inspection_signatures (signer_name, signer_type, signed_at)
+          inspection_templates (name, sections)
         `)
         .eq('id', inspectionId)
         .single();
@@ -583,32 +582,6 @@ const ClientPortalSubsectionDetail = () => {
                   <div className="p-4 rounded-lg border bg-muted/20">
                     <h4 className="text-sm font-semibold mb-1">Description</h4>
                     <p className="text-sm text-muted-foreground">{inspectionDetails.description}</p>
-                  </div>
-                )}
-
-                {/* Signatures */}
-                {inspectionDetails.inspection_signatures?.length > 0 && (
-                  <div className="space-y-3">
-                    <h3 className="text-base font-bold flex items-center gap-2 border-b pb-2">
-                      <CheckCircle2 className="h-5 w-5 text-emerald-600" />
-                      Digital Signatures
-                    </h3>
-                    <div className="space-y-2">
-                      {inspectionDetails.inspection_signatures.map((sig: any, idx: number) => (
-                        <div key={idx} className="flex items-center justify-between p-3 rounded-lg border">
-                          <div>
-                            <p className="font-medium text-sm">{sig.signer_name}</p>
-                            <p className="text-xs text-muted-foreground capitalize">{sig.signer_type}</p>
-                          </div>
-                          <div className="flex items-center gap-2 text-emerald-600">
-                            <CheckCircle2 className="h-4 w-4" />
-                            <span className="text-xs">
-                              {sig.signed_at ? format(new Date(sig.signed_at), "dd MMM yyyy HH:mm") : 'Signed'}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
                   </div>
                 )}
               </div>

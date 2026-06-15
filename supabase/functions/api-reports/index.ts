@@ -141,17 +141,11 @@ serve(async (req) => {
             .eq("id", inspection_id)
             .single();
 
-          const { data: signatures } = await supabase
-            .from("inspection_signatures")
-            .select("*")
-            .eq("inspection_id", inspection_id);
-
           reportData = {
             report_type: "inspection",
             generated_at: new Date().toISOString(),
             inspection: inspection || {},
-            signatures: signatures || [],
-            content_base64: generateInspectionPDFBase64(inspection, signatures),
+            content_base64: generateInspectionPDFBase64(inspection),
           };
           break;
         }
@@ -298,7 +292,7 @@ serve(async (req) => {
 });
 
 // PDF Generation functions (simplified base64 text reports)
-function generateInspectionPDFBase64(inspection: any, signatures: any): string {
+function generateInspectionPDFBase64(inspection: any): string {
   const content = `
 INSPECTION REPORT
 =================
@@ -321,10 +315,6 @@ Category: ${inspection?.inspection_templates?.category || "N/A"}
 INSPECTION DATA
 ---------------
 ${inspection?.json_data ? JSON.stringify(inspection.json_data, null, 2) : "No data recorded"}
-
-SIGNATURES
-----------
-${signatures?.map((s: any) => `${s.signer_type}: ${s.signer_name} (${s.signed_at})`).join("\n") || "No signatures"}
   `.trim();
   
   return btoa(unescape(encodeURIComponent(content)));

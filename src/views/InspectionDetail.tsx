@@ -27,7 +27,6 @@ import {
   generateTenantImagePath,
   renameInspectionImages
 } from "@/lib/imageNaming";
-import { InspectionSignatures } from "@/components/InspectionSignatures";
 import { InspectionOfflineBanner } from "@/components/InspectionOfflineBanner";
 import { useOfflineInspectionDetail } from "@/hooks/useOfflineInspectionDetail";
 import { useOfflineSync } from "@/hooks/useOfflineSync";
@@ -2067,7 +2066,6 @@ const InspectionDetail = () => {
             ))}
           {templateCategory !== "Site Drawing" && !template?.name?.toLowerCase().includes("line shop") && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
-          {templateCategory !== "Site Drawing" && <TabsTrigger value="signatures">Sign-Off</TabsTrigger>}
         </TabsList>
 
         {templateCategory === "Site Drawing" ? (
@@ -2545,12 +2543,6 @@ const InspectionDetail = () => {
                   )}
                 </CardContent>
               </Card>
-            </TabsContent>
-
-            <TabsContent value="signatures" className="space-y-4">
-              {inspectionId && (
-                <InspectionSignatures inspectionId={inspectionId} />
-              )}
             </TabsContent>
           </>
         )}

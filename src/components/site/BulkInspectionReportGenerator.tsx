@@ -249,13 +249,6 @@ export function BulkInspectionReportGenerator({
         .eq('subsection_id', sub.subsectionId);
       const snags = snagsData || [];
 
-      // Fetch signatures
-      const { data: signaturesData } = await supabase
-        .from('inspection_signatures')
-        .select('*')
-        .eq('inspection_id', sub.inspectionId);
-      const signatures = signaturesData || [];
-
       // Build sections from template with photos
       const jsonData: Record<string, any> = (inspection.json_data as Record<string, any>) || {};
       const generalInfo = jsonData.generalInfo || {};
@@ -330,12 +323,6 @@ export function BulkInspectionReportGenerator({
           status: snag.status,
           riskLevel: snag.risk_level || undefined,
           photos: Array.isArray(snag.photos) ? (snag.photos as string[]) : [],
-        })),
-        signatures: signatures.map(sig => ({
-          name: sig.signer_name,
-          role: sig.signer_type,
-          signatureUrl: sig.signature_data,
-          signedAt: sig.signed_at,
         })),
         subsectionName: sub.subsectionName,
       };

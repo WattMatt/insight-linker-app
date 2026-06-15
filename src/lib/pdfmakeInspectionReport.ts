@@ -59,13 +59,6 @@ export interface InspectionSnag {
   photos?: string[];
 }
 
-export interface InspectionSignature {
-  name: string;
-  role?: string;
-  signatureUrl?: string;
-  signedAt?: string;
-}
-
 export interface InspectionTenant {
   shopName: string;
   shopNumber?: string;
@@ -88,7 +81,6 @@ export interface InspectionReportData {
   sections?: InspectionSection[];
   tenants?: InspectionTenant[];
   snags?: InspectionSnag[];
-  signatures?: InspectionSignature[];
   subsectionName?: string;
 }
 
@@ -137,12 +129,6 @@ function collectImageUrls(inspection: InspectionReportData): string[] {
   inspection.snags?.forEach(snag => {
     if (snag.photos?.length) {
       urls.push(...snag.photos.filter(Boolean));
-    }
-  });
-  
-  inspection.signatures?.forEach(sig => {
-    if (sig.signatureUrl && !sig.signatureUrl.startsWith('data:')) {
-      urls.push(sig.signatureUrl);
     }
   });
   
@@ -1363,91 +1349,6 @@ function createTenantCardContent(
 }
 
 // ============================================================================
-// SIGNATURES SECTION - KEEPS HEADER WITH SIGNATURES
-// ============================================================================
-
-function createSignaturesSection(
-  signatures: InspectionSignature[],
-  imageCache: Map<string, string>
-): Content[] {
-  if (!signatures?.length) return [];
-
-  const content: Content[] = [];
-
-  // Section header
-  const sectionHeader = {
-    table: {
-      widths: ['*'],
-      body: [[{
-        text: 'SIGN-OFF & APPROVALS',
-        fontSize: 12,
-        bold: true,
-        color: '#FFFFFF',
-        margin: [12, 8, 0, 8],
-      }]],
-    },
-    layout: {
-      fillColor: () => REPORT_COLORS.primary,
-      hLineWidth: () => 0,
-      vLineWidth: () => 0,
-    },
-    margin: [0, 20, 0, 15],
-  };
-
-  const sigColumns: Content[] = signatures.map(sig => {
-    const sigContent: Content[] = [
-      { text: sig.name, fontSize: 11, bold: true },
-      { text: sig.role || 'Signatory', fontSize: 9, color: REPORT_COLORS.textSecondary },
-    ];
-
-    // Signature image
-    if (sig.signatureUrl) {
-      const dataUrl = sig.signatureUrl.startsWith('data:') 
-        ? sig.signatureUrl 
-        : imageCache.get(sig.signatureUrl);
-      
-      if (dataUrl) {
-        sigContent.push({
-          image: dataUrl,
-          width: 120,
-          height: 50,
-          margin: [0, 8, 0, 0],
-        });
-      }
-    }
-
-    if (sig.signedAt) {
-      sigContent.push({
-        text: `Signed: ${new Date(sig.signedAt).toLocaleDateString('en-GB')}`,
-        fontSize: 8,
-        color: REPORT_COLORS.textMuted,
-        margin: [0, 5, 0, 0],
-      });
-    }
-
-    return {
-      stack: sigContent,
-      width: '*',
-      margin: [0, 0, 20, 0],
-    };
-  });
-
-  // Keep header and all signatures together
-  content.push({
-    unbreakable: true,
-    stack: [
-      sectionHeader,
-      {
-        columns: sigColumns,
-        margin: [0, 10, 0, 20],
-      },
-    ],
-  });
-
-  return content;
-}
-
-// ============================================================================
 // MAIN GENERATOR
 // ============================================================================
 
@@ -1502,11 +1403,6 @@ export async function generateInspectionReportPdf(
     // 6. Tenant Verification
     if (inspection.tenants?.length) {
       content.push(...createTenantSection(inspection.tenants, imageCache));
-    }
-
-    // 7. Signatures
-    if (inspection.signatures?.length) {
-      content.push(...createSignaturesSection(inspection.signatures, imageCache));
     }
 
     // Generate PDF

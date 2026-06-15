@@ -108,7 +108,6 @@ const DEFAULT_TEMPLATES: Record<TemplateReportType, { customization: Partial<Rep
       { id: "inspection-details", title: "Inspection Details", type: "table", enabled: true, order: 0, editable: true },
       { id: "findings", title: "Findings", type: "table", enabled: true, order: 1, editable: true },
       { id: "photos", title: "Photo Evidence", type: "table", enabled: true, order: 2, editable: true },
-      { id: "signatures", title: "Signatures", type: "table", enabled: true, order: 3, editable: true },
     ]
   },
   floor_plan: {
@@ -188,7 +187,6 @@ const DEFAULT_TEMPLATES: Record<TemplateReportType, { customization: Partial<Rep
       { id: "snag-summary", title: "Snag Summary", type: "table", enabled: true, order: 2, editable: true },
       { id: "before-after", title: "Before/After Photos", type: "table", enabled: true, order: 3, editable: true },
       { id: "compliance-checklist", title: "Compliance Checklist", type: "table", enabled: true, order: 4, editable: true },
-      { id: "signatures", title: "Sign-off Section", type: "table", enabled: true, order: 5, editable: true },
     ]
   },
 };
