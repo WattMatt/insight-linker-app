@@ -256,6 +256,7 @@ const InlineTemplateEditor = ({
                           <SelectItem value="number">Number</SelectItem>
                           <SelectItem value="checkbox">Checkbox</SelectItem>
                           <SelectItem value="image">Image</SelectItem>
+                          <SelectItem value="document">Document Upload</SelectItem>
                           <SelectItem value="select">Dropdown</SelectItem>
                         </SelectContent>
                       </Select>
