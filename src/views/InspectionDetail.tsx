@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
 import { useParams, useNavigate, useSearchParams } from "@/lib/navigation";
+import { templateSupportsTenants } from "@/lib/templateTenants";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -1618,12 +1619,16 @@ const InspectionDetail = () => {
     try {
       setSaving(true);
 
-      // Include tenants in json_data — skip the rename-on-every-save cycle
-      // which was causing image loss on slow connections
-      const jsonDataWithTenants = {
-        ...inspection.jsonData,
-        tenants: tenants
-      } as any;
+      // Include tenants in json_data only for templates that support them (EMB).
+      // For every other template, strip any stale tenants key so non-EMB
+      // inspections can't carry or re-save tenant data. (Also skips the
+      // rename-on-every-save cycle that was causing image loss on slow connections.)
+      const jsonDataWithTenants = { ...inspection.jsonData } as any;
+      if (templateSupportsTenants(template)) {
+        jsonDataWithTenants.tenants = tenants;
+      } else {
+        delete jsonDataWithTenants.tenants;
+      }
 
       // The full record we persist, identical for the online and offline paths.
       const updatePayload = {
@@ -2237,7 +2242,7 @@ const InspectionDetail = () => {
                 {formatTabLabel(section.name)}
               </TabsTrigger>
             ))}
-          {templateCategory !== "Site Drawing" && !template?.name?.toLowerCase().includes("line shop") && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
+          {templateSupportsTenants(template) && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
           {templateCategory !== "Site Drawing" && <TabsTrigger value="snag-list">Snag List</TabsTrigger>}
         </TabsList>
 

@@ -1,5 +1,6 @@
 import React from "react";
 import { Badge } from "@/components/ui/badge";
+import { templateSupportsTenants } from "@/lib/templateTenants";
 
 interface TemplateSection {
   id: string;
@@ -543,8 +544,8 @@ export const TemplatePreviewRenderer: React.FC<TemplatePreviewRendererProps> = (
         </div>
       )}
 
-      {/* Tenants Page (for Low Voltage board templates) */}
-      {template.tenants && template.tenants.length > 0 && (
+      {/* Tenants Page (EMB / Electrical Main Board templates only) */}
+      {templateSupportsTenants(template) && template.tenants && template.tenants.length > 0 && (
         <div className="bg-white aspect-[210/297] p-6 border shadow-lg relative">
           <div style={{ backgroundColor: accentColor }} className="text-white -mx-6 px-6 py-2 mb-4">
             <h2 className="text-sm font-bold text-center uppercase">Tenant / Circuit Information</h2>

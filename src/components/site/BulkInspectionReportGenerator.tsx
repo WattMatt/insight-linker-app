@@ -21,6 +21,7 @@ import {
   Image as ImageIcon
 } from "lucide-react";
 import { generateAndSaveInspectionReportPdfmake, type InspectionReportData, type ReportDocument } from "@/lib/pdfmakeInspectionReport";
+import { templateSupportsTenants } from "@/lib/templateTenants";
 
 interface GenerationResult {
   subsectionId: string;
@@ -298,8 +299,8 @@ export function BulkInspectionReportGenerator({
         }
       });
 
-      // Extract tenant photos and count them
-      const tenants = Array.isArray(jsonData.tenants) ? jsonData.tenants : [];
+      // Extract tenant photos and count them (EMB templates only)
+      const tenants = (templateSupportsTenants(template) && Array.isArray(jsonData.tenants)) ? jsonData.tenants : [];
       const tenantsForPdf = tenants.map((tenant: any) => {
         const images: string[] = [];
         if (tenant.meterImage) images.push(tenant.meterImage);

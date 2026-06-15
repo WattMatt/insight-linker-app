@@ -10,6 +10,7 @@ import {
   type ReportDocument,
 } from "@/lib/pdfmakeInspectionReport";
 import { savePDFToDocuments } from "@/lib/pdfDocumentSaver";
+import { templateSupportsTenants } from "@/lib/templateTenants";
 
 interface Snag {
   id: string;
@@ -163,7 +164,7 @@ export const ComprehensiveInspectionReport = ({
         qualityRating: inspectionData?.quality_rating ?? undefined,
         generalInfo,
         sections: sectionsForReport,
-        tenants: tenantsForReport,
+        tenants: templateSupportsTenants(template) ? tenantsForReport : [],
         documents: collectedDocuments,
         snags: snags.map(snag => ({
           title: snag.title,

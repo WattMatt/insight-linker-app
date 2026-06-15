@@ -10,6 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Plus, Trash2, GripVertical, Save } from "lucide-react";
 import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
+import { templateSupportsTenants } from "@/lib/templateTenants";
 
 interface TemplateItem {
   id: string;
@@ -174,7 +175,7 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
         category,
         description,
         sections: sections as any,  // Save as array
-        tenants: ((templateName.toLowerCase().includes("main board") || templateName.toLowerCase().includes("shop board")) && tenants.length > 0) ? tenants as any : undefined,
+        tenants: (templateSupportsTenants({ name: templateName }) && tenants.length > 0) ? tenants as any : undefined,
         sections_count: sections.length,
         pages_count: sections.length + 1, // +1 for cover page
         updated_at: new Date().toISOString(),
@@ -255,9 +256,9 @@ export const TemplateBuilder = ({ templateId, initialData, onSave }: TemplateBui
       </Card>
 
       <Tabs defaultValue="structure" className="w-full">
-        <TabsList className={`grid w-full max-w-md ${(templateName.toLowerCase().includes("main board") || templateName.toLowerCase().includes("shop board")) ? "grid-cols-2" : "grid-cols-1"}`}>
+        <TabsList className={`grid w-full max-w-md ${templateSupportsTenants({ name: templateName }) ? "grid-cols-2" : "grid-cols-1"}`}>
           <TabsTrigger value="structure">Template Structure</TabsTrigger>
-          {(templateName.toLowerCase().includes("main board") || templateName.toLowerCase().includes("shop board")) && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
+          {templateSupportsTenants({ name: templateName }) && <TabsTrigger value="tenants">Tenants</TabsTrigger>}
         </TabsList>
 
         <TabsContent value="structure" className="space-y-6 mt-6">
