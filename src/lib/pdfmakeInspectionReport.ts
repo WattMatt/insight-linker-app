@@ -19,7 +19,7 @@ import {
 } from './pdfEngine';
 import { supabase } from '@/integrations/supabase/client';
 import { mmToPt } from './pdfMakeConfig';
-import { loadImageSimple, loadImagesSimple } from './simpleImageLoader';
+import { loadImageSimple, loadImagesSimple, compressImageBlob } from './simpleImageLoader';
 import { savePDFToDocuments } from './pdfDocumentSaver';
 
 // Type definitions
@@ -113,7 +113,9 @@ export interface GenerateInspectionReportResult {
 
 // Using simple image loader from simpleImageLoader.ts
 async function loadImagesAsDataUrls(urls: string[]): Promise<Map<string, string>> {
-  return loadImagesSimple(urls);
+  // Compress photos before embedding — full-resolution images blow the PDF past
+  // the storage upload size limit. 800px / 0.6 JPEG matches the rest of the app.
+  return loadImagesSimple(urls, { compress: true });
 }
 
 function collectImageUrls(inspection: InspectionReportData): string[] {
@@ -1413,7 +1415,16 @@ async function appendDocumentsToPdf(bodyBlob: Blob, docs: ReportDocument[]): Pro
         }
       } else {
         try {
-          const img = lower.endsWith('.png') ? await out.embedPng(bytes) : await out.embedJpg(bytes);
+          // Downscale/recompress before embedding so a few photos don't blow the
+          // PDF past the storage upload limit. compressImageBlob returns JPEG on
+          // success, or the original blob (PNG/JPEG) if the canvas step fails.
+          const srcType = lower.endsWith('.png') ? 'image/png' : 'image/jpeg';
+          // Cast works around TS 5.7's Uint8Array<ArrayBufferLike> vs BlobPart typing.
+          const compressed = await compressImageBlob(new Blob([bytes as BlobPart], { type: srcType }));
+          const cbytes = new Uint8Array(await compressed.arrayBuffer());
+          const img = compressed.type === 'image/png'
+            ? await out.embedPng(cbytes)
+            : await out.embedJpg(cbytes);
           const page = out.addPage([A4_W, A4_H]);
           page.drawText(doc.name.slice(0, 95), { x: MARGIN, y: A4_H - MARGIN, size: 10, font, color: rgb(0.35, 0.35, 0.35) });
           const maxW = A4_W - MARGIN * 2;
@@ -1514,6 +1525,10 @@ export async function generateInspectionReportPdf(
       console.log(`[pdfmake] Merging ${inspection.documents.length} document(s) into the appendix...`);
       finalBlob = await appendDocumentsToPdf(finalBlob, inspection.documents);
       finalPreviewUrl = URL.createObjectURL(finalBlob);
+    }
+
+    if (finalBlob) {
+      console.log(`[pdfmake] Final report size: ${(finalBlob.size / (1024 * 1024)).toFixed(2)} MB`);
     }
 
     return {

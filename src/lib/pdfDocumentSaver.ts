@@ -40,9 +40,14 @@ export async function savePDFToDocuments(options: SavePDFOptions): Promise<SaveR
     }
   } catch (error) {
     console.error("Error saving PDF to documents:", error);
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : "Unknown error occurred" 
+    const rawMessage = error instanceof Error ? error.message : "Unknown error occurred";
+    const isTooLarge = /exceeded the maximum allowed size|payload too large|413/i.test(rawMessage);
+    const sizeMb = (blob.size / (1024 * 1024)).toFixed(1);
+    return {
+      success: false,
+      error: isTooLarge
+        ? `Report file is too large to save (${sizeMb} MB). Reduce the number of photos or attached documents and try again.`
+        : rawMessage,
     };
   }
 }
