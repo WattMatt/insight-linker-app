@@ -29,6 +29,9 @@ export const inspectionSchema = z.object({
   description: z.string().max(2000).optional(),
   site_id: z.string().uuid("Invalid site ID"),  // Required!
   inspection_date: z.string().optional(),
+  // Status no longer drives compliance/health (existence-based model), and the per-inspection
+  // status markers are removed from the subsection flow. The enum is retained here because the
+  // standalone /inspections view + dashboards still use it, pending a Phase-2 UI sweep.
   status: z.enum(['Pending', 'In Progress', 'Completed', 'Cancelled']),
   priority: z.enum(['Low', 'Medium', 'High', 'Critical']).optional(),
   project_name: z.string().max(255).optional(),

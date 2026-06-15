@@ -22,9 +22,9 @@ describe('predicates', () => {
     expect(isSnagResolved({ subsection_id: 's', status: 'Closed' })).toBe(true);
     expect(isSnagResolved({ subsection_id: 's', status: 'Open' })).toBe(false);
   });
-  it('isInspectionCompleted: completed set', () => {
+  it('isInspectionCompleted: existence-based — any inspection counts', () => {
     expect(isInspectionCompleted({ status: 'Completed' })).toBe(true);
-    expect(isInspectionCompleted({ status: 'Pending' })).toBe(false);
+    expect(isInspectionCompleted({ status: 'Pending' })).toBe(true);
   });
 });
 
@@ -35,11 +35,12 @@ describe('factorScores', () => {
       { subsection_id: 'a', status: 'Open' }, { subsection_id: 'a', status: 'Rectified' },
       { subsection_id: 'b', status: 'Closed' },
     ];
+    // Existence-based: both inspections count (status ignored), so 2 of 3 subsections are inspected.
     const insp = [{ subsection_id: 'a', status: 'Completed' }, { subsection_id: 'b', status: 'Pending' }];
     const f = factorScores(subs, snags, insp);
     expect(f.metering).toBe(67);
     expect(f.snags).toBe(67);
-    expect(f.inspections).toBe(33);
+    expect(f.inspections).toBe(67);
   });
   it('no snags => snag factor is 100', () => {
     expect(factorScores([sub('a')], [], []).snags).toBe(100);

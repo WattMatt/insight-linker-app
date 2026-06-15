@@ -78,15 +78,16 @@ describe('computeSiteDeliverables — counts', () => {
     expect(get(none, 'coc').status).toBe('not_required');
   });
 
-  it('inspections: per-subsection completion', () => {
+  it('inspections: existence-based — any inspection marks a subsection done', () => {
     const s = computeSiteDeliverables(baseInput({
       subsections: [{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }],
+      // Status is ignored now; both subsections have an inspection, so both count.
       inspections: [{ subsection_id: 'a', status: 'Completed' }, { subsection_id: 'b', status: 'Pending' }],
     }));
     const d = get(s, 'inspections');
-    expect(d.done).toBe(1);
+    expect(d.done).toBe(2);
     expect(d.total).toBe(2);
-    expect(d.outstandingItems[0].subsectionId).toBe('b');
+    expect(d.outstandingItems.length).toBe(0);
   });
 
   it('metering: excludes Not Required from total', () => {

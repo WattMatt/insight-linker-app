@@ -925,37 +925,6 @@ export function useSubsectionDetail() {
     }
   };
 
-  const handleUpdateInspectionStatus = async (inspectionId: string, newStatus: string) => {
-    try {
-      if (newStatus === 'Completed') {
-        const { data: inspection, error: fetchError } = await supabase
-          .from('inspections')
-          .select('quality_rating, template_id')
-          .eq('id', inspectionId)
-          .single();
-
-        if (fetchError) throw fetchError;
-        if (!inspection?.quality_rating) {
-          toast.error("Cannot mark inspection as complete without setting a quality rating (1-5). Please edit the inspection and set the quality rating in the General Info tab.");
-          return;
-        }
-        toast.success("Inspection marked as complete. Use the 'Generate Report' button to create a PDF report.");
-      }
-
-      const { error } = await supabase
-        .from('inspections')
-        .update({ status: newStatus })
-        .eq('id', inspectionId);
-
-      if (error) throw error;
-      toast.success("Inspection status updated");
-      fetchSubsectionData();
-    } catch (error) {
-      if (process.env.NODE_ENV === 'development') console.error("Error updating inspection:", error);
-      toast.error("Failed to update inspection status");
-    }
-  };
-
   const handleDeleteInspection = async () => {
     if (!deleteInspectionId) return;
     try {
@@ -1131,7 +1100,6 @@ export function useSubsectionDetail() {
     handleDownloadDocument,
     handleFixCategories,
     handleCreateInspection,
-    handleUpdateInspectionStatus,
     handleDeleteInspection,
     handleFixTemplateLinks,
     fetchSupabaseDocuments,

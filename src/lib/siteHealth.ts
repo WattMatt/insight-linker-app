@@ -31,7 +31,6 @@ export interface ReadinessResult {
 export const DEFAULT_WEIGHTS: HealthWeights = { snags: 0.40, inspections: 0.35, metering: 0.25 };
 export const RESOLVED_SNAG_STATUSES = ['Rectified', 'Closed'];
 export const BLOCKING_RISK_LEVELS = ['Critical', 'High'];
-export const COMPLETED_INSPECTION_STATUSES = ['Complete', 'Completed', 'Closed', 'Done'];
 
 export function isMetered(s: SubsectionForHealth): boolean {
   return s.metering_status === 'Installed' || !!s.meter_serial_number;
@@ -39,8 +38,11 @@ export function isMetered(s: SubsectionForHealth): boolean {
 export function isSnagResolved(snag: SnagForHealth): boolean {
   return !!snag.status && RESOLVED_SNAG_STATUSES.includes(snag.status);
 }
+// Existence-based model: inspection status markers were removed, so any non-deleted
+// inspection counts toward health/compliance simply by existing. (Kept this name so the
+// call sites — filters and incomplete-checks — read unchanged; it now means "counts".)
 export function isInspectionCompleted(i: InspectionForHealth): boolean {
-  return !!i.status && COMPLETED_INSPECTION_STATUSES.includes(i.status);
+  return !!i;
 }
 function isBlockingOpenSnag(snag: SnagForHealth): boolean {
   return snag.status === 'Open' && !!snag.risk_level && BLOCKING_RISK_LEVELS.includes(snag.risk_level);

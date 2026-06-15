@@ -34,7 +34,6 @@ interface InspectionsTabProps {
   setDeleteInspectionId: (id: string | null) => void;
   fixingTemplates: boolean;
   handleCreateInspection: () => void;
-  handleUpdateInspectionStatus: (inspectionId: string, newStatus: string) => void;
   handleDeleteInspection: () => void;
   handleFixTemplateLinks: () => void;
   navigate: (path: string) => void;
@@ -62,7 +61,6 @@ export function InspectionsTab({
   setDeleteInspectionId,
   fixingTemplates,
   handleCreateInspection,
-  handleUpdateInspectionStatus,
   handleDeleteInspection,
   handleFixTemplateLinks,
   navigate,
@@ -185,40 +183,23 @@ export function InspectionsTab({
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <Select
-                      value={inspection.status || 'Pending'}
-                      onValueChange={(value) => handleUpdateInspectionStatus(id, value)}
-                    >
-                      <SelectTrigger className="w-32" onClick={(e) => e.stopPropagation()}>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="Pending">Pending</SelectItem>
-                        <SelectItem value="In Progress">In Progress</SelectItem>
-                        <SelectItem value="Completed">Completed</SelectItem>
-                        <SelectItem value="Cancelled">Cancelled</SelectItem>
-                      </SelectContent>
-                    </Select>
-                    {inspection.status === 'Completed' && (
-                      <div onClick={(e) => e.stopPropagation()}>
-                        <ComprehensiveInspectionReport
-                          inspectionData={{
-                            id,
-                            templateId: inspection.templateId,
-                            status: inspection.status,
-                            inspection_date: inspection.date,
-                          }}
-                          siteName={siteData?.siteName || 'Unknown Site'}
-                          subsectionName={subsection?.name || 'Unknown Subsection'}
-                          templateId={inspection.templateId}
-                          subsectionId={subsectionId}
-                          siteLogoUrl={companyLogo}
-                          inspectionId={id}
-                          clientName={siteData?.clientInfo}
-                          snags={snags.filter(s => s.status?.toLowerCase() !== 'rectified' && s.status?.toLowerCase() !== 'closed')}
-                        />
-                      </div>
-                    )}
+                    <div onClick={(e) => e.stopPropagation()}>
+                      <ComprehensiveInspectionReport
+                        inspectionData={{
+                          id,
+                          templateId: inspection.templateId,
+                          inspection_date: inspection.date,
+                        }}
+                        siteName={siteData?.siteName || 'Unknown Site'}
+                        subsectionName={subsection?.name || 'Unknown Subsection'}
+                        templateId={inspection.templateId}
+                        subsectionId={subsectionId}
+                        siteLogoUrl={companyLogo}
+                        inspectionId={id}
+                        clientName={siteData?.clientInfo}
+                        snags={snags.filter(s => s.status?.toLowerCase() !== 'rectified' && s.status?.toLowerCase() !== 'closed')}
+                      />
+                    </div>
                     <Button
                       size="icon"
                       variant="ghost"

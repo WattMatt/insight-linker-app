@@ -174,7 +174,6 @@ const SubsectionDetail = () => {
             setDeleteInspectionId={hook.setDeleteInspectionId}
             fixingTemplates={hook.fixingTemplates}
             handleCreateInspection={hook.handleCreateInspection}
-            handleUpdateInspectionStatus={hook.handleUpdateInspectionStatus}
             handleDeleteInspection={hook.handleDeleteInspection}
             handleFixTemplateLinks={hook.handleFixTemplateLinks}
             navigate={hook.navigate}
