@@ -9,14 +9,12 @@ import {
   SelectTrigger, 
   SelectValue 
 } from "@/components/ui/select";
-import { 
-  Search, 
-  Filter, 
-  LayoutGrid, 
-  List, 
-  X, 
+import {
+  Search,
+  LayoutGrid,
+  List,
+  X,
   SlidersHorizontal,
-  ChevronDown,
   LayoutList
 } from "lucide-react";
 import {
@@ -24,7 +22,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
@@ -48,13 +45,11 @@ interface SubsectionFiltersProps {
 }
 
 const COC_STATUS_OPTIONS = [
-  { value: "Approved", label: "Approved", color: "bg-green-500" },
-  { value: "Valid", label: "Valid", color: "bg-green-500" },
   { value: "Pass", label: "Pass", color: "bg-green-500" },
-  { value: "Pending", label: "Pending", color: "bg-yellow-500" },
-  { value: "Rejected", label: "Rejected", color: "bg-red-500" },
   { value: "Fail", label: "Fail", color: "bg-red-500" },
+  { value: "Pending", label: "Pending", color: "bg-yellow-500" },
   { value: "Missing", label: "Missing", color: "bg-gray-500" },
+  { value: "N/A", label: "N/A", color: "bg-gray-500" },
 ];
 
 const COMPLIANCE_OPTIONS = [

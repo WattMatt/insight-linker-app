@@ -359,16 +359,16 @@ const SiteDetail = () => {
       toast.info("Deleting subsection...");
 
       // Delete related records first
-      const deletions = [
+      const deletions = await Promise.all([
         supabase.from('subsection_documents').delete().eq('subsection_id', subsectionId),
         supabase.from('inspection_items').delete().eq('subsection_id', subsectionId),
         supabase.from('snags').delete().eq('subsection_id', subsectionId),
         supabase.from('inspections').delete().eq('subsection_id', subsectionId),
         supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
         supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
-      ];
-
-      await Promise.all(deletions);
+      ]);
+      const firstDeleteError = deletions.find(d => d.error)?.error;
+      if (firstDeleteError) throw firstDeleteError;
 
       // Finally delete the subsection itself
       const { error: subsectionError } = await supabase

@@ -29,9 +29,7 @@ interface CocMeteringTabProps {
   ctRatio: string;
   setCtRatio: (v: string) => void;
   saving: boolean;
-  getCocDocuments: () => SupabaseDocument[];
   getSupabaseCocDocuments: () => SupabaseDocument[];
-  getMeteringDocuments: () => SupabaseDocument[];
   getSupabaseMeteringDocuments: () => SupabaseDocument[];
   handleDownloadDocument: (url: string, fileName: string) => void;
   handleSaveMeteringDetails: () => void;
@@ -56,9 +54,7 @@ export function CocMeteringTab({
   ctRatio,
   setCtRatio,
   saving,
-  getCocDocuments,
   getSupabaseCocDocuments,
-  getMeteringDocuments,
   getSupabaseMeteringDocuments,
   handleDownloadDocument,
   handleSaveMeteringDetails,
@@ -243,9 +239,8 @@ export function CocMeteringTab({
           <div>
             <Label>Metering Documents</Label>
             {(() => {
-              const meteringDocs = getMeteringDocuments();
               const supabaseMeteringDocs = getSupabaseMeteringDocuments();
-              const hasDocs = meteringDocs.length > 0 || supabaseMeteringDocs.length > 0;
+              const hasDocs = supabaseMeteringDocs.length > 0;
 
               return hasDocs ? (
                 <div className="mt-2 space-y-2">
@@ -293,26 +288,6 @@ export function CocMeteringTab({
                           )}
                         </Button>
                       </div>
-                    </div>
-                  ))}
-
-                  {meteringDocs.map((doc: any, idx: number) => (
-                    <div
-                      key={idx}
-                      className="flex items-center justify-between p-3 border rounded-lg hover:bg-accent transition-colors bg-muted/30"
-                    >
-                      <div className="flex items-center gap-3">
-                        <FileText className="h-4 w-4 text-muted-foreground" />
-                        <span className="text-sm font-medium">{doc.file_name}</span>
-                        <Badge variant="secondary" className="text-xs">Supabase</Badge>
-                      </div>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleDownloadDocument(doc.file_url, doc.file_name)}
-                      >
-                        <Download className="h-4 w-4" />
-                      </Button>
                     </div>
                   ))}
                 </div>

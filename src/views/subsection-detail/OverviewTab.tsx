@@ -10,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useSearchParams } from "@/lib/navigation";
 import { hasValidCocStatus } from "@/lib/complianceCalculations";
+import { isInspectionCompleted } from "@/lib/siteHealth";
 import type { SubsectionData, SiteData, EditFormData } from "./types";
 
 interface OverviewTabProps {
@@ -81,7 +82,7 @@ export function OverviewTab({
                   Not all inspections have been marked as completed.
                   {inspectionArray.length > 0 && (
                     <span className="text-sm block ml-4 mt-1">
-                      ({inspectionArray.filter(([_, insp]) => !insp?.status || insp.status !== 'Completed').length} of {inspectionArray.length} incomplete)
+                      ({inspectionArray.filter(([_, insp]) => !isInspectionCompleted({ status: insp?.status })).length} of {inspectionArray.length} incomplete)
                     </span>
                   )}
                 </li>
@@ -179,7 +180,7 @@ export function OverviewTab({
                       reasons.push(`Has ${openSnagsCount} open snag${openSnagsCount > 1 ? 's' : ''}`);
                     }
                     if (hasIncompleteInspections) {
-                      const incompleteCount = inspectionArray.filter(([_, insp]) => !insp?.status || insp.status !== 'Completed').length;
+                      const incompleteCount = inspectionArray.filter(([_, insp]) => !isInspectionCompleted({ status: insp?.status })).length;
                       reasons.push(`${incompleteCount} of ${inspectionArray.length} inspection${inspectionArray.length > 1 ? 's' : ''} not completed`);
                     }
 
