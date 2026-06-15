@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { format } from "date-fns";
 import { generateAndUploadQRCode } from "@/lib/qrCodeGenerator";
 import { isSnagOpen } from "@/lib/subsectionStatus";
+import { isInspectionCompleted } from "@/lib/siteHealth";
 import { useOfflineSubsections } from "@/hooks/useOfflineSubsections";
 import type {
   SubsectionData,
@@ -13,26 +14,6 @@ import type {
   DocumentCategory,
   EditFormData,
 } from "./types";
-
-// Normalize COC type to proper casing
-export const normalizeCocType = (type: string | null | undefined): string => {
-  if (!type) return '';
-  const lower = type.toLowerCase();
-  if (lower === 'initial') return 'Initial';
-  if (lower === 'temporary') return 'Temporary';
-  if (lower === 'supplementary') return 'Supplementary';
-  if (lower === 'not marked' || lower === 'notmarked' || lower === 'not_marked') return 'Not Marked';
-  return type;
-};
-
-// Normalize COC status to proper values
-export const normalizeCocStatus = (status: string | null | undefined): string => {
-  if (!status) return '';
-  const lower = status.toLowerCase();
-  if (lower === 'approved' || lower === 'pass' || lower === 'passed') return 'Approved';
-  if (lower === 'failed' || lower === 'fail' || lower === 'rejected') return 'Failed';
-  return status;
-};
 
 export function useSubsectionDetail() {
   const { clientId, siteId, subsectionId } = useParams();
@@ -53,7 +34,6 @@ export function useSubsectionDetail() {
   const [linkedTemplate, setLinkedTemplate] = useState<{id: string, name: string, category: string} | null>(null);
   const [availableTemplates, setAvailableTemplates] = useState<Array<{id: string, name: string, category: string}>>([]);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>("");
-  const [templateNameMap, setTemplateNameMap] = useState<Record<string, string>>({});
   const [uploadingFile, setUploadingFile] = useState(false);
   const [documentCategories, setDocumentCategories] = useState<DocumentCategory[]>([]);
   const [companyLogo, setCompanyLogo] = useState<string | null>(null);
@@ -186,15 +166,6 @@ export function useSubsectionDetail() {
 
       if (error) throw error;
       setAvailableTemplates(data || []);
-
-      const nameMap: Record<string, string> = {};
-      data?.forEach(template => {
-        if (template.category) {
-          nameMap[template.category.toLowerCase()] = template.name;
-        }
-        nameMap[template.name.toLowerCase()] = template.name;
-      });
-      setTemplateNameMap(nameMap);
     } catch (error) {
       if (process.env.NODE_ENV === 'development') console.error("Error fetching templates:", error);
     }
@@ -311,6 +282,7 @@ export function useSubsectionDetail() {
         meteringStatus: fullSubsection.metering_status,
         ctRatio: fullSubsection.ct_ratio,
         isCocRequired: fullSubsection.is_coc_required ?? true,
+        isCompliant: fullSubsection.is_compliant,
         inspections: inspectionsObj
       });
 
@@ -463,8 +435,8 @@ export function useSubsectionDetail() {
         .from('subsections')
         .insert({
           site_id: siteId,
-          name: editFormData.name,
-          tenant_name: editFormData.tenant_name,
+          name: editFormData.name.trim(),
+          tenant_name: editFormData.tenant_name?.trim() || null,
           category: editFormData.category,
           is_coc_required: editFormData.is_coc_required,
           coc_status: 'Missing',
@@ -506,8 +478,8 @@ export function useSubsectionDetail() {
       const { error } = await supabase
         .from('subsections')
         .update({
-          name: editFormData.name,
-          tenant_name: editFormData.tenant_name,
+          name: editFormData.name.trim(),
+          tenant_name: editFormData.tenant_name?.trim() || null,
           category: editFormData.category,
           is_coc_required: editFormData.is_coc_required
         })
@@ -530,15 +502,16 @@ export function useSubsectionDetail() {
       toast.info("Deleting subsection...");
       setDeleteSubsectionDialogOpen(false);
 
-      const deletions = [
+      const deletions = await Promise.all([
         supabase.from('subsection_documents').delete().eq('subsection_id', subsectionId),
         supabase.from('inspection_items').delete().eq('subsection_id', subsectionId),
         supabase.from('snags').delete().eq('subsection_id', subsectionId),
         supabase.from('inspections').delete().eq('subsection_id', subsectionId),
         supabase.from('qr_scans').delete().eq('subsection_id', subsectionId),
         supabase.from('document_categories').delete().eq('subsection_id', subsectionId),
-      ];
-      await Promise.all(deletions);
+      ]);
+      const firstDeleteError = deletions.find(d => d.error)?.error;
+      if (firstDeleteError) throw firstDeleteError;
 
       const { error: subsectionError } = await supabase
         .from('subsections')
@@ -577,12 +550,13 @@ export function useSubsectionDetail() {
       }
       if (!supabaseSubsection) { toast.error("Subsection not found in database"); return; }
 
-      const updateData: any = { updated_at: new Date().toISOString() };
-      if (meterSerialNumber) {
-        updateData.meter_serial_number = meterSerialNumber;
-        updateData.metering_status = 'Installed';
-      }
-      if (ctRatio) updateData.ct_ratio = ctRatio;
+      const trimmedSerial = meterSerialNumber.trim();
+      const updateData: any = {
+        updated_at: new Date().toISOString(),
+        meter_serial_number: trimmedSerial || null,
+        metering_status: trimmedSerial ? 'Installed' : 'Missing',
+        ct_ratio: ctRatio.trim() || null,
+      };
 
       const { error: updateError } = await supabase
         .from('subsections')
@@ -596,8 +570,9 @@ export function useSubsectionDetail() {
 
       setSubsection({
         ...subsection,
-        meterSerialNumber: meterSerialNumber || subsection.meterSerialNumber,
-        ctRatio: ctRatio || subsection.ctRatio
+        meterSerialNumber: trimmedSerial || undefined,
+        meteringStatus: trimmedSerial ? 'Installed' : 'Missing',
+        ctRatio: ctRatio.trim() || undefined
       });
       toast.success("Metering details saved successfully");
     } catch (error) {
@@ -607,8 +582,6 @@ export function useSubsectionDetail() {
       setSaving(false);
     }
   };
-
-  const getCocDocuments = () => getSupabaseCocDocuments();
 
   const getSupabaseCocDocuments = () => {
     // COC certificate categories only — exclude "COC Validation Reports" (old engine output).
@@ -622,8 +595,6 @@ export function useSubsectionDetail() {
     return supabaseDocuments.filter(doc => cocCatIds.includes(doc.category_id));
   };
 
-  const getMeteringDocuments = () => getSupabaseMeteringDocuments();
-
   const getSupabaseMeteringDocuments = () => {
     const meteringCategory = documentCategories.find(cat => cat.name.toLowerCase().includes('meter'));
     if (!meteringCategory) return [];
@@ -636,6 +607,11 @@ export function useSubsectionDetail() {
     e.preventDefault();
     if (!newCategoryName.trim() || !subsectionId) return;
     try {
+      const name = newCategoryName.trim();
+      if (documentCategories.some(cat => cat.name.toLowerCase() === name.toLowerCase())) {
+        toast.error("A category with that name already exists");
+        return;
+      }
       toast.info("Creating category...");
       const maxOrder = documentCategories.length > 0
         ? Math.max(...documentCategories.map(cat => parseInt(cat.name.split(' ')[0]) || 0))
@@ -643,7 +619,7 @@ export function useSubsectionDetail() {
 
       const { data, error } = await supabase
         .from('document_categories')
-        .insert({ subsection_id: subsectionId, name: newCategoryName.trim(), order_index: maxOrder + 1 })
+        .insert({ subsection_id: subsectionId, name, order_index: maxOrder + 1 })
         .select('id, name')
         .single();
 
@@ -660,6 +636,23 @@ export function useSubsectionDetail() {
 
   const handleDeleteCategory = async (categoryId: string, categoryName: string) => {
     try {
+      // Remove storage blobs first so deleting the category doesn't orphan files in the public bucket.
+      const { data: catDocs } = await supabase
+        .from('subsection_documents')
+        .select('file_url')
+        .eq('category_id', categoryId);
+      const paths = (catDocs || [])
+        .map(d => {
+          const parts = (d.file_url || '').split('/');
+          const idx = parts.indexOf('documents');
+          return idx >= 0 ? parts.slice(idx + 1).join('/') : null;
+        })
+        .filter((p): p is string => !!p);
+      if (paths.length > 0) {
+        const { error: removeError } = await supabase.storage.from('documents').remove(paths);
+        if (removeError && process.env.NODE_ENV === 'development') console.error('Failed to remove category blobs:', removeError);
+      }
+
       const { error: docsError } = await supabase.from('subsection_documents').delete().eq('category_id', categoryId);
       if (docsError) throw docsError;
       const { error: categoryError } = await supabase.from('document_categories').delete().eq('id', categoryId);
@@ -697,7 +690,9 @@ export function useSubsectionDetail() {
 
       const timestamp = Date.now();
       const sanitizedFileName = uploadFile.name.replace(/[^a-zA-Z0-9.-]/g, '_');
-      const fileName = `${subsectionId}/${category.name}/${timestamp}-${sanitizedFileName}`;
+      // Key the storage path off the immutable category id (not the editable name)
+      // so renaming a category never orphans its files.
+      const fileName = `${subsectionId}/${category.id}/${timestamp}-${sanitizedFileName}`;
 
       const { data: uploadData, error: uploadError } = await supabase.storage
         .from('documents')
@@ -716,6 +711,11 @@ export function useSubsectionDetail() {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error("User not authenticated");
 
+      // For COC-certificate categories, seed an explicit Pending verdict so the
+      // rollup is deterministic (rather than relying on NULL → Pending).
+      const catName = category.name.toLowerCase();
+      const isCocCategory = catName.includes('coc') && !catName.includes('validation') && !catName.includes('report');
+
       const { error: insertError } = await supabase
         .from('subsection_documents')
         .insert({
@@ -724,7 +724,8 @@ export function useSubsectionDetail() {
           file_name: uploadFile.name,
           file_url: urlData.publicUrl,
           file_size: uploadFile.size,
-          uploaded_by: user.id
+          uploaded_by: user.id,
+          ...(isCocCategory ? { coc_status: 'Pending' } : {})
         });
 
       if (insertError) {
@@ -771,6 +772,7 @@ export function useSubsectionDetail() {
         const { error: storageError } = await supabase.storage.from('documents').remove([filePath]);
         if (storageError) {
           if (process.env.NODE_ENV === 'development') console.error("Error deleting file from storage:", storageError);
+          toast.warning("Document record removed, but its file may remain in storage.");
         }
       }
 
@@ -787,11 +789,6 @@ export function useSubsectionDetail() {
       setSupabaseDocuments(prev => prev.filter(d => d.id !== documentId));
       setDeleteDocumentId(null);
       toast.success(`${fileName} deleted successfully`);
-
-      setTimeout(() => {
-        fetchDocumentCategories();
-        fetchSupabaseDocuments();
-      }, 500);
     } catch (error: any) {
       if (process.env.NODE_ENV === 'development') console.error("Error in handleDeleteDocument:", error);
       toast.error(`Failed to delete document: ${error.message || 'Unknown error'}`);
@@ -994,10 +991,11 @@ export function useSubsectionDetail() {
 
       let linkedCount = 0;
       for (const inspection of inspections) {
+        const title = inspection.title?.toLowerCase() || '';
         const matchingTemplate = availableTemplates.find(template =>
-          inspection.status?.toLowerCase().includes(template.name.toLowerCase()) ||
-          inspection.status?.toLowerCase().includes(template.category.toLowerCase()) ||
-          template.name.toLowerCase().includes(inspection.status?.toLowerCase() || '')
+          title.includes(template.name.toLowerCase()) ||
+          (template.category && title.includes(template.category.toLowerCase())) ||
+          template.name.toLowerCase().includes(title)
         );
 
         if (matchingTemplate) {
@@ -1030,8 +1028,7 @@ export function useSubsectionDetail() {
   const inspectionArray = Object.entries(inspections);
   const hasSnags = openSnagsCount > 0;
   const hasIncompleteInspections = inspectionArray.length > 0 && inspectionArray.some(([_, insp]) => {
-    const status = insp?.status;
-    return !status || status !== 'Completed';
+    return !isInspectionCompleted({ status: insp?.status });
   });
   const isNotCompliant = hasSnags || hasIncompleteInspections;
 
@@ -1053,9 +1050,7 @@ export function useSubsectionDetail() {
     isOnline,
 
     // COC / document getters
-    getCocDocuments,
     getSupabaseCocDocuments,
-    getMeteringDocuments,
     getSupabaseMeteringDocuments,
 
     // Metering

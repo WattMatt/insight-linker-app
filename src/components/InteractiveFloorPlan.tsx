@@ -68,7 +68,10 @@ export const InteractiveFloorPlan = ({
         {
           event: '*', // Listen to all events (INSERT, UPDATE, DELETE)
           schema: 'public',
-          table: 'floor_plan_pins'
+          table: 'floor_plan_pins',
+          // Scope to THIS floor plan's pins; without it the channel fires for
+          // every subsection's pin changes app-wide.
+          ...(floorPlan?.id ? { filter: `floor_plan_id=eq.${floorPlan.id}` } : {})
         },
         (payload) => {
           
@@ -113,11 +116,6 @@ export const InteractiveFloorPlan = ({
       supabase.removeChannel(floorPlanChannel);
     };
   }, [subsectionId, floorPlan?.id]);
-
-  useEffect(() => {
-    if (floorPlan) {
-    }
-  }, [floorPlan]);
 
   const loadFloorPlan = async () => {
     try {

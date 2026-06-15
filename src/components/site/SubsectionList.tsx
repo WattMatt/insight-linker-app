@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
@@ -96,10 +96,6 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                 const hasMetering = !!sub.meter_serial_number || sub.metering_status === "Installed";
                 if (filters.metering.includes("installed") && !hasMetering) return false;
                 if (filters.metering.includes("missing") && hasMetering) return false;
-                if (filters.metering.length === 1) {
-                    if (filters.metering[0] === "installed" && !hasMetering) return false;
-                    if (filters.metering[0] === "missing" && hasMetering) return false;
-                }
             }
 
             // Category filter
@@ -113,10 +109,6 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
                 const hasSnags = (snagCountBySubsection[sub.id] || 0) > 0;
                 if (filters.snags.includes("has-snags") && !hasSnags) return false;
                 if (filters.snags.includes("no-snags") && hasSnags) return false;
-                if (filters.snags.length === 1) {
-                    if (filters.snags[0] === "has-snags" && !hasSnags) return false;
-                    if (filters.snags[0] === "no-snags" && hasSnags) return false;
-                }
             }
 
             return true;
@@ -176,12 +168,12 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
         });
     };
 
-    // Initialize all groups as expanded
-    useMemo(() => {
+    // Initialize all groups as expanded when grouping changes
+    useEffect(() => {
         if (filters.groupBy !== "none") {
             setExpandedGroups(new Set(Object.keys(groupedSubsections)));
         }
-    }, [filters.groupBy]);
+    }, [filters.groupBy, groupedSubsections]);
 
     const renderTableView = (items: Subsection[]) => (
         <Table>
@@ -378,10 +370,10 @@ export function SubsectionList({ subsections, onDelete, clientId, siteId, snags 
             return "bg-red-500/10 text-red-600";
         }
         if (filters.groupBy === "cocStatus") {
-            if (["Approved", "Valid", "Pass"].includes(groupName)) {
+            if (groupName === "Pass") {
                 return "bg-green-500/10 text-green-600";
             }
-            if (["Rejected", "Fail"].includes(groupName)) {
+            if (groupName === "Fail") {
                 return "bg-red-500/10 text-red-600";
             }
             if (groupName === "Pending") {

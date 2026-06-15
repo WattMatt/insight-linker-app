@@ -12,6 +12,7 @@ export interface SubsectionData {
   meteringStatus?: string;
   ctRatio?: string;
   isCocRequired: boolean;
+  isCompliant?: boolean | null;
   inspections?: Record<string, any>;
   files?: Record<string, any>;
   snags?: any[];
